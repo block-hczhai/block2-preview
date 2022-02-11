@@ -3125,9 +3125,17 @@ if not pre_run:
     if "restart_sample" in dic or "sample" in dic:
 
         if "restart_sample" in dic:
-            sample_cutoff = float(dic.get("restart_sample", 0))
+            sample_params = dic.get("restart_sample", 0).split()
         else:
-            sample_cutoff = float(dic.get("sample", 0))
+            sample_params = dic.get("sample", 0).split()
+        if "fci_convention" in dic:
+            fci_convention = True 
+
+        sample_cutoff = float(sample_params[0])
+        if len(sample_params) == 2:
+            max_rank = int(sample_params[1])
+        else:
+            max_rank = nelec[0]
 
         if "trans_mps_to_sz" in dic:
             from block2.sz import DeterminantTRIE, UnfusedMPS
@@ -3139,12 +3147,12 @@ if not pre_run:
         dtrie = DeterminantTRIE(n_sites, True)
         mps.info.load_mutable()
         mps.load_mutable()
-        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
+        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, fci_convention)
         _print("dtrie finished", time.perf_counter() - tx)
         if MPI is None or MPI.rank == 0:
             dname = "CSF" if su2mps else "DET"
-            _print("Number of %s = %10d (cutoff = %9.5g)" %
-                   (dname, len(dtrie), sample_cutoff))
+            _print("Number of %s = %10d (cutoff = %9.5g, max_rank = %3d)" %
+                   (dname, len(dtrie), sample_cutoff, max_rank))
             ddstr = "0+-2" if su2mps else "0ab2"
             dvals = np.array(dtrie.vals)
             gidx = np.argsort(np.abs(dvals))[::-1][:50]
@@ -3156,11 +3164,12 @@ if not pre_run:
                 _print(dname, "%10d" % ii, det, " = %20.15f" % val)
             if len(dvals) > 50:
                 _print(" ... and more ... ")
+            np.save(scratch + "/sample-vals.npy", dvals)
             dets = np.zeros((len(dtrie), n_sites), dtype=np.uint8)
             for i in range(len(dtrie)):
                 dets[i] = np.array(dtrie[i])
-            np.save(scratch + "/sample-vals.npy", dvals)
             np.save(scratch + "/sample-dets.npy", dets)
+
             state_occ = np.array(
                 dtrie.get_state_occupation()).reshape(n_sites, 4)
             # state_occ += ((1 - state_occ.sum(axis=1)) / 4)[:, None]

@@ -421,7 +421,8 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("get_state_occupation",
              &DeterminantTRIE<S, FL>::get_state_occupation)
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
-             py::arg("cutoff") = 0.0);
+             py::arg("cutoff") = 0.0, py::arg("max_rank") = 100, 
+             py::arg("fci_convention") = false);
 }
 
 template <typename S, typename FL> void bind_fl_partition(py::module &m) {

@@ -178,16 +178,19 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each determinant to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
+                  bool fci_convention = false) {
+        if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
+        set<int> ip_history;
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
+                     vector<uint8_t>, int>>
             ptrs;
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
         pinfos[0].resize(1);
@@ -234,10 +237,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
-                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet));
+                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0));
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
+                     vector<uint8_t>, int>>
             pptrs;
+        // assume high-spin state as Fermi vacuum; with nocca > noccb;
+        int nelec = mps->info->target.n();
+        int twos  = mps->info->target.twos();
+        int nocca = (nelec+twos)/2;
+        int noccb = (nelec-twos)/2;
+        assert( (nelec+twos) % 2 == 0 && (nelec-twos) % 2 == 0 );
         int ntg = threading->activate_global();
         int ngroup = ntg * 4;
         vector<shared_ptr<SparseMatrix<S, FL>>> ccmp(ngroup);
@@ -246,12 +255,14 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         while (!ptrs.empty()) {
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
+            set<int>::iterator it = ip_history.find(pstart);
+            if (it == ip_history.end()) ip_history.insert(pstart);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
                     make_shared<VectorAllocator<FP>>();
                 auto &p = ptrs[ip];
-                int j = get<1>(p), d = get<2>(p);
+                int j = get<1>(p), d = get<2>(p), nh = get<5>(p);
                 shared_ptr<SparseMatrix<S, FL>> pmp = get<3>(p);
                 shared_ptr<SparseMatrix<S, FL>> cmp =
                     make_shared<SparseMatrix<S, FL>>(pd_alloc);
@@ -264,7 +275,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                                    m.second->ref(), false,
                                                    (*cmp)[ket], 1.0, 1.0);
                 }
-                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
+                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff)
+                    || nh > max_rank)
                     ccmp[ip - pstart] = nullptr;
                 else
                     ccmp[ip - pstart] = cmp;
@@ -275,7 +287,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                     if (ccmp[ip - pstart] == nullptr)
                         continue;
                     auto &p = ptrs[ip];
-                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p), nh = get<5>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
@@ -307,9 +319,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                              jj++)
-                            if (data[cur][jj] != 0)
+                            if (data[cur][jj] != 0){
+                                int nh_n = nh;
+                                if (it == ip_history.end()){
+                                    if (j == 0 && d < nocca && d < noccb) nh_n += 2;
+                                    if (j == 1 && d < nocca) nh_n += 1;
+                                    if (j == 2 && d < noccb) nh_n += 1;
+                                }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
-                                                           d + 1, cmp, det));
+                                                           d + 1, cmp, det, nh_n));
+                            }
                     }
                     ccmp[ip - pstart] = nullptr;
                 }
@@ -320,8 +339,37 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         }
         pinfos.clear();
         sort_dets();
+        if (fci_convention) convert_phase_to_fci_convention();
         threading->activate_normal();
     }
+    int alpha_count(std::vector<uint8_t> det, const uint8_t qi)
+    {
+        int ncount = 0;
+        for (int i=0; i<qi; i++)
+            if (det[i] == 3 || det[i] == 2)
+                ncount += 1;
+        return ncount;
+    }
+    double parity_ab_str(std::vector<uint8_t> det)
+    {
+        int n=0;
+        for (int i=0; i<det.size(); i++)
+            if (det[i]==3 || det[i]==1)
+               n += alpha_count(det, i);
+        return pow(double(-1), n);
+    }
+    void convert_phase_to_fci_convention() {
+        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+        {
+#pragma omp for schedule(static)
+            for (int i = 0; i < vals.size(); i++){
+                double parity = parity_ab_str((*this)[i]);
+                vals[i] *= parity;
+            } 
+        }
+    }
+
 };
 
 // Prefix trie structure of Configuration State Functions (CSFs) (spin-adapted)
@@ -340,7 +388,9 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
+                  bool fci_convention = false) {
+        if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
@@ -510,7 +560,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
+                  bool fci_convention = false) {
+        if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
