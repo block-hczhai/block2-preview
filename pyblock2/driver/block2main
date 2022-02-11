@@ -994,7 +994,7 @@ elif "fullrestart" in dic:
             mps.info.load_mutable()
             if MPI is not None:
                 MPI.barrier()
-        if not mps.canonical_form[mps.center:mps.center + 2] == "CC":
+        if not mps.canonical_form[mps.center:mps.center + 2] == "CC" and mps.dot == 2:
             mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2:
