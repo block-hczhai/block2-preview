@@ -1804,8 +1804,9 @@ if not pre_run:
             and "delta_t" not in dic and "compression" not in dic and "stopt_sampling" not in dic:
 
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
-        me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = cached_contraction
+        if "use_hybrid_complex" not in dic:
+            me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
