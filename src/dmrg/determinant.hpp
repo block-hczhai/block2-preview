@@ -184,7 +184,6 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
-        set<int> ip_history;
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -241,7 +240,6 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>, int>>
             pptrs;
-        // assume high-spin state as Fermi vacuum; with nocca > noccb;
         int nelec = mps->info->target.n();
         int twos  = mps->info->target.twos();
         int nocca = (nelec+twos)/2;
@@ -255,8 +253,6 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         while (!ptrs.empty()) {
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
-            set<int>::iterator it = ip_history.find(pstart);
-            if (it == ip_history.end()) ip_history.insert(pstart);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
@@ -321,11 +317,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                              jj++)
                             if (data[cur][jj] != 0){
                                 int nh_n = nh;
-                                if (it == ip_history.end()){
-                                    if (j == 0 && d < nocca && d < noccb) nh_n += 2;
-                                    if (j == 1 && d < nocca) nh_n += 1;
-                                    if (j == 2 && d < noccb) nh_n += 1;
-                                }
+                                if ((j == 0 || j == 2) && d < nocca) nh_n += 1;
+                                if ((j == 0 || j == 1) && d < noccb) nh_n += 1;
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
                                                            d + 1, cmp, det, nh_n));
                             }
@@ -342,31 +335,22 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         if (fci_convention) convert_phase_to_fci_convention();
         threading->activate_normal();
     }
-    int alpha_count(std::vector<uint8_t> det, const uint8_t qi)
-    {
-        int ncount = 0;
-        for (int i=0; i<qi; i++)
-            if (det[i] == 3 || det[i] == 2)
-                ncount += 1;
-        return ncount;
-    }
-    double parity_ab_str(std::vector<uint8_t> det)
-    {
-        int n=0;
-        for (int i=0; i<det.size(); i++)
-            if (det[i]==3 || det[i]==1)
-               n += alpha_count(det, i);
-        return pow(double(-1), n);
+    double phase_change(const vector<uint8_t> det) {
+        int n = 0;
+        for (int i = 0, j = 0; i < det.size(); i++) {
+            if (det[i] & 1)
+               n += j;
+            j += (det[i] & 2) >> 1; 
+        }
+        return 1 - ( (n & 1) << 1 );
     }
     void convert_phase_to_fci_convention() {
         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
         {
 #pragma omp for schedule(static)
-            for (int i = 0; i < vals.size(); i++){
-                double parity = parity_ab_str((*this)[i]);
-                vals[i] *= parity;
-            } 
+            for (int i = 0; i < vals.size(); i++)
+                vals[i] *= phase_change((*this)[i]);
         }
     }
 
