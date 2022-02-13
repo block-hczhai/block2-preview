@@ -529,7 +529,9 @@ if pre_run or not no_pre_run:
             fcidump.params["ms2"] = str(spin[0])
             fcidump.params["isym"] = str(isym[0])
         else:
-            fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0])
+            integral_tol = float(dic.get("integral_tol", 1E-12))
+            fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0],
+                                    tol=integral_tol)
     n_orbs = fcidump.n_sites
     if "trans_integral_to_spin_orbital" in dic:
         n_orbs = n_orbs * 2

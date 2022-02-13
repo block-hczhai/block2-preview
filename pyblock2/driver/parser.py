@@ -14,7 +14,7 @@ import numpy as np
 
 KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "twodot_to_onedot", "twodot", "onedot", "zerodot", "sweep_tol",
-              "orbitals", "warmup", "nroots", "outputlevel", "prefix",
+              "orbitals", "integral_tol", "warmup", "nroots", "outputlevel", "prefix",
               "noreorder", "fiedler", "reorder", "gaopt", "nofiedler", "irrep_reorder",
               "num_thrds", "mkl_thrds", "mem", "intmem", "oh", "nonspinadapted",
               "onepdm", "fullrestart", "restart_onepdm", "restart_oh",
