@@ -574,6 +574,10 @@ if pre_run or not no_pre_run:
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
     if "use_hybrid_complex" in dic and orb_idx is not None:
         fd_cpx_h1e.reorder(VectorUInt16(orb_idx))
+    if "full_integral" not in dic and dynamic_corr_method is not None and \
+        dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s"]:
+        _print("use mrcis ficdump")
+        fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     if "trans_integral_to_spin_orbital" in dic:
         fcidump = SpinOrbitalFCIDUMP(fcidump)
 
@@ -992,7 +996,7 @@ elif "fullrestart" in dic:
             mps.info.load_mutable()
             if MPI is not None:
                 MPI.barrier()
-        if not mps.canonical_form[mps.center:mps.center + 2] == "CC":
+        if not mps.canonical_form[mps.center:mps.center + 2] == "CC" and mps.dot == 2:
             mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2:
@@ -1880,6 +1884,8 @@ if not pre_run:
 
         if conn_centers is not None:
             me.finalize_environments()
+        
+        print("!!", dmrg.me.ket.info.bond_dim)
 
         _print("Final canonical form = ", mps.canonical_form, mps.center)
         for x in dmrg.energies:
@@ -2916,6 +2922,8 @@ if not pre_run:
         linear.cutoff = float(dic.get("cutoff", 1E-14))
         linear.decomp_type = decomp_type
         linear.trunc_type = trunc_type
+        linear.linear_soft_max_iter = int(
+                dic.get("linear_soft_max_iter", -1))
         linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
 
         e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
