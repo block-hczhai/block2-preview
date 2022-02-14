@@ -614,6 +614,19 @@ template <typename S> struct MPSInfo {
             }
         check_bond_dimensions();
     }
+    void set_bond_dimension_inact_ext_fci(ubond_t m, int n_inactive, int n_external) {
+        for (int i = 0; i <= n_inactive; i++)
+            left_dims[i] =
+                make_shared<StateInfo<S>>(left_dims_fci[i]->deep_copy());
+        for (int i = n_sites; i >= n_sites - n_external; i--)
+            right_dims[i] =
+                make_shared<StateInfo<S>>(right_dims_fci[i]->deep_copy());
+        // zero states may occur
+        for (int i = 0; i <= n_sites; i++)
+            left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims[i]->collect();
+    }
     ubond_t get_max_bond_dimension() const {
         total_bond_t max_bdim = 0;
         for (int i = 0; i <= n_sites; i++)
@@ -2107,6 +2120,28 @@ template <typename S, typename FL> struct MPS {
     virtual void random_canonicalize() {
         for (int i = 0; i < n_sites; i++)
             random_canonicalize_tensor(i);
+    }
+    virtual void set_inact_ext_identity(int n_inactive, int n_external) {
+        for (int i = 0; i < n_inactive; i++)
+            if (tensors[i] != nullptr && i < center) {
+                tensors[i]->clear();
+                for (int j = 0; j < tensors[i]->info->n; j++) {
+                    GMatrix<FL> mat = (*tensors[i])[j];
+                    assert(mat.m == mat.n);
+                    for (MKL_INT k = 0; k < mat.m; k++)
+                        mat(k, k) = 1;
+                }
+            }
+        for (int i = n_sites - n_external; i < n_sites; i++)
+            if (tensors[i] != nullptr && i > center) {
+                tensors[i]->clear();
+                for (int j = 0; j < tensors[i]->info->n; j++) {
+                    GMatrix<FL> mat = (*tensors[i])[j];
+                    assert(mat.m == mat.n);
+                    for (MKL_INT k = 0; k < mat.m; k++)
+                        mat(k, k) = 1;
+                }
+            }
     }
     virtual string get_filename(int i, const string &dir = "") const {
         stringstream ss;
