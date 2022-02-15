@@ -606,7 +606,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
             for (auto &mps : mpss) {
                 MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                    i, 0, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
                 mps->save_data();
             }
         }
@@ -1317,7 +1317,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         }
         if (me->para_rule == nullptr || me->para_rule->is_root())
             MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
+                i, 0, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
         me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -1902,7 +1902,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         }
         if (me->para_rule == nullptr || me->para_rule->is_root())
             MovingEnvironment<S, FL, FLS>::propagate_multi_wfn(
-                i, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
+                i, 0, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
         mket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();

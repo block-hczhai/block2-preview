@@ -1073,25 +1073,27 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
     }
     // Remove old environment for starting a new sweep
-    void prepare() {
+    void prepare(int start_site = 0, int end_site = -1) {
         tctr = trot = tmid = tint = tdctr = tdiag = tinfo = 0;
         if (dot == 2 && envs[0]->middle.size() == 1)
             throw runtime_error("switching from one-site algorithm to two-site "
                                 "algorithm is not allowed.");
+        if (end_site == -1)
+            end_site = n_sites;
         // two-site to one-site transition
         if (dot == 1 && envs[0]->middle.size() == 2) {
             frame->reset_buffer(1);
-            if (center == n_sites - 2 &&
-                (ket->canonical_form[n_sites - 1] == 'C' ||
-                 ket->canonical_form[n_sites - 1] == 'M')) {
-                center = n_sites - 1;
+            if (center == end_site - 2 &&
+                (ket->canonical_form[end_site - 1] == 'C' ||
+                 ket->canonical_form[end_site - 1] == 'M')) {
+                center = end_site - 1;
                 ket->canonical_form[center] =
                     ket->canonical_form[center] == 'C' ? 'S' : 'T';
                 if (bra != ket)
                     bra->canonical_form[center] =
                         bra->canonical_form[center] == 'C' ? 'S' : 'T';
                 fuse_center = mpo->schemer == nullptr
-                                  ? n_sites - 2
+                                  ? end_site - 2
                                   : mpo->schemer->right_trans_site;
                 frame->reset(1);
                 if (envs[center - 1]->left != nullptr)
@@ -1105,10 +1107,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                        get_right_partition_filename(i + 1));
             for (int i = n_sites - 1; i >= 0; i--) {
                 envs[i]->middle.resize(1);
-                if (i > 0) {
+                if (i > start_site) {
                     envs[i]->right_op_infos = envs[i - 1]->right_op_infos;
                     envs[i]->right = envs[i - 1]->right;
-                } else if (center == 0) {
+                } else if (center == start_site) {
                     if (ket->canonical_form[center] == 'C')
                         ket->canonical_form[center] = 'K';
                     else if (ket->canonical_form[center] == 'M')
@@ -1126,14 +1128,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     envs[center]->right_op_infos.clear();
                     envs[center]->right = nullptr;
                     right_contract_rotate(center);
+                } else if (center == end_site - 1 && end_site < n_sites) {
+                    frame->reset(1);
+                    if (envs[center + 1]->right != nullptr)
+                        frame->load_data(
+                            1, get_right_partition_filename(center + 1));
+                    envs[center]->right_op_infos.clear();
+                    envs[center]->right = nullptr;
+                    right_contract_rotate(center);
                 }
             }
         }
-        for (int i = n_sites - 1; i > center; i--) {
+        for (int i = end_site - 1; i > center; i--) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
         }
-        for (int i = 0; i < center; i++) {
+        for (int i = start_site; i < center; i++) {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
         }
@@ -2920,11 +2930,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     // Change the fusing type of MPS tensor so that it can be used in next sweep
     // iteration
-    static void propagate_wfn(int i, int n_sites,
+    static void propagate_wfn(int i, int start_site, int end_site,
                               const shared_ptr<MPS<S, FLS>> &mps, bool forward,
                               const shared_ptr<CG<S>> &cg) {
         if (forward) {
-            if (i + 1 != n_sites - 1) {
+            if (i + 1 != end_site - 1) {
                 mps->load_tensor(i + 1);
                 shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i + 1];
                 mps->tensors[i + 1] =
@@ -2935,7 +2945,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 old_wfn->deallocate();
             }
         } else {
-            if (i != 0) {
+            if (i != start_site) {
                 mps->load_tensor(i);
                 shared_ptr<SparseMatrix<S, FLS>> old_wfn = mps->tensors[i];
                 mps->tensors[i] =
@@ -2949,11 +2959,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     // Change the fusing type of MultiMPS tensor so that it can be used in next
     // sweep iteration
-    static void propagate_multi_wfn(int i, int n_sites,
+    static void propagate_multi_wfn(int i, int start_site, int end_site,
                                     const shared_ptr<MultiMPS<S, FLS>> &mps,
                                     bool forward, const shared_ptr<CG<S>> &cg) {
         if (forward) {
-            if (i + 1 != n_sites - 1) {
+            if (i + 1 != end_site - 1) {
                 mps->load_wavefunction(i + 1);
                 vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns =
                     mps->wfns;
@@ -2967,7 +2977,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     old_wfns[0]->deallocate_infos();
             }
         } else {
-            if (i != 0) {
+            if (i != start_site) {
                 mps->load_wavefunction(i);
                 vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns =
                     mps->wfns;

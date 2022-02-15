@@ -363,10 +363,11 @@ struct EffectiveFunctions<
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
         assert(h_eff->compute_diag && x_eff->compute_diag);
+        frame->activate(0);
         GMatrix<FL> bre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
         GMatrix<FL> cre(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
         // need this temp array to avoid double accumulate sum in parallel
-        GMatrix<FC> cc(nullptr, (MKL_INT)h_eff->ket[0]->total_memory, 1);
+        GMatrix<FC> cc(nullptr, (MKL_INT)x_eff->ket[0]->total_memory, 1);
         bre.allocate();
         cre.allocate();
         cc.allocate();
@@ -384,7 +385,6 @@ struct EffectiveFunctions<
              i++)
             bs.push_back(GMatrix<FC>(x_eff->ket[i]->data,
                                      (MKL_INT)x_eff->ket[i]->total_memory, 1));
-        frame->activate(0);
         Timer t;
         t.get_time();
         h_eff->tf->opf->seq->cumulative_nflop = 0;

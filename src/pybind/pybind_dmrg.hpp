@@ -141,8 +141,8 @@ template <typename S> void bind_mps(py::module &m) {
         .def("get_ancilla_type", &MPSInfo<S>::get_ancilla_type)
         .def("get_type", &MPSInfo<S>::get_type)
         .def("load_data",
-             (void (MPSInfo<S>::*)(const string &)) & MPSInfo<S>::load_data)
-        .def("save_data", (void (MPSInfo<S>::*)(const string &) const) &
+             (void(MPSInfo<S>::*)(const string &)) & MPSInfo<S>::load_data)
+        .def("save_data", (void(MPSInfo<S>::*)(const string &) const) &
                               MPSInfo<S>::save_data)
         .def("get_max_bond_dimension", &MPSInfo<S>::get_max_bond_dimension)
         .def("check_bond_dimensions", &MPSInfo<S>::check_bond_dimensions)
@@ -160,6 +160,8 @@ template <typename S> void bind_mps(py::module &m) {
              py::arg("left_vacuum") = S(S::invalid),
              py::arg("right_vacuum") = S(S::invalid))
         .def("set_bond_dimension", &MPSInfo<S>::set_bond_dimension)
+        .def("set_bond_dimension_inact_ext_fci",
+             &MPSInfo<S>::set_bond_dimension_inact_ext_fci)
         .def("swap_wfn_to_fused_left",
              &MPSInfo<S>::template swap_wfn_to_fused_left<double>)
         .def("swap_wfn_to_fused_right",
@@ -306,6 +308,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("canonicalize", &MPS<S, FL>::canonicalize)
         .def("dynamic_canonicalize", &MPS<S, FL>::dynamic_canonicalize)
         .def("random_canonicalize", &MPS<S, FL>::random_canonicalize)
+        .def("set_inact_ext_identity", &MPS<S, FL>::set_inact_ext_identity)
         .def("from_singlet_embedding_wfn",
              &MPS<S, FL>::from_singlet_embedding_wfn, py::arg("cg"),
              py::arg("para_rule") = nullptr)
@@ -439,10 +442,10 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("middle", &Partition<S, FL>::middle)
         .def_readwrite("left_op_infos", &Partition<S, FL>::left_op_infos)
         .def_readwrite("right_op_infos", &Partition<S, FL>::right_op_infos)
-        .def("load_data", (void (Partition<S, FL>::*)(bool, const string &)) &
+        .def("load_data", (void(Partition<S, FL>::*)(bool, const string &)) &
                               Partition<S, FL>::load_data)
         .def("save_data",
-             (void (Partition<S, FL>::*)(bool, const string &) const) &
+             (void(Partition<S, FL>::*)(bool, const string &) const) &
                  Partition<S, FL>::save_data)
         .def_static("find_op_info", &Partition<S, FL>::find_op_info)
         .def_static("build_left", &Partition<S, FL>::build_left)
@@ -677,7 +680,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def("finalize_environments",
              &MovingEnvironment<S, FL, FLS>::finalize_environments,
              py::arg("renormalize_ops") = true)
-        .def("prepare", &MovingEnvironment<S, FL, FLS>::prepare)
+        .def("prepare", &MovingEnvironment<S, FL, FLS>::prepare,
+             py::arg("start_site") = 0, py::arg("end_site") = -1)
         .def("move_to", &MovingEnvironment<S, FL, FLS>::move_to, py::arg("i"),
              py::arg("preserve_data") = false)
         .def("partial_prepare", &MovingEnvironment<S, FL, FLS>::partial_prepare)
@@ -828,8 +832,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
             py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_wfn",
                     &MovingEnvironment<S, FL, FLS>::propagate_wfn, py::arg("i"),
-                    py::arg("n_sites"), py::arg("mps"), py::arg("forward"),
-                    py::arg("cg"))
+                    py::arg("start_site"), py::arg("end_site"), py::arg("mps"),
+                    py::arg("forward"), py::arg("cg"))
         .def_static("contract_multi_two_dot",
                     &MovingEnvironment<S, FL, FLS>::contract_multi_two_dot,
                     py::arg("i"), py::arg("mps"), py::arg("reduced") = false)
@@ -853,9 +857,9 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
             py::arg("trace_right"), py::arg("normalize"), py::arg("cutoff"),
             py::arg("trunc_type") = TruncationTypes::Physical)
         .def_static("propagate_multi_wfn",
-                    &MovingEnvironment<S, FL, FLS>::propagate_wfn, py::arg("i"),
-                    py::arg("n_sites"), py::arg("mps"), py::arg("forward"),
-                    py::arg("cg"));
+                    &MovingEnvironment<S, FL, FLS>::propagate_multi_wfn,
+                    py::arg("i"), py::arg("start_site"), py::arg("end_site"),
+                    py::arg("mps"), py::arg("forward"), py::arg("cg"));
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S, FL, FLS>>>>(
         m, ("Vector" + name).c_str());
@@ -1030,6 +1034,8 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("isweep", &DMRG<S, FL, FLS>::isweep)
         .def_readwrite("site_dependent_bond_dims",
                        &DMRG<S, FL, FLS>::site_dependent_bond_dims)
+        .def_readwrite("sweep_start_site", &DMRG<S, FL, FLS>::sweep_start_site)
+        .def_readwrite("sweep_end_site", &DMRG<S, FL, FLS>::sweep_end_site)
         .def("update_two_dot", &DMRG<S, FL, FLS>::update_two_dot)
         .def("update_one_dot", &DMRG<S, FL, FLS>::update_one_dot)
         .def("update_multi_two_dot", &DMRG<S, FL, FLS>::update_multi_two_dot)
@@ -1299,6 +1305,9 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("wfn_spectra", &Linear<S, FL, FLS>::wfn_spectra)
         .def_readwrite("sweep_wfn_spectra",
                        &Linear<S, FL, FLS>::sweep_wfn_spectra)
+        .def_readwrite("sweep_start_site",
+                       &Linear<S, FL, FLS>::sweep_start_site)
+        .def_readwrite("sweep_end_site", &Linear<S, FL, FLS>::sweep_end_site)
         .def("update_one_dot", &Linear<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &Linear<S, FL, FLS>::update_two_dot)
         .def("blocking", &Linear<S, FL, FLS>::blocking)
@@ -1482,11 +1491,11 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def("unload_schemer", &MPO<S, FL>::unload_schemer)
         .def("reduce_data", &MPO<S, FL>::reduce_data)
         .def("load_data",
-             (void (MPO<S, FL>::*)(const string &, bool)) &
+             (void(MPO<S, FL>::*)(const string &, bool)) &
                  MPO<S, FL>::load_data,
              py::arg("filename"), py::arg("minimal") = false)
         .def("save_data",
-             (void (MPO<S, FL>::*)(const string &)) & MPO<S, FL>::save_data)
+             (void(MPO<S, FL>::*)(const string &)) & MPO<S, FL>::save_data)
         .def("get_blocking_formulas", &MPO<S, FL>::get_blocking_formulas)
         .def("get_ancilla_type", &MPO<S, FL>::get_ancilla_type)
         .def("get_parallel_type", &MPO<S, FL>::get_parallel_type)
