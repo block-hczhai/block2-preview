@@ -2049,7 +2049,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             if (lme != nullptr)
                 assert(tme->tag != lme->tag);
         }
-        sweep_end_site = lme->n_sites;
+        sweep_end_site = rme->n_sites;
     }
     Linear(const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
            const vector<ubond_t> &bra_bond_dims,
