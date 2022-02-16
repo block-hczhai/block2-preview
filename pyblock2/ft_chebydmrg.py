@@ -197,6 +197,7 @@ def chebyGreensFunction(freqs:np.ndarray, moments:np.ndarray,
         sumTerm = g * fac * moments[n] * prac / prec
         spectrumGreen[~idxSml] += sumTerm[~idxSml]
     spectrumDelta *= -scale / np.sqrt(1 - FREQSshift)
+    spectrumGreen *= scale
     if addition:
         spectrumGreen.real *= -1
         spectrumNum.imag *= -1
@@ -807,6 +808,7 @@ class FT_Cheb_GFDMRG(FTDMRG):
                                 # scale
                                 ooo = scale * ( (omega - eMin + 1j * eta) - eMin ) - chebyMaxInterval
                                 HcVar[np.diag_indices_from(Hc)] += ooo
+                                # TODO scale back later?
                             c = la.solve(HcVar, ket,overwrite_a=True)
                             GF[ii,jj,io] = GF[jj,ii,io] = np.vdot(bra,c)
 
