@@ -3128,8 +3128,6 @@ if not pre_run:
             sample_params = dic.get("restart_sample", 0).split()
         else:
             sample_params = dic.get("sample", 0).split()
-        if "fci_convention" in dic:
-            fci_convention = True 
 
         sample_cutoff = float(sample_params[0])
         if len(sample_params) == 2:
@@ -3147,8 +3145,35 @@ if not pre_run:
         dtrie = DeterminantTRIE(n_sites, True)
         mps.info.load_mutable()
         mps.load_mutable()
-        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, fci_convention)
+        if "vacuum" not in dic:
+            noca = (nelec[0] + spin[0]) // 2
+            nocb = (nelec[0] - spin[0]) // 2
+            vacuum = "3"*nocb + "1"*(noca-nocb) + "0"*(n_sites-noca)
+        else:
+            vacuum = dic.get("vacuum", 0)
+            assert len(vacuum) == n_sites
+            nelec_vacuum = 0
+            for occ in vacuum:
+                if occ == "3": nelec_vacuum += 2 
+                elif occ == "1" or occ == "2": nelec_vacuum += 1 
+            assert nelec_vacuum == nelec[0] 
+
+        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, vacuum)
+        if "fci_convention" in dic:
+            vacuum_idx = dic.get("fci_convention", 0).split()
+            if len(vacuum_idx) == 0:
+                if orb_idx is None:
+                    vacuum_idx = [] 
+                else:
+                    vacuum_idx = orb_idx
+            else:
+                vacuum_idx = [int(i) for i in vacuum_idx]
+                assert len(vacuum_idx) == n_sites
+                check_idx = [i for i in vacuum_idx if i >= 0 and i < n_sites] 
+                assert len(set(check_idx)) == n_sites
+            dtrie.convert_phase_to_fci_convention(VectorInt(vacuum_idx))
         _print("dtrie finished", time.perf_counter() - tx)
+
         if MPI is None or MPI.rank == 0:
             dname = "CSF" if su2mps else "DET"
             _print("Number of %s = %10d (cutoff = %9.5g, max_rank = %3d)" %

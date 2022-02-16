@@ -178,8 +178,13 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each determinant to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
-                  bool fci_convention = false) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const string &vacuum_str = "") {
+        assert(vacuum_str.size() == n_sites);
+        vector<int> Fermi_vacuum;
+        for (size_t i = 0; i < vacuum_str.size(); i++)
+            Fermi_vacuum.push_back(vacuum_str[i] - '0');
+
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -189,8 +194,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>, int>>
+                     vector<uint8_t>, int, int>>
             ptrs;
+
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
@@ -236,15 +242,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
-                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0));
+                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0, 0));
+
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>, int>>
+                     vector<uint8_t>, int, int>>
             pptrs;
-        int nelec = mps->info->target.n();
-        int twos  = mps->info->target.twos();
-        int nocca = (nelec+twos)/2;
-        int noccb = (nelec-twos)/2;
-        assert( (nelec+twos) % 2 == 0 && (nelec-twos) % 2 == 0 );
         int ntg = threading->activate_global();
         int ngroup = ntg * 4;
         vector<shared_ptr<SparseMatrix<S, FL>>> ccmp(ngroup);
@@ -258,7 +260,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
                     make_shared<VectorAllocator<FP>>();
                 auto &p = ptrs[ip];
-                int j = get<1>(p), d = get<2>(p), nh = get<5>(p);
+                int j = get<1>(p), d = get<2>(p), nh = get<5>(p), np = get<6>(p);
                 shared_ptr<SparseMatrix<S, FL>> pmp = get<3>(p);
                 shared_ptr<SparseMatrix<S, FL>> cmp =
                     make_shared<SparseMatrix<S, FL>>(pd_alloc);
@@ -271,11 +273,13 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                                    m.second->ref(), false,
                                                    (*cmp)[ket], 1.0, 1.0);
                 }
-                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff)
-                    || nh > max_rank)
+                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
                     ccmp[ip - pstart] = nullptr;
                 else
-                    ccmp[ip - pstart] = cmp;
+                    if (Fermi_vacuum.size() != 0 && (nh > max_rank || np > max_rank) )
+                        ccmp[ip - pstart] = nullptr;
+                    else
+                        ccmp[ip - pstart] = cmp;
             }
 #pragma omp single
             {
@@ -283,7 +287,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                     if (ccmp[ip - pstart] == nullptr)
                         continue;
                     auto &p = ptrs[ip];
-                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p), nh = get<5>(p);
+                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    int nh = get<5>(p), np = get<6>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
@@ -317,10 +322,15 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                              jj++)
                             if (data[cur][jj] != 0){
                                 int nh_n = nh;
-                                if ((j == 0 || j == 2) && d < nocca) nh_n += 1;
-                                if ((j == 0 || j == 1) && d < noccb) nh_n += 1;
+                                int np_n = np;
+                                if (Fermi_vacuum.size() != 0) { 
+                                    if (! (j & 1)       &&   (Fermi_vacuum[d] & 1)       ) nh_n += 1;
+                                    if (!((j & 2) >> 1) &&  ((Fermi_vacuum[d] & 2) >> 1)) nh_n += 1;
+                                    if (  (j & 1)       && ! (Fermi_vacuum[d] & 1)      ) np_n += 1;
+                                    if ( ((j & 2) >> 1) && !((Fermi_vacuum[d] & 2) >> 1)) np_n += 1;
+                                }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
-                                                           d + 1, cmp, det, nh_n));
+                                                           d + 1, cmp, det, nh_n, np_n));
                             }
                     }
                     ccmp[ip - pstart] = nullptr;
@@ -332,25 +342,61 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         }
         pinfos.clear();
         sort_dets();
-        if (fci_convention) convert_phase_to_fci_convention();
         threading->activate_normal();
     }
-    double phase_change(const vector<uint8_t> det) {
-        int n = 0;
-        for (int i = 0, j = 0; i < det.size(); i++) {
-            if (det[i] & 1)
-               n += j;
-            j += (det[i] & 2) >> 1; 
-        }
-        return 1 - ( (n & 1) << 1 );
+    // phase of moving all alpha elec before beta elec
+    int phase_change_spin_order(const vector<uint8_t> &det) {
+        uint8_t n = 0, j = 0;
+        for (int i = 0; i < det.size(); j ^= det[i++])
+            n ^= (det[i] << 1) & j;
+        return 1 - (n & 2);
     }
-    void convert_phase_to_fci_convention() {
+    // phase of moving orbitals in the Fermi vacuum order 
+    int phase_change_orb_order(const vector<uint8_t> &det, const vector<int> &reorder) {
+        uint8_t n = 0;
+        int tmp;
+        vector<int> alpha, beta;
+    
+        for (int i=0; i<det.size(); i++) {
+            if ( det[i] & 1)       alpha.push_back(reorder[i]);
+            if ((det[i] & 2) >> 1)  beta.push_back(reorder[i]);
+        }     
+    
+        for (int i = 0;   i < alpha.size()-1; i++) {
+        for (int j = i+1; j < alpha.size();   j++) {
+            if (alpha[i] > alpha[j]){
+               tmp = alpha[i];
+               alpha[i] = alpha[j];
+               alpha[j] = tmp; 
+               n ^= 1;
+            }
+        }
+        }
+
+        for (int i = 0;   i < beta.size()-1; i++) {
+        for (int j = i+1; j < beta.size();   j++) {
+            if (beta[i] > beta[j]){
+               tmp = beta[i];
+               beta[i] = beta[j];
+               beta[j] = tmp; 
+               n ^= 1;
+            }
+        }
+        }   
+    
+        return 1 - ((n & 1) << 1);
+    }
+    void convert_phase_to_fci_convention(const vector<int> &reorder) {
         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
         {
 #pragma omp for schedule(static)
-            for (int i = 0; i < vals.size(); i++)
-                vals[i] *= phase_change((*this)[i]);
+            for (int i = 0; i < vals.size(); i++){
+                vector<uint8_t> det = (*this)[i];
+                vals[i] *= phase_change_spin_order(det);
+                if (reorder.size() != 0)
+                    vals[i] *= phase_change_orb_order (det, reorder);
+            }
         }
     }
 
@@ -372,8 +418,8 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
-                  bool fci_convention = false) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, 
+                  int max_rank = -1, const string &vacuum_str = "") {
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -526,6 +572,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         sort_dets();
         threading->activate_normal();
     }
+    void convert_phase_to_fci_convention(const vector<int> &reorder) {} 
 };
 
 // Prefix trie structure of determinants (general spin)
@@ -544,8 +591,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, int max_rank = -1,
-                  bool fci_convention = false) {
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const string &vacuum_str = "") {
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -690,6 +737,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         sort_dets();
         threading->activate_normal();
     }
+    void convert_phase_to_fci_convention(const vector<int> &reorder) {} 
 };
 
 template <typename S, typename FL> struct DeterminantQC {
