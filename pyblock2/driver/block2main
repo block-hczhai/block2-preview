@@ -3125,15 +3125,9 @@ if not pre_run:
     if "restart_sample" in dic or "sample" in dic:
 
         if "restart_sample" in dic:
-            sample_params = dic.get("restart_sample", 0).split()
+            sample_cutoff = float(dic.get("restart_sample", 0))
         else:
-            sample_params = dic.get("sample", 0).split()
-
-        sample_cutoff = float(sample_params[0])
-        if len(sample_params) == 2:
-            max_rank = int(sample_params[1])
-        else:
-            max_rank = nelec[0]
+            sample_cutoff = float(dic.get("sample", 0))
 
         if "trans_mps_to_sz" in dic:
             from block2.sz import DeterminantTRIE, UnfusedMPS
@@ -3141,37 +3135,40 @@ if not pre_run:
         else:
             su2mps = SX == SU2
 
+        if "sample_reference" not in dic:
+            max_rank = nelec[0]
+            sample_ref = '' 
+        else:
+            sample_params = dic.get("sample_reference", 0).split()
+            max_rank = int(sample_params[0])
+            sample_ref = sample_params[1]
+            assert len(sample_ref) == n_sites
+            sample_ref = [ int(i) for i in sample_ref ]
+            nelec_ref = 0
+            for occ in sample_ref:
+                if occ == 3: nelec_ref += 2 
+                elif occ == 1 or occ == 2: nelec_ref += 1 
+            assert nelec_ref == nelec[0] 
+
         tx = time.perf_counter()
         dtrie = DeterminantTRIE(n_sites, True)
         mps.info.load_mutable()
         mps.load_mutable()
-        if "vacuum" not in dic:
-            noca = (nelec[0] + spin[0]) // 2
-            nocb = (nelec[0] - spin[0]) // 2
-            vacuum = "3"*nocb + "1"*(noca-nocb) + "0"*(n_sites-noca)
-        else:
-            vacuum = dic.get("vacuum", 0)
-            assert len(vacuum) == n_sites
-            nelec_vacuum = 0
-            for occ in vacuum:
-                if occ == "3": nelec_vacuum += 2 
-                elif occ == "1" or occ == "2": nelec_vacuum += 1 
-            assert nelec_vacuum == nelec[0] 
+        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, VectorUInt8(sample_ref))
 
-        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, vacuum)
-        if "fci_convention" in dic:
-            vacuum_idx = dic.get("fci_convention", 0).split()
-            if len(vacuum_idx) == 0:
+        if "sample_phase" in dic:
+            ref_idx = dic.get("sample_phase", 0).split()
+            if len(ref_idx) == 0:
                 if orb_idx is None:
-                    vacuum_idx = [] 
+                    ref_idx = [] 
                 else:
-                    vacuum_idx = orb_idx
+                    ref_idx = orb_idx
             else:
-                vacuum_idx = [int(i) for i in vacuum_idx]
-                assert len(vacuum_idx) == n_sites
-                check_idx = [i for i in vacuum_idx if i >= 0 and i < n_sites] 
+                ref_idx = [int(i) for i in ref_idx]
+                assert len(ref_idx) == n_sites
+                check_idx = [i for i in ref_idx if i >= 0 and i < n_sites] 
                 assert len(set(check_idx)) == n_sites
-            dtrie.convert_phase_to_fci_convention(VectorInt(vacuum_idx))
+            dtrie.convert_phase(VectorInt(ref_idx))
         _print("dtrie finished", time.perf_counter() - tx)
 
         if MPI is None or MPI.rank == 0:

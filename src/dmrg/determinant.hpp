@@ -179,12 +179,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each determinant to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const string &vacuum_str = "") {
-        assert(vacuum_str.size() == n_sites);
-        vector<int> Fermi_vacuum;
-        for (size_t i = 0; i < vacuum_str.size(); i++)
-            Fermi_vacuum.push_back(vacuum_str[i] - '0');
-
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        assert(ref.size() == n_sites || ref.size() == 0);
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -273,13 +269,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                                    m.second->ref(), false,
                                                    (*cmp)[ket], 1.0, 1.0);
                 }
-                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
+                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff) )
+                    ccmp[ip - pstart] = nullptr;
+                else if (ref.size() != 0 && (nh > max_rank || np > max_rank) )
                     ccmp[ip - pstart] = nullptr;
                 else
-                    if (Fermi_vacuum.size() != 0 && (nh > max_rank || np > max_rank) )
-                        ccmp[ip - pstart] = nullptr;
-                    else
-                        ccmp[ip - pstart] = cmp;
+                    ccmp[ip - pstart] = cmp;
             }
 #pragma omp single
             {
@@ -323,11 +318,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                             if (data[cur][jj] != 0){
                                 int nh_n = nh;
                                 int np_n = np;
-                                if (Fermi_vacuum.size() != 0) { 
-                                    if (! (j & 1)       &&   (Fermi_vacuum[d] & 1)       ) nh_n += 1;
-                                    if (!((j & 2) >> 1) &&  ((Fermi_vacuum[d] & 2) >> 1)) nh_n += 1;
-                                    if (  (j & 1)       && ! (Fermi_vacuum[d] & 1)      ) np_n += 1;
-                                    if ( ((j & 2) >> 1) && !((Fermi_vacuum[d] & 2) >> 1)) np_n += 1;
+                                if (ref.size() != 0) { 
+                                    if (!(j & 1) &&  (ref[d] & 1) ) nh_n += 1;
+                                    if (!(j & 2) &&  (ref[d] & 2) ) nh_n += 1;
+                                    if ( (j & 1) && !(ref[d] & 1) ) np_n += 1;
+                                    if ( (j & 2) && !(ref[d] & 2) ) np_n += 1;
                                 }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
                                                            d + 1, cmp, det, nh_n, np_n));
@@ -356,48 +351,39 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         uint8_t n = 0;
         int tmp;
         vector<int> alpha, beta;
-    
-        for (int i=0; i<det.size(); i++) {
-            if ( det[i] & 1)       alpha.push_back(reorder[i]);
-            if ((det[i] & 2) >> 1)  beta.push_back(reorder[i]);
-        }     
-    
-        for (int i = 0;   i < alpha.size()-1; i++) {
-        for (int j = i+1; j < alpha.size();   j++) {
-            if (alpha[i] > alpha[j]){
-               tmp = alpha[i];
-               alpha[i] = alpha[j];
-               alpha[j] = tmp; 
-               n ^= 1;
-            }
-        }
-        }
 
-        for (int i = 0;   i < beta.size()-1; i++) {
-        for (int j = i+1; j < beta.size();   j++) {
-            if (beta[i] > beta[j]){
-               tmp = beta[i];
-               beta[i] = beta[j];
-               beta[j] = tmp; 
-               n ^= 1;
-            }
-        }
-        }   
-    
+        for (int i=0; i<det.size(); i++) {
+            if ( det[i] & 1) alpha.push_back(reorder[i]);
+            if ((det[i] & 2) >> 1) beta.push_back(reorder[i]);
+        }     
+        for (int i = 0; i < alpha.size()-1; i++)
+            for (int j = i+1; j < alpha.size(); j++)
+                if (alpha[i] > alpha[j]) {
+                   tmp = alpha[i];
+                   alpha[i] = alpha[j];
+                   alpha[j] = tmp; 
+                   n ^= 1;
+                }
+        for (int i = 0; i < beta.size()-1; i++)
+            for (int j = i+1; j < beta.size(); j++)
+                if (beta[i] > beta[j]) {
+                   tmp = beta[i];
+                   beta[i] = beta[j];
+                   beta[j] = tmp; 
+                   n ^= 1;
+                }
         return 1 - ((n & 1) << 1);
     }
-    void convert_phase_to_fci_convention(const vector<int> &reorder) {
+    void convert_phase(const vector<int> &reorder) {
         int ntg = threading->activate_global();
-#pragma omp parallel num_threads(ntg)
-        {
-#pragma omp for schedule(static)
-            for (int i = 0; i < vals.size(); i++){
+#pragma omp parallel for schedule(static) num_threads(ntg)
+            for (int i = 0; i < vals.size(); i++) {
                 vector<uint8_t> det = (*this)[i];
                 vals[i] *= phase_change_spin_order(det);
                 if (reorder.size() != 0)
-                    vals[i] *= phase_change_orb_order (det, reorder);
+                    vals[i] *= phase_change_orb_order(det, reorder);
             }
-        }
+        threading->activate_normal();
     }
 
 };
@@ -419,7 +405,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, 
-                  int max_rank = -1, const string &vacuum_str = "") {
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -572,7 +558,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         sort_dets();
         threading->activate_normal();
     }
-    void convert_phase_to_fci_convention(const vector<int> &reorder) {} 
+    void convert_phase(const vector<int> &reorder) {} 
 };
 
 // Prefix trie structure of determinants (general spin)
@@ -592,7 +578,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const string &vacuum_str = "") {
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -737,7 +723,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         sort_dets();
         threading->activate_normal();
     }
-    void convert_phase_to_fci_convention(const vector<int> &reorder) {} 
+    void convert_phase(const vector<int> &reorder) {} 
 };
 
 template <typename S, typename FL> struct DeterminantQC {

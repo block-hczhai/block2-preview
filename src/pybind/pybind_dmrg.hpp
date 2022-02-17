@@ -422,9 +422,8 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
              &DeterminantTRIE<S, FL>::get_state_occupation)
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0, py::arg("max_rank") = -1,
-             py::arg("vacuum_str") = "")
-        .def("convert_phase_to_fci_convention",
-             &DeterminantTRIE<S, FL>::convert_phase_to_fci_convention,
+             py::arg("ref") = vector<uint8_t>())
+        .def("convert_phase", &DeterminantTRIE<S, FL>::convert_phase,
              py::arg("reorder"));
 }
 
