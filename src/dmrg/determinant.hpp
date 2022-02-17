@@ -346,33 +346,40 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
             n ^= (det[i] << 1) & j;
         return 1 - (n & 2);
     }
-    // phase of moving orbitals in the Fermi vacuum order 
-    int phase_change_orb_order(const vector<uint8_t> &det, const vector<int> &reorder) {
+    // return 1 if number of even cycles is odd
+    uint8_t permutation_parity(const vector<int> &perm) {
         uint8_t n = 0;
-        int tmp;
-        vector<int> alpha, beta;
-
-        for (int i=0; i<det.size(); i++) {
-            if ( det[i] & 1) alpha.push_back(reorder[i]);
-            if ((det[i] & 2) >> 1) beta.push_back(reorder[i]);
-        }     
-        for (int i = 0; i < alpha.size()-1; i++)
-            for (int j = i+1; j < alpha.size(); j++)
-                if (alpha[i] > alpha[j]) {
-                   tmp = alpha[i];
-                   alpha[i] = alpha[j];
-                   alpha[j] = tmp; 
-                   n ^= 1;
-                }
-        for (int i = 0; i < beta.size()-1; i++)
-            for (int j = i+1; j < beta.size(); j++)
-                if (beta[i] > beta[j]) {
-                   tmp = beta[i];
-                   beta[i] = beta[j];
-                   beta[j] = tmp; 
-                   n ^= 1;
-                }
-        return 1 - ((n & 1) << 1);
+        vector<uint8_t> tag(perm.size(), 0);
+        for (int i = 0, j; i < perm.size(); i++) {
+            j = i, n ^= !tag[j];
+            while (!tag[j])
+                n ^= 1, tag[j] = 1, j = perm[j];
+        }
+        return n;
+    }
+    int phase_change_orb_order(const vector<uint8_t> &det,
+                               const vector<int> &reorder) {
+        vector<int> alpha, beta, rev_det, reva, revb;
+        alpha.reserve(det.size());
+        beta.reserve(det.size());
+        rev_det.reserve(det.size());
+        reva.reserve(det.size());
+        revb.reserve(det.size());
+        for (int i = 0; i < det.size(); i++)
+            rev_det[reorder[i]] = det[i];
+        for (int i = 0, ja = 0, jb = 0; i < det.size(); i++) {
+            reva[i] = ja, ja += (rev_det[i] & 1);
+            revb[i] = jb, jb += ((rev_det[i] & 2) >> 1);
+        }
+        for (int i = 0; i < det.size(); i++) {
+            if (det[i] & 1)
+                alpha.push_back(reva[reorder[i]]);
+            if (det[i] & 2)
+                beta.push_back(revb[reorder[i]]);
+        }
+        uint8_t n = permutation_parity(alpha);
+        n ^= permutation_parity(beta);
+        return 1 - (n << 1);
     }
     void convert_phase(const vector<int> &reorder) {
         int ntg = threading->activate_global();
@@ -385,7 +392,6 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
             }
         threading->activate_normal();
     }
-
 };
 
 // Prefix trie structure of Configuration State Functions (CSFs) (spin-adapted)

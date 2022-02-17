@@ -3137,7 +3137,7 @@ if not pre_run:
 
         if "sample_reference" not in dic:
             max_rank = nelec[0]
-            sample_ref = '' 
+            sample_ref = []
         else:
             sample_params = dic.get("sample_reference", 0).split()
             max_rank = int(sample_params[0])
@@ -3157,7 +3157,7 @@ if not pre_run:
         dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, VectorUInt8(sample_ref))
 
         if "sample_phase" in dic:
-            ref_idx = dic.get("sample_phase", 0).split()
+            ref_idx = dic["sample_phase"].split()
             if len(ref_idx) == 0:
                 if orb_idx is None:
                     ref_idx = [] 
