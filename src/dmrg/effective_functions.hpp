@@ -100,7 +100,7 @@ struct EffectiveFunctions<
         };
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         rbra.clear();
-        f(ibra, rbra);
+        f(ibra, rbra); // TODO not needed for chebychev
         GMatrixFunctions<FL>::iadd(rbra, ibra, const_e + omega);
         GMatrixFunctions<FL>::iscale(rbra, -1.0 / eta);
         GMatrixFunctions<FC>::fill_complex(cbra, rbra, ibra);
@@ -159,6 +159,78 @@ struct EffectiveFunctions<
                 iprint, para_rule == nullptr ? nullptr : para_rule->comm,
                 precond_reg, idrs_tol, idrs_atol, max_iter, soft_max_iter);
             niter++;
+        } else if (solver_type == LinearSolverTypes::Cheby) {
+            // Here I only use f and not op, so wrap it for nmult
+            const auto Hvec =
+                    [f, &nmult](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                        f(a,b);
+                        ++nmult;
+                    };
+            FP eMin, eMax; // eigenvalue
+            {
+                // Compute lowest and largest eigenvalue
+                const auto dav_tol = 1e-4;
+                Random rgen;
+                rgen.rand_seed(-1);
+                MatrixRef uv(nullptr,  (MKL_INT)h_eff->ket->total_memory,1);
+                uv.allocate();
+                double xnorm = 0;
+                for (MKL_INT i = 0; i < aa.size(); i++){
+                    uv.data[i] = rgen.rand_double(-1,1);
+                    xnorm += uv.data[i] * uv.data[i];
+                }
+                for (MKL_INT i = 0; i < aa.size(); i++){
+                    uv.data[i] /= sqrt(xnorm);
+                }
+                DiagonalMatrix adiag(h_eff->diag->data, (MKL_INT)h_eff->diag->total_memory);
+                int ndav = 0;
+                std::vector<MatrixRef> uvv{uv};
+                auto evsmall = MatrixFunctions::davidson(Hvec, adiag, uvv, 0.0, DavidsonTypes::Normal, ndav, true,
+                                                         para_rule == nullptr ? nullptr : para_rule->comm,
+                                                         dav_tol, 300);
+                // largest: use CloseTop and huge shift
+                xnorm = 0;
+                for (MKL_INT i = 0; i < aa.size(); i++){
+                    uv.data[i] = rgen.rand_double(-1,1);
+                    xnorm += uv.data[i] * uv.data[i];
+                }
+                for (MKL_INT i = 0; i < aa.size(); i++){
+                    uv.data[i] /= sqrt(xnorm);
+                }
+                auto evlarge = MatrixFunctions::davidson(Hvec, adiag, uvv, 1e9, DavidsonTypes::CloseTo, ndav, true,
+                                                         para_rule == nullptr ? nullptr : para_rule->comm,
+                                                         dav_tol, 300);
+                eMin = evsmall[0];
+                eMax = evlarge[0];
+                uv.deallocate();
+            }
+            const auto nmult_davidson = nmult; // statistics
+            // Scaling
+            const FP maxInterval = 0.98; // Make it slightly smaller, for numerics
+            //eMax *= 2; eMin -= eMin; // TODO
+            const auto scale = 2 * maxInterval / (eMax-eMin); // 1/a = deltaH
+            const auto maxNCheby = ceil(1.1 / (scale * eta)); // just an estimate
+            // That would be fine if we use damping as well
+            cout << endl << "cheby: eMin= "
+                 <<  scientific << setprecision(4) << eMin << "; eMax = " << scientific << setprecision(4) << eMax
+                 << ", nmultDav = "  << nmult_davidson
+                 << ", maxNCheby approx "  << maxNCheby << endl;
+            // TODO
+            // - damping
+            // - no eta: numerical
+            // - preconditioner
+            //assert(linear_solver_params.first > 0);
+            int damping = 0; // TODO linear_soler_params.first
+            FC evalShift(const_e + omega, eta);
+            gf = IterativeMatrixFunctions<FP>::cheby(
+                    Hvec, cbra, mket,
+                    evalShift,
+                    conv_thrd, min(max_iter, soft_max_iter), // here: never abort as the values may still be ok
+                    eMin, eMax, maxInterval,
+                    damping,
+                    iprint, para_rule == nullptr ? nullptr : para_rule->comm);
+            gf = GMatrixFunctions<FC>::complex_dot(cbra, cket); // ATTENTION TODO
+            niter += maxNCheby; // TODO or less?
         } else
             throw runtime_error("Invalid solver type of Green's function.");
         gf = xconj<FC>(gf);

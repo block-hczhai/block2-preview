@@ -57,7 +57,8 @@ enum struct LinearSolverTypes : uint8_t {
     MinRes,
     GCROT,
     IDRS,
-    LSQR
+    LSQR,
+    Cheby
 };
 
 template <typename S, typename FL, typename = MPS<S, FL>>
