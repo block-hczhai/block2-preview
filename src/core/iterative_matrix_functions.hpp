@@ -2466,12 +2466,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
      * @param max_iter Maximum number of iterations, without throwing error
      * @return <x,b>
      */
+    // TODO allow for preconditioner
+    // TODO allow for zero eta, using numerical expansion
     template <typename MatMul, typename PComm>
     static FC cheby(MatMul &op, GMatrix<FC> x, // ATTENTION: Assume x and shift is complex but op is real
                    const GMatrix<FL> b,
                    const FC evalShift,
                    const FP tol, const int max_iter,
-                   // TODO add const
                    FP eMin, FP eMax, const FP maxInterval,
                    const int damping, // 0 1 2
                    const bool iprint = false, const PComm &pcomm = nullptr) {
@@ -2512,7 +2513,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     break;
             }
         }
-        cout << "\nHELLO  nCheby=" << nCheby << endl;
 
         //
         // Init
@@ -2558,12 +2558,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             auto fa = pow(zs, iCheb + 1); // TODO compute iteratively.
             auto fu = pow(zone + sqrt(zs2) * sqrt(zs2 - zone) / zs2, -iCheb);
             auto prec = fa * sqrt(zone - zone / zs2);
-            if (prec != zone) {
+            // alternative vv; less accurate but seems to be more stable
+            //prec = -static_cast<complex<long double>>(chebCoeffNum(iCheb, nCheby));
+            if (prec != zone and not isnan(real(fu/prec)) and not isnan(imag(fu/prec))) {
                 prec = damp * fac * fu / prec;
+                if(iprint)
+                    cout << iCheb << " " << prec <<", " << dot(phi,phi) << endl;
                 for (size_t i = 0; i < N; ++i)
                     //      vv original formula was for (-A + w); so need to change sign here
                     xOut[i] -= cast(scale) * prec * cast(phi(i, 0));
             } else {
+                break; // Only gets worse!
                 // Can I abort expansion?; With the tol criterium, this should not occur, though
             }
             // next

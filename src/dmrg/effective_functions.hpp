@@ -167,38 +167,61 @@ struct EffectiveFunctions<
                         ++nmult;
                     };
             FP eMin, eMax; // eigenvalue
+            FP diagMin  = 999999999999990.;
+            FP diagMax  = -999999999999990.;
             {
+                DiagonalMatrix adiag(h_eff->diag->data, (MKL_INT)h_eff->diag->total_memory);
+                // for initial vector  => use extrema of diag(H)
+                // purely random vectors get stuck to easily
+                MKL_INT locMin = 0;
+                MKL_INT locMax = 0;
+                for (MKL_INT i = 0; i < adiag.size(); i++){
+                    if (adiag.data[i] < diagMin){
+                        diagMin = adiag.data[i];
+                        locMin = i;
+                    }
+                    if (adiag.data[i] > diagMax){
+                        diagMax = adiag.data[i];
+                        locMax = i;
+                    }
+                    diagMax = max(diagMax, adiag.data[i]);
+                }
                 // Compute lowest and largest eigenvalue
-                const auto dav_tol = 1e-4;
+                const auto dav_tol = 1e-6; // 1e-5 is not good enough
                 Random rgen;
                 rgen.rand_seed(-1);
                 MatrixRef uv(nullptr,  (MKL_INT)h_eff->ket->total_memory,1);
                 uv.allocate();
                 double xnorm = 0;
                 for (MKL_INT i = 0; i < aa.size(); i++){
-                    uv.data[i] = rgen.rand_double(-1,1);
+                    uv.data[i] = 1e-4 * rgen.rand_double(-1,1); // small noise to avoid getting stuck in symmetry sectors
                     xnorm += uv.data[i] * uv.data[i];
                 }
+                xnorm -= uv.data[locMin] * uv.data[locMin];
+                uv.data[locMin] += 1.;
+                xnorm += uv.data[locMin] * uv.data[locMin];
                 for (MKL_INT i = 0; i < aa.size(); i++){
                     uv.data[i] /= sqrt(xnorm);
                 }
-                DiagonalMatrix adiag(h_eff->diag->data, (MKL_INT)h_eff->diag->total_memory);
                 int ndav = 0;
                 std::vector<MatrixRef> uvv{uv};
-                auto evsmall = MatrixFunctions::davidson(Hvec, adiag, uvv, 0.0, DavidsonTypes::Normal, ndav, true,
-                                                         para_rule == nullptr ? nullptr : para_rule->comm,
-                                                         dav_tol, 300);
+                auto evsmall = MatrixFunctions::davidson(Hvec, adiag, uvv, 0.0, DavidsonTypes::Normal, ndav, false,
+                        para_rule == nullptr ? nullptr : para_rule->comm,
+                        dav_tol, 300);
                 // largest: use CloseTop and huge shift
                 xnorm = 0;
                 for (MKL_INT i = 0; i < aa.size(); i++){
-                    uv.data[i] = rgen.rand_double(-1,1);
+                    uv.data[i] = 1e-4 * rgen.rand_double(-1,1);
                     xnorm += uv.data[i] * uv.data[i];
                 }
+                xnorm -= uv.data[locMax] * uv.data[locMax];
+                uv.data[locMax] += 1.;
+                xnorm += uv.data[locMax] * uv.data[locMax];
                 for (MKL_INT i = 0; i < aa.size(); i++){
                     uv.data[i] /= sqrt(xnorm);
                 }
-                auto evlarge = MatrixFunctions::davidson(Hvec, adiag, uvv, 1e9, DavidsonTypes::CloseTo, ndav, true,
-                                                         para_rule == nullptr ? nullptr : para_rule->comm,
+                auto evlarge = MatrixFunctions::davidson(Hvec, adiag, uvv, 1e9, DavidsonTypes::CloseTo, ndav, false,
+                        para_rule == nullptr ? nullptr : para_rule->comm,
                                                          dav_tol, 300);
                 eMin = evsmall[0];
                 eMax = evlarge[0];
@@ -206,22 +229,29 @@ struct EffectiveFunctions<
             }
             const auto nmult_davidson = nmult; // statistics
             // Scaling
-            const FP maxInterval = 0.98; // Make it slightly smaller, for numerics
-            //eMax *= 2; eMin -= eMin; // TODO
+            //const FP maxInterval = 0.98; // Make it slightly smaller, for numerics
+            const FP maxInterval = 0.58; // Make it even smaller, for numerics
+            // TODO adaptive way?
+            auto origEmin = eMin;
+            auto origEmax = eMax;
+            eMax += 1. * abs(eMax); eMin -= 1. * abs(eMin); // the limit analysis is too tricky
             const auto scale = 2 * maxInterval / (eMax-eMin); // 1/a = deltaH
             const auto maxNCheby = ceil(1.1 / (scale * eta)); // just an estimate
             // That would be fine if we use damping as well
-            cout << endl << "cheby: eMin= "
-                 <<  scientific << setprecision(4) << eMin << "; eMax = " << scientific << setprecision(4) << eMax
-                 << ", nmultDav = "  << nmult_davidson
-                 << ", maxNCheby approx "  << maxNCheby << endl;
-            // TODO
-            // - damping
-            // - no eta: numerical
-            // - preconditioner
+            if(iprint){
+                cout << endl << "cheby: eMin= "
+                    <<  scientific << setprecision(4) << eMin << "; eMax = " 
+                    << scientific << setprecision(4) << eMax
+                    << "; original : eMin= "
+                    <<  scientific << setprecision(4) << origEmin << "; eMax = " 
+                    << scientific << setprecision(4) << origEmax
+                    << ", nmultDav = "  << nmult_davidson
+                    << ", maxNCheby approx "  << maxNCheby << endl;
+            }
             //assert(linear_solver_params.first > 0);
-            int damping = 0; // TODO linear_soler_params.first
+            int damping = 0; // TODO add damping option; linear_solver_params.first
             FC evalShift(const_e + omega, eta);
+            const auto nmultpre = nmult;
             gf = IterativeMatrixFunctions<FP>::cheby(
                     Hvec, cbra, mket,
                     evalShift,
@@ -229,8 +259,7 @@ struct EffectiveFunctions<
                     eMin, eMax, maxInterval,
                     damping,
                     iprint, para_rule == nullptr ? nullptr : para_rule->comm);
-            gf = GMatrixFunctions<FC>::complex_dot(cbra, cket); // ATTENTION TODO
-            niter += maxNCheby; // TODO or less?
+            niter += nmult - nmultpre; 
         } else
             throw runtime_error("Invalid solver type of Green's function.");
         gf = xconj<FC>(gf);
