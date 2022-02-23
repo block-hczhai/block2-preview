@@ -1802,7 +1802,8 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("MinRes", LinearSolverTypes::MinRes)
         .value("GCROT", LinearSolverTypes::GCROT)
         .value("IDRS", LinearSolverTypes::IDRS)
-        .value("LSQR", LinearSolverTypes::LSQR);
+        .value("LSQR", LinearSolverTypes::LSQR)
+        .value("Cheby", LinearSolverTypes::Cheby);
 
     py::enum_<OpCachingTypes>(m, "OpCachingTypes", py::arithmetic())
         .value("Nothing", OpCachingTypes::None)

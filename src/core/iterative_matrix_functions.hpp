@@ -33,6 +33,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::copy;
     using GMatrixFunctions<FL>::iadd;
     using GMatrixFunctions<FL>::complex_dot;
+    using GMatrixFunctions<FL>::dot;
     using GMatrixFunctions<FL>::norm;
     using GMatrixFunctions<FL>::norm_accurate;
     using GMatrixFunctions<FL>::iscale;
@@ -42,6 +43,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::inverse;
     using GMatrixFunctions<FL>::least_squares;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FC FC;
     static const int cpx_sz = sizeof(FL) / sizeof(FP);
     // z = r / aa
     static void cg_precondition(const GMatrix<FL> &z, const GMatrix<FL> &r,
@@ -1692,8 +1694,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             }
         } else { // Copy init_basis references
             for (int i = 0; i < init_basis_in.size(); ++i) {
-                const auto &b = init_basis_in[i];
-                init_basis.emplace_back(GMatrix<FL>(b.data, b.m, b.n));
+                const auto &ba = init_basis_in[i];
+                init_basis.emplace_back(GMatrix<FL>(ba.data, ba.m, ba.n));
             }
         }
         const auto N = b.m; // vector size
@@ -2446,6 +2448,143 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
         nmult = niter;
         auto out = complex_dot(x, b);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(x.data, x.size(), pcomm->root);
+            pcomm->broadcast(&out, 1, pcomm->root);
+        }
+        return out;
+    }
+
+    /** Chebychev implementation
+     *
+     * @author  Henrik R. Larsson
+     * @param op Computes op(x) = A x
+     * @param x Input guess/ output solution
+     * @param b Right-hand side
+     * @param iprint Whether to print output during the iterations
+     * @param pcomm MPI communicator
+     * @param max_iter Maximum number of iterations, without throwing error
+     * @return <x,b>
+     */
+    // TODO allow for preconditioner
+    // TODO allow for zero eta, using numerical expansion
+    template <typename MatMul, typename PComm>
+    static FC cheby(MatMul &op, GMatrix<FC> x, // ATTENTION: Assume x and shift is complex but op is real
+                   const GMatrix<FL> b,
+                   const FC evalShift,
+                   const FP tol, const int max_iter,
+                   FP eMin, FP eMax, const FP maxInterval,
+                   const int damping, // 0 1 2
+                   const bool iprint = false, const PComm &pcomm = nullptr) {
+        assert(maxInterval <= 1 && maxInterval > 0);
+        assert(eMin < eMax);
+        const auto scale = 2 * maxInterval / (eMax - eMin); // 1/a = deltaH
+        const auto Hbar = eMin + maxInterval / scale; //  (eMax + eMin) / 2
+        const auto Ashift = -(scale * eMin + maxInterval);
+        assert(b.m == x.m);
+        assert(b.n == x.n);
+        //
+        // Compute max cheby expansion from numerical coefficient
+        //
+        const auto chebCoeffNum = [scale, Hbar, evalShift](int j, int polOrder) {
+            FC c{0., 0.};
+            const auto pi = acos(-1.);
+            for (int k = 0; k < polOrder; ++k) {
+                auto pix = cos(pi * (k + .5) / polOrder) / scale + Hbar;
+                auto fct = 1. / (pix + evalShift); //Function f(pix) to approximate
+                c += fct * cos(pi * j * (k + .5) / polOrder);
+            }
+            c *= 2. / polOrder;
+            return c;
+        };
+        const auto eta = imag(evalShift);
+        assert(eta >= 0.);
+        int nCheby = min(static_cast<int>(ceil(1.1 / (scale * eta))), max_iter); // just an estimate
+        if (abs(chebCoeffNum(nCheby - 1, nCheby)) < tol) {
+            for (; nCheby >= 3; --nCheby) {
+                if (abs(chebCoeffNum(nCheby - 1, nCheby)) > tol) {
+                    ++nCheby;
+                    break;
+                }
+            }
+        } else {
+            for (; nCheby <= max_iter; ++nCheby) {
+                if (abs(chebCoeffNum(nCheby - 1, nCheby)) < tol)
+                    break;
+            }
+        }
+
+        //
+        // Init
+        //
+        const auto N = b.m; // vector size
+        // Compute chebychev expansion on the fly
+        GMatrix<FL> phi(nullptr, N, 1);
+        GMatrix<FL> phiMinus(nullptr, N, 1);
+        GMatrix<FL> phiMinusMinus(nullptr, N, 1);
+        phi.allocate();
+        phiMinus.allocate();
+        phiMinusMinus.allocate();
+
+        const auto AshiftOp = [&op, scale, Ashift, N](const GMatrix<FL> &in, GMatrix<FL> &out) {
+            op(in, out);
+            for (size_t i = 0; i < N; ++i)
+                out(i, 0) = scale * out(i, 0) + Ashift * in(i,0);
+        };
+        //
+        // Series
+        //
+        complex<long double> zs = evalShift;
+        constexpr complex<long double> zone{1., 0.};
+        const auto cast = [](const double in) { return static_cast<long double>(in); };
+        //                  vv original formula was for (-A + w); so need to change sign here
+        zs = cast(scale) * -zs + cast(Ashift);
+        const auto zs2 = zs * zs;
+        vector<complex<long double>> xOut(N, {0., 0.});
+        for (int iCheb = 0; iCheb < nCheby; ++iCheb) {
+            if (iCheb == 0) {
+                copy(phi, b); // phi0 = b
+            } else if (iCheb == 1) {
+                AshiftOp(phiMinus, phi); // phi1 = H phi0
+            } else {
+                AshiftOp(phiMinus, phi); // phin = 2 H phi_n-1 - phi_n-2
+                for (size_t i = 0; i < N; ++i) {
+                    phi(i, 0) = 2. * phi(i, 0) - phiMinusMinus(i, 0);
+                }
+            }
+            // add
+            auto fac = iCheb == 0 ? zone : zone + zone;
+            auto damp = zone; // TODO add damping option
+            auto fa = pow(zs, iCheb + 1); // TODO compute iteratively.
+            auto fu = pow(zone + sqrt(zs2) * sqrt(zs2 - zone) / zs2, -iCheb);
+            auto prec = fa * sqrt(zone - zone / zs2);
+            // alternative vv; less accurate but seems to be more stable
+            //prec = -static_cast<complex<long double>>(chebCoeffNum(iCheb, nCheby));
+            if (prec != zone and not isnan(real(fu/prec)) and not isnan(imag(fu/prec))) {
+                prec = damp * fac * fu / prec;
+                if(iprint)
+                    cout << iCheb << " " << prec <<", " << dot(phi,phi) << endl;
+                for (size_t i = 0; i < N; ++i)
+                    //      vv original formula was for (-A + w); so need to change sign here
+                    xOut[i] -= cast(scale) * prec * cast(phi(i, 0));
+            } else {
+                break; // Only gets worse!
+                // Can I abort expansion?; With the tol criterium, this should not occur, though
+            }
+            // next
+            // vv could also be done much cheaper using pointers
+            copy(phiMinusMinus, phiMinus);
+            copy(phiMinus, phi);
+        }
+        phiMinusMinus.deallocate();
+        phiMinus.deallocate();
+        phi.deallocate();
+
+        FC out{0.,0.};
+        for (size_t i = 0; i < N; ++i) {
+            x(i, 0) = xOut[i];
+            out += conj(x(i,0)) * b(i,0);
+        }
         if (pcomm != nullptr) {
             pcomm->broadcast(x.data, x.size(), pcomm->root);
             pcomm->broadcast(&out, 1, pcomm->root);

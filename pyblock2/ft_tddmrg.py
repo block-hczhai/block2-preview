@@ -91,8 +91,6 @@ class RT_GFDMRG(FTDMRG):
                         cps_conv_tol: float, cps_n_sweeps: float,
                         diag_only=False, alpha=True,
                         cutoff=1E-14,
-                        max_solver_iter=20000,
-                        max_solver_iter_off_diag=0,
                         occs=None, bias=1.0, mo_coeff=None,
                         callback=lambda i,j,t,gf:None,
                         n_sub_sweeps=2, n_sub_sweeps_init = 4, exp_tol = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
@@ -114,8 +112,6 @@ class RT_GFDMRG(FTDMRG):
         :param cutoff: Bond dimension cutoff for sweeps
         :param diag_only: Solve only diagonal of GF: GF_ii
         :param alpha: Creation/annihilation operator refers to alpha spin (otherwise: beta spin)
-        :param max_solver_iter: Max. solver iterations for GF
-        :param max_solver_iter_off_diag: Max. solver iteration for off diagonal terms (if 0, is set to max_solver_iter)
         :param occs: Optional occupation number vector for V|psi0> initialization
         :param bias: Optional occupation number bias for V|psi0> initialization
         :param mo_coeff: MPO is in MO basis but GF should be computed in AO basis
@@ -168,12 +164,6 @@ class RT_GFDMRG(FTDMRG):
                 mem2), " SCRATCH = ", RT_GFDMRG.fmt_size(disk))
             mps_info2.deallocate_mutable()
             mps_info2.deallocate()
-
-        impo = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)),
-                             NoTransposeRule(RuleQC()), True, True, OpNamesSet((OpNames.R, OpNames.RD)))
-
-        if self.mpi is not None:
-            impo = ParallelMPO(impo, self.identrule)
 
         ############################################
         # Prepare creation/annihilation operators
@@ -292,6 +282,9 @@ class RT_GFDMRG(FTDMRG):
 
         # for autocorrelation
         idMPO = SimplifiedMPO(AncillaMPO(IdentityMPO(self.hamil)), RuleQC(), True, True)
+        if self.mpi is not None:
+            idMPO = ParallelMPO(idMPO, self.identrule)
+
         for ii, idx in enumerate(idxs):
 
             #

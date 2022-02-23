@@ -44,15 +44,28 @@ if SpinLabel == SU2:
     from block2.su2 import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.su2 import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.su2 import VectorOpElement, LocalMPO
-    from block2.su2 import MPICommunicator
+    try:
+        from block2.su2 import MPICommunicator
+        hasMPI = True
+    except ImportError:
+        hasMPI = False
 else:
     from block2.sz import HamiltonianQC, SimplifiedMPO, Rule, RuleQC, MPOQC
     from block2.sz import MPSInfo, MPS, MovingEnvironment, DMRG, Linear, IdentityMPO
     from block2.sz import OpElement, SiteMPO, NoTransposeRule, PDM1MPOQC, Expect
     from block2.sz import VectorOpElement, LocalMPO
-    from block2.sz import MPICommunicator
+    try:
+        from block2.sz import MPICommunicator
+        hasMPI = True
+    except ImportError:
+        hasMPI = False
 
-MPI = MPICommunicator()
+if hasMPI:
+    MPI = MPICommunicator()
+else:
+    class _MPI:
+        rank = 0
+    MPI = _MPI()
 
 
 def _print(*args, **kwargs):
@@ -561,7 +574,7 @@ class GFDMRG:
                 mo_coeff = mo_coeff[:, self.idx]
             gidxs = list(range(self.n_sites))
             ops = [None] * self.n_sites
-            print('idxs = ', idxs, 'gidxs = ', gidxs)
+            _print('idxs = ', idxs, 'gidxs = ', gidxs)
 
         for ii, idx in enumerate(gidxs):
             if SpinLabel == SZ:
