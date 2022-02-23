@@ -905,6 +905,38 @@ template <typename FL> struct FCIDUMP {
             }
         }
     }
+    // Remove small integral elements
+    virtual FP truncate_small(FP tol) {
+        uint16_t n = n_sites();
+        FP error = 0.0;
+        for (auto &t : ts)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < (t.general ? n : i + 1); j++)
+                    if (abs(t(i, j)) < tol)
+                        error += abs(t(i, j)), t(i, j) = 0;
+        for (auto &v : vgs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            if (abs(v(i, j, k, l)) < tol)
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vabs)
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            if (abs(v(i, j, k, l)) < tol)
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        for (auto &v : vs)
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl && abs(v(i, j, k, l)) < tol)
+                                error += abs(v(i, j, k, l)), v(i, j, k, l) = 0;
+        return error;
+    }
     // Remove integral elements that violate point group symmetry
     // orbsym: in XOR convention
     virtual FP symmetrize(const vector<uint8_t> &orbsym) {

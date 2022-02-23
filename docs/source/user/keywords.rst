@@ -27,8 +27,8 @@ orbitals
     Only ``nonspinadapted`` is supported for ``orbitals`` with ``hdf5`` format .
 
 integral\_tol
-    Optional. Only used for integral with ``hdf5`` format. The integral values smaller than ``integral_tol`` will be discarded.
-    Default is 1E-12.
+    Optional. The integral values smaller than ``integral_tol`` will be discarded.
+    Default is 1E-12 (for integral with ``hdf5`` format) or 0 (for integral with FCIDUMP format).
 
 model
     Optional. Can be used to perform calculations for some simple model Hamiltonian and the ``orbitals`` keyword can be skipped. For example,

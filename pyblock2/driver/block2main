@@ -525,6 +525,10 @@ if pre_run or not no_pre_run:
             else:
                 fcidump = FCIDUMP()
                 fcidump.read(fints)
+            integral_tol = float(dic.get("integral_tol", 0.0))
+            if integral_tol != 0.0:
+                int_tc_error = fcidump.truncate_small(integral_tol)
+                _print("integral truncation error = ", int_tc_error)
             fcidump.params["nelec"] = str(nelec[0])
             fcidump.params["ms2"] = str(spin[0])
             fcidump.params["isym"] = str(isym[0])

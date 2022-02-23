@@ -2094,6 +2094,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
                                      vab.data(), vab.size());
              })
         .def("deallocate", &FCIDUMP<FL>::deallocate)
+        .def("truncate_small", &FCIDUMP<FL>::truncate_small)
         .def("symmetrize",
              (double (FCIDUMP<FL>::*)(const vector<uint8_t> &)) &
                  FCIDUMP<FL>::symmetrize,
