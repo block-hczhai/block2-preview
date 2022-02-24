@@ -3188,16 +3188,46 @@ if not pre_run:
         else:
             su2mps = SX == SU2
 
+        if "sample_reference" not in dic:
+            max_rank = nelec[0]
+            sample_ref = []
+        else:
+            sample_params = dic.get("sample_reference", 0).split()
+            max_rank = int(sample_params[0])
+            sample_ref = sample_params[1]
+            assert len(sample_ref) == n_sites
+            sample_ref = [ int(i) for i in sample_ref ]
+            nelec_ref = 0
+            for occ in sample_ref:
+                if occ == 3: nelec_ref += 2 
+                elif occ == 1 or occ == 2: nelec_ref += 1 
+            assert nelec_ref == nelec[0] 
+
         tx = time.perf_counter()
         dtrie = DeterminantTRIE(n_sites, True)
         mps.info.load_mutable()
         mps.load_mutable()
-        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff)
+        dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, VectorUInt8(sample_ref))
+
+        if "sample_phase" in dic:
+            ref_idx = dic["sample_phase"].split()
+            if len(ref_idx) == 0:
+                if orb_idx is None:
+                    ref_idx = [] 
+                else:
+                    ref_idx = orb_idx
+            else:
+                ref_idx = [int(i) for i in ref_idx]
+                assert len(ref_idx) == n_sites
+                check_idx = [i for i in ref_idx if i >= 0 and i < n_sites] 
+                assert len(set(check_idx)) == n_sites
+            dtrie.convert_phase(VectorInt(ref_idx))
         _print("dtrie finished", time.perf_counter() - tx)
+
         if MPI is None or MPI.rank == 0:
             dname = "CSF" if su2mps else "DET"
-            _print("Number of %s = %10d (cutoff = %9.5g)" %
-                   (dname, len(dtrie), sample_cutoff))
+            _print("Number of %s = %10d (cutoff = %9.5g, max_rank = %3d)" %
+                   (dname, len(dtrie), sample_cutoff, max_rank))
             ddstr = "0+-2" if su2mps else "0ab2"
             dvals = np.array(dtrie.vals)
             gidx = np.argsort(np.abs(dvals))[::-1][:50]
@@ -3209,11 +3239,12 @@ if not pre_run:
                 _print(dname, "%10d" % ii, det, " = %20.15f" % val)
             if len(dvals) > 50:
                 _print(" ... and more ... ")
+            np.save(scratch + "/sample-vals.npy", dvals)
             dets = np.zeros((len(dtrie), n_sites), dtype=np.uint8)
             for i in range(len(dtrie)):
                 dets[i] = np.array(dtrie[i])
-            np.save(scratch + "/sample-vals.npy", dvals)
             np.save(scratch + "/sample-dets.npy", dets)
+
             state_occ = np.array(
                 dtrie.get_state_occupation()).reshape(n_sites, 4)
             # state_occ += ((1 - state_occ.sum(axis=1)) / 4)[:, None]
