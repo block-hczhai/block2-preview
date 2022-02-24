@@ -576,6 +576,11 @@ if pre_run or not no_pre_run:
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
     if "use_hybrid_complex" in dic and orb_idx is not None:
         fd_cpx_h1e.reorder(VectorUInt16(orb_idx))
+    if "full_integral" not in dic and dynamic_corr_method is not None and \
+        dynamic_corr_method[0] in ["nevpt2s", "mrcis", "mrrept2s",
+            "nevpt2-i", "nevpt2-r", "mrrept2-i", "mrrept2-r"]:
+        _print("use mrcis ficdump")
+        fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     if "trans_integral_to_spin_orbital" in dic:
         fcidump = SpinOrbitalFCIDUMP(fcidump)
 
@@ -994,7 +999,7 @@ elif "fullrestart" in dic:
             mps.info.load_mutable()
             if MPI is not None:
                 MPI.barrier()
-        if not mps.canonical_form[mps.center:mps.center + 2] == "CC":
+        if not mps.canonical_form[mps.center:mps.center + 2] == "CC" and mps.dot == 2:
             mps.center -= 1
         forward = False
     elif mps.center == mps.n_sites - 1 and mps.dot == 2:
@@ -1090,6 +1095,9 @@ elif pre_run or not no_pre_run:
         else:
             mps_info.set_bond_dimension_using_occ(
                 bond_dims[0], occs, bias=bias)
+    if "skip_inact_ext_sites" in dic:
+        assert dynamic_corr_method is not None
+        mps_info.set_bond_dimension_inact_ext_fci(bond_dims[0], n_inactive, n_external)
     if MPI is None or MPI.rank == 0:
         mps_info.save_data(scratch + '/mps_info.bin')
         mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
@@ -1114,6 +1122,8 @@ elif pre_run or not no_pre_run:
     else:
         for xwfn in mps.wfns:
             xwfn.normalize()
+    if "skip_inact_ext_sites" in dic:
+        mps.set_inact_ext_identity(n_inactive, n_external)
     forward = mps.center == 0
 else:
     mps_info = MPSInfo(0) if nroots == 1 and len(
@@ -1128,6 +1138,9 @@ else:
     else:
         mps_info.set_bond_dimension_using_occ(
             bond_dims[0], occs, bias=bias)
+    if "skip_inact_ext_sites" in dic:
+        assert dynamic_corr_method is not None
+        mps_info.set_bond_dimension_inact_ext_fci(bond_dims[0], n_inactive, n_external)
 
     if conn_centers is not None:
         assert nroots == 1
@@ -1149,6 +1162,8 @@ else:
     else:
         for xwfn in mps.wfns:
             xwfn.normalize()
+    if "skip_inact_ext_sites" in dic:
+        mps.set_inact_ext_identity(n_inactive, n_external)
     forward = mps.center == 0
 
 if mps is not None:
@@ -1804,8 +1819,9 @@ if not pre_run:
             and "delta_t" not in dic and "compression" not in dic and "stopt_sampling" not in dic:
 
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
-        me.delayed_contraction = OpNamesSet.normal_ops()
-        me.cached_contraction = cached_contraction
+        if "use_hybrid_complex" not in dic:
+            me.delayed_contraction = OpNamesSet.normal_ops()
+            me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)
 
@@ -1828,6 +1844,10 @@ if not pre_run:
         else:
             dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
         dmrg.iprint = max(min(outputlevel, 3), 0)
+
+        if "skip_inact_ext_sites" in dic:
+            dmrg.sweep_start_site = n_inactive
+            dmrg.sweep_end_site = me.n_sites - n_external
 
         if "use_hybrid_complex" in dic:
             dmrg.cpx_me = cpx_me
@@ -1874,7 +1894,7 @@ if not pre_run:
             dmrg.site_dependent_bond_dims = site_dependent_bdims[tto:]
             dmrg.me.dot = 1
             E_dmrg = dmrg.solve(len(bond_dims) - tto,
-                                mps.center == 0, sweep_tol)
+                                mps.center == dmrg.sweep_start_site, sweep_tol)
             mps.dot = 1
             if MPI is None or MPI.rank == 0:
                 mps.save_data()
@@ -2155,6 +2175,23 @@ if not pre_run:
     if "restart_onepdm" in dic or "onepdm" in dic:
 
         if nroots == 1:
+
+            if "skip_inact_ext_sites" in dic and mps.center != 0 and mps.center != mps.n_sites - mps.dot:
+                if MPI is not None:
+                    MPI.barrier()
+                _print('change canonical form ...')
+                _print('original cf = ', mps.canonical_form)
+                ime = MovingEnvironment(impo, mps, mps, "IEX")
+                ime.delayed_contraction = OpNamesSet.normal_ops()
+                ime.cached_contraction = cached_contraction
+                ime.init_environments(False)
+                expect = XExpect(ime, mps.info.bond_dim, mps.info.bond_dim)
+                expect.iprint = max(min(outputlevel, 3), 0)
+                expect.solve(True, mps.center != n_inactive)
+                _print('final cf = ', mps.canonical_form)
+                if MPI is not None:
+                    MPI.barrier()
+
             dm = do_onepdm(mps, mps)
             if MPI is None or MPI.rank == 0:
                 dmocc = np.diag(np.sum(dm, axis=0))
@@ -2855,6 +2892,8 @@ if not pre_run:
         while bra_info.tag == mps_info.tag:
             bra_info.tag += 'X'
         bra_info.set_bond_dimension(bond_dims[0])
+        if "skip_inact_ext_sites" in dic:
+            bra_info.set_bond_dimension_inact_ext_fci(bond_dims[0], n_inactive, n_external)
         if dynamic_corr_method[0].startswith('nevpt2'):
             mrpt_method_name = 'nevpt2'
         else:
@@ -2866,6 +2905,8 @@ if not pre_run:
         bra.initialize(bra_info)
         bra.random_canonicalize()
         bra.tensors[bra.center].normalize()
+        if "skip_inact_ext_sites" in dic:
+            bra.set_inact_ext_identity(n_inactive, n_external)
         bra.save_mutable()
         bra.deallocate()
         bra_info.save_mutable()
@@ -2908,6 +2949,11 @@ if not pre_run:
             linear = Linear(lme, rme, None, VectorUBond(
                 bond_dims), right_bdims, VectorDouble(noises))
         linear.iprint = max(min(outputlevel, 3), 0)
+
+        if "skip_inact_ext_sites" in dic:
+            linear.sweep_start_site = n_inactive
+            linear.sweep_end_site = lme.n_sites - n_external
+
         if "lowmem_noise" in dic:
             linear.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
         elif decomp_type != DecompositionTypes.SVD:
@@ -2917,9 +2963,12 @@ if not pre_run:
         linear.cutoff = float(dic.get("cutoff", 1E-14))
         linear.decomp_type = decomp_type
         linear.trunc_type = trunc_type
+        linear.linear_soft_max_iter = int(
+                dic.get("linear_soft_max_iter", -1))
         linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
 
-        e_corr = linear.solve(len(bond_dims), mps.center == 0, sweep_tol)
+        e_corr = linear.solve(len(bond_dims),
+            mps.center == linear.sweep_start_site, sweep_tol)
         nevpt_sweep_energies = np.array(linear.targets)
         nevpt_discarded_weights = np.array(linear.discarded_weights)
 

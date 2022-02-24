@@ -1349,7 +1349,8 @@ template <typename FL> struct MRCISFCIDUMP : FCIDUMP<FL> {
     uint16_t n_inactive, n_virtual, n_active;
     MRCISFCIDUMP(const shared_ptr<FCIDUMP<FL>> &fcidump, uint16_t n_inactive,
                  uint16_t n_virtual)
-        : FCIDUMP<FL>(), prim_fcidump(fcidump), n_virtual(n_virtual),
+        : FCIDUMP<FL>(), prim_fcidump(fcidump), n_inactive(n_inactive),
+          n_virtual(n_virtual),
           n_active(fcidump->n_sites() - n_inactive - n_virtual) {
         params = fcidump->params;
     }
@@ -1366,22 +1367,14 @@ template <typename FL> struct MRCISFCIDUMP : FCIDUMP<FL> {
     FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
         const uint16_t nocc = n_inactive + n_active;
         const int cnt = (i >= nocc) + (j >= nocc) + (k >= nocc) + (l >= nocc);
-        if (cnt <= 1 || (cnt == 2 && (i >= nocc) == (j >= nocc) ||
-                         (i >= nocc) == (l >= nocc)))
-            return prim_fcidump->v(i, j, k, l);
-        else
-            return 0;
+        return cnt <= 2 ? prim_fcidump->v(i, j, k, l) : 0;
     }
     // Two-electron integral element (SZ)
     FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
          uint16_t l) const override {
         const uint16_t nocc = n_inactive + n_active;
         const int cnt = (i >= nocc) + (j >= nocc) + (k >= nocc) + (l >= nocc);
-        if (cnt <= 1 || (cnt == 2 && (i >= nocc) == (j >= nocc) ||
-                         (i >= nocc) == (l >= nocc)))
-            return prim_fcidump->v(sl, sr, i, j, k, l);
-        else
-            return 0;
+        return cnt <= 2 ? prim_fcidump->v(sl, sr, i, j, k, l) : 0;
     }
     FL e() const override { return prim_fcidump->e(); }
     void deallocate() override {}

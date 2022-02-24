@@ -110,10 +110,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     bool store_wfn_spectra = false;
     vector<vector<FPS>> sweep_wfn_spectra;
     vector<FPS> wfn_spectra;
+    int sweep_start_site = 0;
+    int sweep_end_site = -1;
     Timer _t, _t2;
     DMRG(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
          const vector<ubond_t> &bond_dims, const vector<FPS> &noises)
-        : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
+        : me(me), bond_dims(bond_dims), noises(noises), forward(false) {
+        sweep_end_site = me->n_sites;
+    }
     virtual ~DMRG() = default;
     struct Iteration {
         vector<FPS> energies;
@@ -166,8 +170,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 me->ket->canonical_form[i] = 'K';
             else if (i == me->n_sites - 1)
                 me->ket->canonical_form[i] = 'S';
+            else if (forward)
+                me->ket->canonical_form[i] = 'K';
             else
-                assert(false);
+                me->ket->canonical_form[i] = 'S';
         }
         // guess wavefunction
         // change to fused form for super-block hamiltonian
@@ -219,9 +225,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         tuple<FPS, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
-        bool skip_decomp = !decomp_last_site &&
-                           ((forward && i == me->n_sites - 1 && !fuse_left) ||
-                            (!forward && i == 0 && fuse_left));
+        bool skip_decomp =
+            !decomp_last_site &&
+            ((forward && i == sweep_end_site - 1 && !fuse_left) ||
+             (!forward && i == sweep_start_site && fuse_left));
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         // effective hamiltonian
         if (davidson_soft_max_iter != 0 || noise != 0)
@@ -292,9 +299,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mps->canonical_form[i] = forward ? 'S' : 'K';
             else {
                 mps->canonical_form[i] = forward ? 'K' : 'S';
-                if (forward && i != me->n_sites - 1)
+                if (forward && i != sweep_end_site - 1)
                     mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
-                else if (!forward && i != 0)
+                else if (!forward && i != sweep_start_site)
                     mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
             }
         }
@@ -374,7 +381,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     me->ket->info->left_dims[i + 1] = info;
                     me->ket->info->save_left_dims(i + 1);
                     info->deallocate();
-                    if (i != me->n_sites - 1) {
+                    if (i != sweep_end_site - 1) {
                         MovingEnvironment<S, FL, FLS>::contract_one_dot(
                             i + 1, right, me->ket, forward);
                         me->ket->save_tensor(i + 1);
@@ -400,7 +407,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     me->ket->info->right_dims[i] = info;
                     me->ket->info->save_right_dims(i);
                     info->deallocate();
-                    if (i > 0) {
+                    if (i > sweep_start_site) {
                         MovingEnvironment<S, FL, FLS>::contract_one_dot(
                             i - 1, left, me->ket, forward);
                         me->ket->save_tensor(i - 1);
@@ -443,13 +450,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 me->ket->canonical_form[i] = forward ? 'S' : 'K';
             else {
                 if (forward) {
-                    if (i != me->n_sites - 1) {
+                    if (i != sweep_end_site - 1) {
                         me->ket->canonical_form[i] = 'L';
                         me->ket->canonical_form[i + 1] = 'S';
                     } else
                         me->ket->canonical_form[i] = 'K';
                 } else {
-                    if (i > 0) {
+                    if (i > sweep_start_site) {
                         me->ket->canonical_form[i - 1] = 'K';
                         me->ket->canonical_form[i] = 'R';
                     } else
@@ -573,7 +580,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
             if (me->para_rule == nullptr || me->para_rule->is_root())
                 MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                    i, sweep_start_site, sweep_end_site, mps, forward,
+                    me->mpo->tf->opf->cg);
         }
         if (build_pdm) {
             _t.get_time();
@@ -664,7 +672,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             old_wfn->info->deallocate();
             old_wfn->deallocate();
             MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                i, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
+                i, sweep_start_site, sweep_end_site, me->ket, forward,
+                me->mpo->tf->opf->cg);
             me->ket->save_data();
         } else {
             if (pdm != nullptr) {
@@ -752,8 +761,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mket->canonical_form[i] = 'J';
             else if (i == me->n_sites - 1)
                 mket->canonical_form[i] = 'T';
+            else if (forward)
+                me->ket->canonical_form[i] = 'J';
             else
-                assert(false);
+                me->ket->canonical_form[i] = 'T';
         }
         // guess wavefunction
         // change to fused form for super-block hamiltonian
@@ -862,6 +873,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 dm, mket->wfns, (int)bond_dim, forward, cpx_me == nullptr,
                 new_wfns, rot, cutoff, store_wfn_spectra, wfn_spectra,
                 trunc_type);
+            if (cpx_me != nullptr)
+                for (size_t k = 0; k < new_wfns.size(); k += 2) {
+                    FP nra = new_wfns[k]->norm();
+                    FP nrb = new_wfns[k + 1]->norm();
+                    FP nr = sqrt(abs(nra * nra + nrb * nrb));
+                    new_wfns[k]->iscale(1 / nr);
+                    new_wfns[k + 1]->iscale(1 / nr);
+                }
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
@@ -874,7 +893,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mket->info->left_dims[i + 1] = info;
                 mket->info->save_left_dims(i + 1);
                 info->deallocate();
-                if (i != me->n_sites - 1) {
+                if (i != sweep_end_site - 1) {
                     MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                         i + 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i + 1);
@@ -898,7 +917,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mket->info->right_dims[i] = info;
                 mket->info->save_right_dims(i);
                 info->deallocate();
-                if (i > 0) {
+                if (i > sweep_start_site) {
                     MovingEnvironment<S, FL, FLS>::contract_multi_one_dot(
                         i - 1, new_wfns, mket, forward);
                     mket->save_wavefunction(i - 1);
@@ -947,7 +966,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
             mket->unload_tensor(i);
             if (forward) {
-                if (i != me->n_sites - 1) {
+                if (i != sweep_end_site - 1) {
                     mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                     mket->tensors[i + 1] = nullptr;
                     mket->canonical_form[i] = 'L';
@@ -955,7 +974,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 } else
                     mket->canonical_form[i] = 'J';
             } else {
-                if (i > 0) {
+                if (i > sweep_start_site) {
                     mket->tensors[i - 1] = nullptr;
                     mket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                     mket->canonical_form[i - 1] = 'J';
@@ -1027,7 +1046,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
-        if (cpx_me != nullptr)
+        if (x_eff != nullptr)
             for (int i = 0; i < mket->nroots / 2; i++)
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
@@ -1101,6 +1120,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 dm, old_wfns, (int)bond_dim, forward, cpx_me == nullptr,
                 mket->wfns, forward ? mket->tensors[i] : mket->tensors[i + 1],
                 cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
+            if (cpx_me != nullptr)
+                for (size_t k = 0; k < mket->wfns.size(); k += 2) {
+                    FP nra = mket->wfns[k]->norm();
+                    FP nrb = mket->wfns[k + 1]->norm();
+                    FP nr = sqrt(abs(nra * nra + nrb * nrb));
+                    mket->wfns[k]->iscale(1 / nr);
+                    mket->wfns[k + 1]->iscale(1 / nr);
+                }
             tsplt += _t.get_time();
             shared_ptr<StateInfo<S>> info = nullptr;
             if (forward) {
@@ -1145,7 +1172,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 old_wfns[k]->deallocate();
             old_wfns[0]->deallocate_infos();
             MovingEnvironment<S, FL, FLS>::propagate_multi_wfn(
-                i, me->n_sites, mket, forward, me->mpo->tf->opf->cg);
+                i, sweep_start_site, sweep_end_site, mket, forward,
+                me->mpo->tf->opf->cg);
             mket->save_data();
         } else {
             if (pdm != nullptr) {
@@ -1226,7 +1254,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           }),
                 mps_quanta[i].end());
         }
-        if (cpx_me != nullptr)
+        if (x_eff != nullptr)
             for (int i = 0; i < mket->nroots / 2; i++)
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
@@ -1306,11 +1334,11 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->para_rule->comm->tidle = 0;
             me->para_rule->comm->twait = 0;
         }
-        me->prepare();
+        me->prepare(sweep_start_site, sweep_end_site);
         for (auto &xme : ext_mes)
-            xme->prepare();
+            xme->prepare(sweep_start_site, sweep_end_site);
         if (cpx_me != nullptr)
-            cpx_me->prepare();
+            cpx_me->prepare(sweep_start_site, sweep_end_site);
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();
@@ -1320,10 +1348,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
-            for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
+            for (int it = me->center; it < sweep_end_site - me->dot + 1; it++)
                 sweep_range.push_back(it);
         else
-            for (int it = me->center; it >= 0; it--)
+            for (int it = me->center; it >= sweep_start_site; it--)
                 sweep_range.push_back(it);
 
         Timer t;
@@ -2002,6 +2030,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
     bool store_bra_spectra = false, store_ket_spectra = false;
     vector<vector<FPS>> sweep_wfn_spectra;
     vector<FPS> wfn_spectra;
+    int sweep_start_site = 0;
+    int sweep_end_site = -1;
     Linear(const shared_ptr<MovingEnvironment<S, FL, FLS>> &lme,
            const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
            const shared_ptr<MovingEnvironment<S, FL, FLS>> &tme,
@@ -2019,6 +2049,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             if (lme != nullptr)
                 assert(tme->tag != lme->tag);
         }
+        sweep_end_site = rme->n_sites;
     }
     Linear(const shared_ptr<MovingEnvironment<S, FL, FLS>> &rme,
            const vector<ubond_t> &bra_bond_dims,
@@ -2089,8 +2120,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     mps->canonical_form[i] = 'K';
                 else if (i == me->n_sites - 1)
                     mps->canonical_form[i] = 'S';
+                else if (forward)
+                    mps->canonical_form[i] = 'K';
                 else
-                    assert(false);
+                    mps->canonical_form[i] = 'S';
             }
             // guess wavefunction
             // change to fused form for super-block hamiltonian
@@ -2116,9 +2149,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                          real_bra = nullptr;
         shared_ptr<SparseMatrixGroup<S, FLS>> pbra = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
-        bool skip_decomp = !decomp_last_site &&
-                           ((forward && i == me->n_sites - 1 && !fuse_left) ||
-                            (!forward && i == 0 && fuse_left));
+        bool skip_decomp =
+            !decomp_last_site &&
+            ((forward && i == sweep_end_site - 1 && !fuse_left) ||
+             (!forward && i == sweep_start_site && fuse_left));
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
@@ -2359,8 +2393,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     mps->canonical_form[i] = 'K';
                 else if (i == me->n_sites - 1)
                     mps->canonical_form[i] = 'S';
+                else if (forward)
+                    mps->canonical_form[i] = 'K';
                 else
-                    assert(false);
+                    mps->canonical_form[i] = 'S';
             }
             mps->load_tensor(i);
             if ((fuse_left && mps->canonical_form[i] == 'S') ||
@@ -2482,9 +2518,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 mps->canonical_form[i] = forward ? 'S' : 'K';
             else {
                 mps->canonical_form[i] = forward ? 'K' : 'S';
-                if (forward && i != me->n_sites - 1)
+                if (forward && i != sweep_end_site - 1)
                     mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
-                else if (!forward && i != 0)
+                else if (!forward && i != sweep_start_site)
                     mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
             }
         }
@@ -2694,7 +2730,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         mps->info->left_dims[i + 1] = info;
                         mps->info->save_left_dims(i + 1);
                         info->deallocate();
-                        if (i != me->n_sites - 1) {
+                        if (i != sweep_end_site - 1) {
                             MovingEnvironment<S, FL, FLS>::contract_one_dot(
                                 i + 1, right, mps, forward);
                             mps->save_tensor(i + 1);
@@ -2722,7 +2758,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         mps->info->right_dims[i] = info;
                         mps->info->save_right_dims(i);
                         info->deallocate();
-                        if (i > 0) {
+                        if (i > sweep_start_site) {
                             MovingEnvironment<S, FL, FLS>::contract_one_dot(
                                 i - 1, left, mps, forward);
                             mps->save_tensor(i - 1);
@@ -2771,13 +2807,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
             else
                 for (auto &mps : mpss) {
                     if (forward) {
-                        if (i != me->n_sites - 1) {
+                        if (i != sweep_end_site - 1) {
                             mps->canonical_form[i] = 'L';
                             mps->canonical_form[i + 1] = 'S';
                         } else
                             mps->canonical_form[i] = 'K';
                     } else {
-                        if (i > 0) {
+                        if (i > sweep_start_site) {
                             mps->canonical_form[i - 1] = 'K';
                             mps->canonical_form[i] = 'R';
                         } else
@@ -3158,8 +3194,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 mps->canonical_form[i] = 'C';
                 mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
                 mps->canonical_form[i + 1] = 'C';
-                if (mps->center == mps->n_sites - 1)
-                    mps->center = mps->n_sites - 2;
+                if (mps->center == sweep_end_site - 1)
+                    mps->center = sweep_end_site - 2;
             } else {
                 mps->canonical_form[i] = 'C';
                 mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
@@ -3167,7 +3203,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             }
             if (me->para_rule == nullptr || me->para_rule->is_root())
                 MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                    i, sweep_start_site, sweep_end_site, mps, forward,
+                    me->mpo->tf->opf->cg);
         }
         if (build_pdm) {
             _t.get_time();
@@ -3322,7 +3359,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     dm->deallocate();
                 }
                 MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                    i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                    i, sweep_start_site, sweep_end_site, mps, forward,
+                    me->mpo->tf->opf->cg);
             }
             for (auto &mps : mpss)
                 mps->save_data();
@@ -3405,13 +3443,13 @@ template <typename S, typename FL, typename FLS> struct Linear {
             lme->para_rule->comm->tidle = 0;
             lme->para_rule->comm->twait = 0;
         }
-        rme->prepare();
+        rme->prepare(sweep_start_site, sweep_end_site);
         if (lme != nullptr)
-            lme->prepare();
+            lme->prepare(sweep_start_site, sweep_end_site);
         if (tme != nullptr)
-            tme->prepare();
+            tme->prepare(sweep_start_site, sweep_end_site);
         for (auto &xme : ext_tmes)
-            xme->prepare();
+            xme->prepare(sweep_start_site, sweep_end_site);
         sweep_targets.clear();
         sweep_discarded_weights.clear();
         sweep_cumulative_nflop = 0;
@@ -3420,10 +3458,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
         frame->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
-            for (int it = rme->center; it < rme->n_sites - rme->dot + 1; it++)
+            for (int it = rme->center; it < sweep_end_site - rme->dot + 1; it++)
                 sweep_range.push_back(it);
         else
-            for (int it = rme->center; it >= 0; it--)
+            for (int it = rme->center; it >= sweep_start_site; it--)
                 sweep_range.push_back(it);
 
         Timer t;
@@ -4358,7 +4396,7 @@ struct Expect {
                     dm->info->deallocate();
                     dm->deallocate();
                     MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                        i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                        i, 0, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
                 }
             } else
                 for (auto &mps : mpss)
@@ -4725,7 +4763,7 @@ struct Expect {
                     dm->info->deallocate();
                     dm->deallocate();
                     MovingEnvironment<S, FL, FLS>::propagate_multi_wfn(
-                        i, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
+                        i, 0, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
                 }
             } else {
                 for (auto &mps : mpss)
