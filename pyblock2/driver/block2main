@@ -410,7 +410,7 @@ if "use_hybrid_complex" in dic:
     if anti_herm:
         simpl_rule_cpx_h1e = AntiHermitianRuleQCCPX(simpl_rule_cpx_h1e)
 
-if MPI is not None and MPI.rank == 0:
+if MPI is None or MPI.rank == 0:
     if not os.path.isdir(scratch):
         os.mkdir(scratch)
     if stackblock_compat:
@@ -419,6 +419,10 @@ if MPI is not None and MPI.rank == 0:
         os.mkdir(scratch)
     if restart_dir is not None and not os.path.isdir(restart_dir):
         os.mkdir(restart_dir)
+    os.environ['TMPDIR'] = scratch
+else:
+    if stackblock_compat:
+        scratch = scratch + "/node0"
     os.environ['TMPDIR'] = scratch
 if MPI is not None:
     MPI.barrier()
