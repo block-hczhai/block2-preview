@@ -29,7 +29,10 @@ DEBUG = True
 
 if len(sys.argv) > 1:
     fin = sys.argv[1]
-    if len(sys.argv) > 2 and sys.argv[2] in ["pre", "para-pre"]:
+    if len(sys.argv) == 2 and fin == '-v':
+        print('Block 2.0')
+        quit()
+    elif len(sys.argv) > 2 and sys.argv[2] in ["pre", "para-pre"]:
         pre_run = True
         para_pre_run = sys.argv[2] == "para-pre"
     else:
@@ -269,8 +272,12 @@ if DEBUG:
 
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
+stackblock_compat = dic.get("hf_occ", None) == "integral"
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
-n_threads = int(dic.get("num_thrds", 28))
+if stackblock_compat:
+    n_threads = int(dic.get("num_thrds", 1))
+else:
+    n_threads = int(dic.get("num_thrds", 28))
 mkl_threads = int(dic.get("mkl_thrds", 1))
 bond_dims, dav_thrds, noises, site_dependent_bdims = dic["schedule"]
 if max([len(x) for x in site_dependent_bdims]) == 0:
@@ -404,6 +411,10 @@ if "use_hybrid_complex" in dic:
         simpl_rule_cpx_h1e = AntiHermitianRuleQCCPX(simpl_rule_cpx_h1e)
 
 if MPI is not None and MPI.rank == 0:
+    if not os.path.isdir(scratch):
+        os.mkdir(scratch)
+    if stackblock_compat:
+        scratch = scratch + "/node0"
     if not os.path.isdir(scratch):
         os.mkdir(scratch)
     if restart_dir is not None and not os.path.isdir(restart_dir):
@@ -1921,6 +1932,11 @@ if not pre_run:
                 bdims = bdims + bdims[-1:] * \
                     (len(discarded_weights) - len(bdims))
             np.save(scratch + "/E_dmrg.npy", E_dmrg)
+            if stackblock_compat:
+                dmrg_energies = [E_dmrg] if nroots == 1 else list(sweep_energies[-1])
+                with open(os.path.join(scratch + "/dmrg.e"), "wb") as f:
+                    import struct
+                    f.write(struct.pack('d' * nroots, *dmrg_energies))
             np.save(scratch + "/bond_dims.npy", bdims)
             np.save(scratch + "/sweep_energies.npy", sweep_energies)
             np.save(scratch + "/discarded_weights.npy", discarded_weights)
@@ -2481,6 +2497,18 @@ if not pre_run:
             return dm
         else:
             return None
+    
+    def save_twopdm_stackblock_format(dm, fn):
+        xdm = (dm[0] + dm[2] + 2 * dm[1]) / 2
+        xn = xdm.shape[0]
+        with open(scratch + "/" + fn, 'w') as f:
+            f.write("%d\n" % xn)
+            for i in range(0, xn):
+                for j in range(0, xn):
+                    for k in range(0, xn):
+                        for l in range(0, xn):
+                            f.write(("%d " * 4 + "%20.14f\n")
+                                % (i, j, k, l, xdm[i, j, k, l]))
 
     # TWOPDM
     if "restart_twopdm" in dic or "twopdm" in dic:
@@ -2489,6 +2517,8 @@ if not pre_run:
             dm = do_twopdm(mps, mps)
             if MPI is None or MPI.rank == 0:
                 np.save(scratch + "/2pdm.npy", dm)
+                if stackblock_compat:
+                    save_twopdm_stackblock_format(dm, "spatial_twopdm.0.0.txt")
                 mps_info.save_data(scratch + '/mps_info.bin')
                 mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
         else:
@@ -2504,6 +2534,8 @@ if not pre_run:
                 dm = do_twopdm(smps, smps)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, iroot), dm)
+                    if stackblock_compat:
+                        save_twopdm_stackblock_format(dm, "spatial_twopdm.%d.%d.txt" % (iroot, iroot))
                     smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
     # Transition TWOPDM
