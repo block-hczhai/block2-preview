@@ -296,6 +296,20 @@ tran\_triangular
     Optional keyword with no associated value. If given, only the transition density matrices with bra state
     index equal to or greater than the ket state index will be computed.
 
+skip\_inact\_ext\_sites
+    Optional keyword with no associated value. If given, for uncontracted dynamic correlation calculations,
+    the sweeps will skip inactive and external sites,
+    so that the efficiency can be higher and the accuracy is not affected. This should only be used with
+    uncontracted dynamic correlation keywords (checked) without any big sites. Normally it is useful only for
+    dynamic correlation with singles (such as ``mrcis``).
+
+full\_integral
+    Optional keyword with no associated value. If **not** given, and it is a dynamic correlation with singles
+    (namely, with keywords ``nevpt2s``, ``mrcis``, ``mrrept2s``, ``nevpt2-i``, ``nevpt2-r``, ``mrrept2-i``, or
+    ``mrrept2-r``), the two-electron integral elements with more than two virtual indices will be set to zero.
+    This should save some MPO contruction time, without affecting the sweep time cost and accuracy.
+    If this keyword is given, the full integral elements will be used for constructing MPO.
+
 Uncontracted Dynamic Correlation
 --------------------------------
 

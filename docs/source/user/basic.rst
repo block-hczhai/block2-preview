@@ -26,7 +26,7 @@ Otherwise, for manual installation, please first compile the code according to
 :ref:`user_installation` with ``cmake`` option ``-DBUILD_LIB=ON`` (and other necessary options).
 The following python script is used as the "block2 executable": ::
 
-    ${BLOCK2HOME}/pyblock2/block2main
+    ${BLOCK2HOME}/pyblock2/driver/block2main
 
 where ``${BLOCK2HOME}`` is the ``block2`` root directory. The ``build`` directory under ``block2``
 root directory should be in ``PYTHONPATH``. You can add the following line in your environemnt
@@ -43,7 +43,7 @@ where ``dmrg.conf`` is the input file and ``dmrg.out`` is the output file.
 To run a DMRG calculation with MPI parallelization, please use the following command: ::
 
     mpirun --bind-to core --map-by ppr:${SLURM_TASKS_PER_NODE}:node:pe=${OMP_NUM_THREADS} \
-        python -u ${BLOCK2HOME}/pyblock2/block2main dmrg.conf > dmrg.out
+        python -u ${BLOCK2HOME}/pyblock2/driver/block2main dmrg.conf > dmrg.out
 
 where ``${SLURM_TASKS_PER_NODE}`` is the number of mpi processes in each node.
 ``${OMP_NUM_THREADS}`` is the number of threads (CPU cores) used by each mpi process.

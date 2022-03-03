@@ -15,12 +15,17 @@ One can install ``block2`` using ``pip``:
 
       pip install block2
 
-* Hybrid openMP/MPI version (requiring openMPI 4.0.x installed) ::
+* Hybrid openMP/MPI version (requiring openMPI 4.0.x and ``mpi4py`` based on the same openMPI library installed) ::
 
       pip install block2-mpi
 
 * Binary format are prepared via ``pip`` for python 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI).
   If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source.
+
+* One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``,
+  but its dependence on mpi library can sometimes be difficult to deal with.
+  Some guidance for resolving environment problems can be found in github issue
+  `#7 <https://github.com/block-hczhai/block2-preview/issues/7>`_.
 
 Manual Installation
 -------------------
