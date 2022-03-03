@@ -221,7 +221,7 @@ class DMRGCI(lib.StreamObject):
 
         if state is None:
             state = self.mps
-            state.dot = 2
+            state.dot = 1
         
         # 1PDM MPO
         pmpo = PDM1MPOQC(self.hamil, 0)
@@ -247,7 +247,7 @@ class DMRGCI(lib.StreamObject):
 
         if state is None:
             state = self.mps
-            state.dot = 2
+            state.dot = 1
         
         # 2PDM MPO
         pmpo = PDM2MPOQC(self.hamil)

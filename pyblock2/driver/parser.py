@@ -143,6 +143,13 @@ def parse(fname):
     if len(schedule) == 0:
         schedule = get_schedule(dic)
         site_dependent_bdims = [[]] * len(schedule)
+    
+    if "memory," in dic:
+        dic["mem"] = dic["memory,"].replace(",", "")
+        del dic["memory,"]
+    elif "memory" in dic:
+        dic["mem"] = dic["memory"].replace(",", "")
+        del dic["memory"]
 
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()

@@ -252,7 +252,7 @@ class NEVPT(lib.StreamObject):
 
         if state is None:
             state = self.mps
-            state.dot = 2
+            state.dot = 1
         
         if state.center == state.n_sites - 1 and state.canonical_form[state.center] == 'K':
             cg = CG(200)
@@ -267,6 +267,7 @@ class NEVPT(lib.StreamObject):
         # 1PDM
         pme = MovingEnvironment(pmpo, state, state, "1PDM")
         pme.init_environments(self.verbose >= 5)
+
         expect = Expect(pme, state.info.bond_dim, state.info.bond_dim)
         expect.iprint = max(min(self.verbose - 4, 3), 0)
         expect.solve(True, state.center == 0)
