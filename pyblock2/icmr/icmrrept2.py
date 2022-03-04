@@ -180,18 +180,27 @@ def _grid_restrict(key, grid, restrict_cas, no_eq):
                 ixx.append(grid[i - 1] <= grid[i])
     return np.bitwise_and.reduce(ixx)
 
+def _linear_solve(a, b):
+    c = np.zeros_like(b)
+    for i in range(len(a)):
+        c[i] = np.linalg.lstsq(a[i], b[i], rcond=None)[0]
+    return c
+
 from pyscf import lib
 
-def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
+def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     if mc is None:
         mc = ic._mc
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
+    if root is None and hasattr(ic, 'root'):
+        root = ic.root
+    ic.root = root
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
     ic.mo_energy = mc.mo_energy
     if pdms is None:
-        pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs)
+        pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs, root=root)
     if eris is None:
         eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True)
     ic.eris = eris
@@ -263,14 +272,14 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
                 xh = ener.reshape(-1, dcas, dcas)
         skey = key[:9 - l]
         if skey not in ic.sub_eners:
-            ic.sub_eners[skey] = -(np.linalg.solve(xh, xr) * xr).sum()
+            ic.sub_eners[skey] = -(_linear_solve(xh, xr) * xr).sum()
         else:
-            ic.sub_eners[skey] += -(np.linalg.solve(xh, xr) * xr).sum()
+            ic.sub_eners[skey] += -(_linear_solve(xh, xr) * xr).sum()
         if key[-1] in "-1*":
             lib.logger.note(ic, "E(%s-%4s) = %20.14f",
                 ic.__class__.__name__, skey, ic.sub_eners[skey])
-    ic.e_corr = sum(ic.sub_eners.values()) + ic._mc.e_tot - ic._scf.e_tot
-    lib.logger.note(ic, 'E(%s) = %.16g  E_corr = %.16g',
+    ic.e_corr = sum(ic.sub_eners.values())
+    lib.logger.note(ic, 'E(%s) = %.16g  E_corr_pt = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
 
 class WickICMRREPT2(lib.StreamObject):
@@ -285,7 +294,12 @@ class WickICMRREPT2(lib.StreamObject):
 
     @property
     def e_tot(self):
-        return np.asarray(self.e_corr) + self._scf.e_tot
+        if hasattr(self._mc, 'e_states') and hasattr(self, 'root'):
+            return np.asarray(self.e_corr) + self._mc.e_states[self.root]
+        elif hasattr(self, 'root') and isinstance(self._mc.e_tot, np.ndarray):
+            return np.asarray(self.e_corr) + self._mc.e_tot[self.root]
+        else:
+            return np.asarray(self.e_corr) + self._mc.e_tot
 
     kernel = kernel
 
@@ -297,10 +311,39 @@ if __name__ == "__main__":
 
     mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2)
     mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    # Example 1 - single state
     mc = mcscf.CASSCF(mf, 6, 8)
     mc.fcisolver.conv_tol = 1e-14
     mc.run()
     wsc = WickICMRREPT2(mc).run()
     # converged SCF energy = -149.608181589162
     # CASSCF energy = -149.708657771221
-    # E(WickICMRREPT2) = -149.9154338112048  E_corr = -0.3072522220430498
+    # E(WickICMRREPT2) = -150.0162455392724  E_corr_pt = -0.3075877680517728
+
+    # Example 2 - CASCI multi-state
+    mc2 = mcscf.CASCI(mf, 6, 8)
+    mc2.fcisolver.nroots = 3
+    mc2.fcisolver.conv_tol = 1e-14
+    mc2.canonicalization = True
+    mc2.kernel(mc.mo_coeff)
+    # [ -149.708657771221 -149.480534726188 -149.480534726188 ]
+
+    wsc = WickICMRREPT2(mc2).run(root=0)
+    wsc = WickICMRREPT2(mc2).run(root=1)
+    wsc = WickICMRREPT2(mc2).run(root=2)
+    # [ -0.3072831603857041 -0.301737869046007 -0.3018189555282041 ]
+
+    # Example 3 - CASSCF state-average
+    mc = mcscf.CASSCF(mf, 6, 8)
+    mc.state_average_([1 / 3] * 3)
+    mc.fcisolver.conv_tol = 1e-14
+    mc.canonicalization = True
+    mc.run()
+    # [ -149.706807304716 -149.484319800832 -149.484319800828 ]
+    wsc = WickICMRREPT2(mc).run(root=0)
+    wsc = WickICMRREPT2(mc).run(root=1)
+    wsc = WickICMRREPT2(mc).run(root=2)
+    # E(WickICMRREPT2) = -150.0147593908998  E_corr_pt = -0.3079520861841749
+    # E(WickICMRREPT2) = -149.7801934111490  E_corr_pt = -0.2958736103171785
+    # E(WickICMRREPT2) = -149.7801590818412  E_corr_pt = -0.2958392810134889

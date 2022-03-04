@@ -114,16 +114,19 @@ for key, expr in sub_spaces.items():
 
 from pyscf import lib
 
-def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
+def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     if mc is None:
         mc = ic._mc
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
+    if root is None and hasattr(ic, 'root'):
+        root = ic.root
+    ic.root = root
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
     ic.mo_energy = mc.mo_energy
     if pdms is None:
-        pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs)
+        pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs, root=root)
     if eris is None:
         eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
     ic.eris = eris
@@ -167,7 +170,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None):
         lib.logger.note(ic, "E(%s-%4s) = %20.14f",
             ic.__class__.__name__, key, ic.sub_eners[key])
     ic.e_corr = sum(ic.sub_eners.values())
-    lib.logger.note(ic, 'E(%s) = %.16g  E_corr = %.16g',
+    lib.logger.note(ic, 'E(%s) = %.16g  E_corr_pt = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
 
 class WickSCNEVPT2(lib.StreamObject):
@@ -182,7 +185,12 @@ class WickSCNEVPT2(lib.StreamObject):
 
     @property
     def e_tot(self):
-        return np.asarray(self.e_corr) + self._scf.e_tot
+        if hasattr(self._mc, 'e_states') and hasattr(self, 'root'):
+            return np.asarray(self.e_corr) + self._mc.e_states[self.root]
+        elif hasattr(self, 'root') and isinstance(self._mc.e_tot, np.ndarray):
+            return np.asarray(self.e_corr) + self._mc.e_tot[self.root]
+        else:
+            return np.asarray(self.e_corr) + self._mc.e_tot
 
     kernel = kernel
 
@@ -194,6 +202,8 @@ if __name__ == "__main__":
 
     mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2)
     mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    # Example 1 - single state
     mc = mcscf.CASSCF(mf, 6, 8)
     mc.fcisolver.conv_tol = 1e-14
     mc.canonicalization = True
@@ -201,5 +211,44 @@ if __name__ == "__main__":
     sc = mrpt.NEVPT(mc).set(canonicalized=True).run()
     wsc = WickSCNEVPT2(mc).run()
     # converged SCF energy = -149.608181589162
-    # CASSCF energy = -149.708657770062
-    # E(WickSCNEVPT2) = -149.8573613496467  E_corr = -0.2491797604849861
+    # CASSCF energy = -149.708657770004
+    # E(WickSCNEVPT2) = -149.9578375745639  E_corr_pt = -0.2491798045596538
+    # E_corr(pyscf) = -0.249179804533910
+    # ref -149.708657773372 (casscf) -0.2491831156 (sc) -149.95784088897202 (tot-sc)
+
+    # Example 2 - CASCI multi-state
+    mc2 = mcscf.CASCI(mf, 6, 8)
+    mc2.fcisolver.nroots = 3
+    mc2.fcisolver.conv_tol = 1e-14
+    mc2.canonicalization = True
+    mc2.kernel(mc.mo_coeff)
+    # [ -149.708657770004 -149.480535614204 -149.480535614204 ]
+
+    sc = mrpt.NEVPT(mc2, root=0).set(canonicalized=True).run()
+    sc = mrpt.NEVPT(mc2, root=1).set(canonicalized=True).run()
+    sc = mrpt.NEVPT(mc2, root=2).set(canonicalized=True).run()
+    # [ -0.249179840264890 -0.245255108987011 -0.245255066342682 ]
+
+    wsc = WickSCNEVPT2(mc2).run(root=0)
+    wsc = WickSCNEVPT2(mc2).run(root=1)
+    wsc = WickSCNEVPT2(mc2).run(root=2)
+    # [ -0.249179840264885 -0.2452551089870089 -0.2452550663426834 ]
+
+    # Example 3 - CASSCF state-average
+    mc = mcscf.CASSCF(mf, 6, 8)
+    mc.state_average_([1 / 3] * 3)
+    mc.fcisolver.conv_tol = 1e-14
+    mc.canonicalization = True
+    mc.run()
+    # [ -149.706807303572 -149.484319801403 -149.484319801397 ]
+    wsc = WickSCNEVPT2(mc).run(root=0)
+    wsc = WickSCNEVPT2(mc).run(root=1)
+    wsc = WickSCNEVPT2(mc).run(root=2)
+    # E(WickSCNEVPT2) = -149.9567617925674  E_corr_pt = -0.2499544889955986
+    # E(WickSCNEVPT2) = -149.7252390131850  E_corr_pt = -0.2409192117816299
+    # E(WickSCNEVPT2) = -149.7252388904416  E_corr_pt = -0.2409190890441966
+
+    # ref casscf = [ -149.706807583050 -149.484319661994 -149.484319661994 ]
+    # ref 0 =  -0.2498431015 (SC) -0.2522554873 (PC) -149.956650684550 (TOT-SC)
+    # ref 1 =  -0.2410187659 (SC) -0.2422012621 (PC) -149.725338427894 (TOT-SC)
+    # ref 2 =  -0.2410187659 (SC) -0.2422012621 (PC) -149.725338427894 (TOT-SC)

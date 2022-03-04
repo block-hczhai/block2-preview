@@ -241,13 +241,12 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, nroots=1):
     w, v = np.linalg.eigh(hmat)
     ic.e_states = w[:nroots] + ic._mc.e_tot
     ic.ci = v[:, :nroots]
-    ic.e_corr = ic.e_states[0] - ic._scf.e_tot
-    ic.de_dav_q = (ic.e_states[0] - ic._mc.e_tot) * (1 - v[0, 0] ** 2) / v[0, 0] ** 2
-    lib.logger.note(ic, 'E(MRCI) - E(ref) = %.16g DC = %.16g',
-        ic.e_states[0] - ic._mc.e_tot, ic.de_dav_q)
-    lib.logger.note(ic, 'E(%s)   = %.16g  E_corr = %.16g',
+    ic.e_corr = ic.e_states[0] - ic._mc.e_tot
+    ic.de_dav_q = ic.e_corr * (1 - v[0, 0] ** 2) / v[0, 0] ** 2
+    lib.logger.note(ic, 'E(MRCI) - E(ref) = %.16g DC = %.16g', ic.e_corr, ic.de_dav_q)
+    lib.logger.note(ic, 'E(%s)   = %.16g  E_corr_ci = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
-    lib.logger.note(ic, 'E(%s+Q) = %.16g  E_corr = %.16g',
+    lib.logger.note(ic, 'E(%s+Q) = %.16g  E_corr_ci = %.16g',
         ic.__class__.__name__, ic.e_tot + ic.de_dav_q, ic.e_corr + ic.de_dav_q)
 
 class WickICMRCISD(lib.StreamObject):
@@ -262,7 +261,7 @@ class WickICMRCISD(lib.StreamObject):
 
     @property
     def e_tot(self):
-        return np.asarray(self.e_corr) + self._scf.e_tot
+        return np.asarray(self.e_corr) + self._mc.e_tot
 
     kernel = kernel
 
@@ -282,6 +281,6 @@ if __name__ == "__main__":
     # converged SCF energy = -149.608181589162
     # CASSCF energy = -149.708657770062
     # HMAT symm error =    0.0026672717
-    # E(MRCI) - E(ref) = -0.2643537356921684 DC = -0.01633618754618191
-    # E(WickICMRCISD)   = -149.9730115057538  E_corr = -0.3648299165920434
-    # E(WickICMRCISD+Q) = -149.9893476933  E_corr = -0.3811661041382254
+    # E(MRCI) - E(ref) = -0.2643537344241054 DC = -0.01633618724661364
+    # E(WickICMRCISD)   = -149.9730115044681  E_corr_ci = -0.2643537344241054
+    # E(WickICMRCISD+Q) = -149.9893476917148  E_corr_ci = -0.280689921670719

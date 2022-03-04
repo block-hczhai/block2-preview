@@ -125,14 +125,17 @@ def init_eris(mc, mo_coeff=None, mrci=False):
         eris.cvcv = cvcv.reshape(ncore, nvir, ncore, nvir)
     return eris
 
-def init_pdms(mc, pdm_eqs):
+def init_pdms(mc, pdm_eqs, root=None):
     from pyscf import fci
-    if isinstance(mc.ci, list):
-        trans_dms = [None] * len(mc.ci)
-        for ibi in range(len(mc.ci)):
-            dmm = [None] * len(mc.ci)
-            for iki in range(len(mc.ci)):
-                dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mc.ci[ibi], mc.ci[iki],
+    xci = mc.ci
+    if root is not None and isinstance(xci, list):
+        xci = xci[root]
+    if isinstance(xci, list):
+        trans_dms = [None] * len(xci)
+        for ibi in range(len(xci)):
+            dmm = [None] * len(xci)
+            for iki in range(len(xci)):
+                dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', xci[ibi], xci[iki],
                     mc.ncas, mc.nelecas)
                 dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
                 E1, E2, E3, E4 = [np.zeros_like(dm) for dm in dms]
@@ -144,7 +147,7 @@ def init_pdms(mc, pdm_eqs):
             trans_dms[ibi] = dmm
         return trans_dms
     else:
-        dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mc.ci, mc.ci, mc.ncas, mc.nelecas)
+        dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', xci, xci, mc.ncas, mc.nelecas)
         dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
         E1, E2, E3, E4 = [np.zeros_like(dm) for dm in dms]
         exec("".join(pdm_eqs), globals(), {
