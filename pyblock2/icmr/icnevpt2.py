@@ -31,11 +31,12 @@ except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
 import numpy as np
+import time
 
 try:
-    from . import eri_helper
+    from . import eri_helper, dmrg_helper
 except ImportError:
-    import eri_helper
+    import eri_helper, dmrg_helper
 
 def init_parsers():
 
@@ -180,9 +181,13 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     ic.ci = mc.ci
     ic.mo_energy = mc.mo_energy
     if pdms is None:
+        t = time.perf_counter()
         pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs, root=root)
+        tpdms = time.perf_counter() - t
     if eris is None:
+        t = time.perf_counter()
         eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
+        teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
@@ -210,10 +215,21 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     }
 
     ic.sub_eners = {}
+    ic.sub_times = {'pdms': tpdms, 'eris': teris}
     for key in sub_spaces:
+        t = time.perf_counter()
+        l = len(key)
+        skey = key[:9 - l]
+        if E4 is None and "abc" in key:
+            irkmap = {'i': 'aaac', 'r': 'aaav'}
+            ic.sub_eners[skey] = dmrg_helper.dmrg_response_singles(mc, eris, E1,
+                irkmap[key[0]], theory='nevpt2', root=root)
+            lib.logger.note(ic, "E(%s-%4s) = %20.14f",
+                ic.__class__.__name__.replace("IC", "UC"), 'mps' + skey, ic.sub_eners[skey])
+            ic.sub_times[skey] = time.perf_counter() - t
+            continue
         if key[-1] == '2':
             continue
-        l = len(key)
         rkey = key[:9 - l] + key[4 - l:-1]
         hkey = key[:-1]
         rhhk = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(rkey)])
@@ -258,17 +274,20 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
             else:
                 xr = rhhk.reshape(-1, dcas)
                 xh = ener.reshape(-1, dcas, dcas)
-        skey = key[:9 - l]
         if skey not in ic.sub_eners:
             ic.sub_eners[skey] = -(_linear_solve(xh, xr) * xr).sum()
+            ic.sub_times[skey] = time.perf_counter() - t
         else:
             ic.sub_eners[skey] += -(_linear_solve(xh, xr) * xr).sum()
+            ic.sub_times[skey] += time.perf_counter() - t
         if key[-1] in "-1*":
             lib.logger.note(ic, "E(%s-%4s) = %20.14f",
                 ic.__class__.__name__, skey, ic.sub_eners[skey])
     ic.e_corr = sum(ic.sub_eners.values())
     lib.logger.note(ic, 'E(%s) = %.16g  E_corr_pt = %.16g',
         ic.__class__.__name__, ic.e_tot, ic.e_corr)
+    lib.logger.note(ic, "Timings = %s",
+        " | ".join(["%s = %7.2f" % (k, v) for k, v in ic.sub_times.items()]))
 
 class WickICNEVPT2(lib.StreamObject):
     def __init__(self, mc):

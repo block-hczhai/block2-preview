@@ -128,7 +128,7 @@ def init_eris(mc, mo_coeff=None, mrci=False):
 def init_pdms(mc, pdm_eqs, root=None):
     from pyscf import fci
     xci = mc.ci
-    if root is not None and isinstance(xci, list):
+    if root is not None and (isinstance(xci, list) or isinstance(xci, range)):
         xci = xci[root]
     if isinstance(xci, list):
         trans_dms = [None] * len(xci)
@@ -146,6 +146,21 @@ def init_pdms(mc, pdm_eqs, root=None):
                 dmm[iki] = E1, E2, E3, E4
             trans_dms[ibi] = dmm
         return trans_dms
+    elif isinstance(xci, int):
+        # dmrg solver
+        if mc.fcisolver.has_threepdm == False:
+            from subprocess import call
+            call("rm ./node0/Rotation-*.state-1.tmp >> rm.out 2>&1", cwd=mc.fcisolver.scratchDirectory, shell=True)
+            call("rm ./node0/wave-*.-1.tmp >> rm.out 2>&1", cwd=mc.fcisolver.scratchDirectory, shell=True)
+            call("rm ./node0/CasReorder.dat >> rm.out 2>&1", cwd=mc.fcisolver.scratchDirectory, shell=True)
+        dms = mc.fcisolver._make_dm123(xci, mc.ncas, mc.nelecas)
+        dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA"]
+        E1, E2, E3 = [np.zeros_like(dm) for dm in dms]
+        exec("".join(pdm_eqs[:3]), globals(), {
+            "E1": E1, "E2": E2, "E3": E3, **dict(zip(dm_names, dms)),
+            "deltaAA": np.eye(mc.ncas)
+        })
+        return E1, E2, E3, None
     else:
         dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', xci, xci, mc.ncas, mc.nelecas)
         dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]
