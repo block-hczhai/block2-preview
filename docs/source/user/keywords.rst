@@ -42,7 +42,9 @@ prefix
 
 num\_thrds
     Optional. Followed by an integer for the number of OpenMP threads to use.
-    Default is 28.
+    Default is 28 (if there is no ``hf_occ integral`` in the input file) or 1
+    (to be compatible with ``StackBlock`` when there is ``hf_occ integral`` in the input file).
+    Note that the environment variable ``OMP_NUM_THREADS`` is ignored.
 
 mkl\_thrds
     Optional. Followed by an integer for the number of OpenMP threads to use for the MKL library. Default is 1.
