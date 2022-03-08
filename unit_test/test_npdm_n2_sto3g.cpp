@@ -604,7 +604,7 @@ TEST_F(TestNPDM, TestSU2) {
 
         // DMRG
         vector<ubond_t> bdims = {bond_dim};
-        vector<double> noises = {1E-8, 0};
+        vector<double> noises = {1E-8, 1E-9, 0};
         shared_ptr<DMRG<SU2, double, double>> dmrg =
             make_shared<DMRG<SU2, double, double>>(me, bdims, noises);
         dmrg->iprint = 2;
