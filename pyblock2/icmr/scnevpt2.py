@@ -174,7 +174,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
             **wdict
         })
         idx = (abs(norm) > 1E-14)
-        grid = np.indices(deno.shape)
+        grid = np.indices(deno.shape, dtype=np.int16)
         for sym_pair in ["ij", "rs"]:
             ix = key.find(sym_pair)
             if ix != -1:

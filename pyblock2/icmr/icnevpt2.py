@@ -265,10 +265,10 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
             else:
                 dcas = ncas ** (len(key) - 5)
             if 9 - len(key) >= 2:
-                grid = np.indices(rhhk.shape)
+                grid = np.indices(rhhk.shape, dtype=np.int16)
                 idx = _grid_restrict(rkey, grid, restrict_cas, key[-1] == '-')
                 xr = rhhk[idx].reshape(-1, dcas)
-                grid = np.indices(ener.shape)
+                grid = np.indices(ener.shape, dtype=np.int16)
                 idx = _grid_restrict(hkey, grid, restrict_cas, key[-1] == '-')
                 xh = ener[idx].reshape(-1, dcas, dcas)
             else:
