@@ -20,8 +20,10 @@
 
 #pragma once
 
+#include <cassert>
 #include <cmath>
 #include <memory>
+#include <vector>
 
 using namespace std;
 
@@ -32,7 +34,6 @@ template <typename, typename = void> struct CG;
 // Trivial CG factors for Abelian symmetry
 struct TrivialCG {
     TrivialCG() {}
-    TrivialCG(int n_sqrt_fact) {}
     void initialize(double *ptr = 0) {}
     void deallocate() {}
     long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
@@ -52,23 +53,13 @@ struct TrivialCG {
     }
 };
 
-template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
-    CG() {}
-    CG(int n_sqrt_fact) {}
-};
-
-template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
-    CG() {}
-    CG(int n_sqrt_fact) {}
-};
-
 // CG factors for SU(2) symmetry
-template <typename S> struct CG<S, typename S::is_su2_t> {
+struct SU2CG {
     shared_ptr<vector<double>> vdata;
     long double *sqrt_fact;
     int n_sf;
-    CG() : n_sf(0), sqrt_fact(nullptr), vdata(nullptr) {}
-    CG(int n_sqrt_fact) : n_sf(n_sqrt_fact) {}
+    SU2CG() : n_sf(0), sqrt_fact(nullptr), vdata(nullptr) {}
+    SU2CG(int n_sqrt_fact) : n_sf(n_sqrt_fact) {}
     void initialize(double *ptr = 0) {
         assert(n_sf != 0);
         if (ptr == 0) {
@@ -192,6 +183,21 @@ template <typename S> struct CG<S, typename S::is_su2_t> {
     long double transpose_cg(int td, int tl, int tr) {
         return (1 - ((td + tl - tr) & 2)) * sqrtl(tr + 1) / sqrtl(tl + 1);
     }
+};
+
+template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
+    CG() : TrivialCG() {}
+    CG(int n_sqrt_fact) : TrivialCG() {}
+};
+
+template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
+    CG() : TrivialCG() {}
+    CG(int n_sqrt_fact) : TrivialCG() {}
+};
+
+template <typename S> struct CG<S, typename S::is_su2_t> : SU2CG {
+    CG() : SU2CG() {}
+    CG(int n_sqrt_fact) : SU2CG(n_sqrt_fact) {}
 };
 
 } // namespace block2

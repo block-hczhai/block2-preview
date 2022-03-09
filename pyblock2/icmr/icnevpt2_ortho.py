@@ -22,11 +22,11 @@ Internally-Contracted NEVPT2 [J. Chem. Phys. 117, 9138 (2002)]
 with equations derived on the fly.
 need internal contraction module of block2.
 
-CG method is used for solving the sparse linear problem.
+A orthogonal basis is used in CG method.
 """
 
 try:
-    from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
+    from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation, WickTensorTypes
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
     from block2 import MapStrPWickTensorExpr, MapStrStr
 except ImportError:
@@ -63,10 +63,28 @@ def _sum_indices(expr, idxs):
             term.ctr_indices.add(idx)
     return expr
 
+def _remove_ie_deltas(expr):
+    new_terms = []
+    for term in expr.terms:
+        xfound = False
+        for wt in term.tensors:
+            if wt.type == WickTensorTypes.KroneckerDelta:
+                found = False
+                for wi in wt.indices:
+                    if (wi.types & WickIndexTypes.External) != WickIndexTypes.Nothing \
+                        or (wi.types & WickIndexTypes.Inactive) != WickIndexTypes.Nothing:
+                        found = True
+                xfound = xfound or found
+        if not xfound:
+            new_terms.append(term)
+    expr.terms = expr.terms.__class__(new_terms)
+    return expr
+
 P, PT, PD, DEF = init_parsers() # parsers
 SP = lambda x: x.expand().add_spin_free_trans_symm().remove_external().simplify()
 SPR = lambda x: x.expand().add_spin_free_trans_symm().remove_external().remove_inactive().simplify()
 Comm = lambda b, h, k, idxs: SP(_sum_indices(b.conjugate() * (h ^ k), idxs))
+Norm = lambda b, k: _remove_ie_deltas(SP(b.conjugate() * k))
 Rhs = lambda b, k: SPR(b.conjugate() * k)
 
 hi = P("SUM <i> orbe[i] E1[i,i]\n + SUM <r> orbe[r] E1[r,r]")
@@ -109,6 +127,8 @@ sub_spaces = {
 ener_eqs = {} # Hamiltonian expectations
 ener2_eqs = {} # Hamiltonian expectations
 rhhk_eqs = {} # rhs equations
+norm_eqs = {} # overlap equations
+norm2_eqs = {} # overlap equations
 
 for key, expr in sub_spaces.items():
     l = len(key)
@@ -117,12 +137,14 @@ for key, expr in sub_spaces.items():
     ket = P(expr)
     bra = ket.index_map(MapStrStr(ket_bra_map))
     rhhk_eqs[key] = Rhs(bra, hfull)
+    norm_eqs[key] = Norm(bra, ket)
     act_idxs = x.terms[0].tensors[0].indices[9 - l:4]
     ener_eqs[key] = Comm(bra, hd, ket * x, act_idxs)
     if key[-1] in "12":
         ket2 = P(sub_spaces[key[:-1] + ('1' if key[-1] == '2' else '2')])
         x2 = P("x%s[%s]" % ('' if key[-1] == '2' else '2', key[:4]))
         ener2_eqs[key] = Comm(bra, hd, ket2 * x2, act_idxs)
+        norm2_eqs[key] = Norm(bra, ket2)
 
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E",  WickIndexTypes.Active: "A",
@@ -172,7 +194,7 @@ def _grid_restrict(key, grid, restrict_cas, no_eq):
                 ixx.append(grid[i - 1] <= grid[i])
     return np.bitwise_and.reduce(ixx)
 
-def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=5000, conv_thrd=5E-4, iprint=False):
+def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, iprint=False):
     r = -axop(x) + b
     p = r.copy()
     error = xdot(p, r)
@@ -184,7 +206,6 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=5000, conv_thrd=5E-4, 
     old_error = error
     xiter = 0
     while xiter < max_iter:
-        t = time.perf_counter()
         xiter += 1
         hp = axop(p)
         alpha = old_error / xdot(p, hp)
@@ -194,7 +215,7 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=5000, conv_thrd=5E-4, 
         error = xdot(z, r)
         func = xdot(x, b)
         if iprint:
-            print("%5d %15.8f %9.2E T = %.3f" % (xiter, func, error, time.perf_counter() - t))
+            print("%5d %15.8f %9.2E" % (xiter, func, error))
         if np.sqrt(np.abs(error)) < conv_thrd:
             break
         else:
@@ -207,15 +228,13 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=5000, conv_thrd=5E-4, 
 
 from pyscf import lib
 
-def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=None):
+def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     if mc is None:
         mc = ic._mc
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     if root is None and hasattr(ic, 'root'):
         root = ic.root
-    if iprint is None and hasattr(ic, 'iprint'):
-        iprint = ic.iprint
     ic.root = root
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
@@ -273,29 +292,65 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         if key[-1] == '2':
             continue
         rkey = key[:9 - l] + key[4 - l:-1]
+        nkey = key[9 - l:-1]
         xindex = "".join(["IAE"[i] for i in _key_idx(rkey)])
+        s = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(nkey)])
         b = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(rkey)])
+        pt2_seqs = norm_eqs[key].to_einsum(PT("s[%s]" % nkey))
         pt2_beqs = rhhk_eqs[key].to_einsum(PT("b[%s]" % rkey))
         pt2_axeqs = ener_eqs[key].to_einsum(PT("ax[%s]" % rkey))
         if key[-1] == '1':
             key2 = key[:-1] + '2'
+            s12 = np.zeros_like(s)
+            s21 = np.zeros_like(s)
+            s22 = np.zeros_like(s)
             b2 = np.zeros_like(b)
+            pt2_seqs += norm2_eqs[key].to_einsum(PT("s12[%s]" % nkey))
+            pt2_seqs += norm_eqs[key2].to_einsum(PT("s22[%s]" % nkey))
+            pt2_seqs += norm2_eqs[key2].to_einsum(PT("s21[%s]" % nkey))
             pt2_beqs += rhhk_eqs[key2].to_einsum(PT("b2[%s]" % rkey))
             pt2_axeqs += ener2_eqs[key].to_einsum(PT("ax[%s]" % rkey))
             pt2_axeqs += ener_eqs[key2].to_einsum(PT("ax2[%s]" % rkey))
             pt2_axeqs += ener2_eqs[key2].to_einsum(PT("ax2[%s]" % rkey))
+            exec(pt2_seqs, globals(), { "s": s, "s12": s12, "s21": s21, "s22": s22, **mdict })
+            ss = np.concatenate((s[..., None], s12[..., None], s21[..., None], s22[..., None]), axis=-1)
+            ns = np.prod(s.shape[:len(s.shape) // 2], dtype=int)
+            ss = ss.reshape((ns, ns, 2, 2)).transpose((2, 0, 3, 1))
+            sw, su = np.linalg.eigh(ss.reshape((ns * 2, ns * 2)))
+            idx = sw > ic.trunc_thrds
+            sf = su[:, idx] * (sw[idx] ** (-0.5))
+            sb = su[:, idx] * (sw[idx] ** 0.5)
+            sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], -1))
+            sb = sb.reshape((2, *s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
-            xdot = lambda a, b: (a * b).sum()
-            def axop(px, eqs=pt2_axeqs, xid=xindex):
+            def trans_forth(g, sf=sf):
+                return np.einsum("v%s,v%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
+            def trans_back(g, sb=sb):
+                return np.einsum("%sx,v%sx->v%s" % (key[:9 - l], key[4 - l:-1], rkey), g, sb, optimize=True)
+            xdot = lambda a, b: (trans_back(a) * trans_back(b)).sum()
+            def axop(ppx, eqs=pt2_axeqs, xid=xindex):
+                px = trans_back(ppx)
                 pax = np.zeros_like(px)
                 x, x2 = px[0], px[1]
                 ax, ax2 = pax[0], pax[1]
                 exec(eqs, globals(), { "x" + xid: x, "x2" + xid: x2,
                     "ax": ax, "ax2": ax2, **mdict })
-                return pax
-            pb = np.concatenate((b[None], b2[None]), axis=0)
+                return trans_forth(pax)
+            pb = trans_forth(np.concatenate((b[None], b2[None]), axis=0))
         else:
+            exec(pt2_seqs, globals(), { "s": s, **mdict })
+            ns = np.prod(s.shape[:len(s.shape) // 2], dtype=int)
+            sw, su = np.linalg.eigh(s.reshape((ns, ns)))
+            idx = sw > ic.trunc_thrds
+            sf = su[:, idx] * (sw[idx] ** (-0.5))
+            sb = su[:, idx] * (sw[idx] ** 0.5)
+            sf = sf.reshape((*s.shape[:len(s.shape) // 2], -1))
+            sb = sb.reshape((*s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, **mdict })
+            def trans_forth(g, sf=sf):
+                return np.einsum("%s,%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
+            def trans_back(g, sb=sb):
+                return np.einsum("%sx,%sx->%s" % (key[:9 - l], key[4 - l:-1], rkey), g, sb, optimize=True)
             if 9 - len(key) >= 2:
                 grid = np.indices(b.shape, dtype=np.int16)
                 idx = _grid_restrict(rkey, grid, key[-1] in '+-', key[-1] == '-')
@@ -305,15 +360,15 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
                 ridx = ~idx
             else:
                 ridx = slice(0)
-            xdot = lambda a, b, idx=idx: (a[idx] * b[idx]).sum()
-            def axop(x, eqs=pt2_axeqs, xid=xindex, ridx=ridx):
+            xdot = lambda a, b, idx=idx: (trans_back(a)[idx] * trans_back(b)[idx]).sum()
+            def axop(px, eqs=pt2_axeqs, xid=xindex, ridx=ridx):
+                x = trans_back(px)
                 x[ridx] = 0
                 ax = np.zeros_like(x)
                 exec(eqs, globals(), { "x" + xid: x, "ax": ax, **mdict })
-                ax[ridx] = 0
-                return ax
-            pb = b
-        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=iprint)
+                return trans_forth(ax)
+            pb = trans_forth(b)
+        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=False)
         niter += niterx
         if skey not in ic.sub_eners:
             ic.sub_eners[skey] = -func
@@ -341,6 +396,7 @@ class WickICNEVPT2(lib.StreamObject):
         self.verbose = self.mol.verbose
         self.stdout = self.mol.stdout
         self.e_corr = None
+        self.trunc_thrds = 1E-4
 
     @property
     def e_tot(self):

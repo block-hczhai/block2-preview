@@ -18,11 +18,12 @@
 #
 
 """
-Internally-Contracted NEVPT2 [J. Chem. Phys. 117, 9138 (2002)]
+Internally-Contracted MR-REPT2 (MRLCC2) [J. Chem. Theory Comput. 13, 488 (2017)]
 with equations derived on the fly.
 need internal contraction module of block2.
 
-CG method is used for solving the sparse linear problem.
+Full Hamiltonian matrix is build for solving the linear problem.
+May consume large amount of memory.
 """
 
 try:
@@ -57,26 +58,35 @@ def init_parsers():
 
     return p, pt, pd, defs
 
-def _sum_indices(expr, idxs):
-    for term in expr.terms:
-        for idx in idxs:
-            term.ctr_indices.add(idx)
-    return expr
-
 P, PT, PD, DEF = init_parsers() # parsers
 SP = lambda x: x.expand().add_spin_free_trans_symm().remove_external().simplify()
 SPR = lambda x: x.expand().add_spin_free_trans_symm().remove_external().remove_inactive().simplify()
-Comm = lambda b, h, k, idxs: SP(_sum_indices(b.conjugate() * (h ^ k), idxs))
+Comm = lambda b, h, k: SP(b.conjugate() * (h ^ k))
 Rhs = lambda b, k: SPR(b.conjugate() * k)
 
-hi = P("SUM <i> orbe[i] E1[i,i]\n + SUM <r> orbe[r] E1[r,r]")
-h1 = P("SUM <ab> f[ab] E1[a,b]")
-h2 = P("0.5 SUM <abcd> w[abcd] E2[ab,cd]")
-hd = hi + h1 + h2
-hfull = P("SUM <mn> f[mn] E1[m,n] \n - 2.0 SUM <mnj> w[mjnj] E1[m,n]\n"
-    "+ 1.0 SUM <mnj> w[mjjn] E1[m,n]\n + 0.5 SUM <mnxy> w[mnxy] E2[mn,xy]")
+# See J. Chem. Theory Comput. 15, 2291 (2019) Eq. (11)
+# Fink's Hamiltonian
+h1 = P("""
+    SUM <ij> h[ij] E1[i,j]
+    SUM <ab> h[ab] E1[a,b]
+    SUM <rs> h[rs] E1[r,s]
+""")
+h2 = P("""
+    0.5 SUM <ijkl> w[ijkl] E2[ij,kl]
+    0.5 SUM <abcd> w[abcd] E2[ab,cd]
+    0.5 SUM <rstu> w[rstu] E2[rs,tu]
+    0.5 SUM <iajb> w[iajb] E2[ia,jb] \n + 0.5 SUM <iajb> w[iabj] E2[ia,bj]
+    0.5 SUM <irjs> w[irjs] E2[ir,js] \n + 0.5 SUM <irjs> w[irsj] E2[ir,sj]
+    0.5 SUM <aibj> w[aibj] E2[ai,bj] \n + 0.5 SUM <aibj> w[aijb] E2[ai,jb]
+    0.5 SUM <arbs> w[arbs] E2[ar,bs] \n + 0.5 SUM <arbs> w[arsb] E2[ar,sb]
+    0.5 SUM <risj> w[risj] E2[ri,sj] \n + 0.5 SUM <risj> w[rijs] E2[ri,js]
+    0.5 SUM <rasb> w[rasb] E2[ra,sb] \n + 0.5 SUM <rasb> w[rabs] E2[ra,bs]
+""")
+hd = h1 + h2
+hfull = P("SUM <mn> h[mn] E1[m,n] \n + 0.5 SUM <mnxy> w[mnxy] E2[mn,xy]")
 
 # convert < E1[p,a] E1[q,b] > ("dm2") to < E2[pq,ab] > ("E2"), etc.
+# E2[pq,ab] = E1[p,a] E1[q,b] - delta[aq] E1[p,b]
 pdm_eqs = [
     "E1[p,a] = E1[p,a]\n - E1[p,a]\n + dm1[pa]",
     "E2[pq,ab] = E2[pq,ab]\n - E1[p,a] E1[q,b]\n + dm2[paqb]",
@@ -88,7 +98,8 @@ for k, eq in enumerate(pdm_eqs):
     name, expr = PD(eq)
     pdm_eqs[k] = SP(expr).to_einsum(name)
 
-# def of ic-nevpt2 sub-spaces
+
+# def of ic-mrrept2 sub-spaces
 sub_spaces = {
     "ijrs+": "E1[r,i] E1[s,j] \n + E1[s,i] E1[r,j]",
     "ijrs-": "E1[r,i] E1[s,j] \n - E1[s,i] E1[r,j]",
@@ -113,22 +124,21 @@ rhhk_eqs = {} # rhs equations
 for key, expr in sub_spaces.items():
     l = len(key)
     ket_bra_map = { k: v for k, v in zip(key[9 - l:4 - l], key[4 - l:-1]) }
-    x = P("x%s[%s]" % ('2' if key[-1] == '2' else '', key[:4]))
     ket = P(expr)
     bra = ket.index_map(MapStrStr(ket_bra_map))
     rhhk_eqs[key] = Rhs(bra, hfull)
-    act_idxs = x.terms[0].tensors[0].indices[9 - l:4]
-    ener_eqs[key] = Comm(bra, hd, ket * x, act_idxs)
+    ener_eqs[key] = Comm(bra, hd, ket)
     if key[-1] in "12":
         ket2 = P(sub_spaces[key[:-1] + ('1' if key[-1] == '2' else '2')])
-        x2 = P("x%s[%s]" % ('' if key[-1] == '2' else '2', key[:4]))
-        ener2_eqs[key] = Comm(bra, hd, ket2 * x2, act_idxs)
+        ener2_eqs[key] = Comm(bra, hd, ket2)
+
+allowed_perms = {"AAAA", "EAAA", "EAIA", "EAAI", "AAIA", "EEIA",
+    "EAII", "EEAA", "AAII", "EEII", "EEEE", "IIII",
+    "EIEI", "EAEA", "AIAI", "IIIE", "IAIE", "IIIA"}
 
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E",  WickIndexTypes.Active: "A",
         WickIndexTypes.Inactive: "I"}
-    allowed_perms = {"AAAA", "EAAA", "EAIA", "EAAI", "AAIA",
-                     "EEIA", "EAII", "EEAA", "AAII", "EEII"}
     for term in eq.terms:
         for wt in term.tensors:
             if wt.name == "w":
@@ -172,50 +182,21 @@ def _grid_restrict(key, grid, restrict_cas, no_eq):
                 ixx.append(grid[i - 1] <= grid[i])
     return np.bitwise_and.reduce(ixx)
 
-def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=5000, conv_thrd=5E-4, iprint=False):
-    r = -axop(x) + b
-    p = r.copy()
-    error = xdot(p, r)
-    if np.sqrt(np.abs(error)) < conv_thrd:
-        func = xdot(x, b)
-        if iprint:
-            print("%5d %15.8f %9.2E" % (0, func, error))
-        return func, x, 1
-    old_error = error
-    xiter = 0
-    while xiter < max_iter:
-        t = time.perf_counter()
-        xiter += 1
-        hp = axop(p)
-        alpha = old_error / xdot(p, hp)
-        x += alpha * p
-        r -= alpha * hp
-        z = r.copy()
-        error = xdot(z, r)
-        func = xdot(x, b)
-        if iprint:
-            print("%5d %15.8f %9.2E T = %.3f" % (xiter, func, error, time.perf_counter() - t))
-        if np.sqrt(np.abs(error)) < conv_thrd:
-            break
-        else:
-            beta = error / old_error
-            old_error = error
-            p[:] = beta * p + z
-    if xiter == max_iter:
-        print("Error : linear solver (cg) not converged!")
-    return func, x, xiter + 1
+def _linear_solve(a, b):
+    c = np.zeros_like(b)
+    for i in range(len(a)):
+        c[i] = np.linalg.lstsq(a[i], b[i], rcond=None)[0]
+    return c
 
 from pyscf import lib
 
-def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=None):
+def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     if mc is None:
         mc = ic._mc
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     if root is None and hasattr(ic, 'root'):
         root = ic.root
-    if iprint is None and hasattr(ic, 'iprint'):
-        iprint = ic.iprint
     ic.root = root
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
@@ -227,7 +208,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
@@ -236,10 +217,6 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
     ncas = mc.ncas
     nocc = ncore + ncas
     nvirt = len(ic.mo_energy) - nocc
-    orbeI = ic.mo_energy[:ncore]
-    orbeE = ic.mo_energy[nocc:]
-    wkeys = ["wAAAA", "wEAAA", "wEAIA", "wEAAI", "wAAIA", 
-             "wEEIA", "wEAII", "wEEAA", "wAAII", "wEEII"]
     mdict = {
         "E1": E1, "E2": E2, "E3": E3, "E4": E4,
         "deltaII": np.eye(ncore), "deltaEE": np.eye(nvirt),
@@ -247,17 +224,12 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         "ident1": np.ones((1, )),
         "ident2": np.ones((1, 1, )),
         "ident3": np.ones((1, 1, 1, )),
-        "fAA": eris.h1eff[ncore:nocc, ncore:nocc],
-        "fAI": eris.h1eff[ncore:nocc, :ncore],
-        "fEI": eris.h1eff[nocc:, :ncore],
-        "fEA": eris.h1eff[nocc:, ncore:nocc],
-        "orbeE": orbeE, "orbeI": orbeI,
-        **{ k: eris.get_phys(k[1:]) for k in wkeys }
+        **{ 'h' + a + b: eris.get_h1(a + b) for a in 'IAE' for b in 'IAE' },
+        **{ 'w' + k: eris.get_phys(k) for k in allowed_perms }
     }
 
     ic.sub_eners = {}
     ic.sub_times = {'pdms': tpdms, 'eris': teris}
-    niter = 0
     for key in sub_spaces:
         t = time.perf_counter()
         l = len(key)
@@ -265,7 +237,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         if E4 is None and "abc" in key:
             irkmap = {'i': 'aaac', 'r': 'aaav'}
             ic.sub_eners[skey] = dmrg_helper.dmrg_response_singles(mc, eris, E1,
-                irkmap[key[0]], theory='nevpt2', root=root)
+                irkmap[key[0]], theory='mrrept2', root=root)
             lib.logger.note(ic, "E(%s-%4s) = %20.14f",
                 ic.__class__.__name__.replace("IC", "UC"), 'mps' + skey, ic.sub_eners[skey])
             ic.sub_times[skey] = time.perf_counter() - t
@@ -273,58 +245,58 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         if key[-1] == '2':
             continue
         rkey = key[:9 - l] + key[4 - l:-1]
-        xindex = "".join(["IAE"[i] for i in _key_idx(rkey)])
-        b = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(rkey)])
-        pt2_beqs = rhhk_eqs[key].to_einsum(PT("b[%s]" % rkey))
-        pt2_axeqs = ener_eqs[key].to_einsum(PT("ax[%s]" % rkey))
+        hkey = key[:-1]
+        rhhk = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(rkey)])
+        ener = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(hkey)])
+        pt2_eqs = rhhk_eqs[key].to_einsum(PT("rhhk[%s]" % rkey))
+        pt2_eqs += ener_eqs[key].to_einsum(PT("ener[%s]" % hkey))
         if key[-1] == '1':
             key2 = key[:-1] + '2'
-            b2 = np.zeros_like(b)
-            pt2_beqs += rhhk_eqs[key2].to_einsum(PT("b2[%s]" % rkey))
-            pt2_axeqs += ener2_eqs[key].to_einsum(PT("ax[%s]" % rkey))
-            pt2_axeqs += ener_eqs[key2].to_einsum(PT("ax2[%s]" % rkey))
-            pt2_axeqs += ener2_eqs[key2].to_einsum(PT("ax2[%s]" % rkey))
-            exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
-            xdot = lambda a, b: (a * b).sum()
-            def axop(px, eqs=pt2_axeqs, xid=xindex):
-                pax = np.zeros_like(px)
-                x, x2 = px[0], px[1]
-                ax, ax2 = pax[0], pax[1]
-                exec(eqs, globals(), { "x" + xid: x, "x2" + xid: x2,
-                    "ax": ax, "ax2": ax2, **mdict })
-                return pax
-            pb = np.concatenate((b[None], b2[None]), axis=0)
+            rhhk2 = np.zeros_like(rhhk)
+            ener12 = np.zeros_like(ener)
+            ener21 = np.zeros_like(ener)
+            ener22 = np.zeros_like(ener)
+            pt2_eqs += rhhk_eqs[key2].to_einsum(PT("rhhk2[%s]" % rkey))
+            pt2_eqs += ener2_eqs[key].to_einsum(PT("ener12[%s]" % hkey))
+            pt2_eqs += ener_eqs[key2].to_einsum(PT("ener22[%s]" % hkey))
+            pt2_eqs += ener2_eqs[key2].to_einsum(PT("ener21[%s]" % hkey))
+            exec(pt2_eqs, globals(), {
+                "rhhk": rhhk, "rhhk2": rhhk2, "ener": ener, "ener12": ener12,
+                "ener22": ener22, "ener21": ener21, **mdict
+            })
+            rhhk = np.concatenate((rhhk[..., None], rhhk2[..., None]), axis=-1)
+            ener = np.concatenate((ener[..., None], ener12[..., None],
+                ener21[..., None], ener22[..., None]), axis=-1)
+            dcas = ncas ** (len(key) - 5)
+            xr = rhhk.reshape(-1, dcas * 2)
+            xh = ener.reshape(-1, dcas, dcas, 2, 2).transpose(0, 1, 3, 2, 4)
+            xh = xh.reshape(-1, dcas * 2, dcas * 2)
         else:
-            exec(pt2_beqs, globals(), { "b": b, **mdict })
+            exec(pt2_eqs, globals(), { "rhhk": rhhk, "ener": ener, **mdict })
+            restrict_cas = key[-1] in '+-'
+            if len(key) - 5 == 2 and restrict_cas:
+                dcas = ncas * (ncas + (1 if key[-1] == '+' else -1)) // 2
+            else:
+                dcas = ncas ** (len(key) - 5)
             if 9 - len(key) >= 2:
-                grid = np.indices(b.shape, dtype=np.int16)
-                idx = _grid_restrict(rkey, grid, key[-1] in '+-', key[-1] == '-')
+                grid = np.indices(rhhk.shape, dtype=np.int16)
+                idx = _grid_restrict(rkey, grid, restrict_cas, key[-1] == '-')
+                xr = rhhk[idx].reshape(-1, dcas)
+                grid = np.indices(ener.shape, dtype=np.int16)
+                idx = _grid_restrict(hkey, grid, restrict_cas, key[-1] == '-')
+                xh = ener[idx].reshape(-1, dcas, dcas)
             else:
-                idx = slice(None)
-            if len(key) - 5 == 2 and key[-1] in '+-':
-                ridx = ~idx
-            else:
-                ridx = slice(0)
-            xdot = lambda a, b, idx=idx: (a[idx] * b[idx]).sum()
-            def axop(x, eqs=pt2_axeqs, xid=xindex, ridx=ridx):
-                x[ridx] = 0
-                ax = np.zeros_like(x)
-                exec(eqs, globals(), { "x" + xid: x, "ax": ax, **mdict })
-                ax[ridx] = 0
-                return ax
-            pb = b
-        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=iprint)
-        niter += niterx
+                xr = rhhk.reshape(-1, dcas)
+                xh = ener.reshape(-1, dcas, dcas)
         if skey not in ic.sub_eners:
-            ic.sub_eners[skey] = -func
+            ic.sub_eners[skey] = -(_linear_solve(xh, xr) * xr).sum()
             ic.sub_times[skey] = time.perf_counter() - t
         else:
-            ic.sub_eners[skey] += -func
+            ic.sub_eners[skey] += -(_linear_solve(xh, xr) * xr).sum()
             ic.sub_times[skey] += time.perf_counter() - t
         if key[-1] in "-1*":
-            lib.logger.note(ic, "E(%s-%4s) = %20.14f Niter = %5d",
-                ic.__class__.__name__, skey, ic.sub_eners[skey], niter)
-            niter = 0
+            lib.logger.note(ic, "E(%s-%4s) = %20.14f",
+                ic.__class__.__name__, skey, ic.sub_eners[skey])
     ic.e_corr = sum(ic.sub_eners.values())
     ic.sub_times['total'] = time.perf_counter() - tt
     lib.logger.note(ic, 'E(%s) = %.16g  E_corr_pt = %.16g',
@@ -332,7 +304,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
     lib.logger.note(ic, "Timings = %s",
         " | ".join(["%s = %7.2f" % (k, v) for k, v in ic.sub_times.items()]))
 
-class WickICNEVPT2(lib.StreamObject):
+class WickICMRREPT2(lib.StreamObject):
     def __init__(self, mc):
         self._mc = mc
         assert mc.canonicalization
@@ -353,7 +325,7 @@ class WickICNEVPT2(lib.StreamObject):
 
     kernel = kernel
 
-ICNEVPT2 = WickICNEVPT2
+ICMRREPT2 = WickICMRREPT2
 
 if __name__ == "__main__":
 
@@ -365,13 +337,12 @@ if __name__ == "__main__":
     # Example 1 - single state
     mc = mcscf.CASSCF(mf, 6, 8)
     mc.fcisolver.conv_tol = 1e-14
-    mc.canonicalization = True
+    mc.conv_tol = 1e-12
     mc.run()
-    wsc = WickICNEVPT2(mc).run()
+    wsc = WickICMRREPT2(mc).run()
     # converged SCF energy = -149.608181589162
-    # CASSCF energy = -149.708657770028
-    # E(WickICNEVPT2) = -149.9601360650626  E_corr_pt = -0.2514782950349269
-    # ref -149.708657773372 (casscf) -0.2514798828 (pc) -149.960137653992 (tot-pc)
+    # CASSCF energy = -149.708657771221
+    # E(WickICMRREPT2) = -150.0162455392724  E_corr_pt = -0.3075877680517728
 
     # Example 2 - CASCI multi-state
     mc2 = mcscf.CASCI(mf, 6, 8)
@@ -379,12 +350,12 @@ if __name__ == "__main__":
     mc2.fcisolver.conv_tol = 1e-14
     mc2.canonicalization = True
     mc2.kernel(mc.mo_coeff)
-    # [ -149.708657770072 -149.480535581399 -149.480535581399 ]
+    # [ -149.708657771221 -149.480534726188 -149.480534726188 ]
 
-    wsc = WickICNEVPT2(mc2).run(root=0)
-    wsc = WickICNEVPT2(mc2).run(root=1)
-    wsc = WickICNEVPT2(mc2).run(root=2)
-    # [ -0.2514783034161103 -0.2468313797875435 -0.2468313797875419 ]
+    wsc = WickICMRREPT2(mc2).run(root=0)
+    wsc = WickICMRREPT2(mc2).run(root=1)
+    wsc = WickICMRREPT2(mc2).run(root=2)
+    # [ -0.3072831603857041 -0.301737869046007 -0.3018189555282041 ]
 
     # Example 3 - CASSCF state-average
     mc = mcscf.CASSCF(mf, 6, 8)
@@ -392,15 +363,10 @@ if __name__ == "__main__":
     mc.fcisolver.conv_tol = 1e-14
     mc.canonicalization = True
     mc.run()
-    # [ -149.706807301761 -149.484319802309 -149.484319802303 ]
-    wsc = WickICNEVPT2(mc).run(root=0)
-    wsc = WickICNEVPT2(mc).run(root=1)
-    wsc = WickICNEVPT2(mc).run(root=2)
-    # E(WickICNEVPT2) = -149.9591789667880  E_corr_pt = -0.252371665027283
-    # E(WickICNEVPT2) = -149.7264213542754  E_corr_pt = -0.2421015519665067
-    # E(WickICNEVPT2) = -149.7264213421491  E_corr_pt = -0.2421015398465075
-
-    # ref casscf = [ -149.706807583050 -149.484319661994 -149.484319661994 ]
-    # ref 0 =  -0.2498431015 (SC) -0.2522554873 (PC) -149.959063070398 (TOT-PC)
-    # ref 1 =  -0.2410187659 (SC) -0.2422012621 (PC) -149.726520924054 (TOT-PC)
-    # ref 2 =  -0.2410187659 (SC) -0.2422012621 (PC) -149.726520924054 (TOT-PC)
+    # [ -149.706807304716 -149.484319800832 -149.484319800828 ]
+    wsc = WickICMRREPT2(mc).run(root=0)
+    wsc = WickICMRREPT2(mc).run(root=1)
+    wsc = WickICMRREPT2(mc).run(root=2)
+    # E(WickICMRREPT2) = -150.0147593908998  E_corr_pt = -0.3079520861841749
+    # E(WickICMRREPT2) = -149.7801934111490  E_corr_pt = -0.2958736103171785
+    # E(WickICMRREPT2) = -149.7801590818412  E_corr_pt = -0.2958392810134889
