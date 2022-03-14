@@ -52,7 +52,7 @@ namespace sci {
         // Actually I made this class not abstract (pure virtual fct) in order to ease life.
     public:
         using sizPair = std::pair<std::size_t, std::size_t>;
-        using BLSparseMatrix = block2::CSRSparseMatrix<S>;
+        using BLSparseMatrix = block2::CSRSparseMatrix<S, double>;
         struct entryTuple1{ // ease life and define this instead of using std::tuple
             BLSparseMatrix& mat;
             int iOrb;
@@ -79,7 +79,7 @@ namespace sci {
          * @param fcidump block2 FCIDUMP file
          */
         AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
-                           const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           const std::shared_ptr<block2::FCIDUMP<double>>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            int nMaxAlphaEl, int nMaxBetaEl, int nMaxEl, bool verbose=true):
                 nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},
@@ -97,7 +97,7 @@ namespace sci {
          * @param fcidump block2 FCIDUMP file
          */
         AbstractSciWrapper(int nOrb_, int nOrbThis_, bool isRight,
-                           const std::shared_ptr<block2::FCIDUMP>& fcidump,
+                           const std::shared_ptr<block2::FCIDUMP<double>>& fcidump,
                            const std::vector<uint8_t>& orbsym,
                            const vector<vector<int>>& occs, bool verbose=true):
                 nOrbOther{nOrb_-nOrbThis_}, nOrbThis{nOrbThis_}, nOrb{nOrb_},

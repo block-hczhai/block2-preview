@@ -29,19 +29,19 @@ using namespace std;
 namespace block2 {
 
 // Density Matrix Renormalization Group for SCI
-template <typename S> struct DMRGSCI : DMRG<S> {
-    using DMRG<S>::iprint;
-    using DMRG<S>::me;
-    using DMRG<S>::ext_mes;
-    using DMRG<S>::davidson_soft_max_iter;
-    using DMRG<S>::noise_type;
-    using DMRG<S>::decomp_type;
-    using typename DMRG<S>::Iteration;
+template <typename S> struct DMRGSCI : DMRG<S, double, double> {
+    using DMRG<S, double, double>::iprint;
+    using DMRG<S, double, double>::me;
+    using DMRG<S, double, double>::ext_mes;
+    using DMRG<S, double, double>::davidson_soft_max_iter;
+    using DMRG<S, double, double>::noise_type;
+    using DMRG<S, double, double>::decomp_type;
+    using typename DMRG<S, double, double>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
-    DMRGSCI(const shared_ptr<MovingEnvironment<S>> &me,
+    DMRGSCI(const shared_ptr<MovingEnvironment<S, double, double>> &me,
             const vector<ubond_t> &bond_dims, const vector<double> &noises)
-        : DMRG<S>(me, bond_dims, noises) {}
+        : DMRG<S, double, double>(me, bond_dims, noises) {}
     Iteration blocking(int i, bool forward, ubond_t bond_dim, double noise,
                        double davidson_conv_thrd) override {
         const int dsmi =
@@ -65,7 +65,7 @@ template <typename S> struct DMRGSCI : DMRG<S> {
             me->ket->canonical_form[i] = 'K';
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S>::blocking(i, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, double, double>::blocking(i, forward, bond_dim, 0, davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             i++;
             if (iprint >= 2) {
@@ -94,7 +94,7 @@ template <typename S> struct DMRGSCI : DMRG<S> {
             decomp_type = DecompositionTypes::SVD;
         }
         Iteration r =
-            DMRG<S>::blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
+            DMRG<S, double, double>::blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             r.energies[0] = 0;
             davidson_soft_max_iter = dsmi;
@@ -112,7 +112,7 @@ template <typename S> struct DMRGSCI : DMRG<S> {
             assert(me->dot = 1);
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S>::blocking(i - 1, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, double, double>::blocking(i - 1, forward, bond_dim, 0, davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -129,40 +129,40 @@ template <typename S> struct DMRGSCI : DMRG<S> {
 };
 
 // Linear equation for SCI
-template <typename S> struct LinearSCI : Linear<S> {
-    using Linear<S>::iprint;
-    using Linear<S>::lme;
-    using Linear<S>::rme;
-    using Linear<S>::tme;
-    using Linear<S>::linear_soft_max_iter;
-    using Linear<S>::noise_type;
-    using Linear<S>::decomp_type;
-    using Linear<S>::targets;
-    using typename Linear<S>::Iteration;
+template <typename S> struct LinearSCI : Linear<S, double, double> {
+    using Linear<S, double, double>::iprint;
+    using Linear<S, double, double>::lme;
+    using Linear<S, double, double>::rme;
+    using Linear<S, double, double>::tme;
+    using Linear<S, double, double>::linear_soft_max_iter;
+    using Linear<S, double, double>::noise_type;
+    using Linear<S, double, double>::decomp_type;
+    using Linear<S, double, double>::targets;
+    using typename Linear<S, double, double>::Iteration;
     bool last_site_svd = false;
     bool last_site_1site = false; // ATTENTION: only use in two site algorithm
-    LinearSCI(const shared_ptr<MovingEnvironment<S>> &rme,
+    LinearSCI(const shared_ptr<MovingEnvironment<S, double, double>> &rme,
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S>(rme, bra_bond_dims, ket_bond_dims, noises) {}
-    LinearSCI(const shared_ptr<MovingEnvironment<S>> &lme,
-              const shared_ptr<MovingEnvironment<S>> &rme,
+        : Linear<S, double, double>(rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearSCI(const shared_ptr<MovingEnvironment<S, double, double>> &lme,
+              const shared_ptr<MovingEnvironment<S, double, double>> &rme,
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
-    LinearSCI(const shared_ptr<MovingEnvironment<S>> &lme,
-              const shared_ptr<MovingEnvironment<S>> &rme,
-              const shared_ptr<MovingEnvironment<S>> &tme,
+        : Linear<S, double, double>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
+    LinearSCI(const shared_ptr<MovingEnvironment<S, double, double>> &lme,
+              const shared_ptr<MovingEnvironment<S, double, double>> &rme,
+              const shared_ptr<MovingEnvironment<S, double, double>> &tme,
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S>(lme, rme, tme, bra_bond_dims, ket_bond_dims, noises) {}
+        : Linear<S, double, double>(lme, rme, tme, bra_bond_dims, ket_bond_dims, noises) {}
     Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                        ubond_t ket_bond_dim, double noise,
                        double linear_conv_thrd) override {
-        const shared_ptr<MovingEnvironment<S>> &me = rme;
+        const shared_ptr<MovingEnvironment<S, double, double>> &me = rme;
         const int dsmi =
             linear_soft_max_iter; // Save it as it may be changed here
         const NoiseTypes nt = noise_type;
@@ -233,7 +233,7 @@ template <typename S> struct LinearSCI : Linear<S> {
                                         (uint8_t)NoiseTypes::Collected);
             decomp_type = DecompositionTypes::SVD;
         }
-        Iteration r = Linear<S>::blocking(
+        Iteration r = Linear<S, double, double>::blocking(
             i, forward, bra_bond_dim, ket_bond_dim, noise, linear_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             if (targets.size() != 0)
@@ -257,7 +257,7 @@ template <typename S> struct LinearSCI : Linear<S> {
             assert(me->dot = 1);
             linear_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            Linear<S>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
+            Linear<S, double, double>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
                                 linear_conv_thrd);
             linear_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
@@ -314,8 +314,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** Frozen/CAS mode: Only one big site at the end
      * => ME + S * SME  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                const shared_ptr<MovingEnvironment<S>> &sme,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
         : DMRGSCI<S>(me, bond_dims, noises),
@@ -330,9 +330,9 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** Frozen/CAS mode ACPF2: Only one big site at the end
      * => ME + S * SME + S2 * SME2 **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                const shared_ptr<MovingEnvironment<S>> &sme, double g_factor2,
-                const shared_ptr<MovingEnvironment<S>> &sme2,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme, double g_factor2,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme2,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
         : DMRGSCI<S>(me, bond_dims, noises),
@@ -349,9 +349,9 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** RAS mode: Big sites on both ends
      * => ME + S * (SME1 - SME2)  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                const shared_ptr<MovingEnvironment<S>> &sme1,
-                const shared_ptr<MovingEnvironment<S>> &sme2,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme1,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme2,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
         : DMRGSCI<S>(me, bond_dims, noises),
@@ -367,11 +367,11 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** RAS ACPF2 mode: Big sites on both ends
      * => ME + S * (SME1 - SME2) + S2 * (SME3-SME4)  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S>> &me, double g_factor,
-                const shared_ptr<MovingEnvironment<S>> &sme1,
-                const shared_ptr<MovingEnvironment<S>> &sme2, double g_factor2,
-                const shared_ptr<MovingEnvironment<S>> &sme3,
-                const shared_ptr<MovingEnvironment<S>> &sme4,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme1,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme2, double g_factor2,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme3,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme4,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
         : DMRGSCI<S>(me, bond_dims, noises),
@@ -388,15 +388,15 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         ext_mes.push_back(sme4);
     }
 
-    shared_ptr<LinearEffectiveHamiltonian<S>>
-    get_aqcc_eff(shared_ptr<EffectiveHamiltonian<S>> h_eff,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff1,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff2,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff3,
-                 shared_ptr<EffectiveHamiltonian<S>> d_eff4) {
+    shared_ptr<LinearEffectiveHamiltonian<S, double>>
+    get_aqcc_eff(shared_ptr<EffectiveHamiltonian<S, double>> h_eff,
+                 shared_ptr<EffectiveHamiltonian<S, double>> d_eff1,
+                 shared_ptr<EffectiveHamiltonian<S, double>> d_eff2,
+                 shared_ptr<EffectiveHamiltonian<S, double>> d_eff3,
+                 shared_ptr<EffectiveHamiltonian<S, double>> d_eff4) {
         const auto shift = (1. - g_factor) * delta_e;
         const auto shift2 = (1. - g_factor2) * delta_e;
-        shared_ptr<LinearEffectiveHamiltonian<S>> aqcc_eff;
+        shared_ptr<LinearEffectiveHamiltonian<S, double>> aqcc_eff;
         if (not RAS_mode) {
             aqcc_eff = h_eff + shift * d_eff1;
             if (ACPF2_mode) {
@@ -419,10 +419,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
         const bool forward, const int i, const double davidson_conv_thrd,
-        const double noise, shared_ptr<SparseMatrixGroup<S>> &pket) override {
+        const double noise, shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi;
         _t.get_time();
-        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 =
             ext_mes.at(0)->eff_ham(FuseTypes::FuseLR, forward, true,
                                    me->bra->tensors[i], me->ket->tensors[i]);
@@ -440,7 +440,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                                             me->ket->tensors[i]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff =
+        shared_ptr<EffectiveHamiltonian<S, double>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
         auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
@@ -471,13 +471,13 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
                              const int i_site, const double davidson_conv_thrd,
                              const double noise,
-                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
+                             shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi{0., 0, 0,
                                                0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0) and
                             abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -495,7 +495,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
         // h_eff needs to be done *last* for 3idx stuff
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, double>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
         teff += _t.get_time();
@@ -630,7 +630,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
     int max_aqcc_iter = 5;  // Max iter spent on last site. Convergence depends
                             // on davidson conv. Note that this does not need to
                             // be fully converged as we do sweeps anyways.
-    DMRGSCIAQCCOLD(const shared_ptr<MovingEnvironment<S>> &me,
+    DMRGSCIAQCCOLD(const shared_ptr<MovingEnvironment<S, double, double>> &me,
                    const vector<ubond_t> &bond_dims,
                    const vector<double> &noises, double g_factor,
                    double ref_energy, const std::vector<S> &mod_qns)
@@ -647,13 +647,13 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
     one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
                              const int i_site, const double davidson_conv_thrd,
                              const double noise,
-                             shared_ptr<SparseMatrixGroup<S>> &pket) override {
+                             shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi{0., 0, 0,
                                                0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC =
             i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S>> h_eff = me->eff_ham(
+        shared_ptr<EffectiveHamiltonian<S, double>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
             // vv diag will be computed in aqcc loop
             not doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -687,22 +687,22 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                     SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "MRCIAQCC: No CSRSparseMatrix is used?");
-                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(
+                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S, double>>(
                     h_eff->op->ropt->ops[me->mpo->op]);
                 modify_H_mats(Hop, false, shift);
                 //
                 // Compute diagonal
                 //
                 if (itAQCC == 0) {
-                    h_eff->diag = make_shared<SparseMatrix<S>>();
+                    h_eff->diag = make_shared<SparseMatrix<S, double>>();
                     h_eff->diag->allocate(h_eff->ket->info);
                     diag_info = make_shared<
                         typename SparseMatrixInfo<S>::ConnectionInfo>();
                     S cdq = h_eff->ket->info->delta_quantum;
                     vector<S> msl =
-                        Partition<S>::get_uniq_labels({h_eff->hop_mat});
+                        Partition<S, double>::get_uniq_labels({h_eff->hop_mat});
                     vector<vector<pair<uint8_t, S>>> msubsl =
-                        Partition<S>::get_uniq_sub_labels(h_eff->op->mat,
+                        Partition<S, double>::get_uniq_sub_labels(h_eff->op->mat,
                                                           h_eff->hop_mat, msl);
                     diag_info->initialize_diag(
                         cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
@@ -813,18 +813,18 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
         }
         auto &ops = me->mpo->tensors.at(me->mpo->n_sites - 1)->ops;
         for (auto &p : ops) {
-            OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+            OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
             if (op.name == OpNames::H) {
                 if (p.second->get_type() != SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "MRCIAQCC: No CSRSparseMatrix is used?");
-                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S>>(p.second);
+                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S, double>>(p.second);
                 modify_H_mats(Hop, save, diag_shift);
                 break;
             }
         }
     }
-    void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S>> &Hop,
+    void modify_H_mats(std::shared_ptr<CSRSparseMatrix<S, double>> &Hop,
                        const bool save, const double diag_shift) {
         if (save) {
             for (const auto &qn : mod_qns) {
@@ -840,7 +840,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 // Not all QNs make sense for H!
                 continue;
             }
-            CSRMatrixRef mat = (*Hop)[idx];
+            auto& mat = (*Hop)[idx];
             assert(mat.m == mat.n);
             if (!save)
                 assert(mat.m == (MKL_INT)pqn.second.size());

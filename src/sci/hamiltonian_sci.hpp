@@ -76,11 +76,11 @@ template <typename S> struct HamiltonianSCI {
     // Sparse matrix info for site operators
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
     // Sparse matrix representation for normal site operators
-    vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>
+    vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>>
         *site_norm_ops;
     // Number of sites
     uint16_t n_sites;
-    shared_ptr<OperatorFunctions<S>> opf;
+    shared_ptr<OperatorFunctions<S, double>> opf;
     // Point group symmetry of orbitals
     vector<uint8_t> orb_sym;
     DelayedSCIOpNames delayed = DelayedSCIOpNames::None;
@@ -92,8 +92,8 @@ template <typename S> struct HamiltonianSCI {
         site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
         site_norm_ops = new vector<
-            pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>[n_sites];
-        opf = make_shared<OperatorFunctions<S>>(make_shared<CG<S>>());
+            pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>>[n_sites];
+        opf = make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>());
         opf->cg->initialize();
     }
     virtual ~HamiltonianSCI() = default;
@@ -102,7 +102,7 @@ template <typename S> struct HamiltonianSCI {
     // Trivial sparse matrices are removed from symbolic operator tensor and map
     void filter_site_ops(uint16_t m,
                          const vector<shared_ptr<Symbolic<S>>> &mats,
-                         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops) const {
+                         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>> &ops) const {
         vector<shared_ptr<Symbolic<S>>> pmats = mats;
         // hrl: ops is empty initially. It will be filled here. First by
         // specifying the keys, then by declaring the value
@@ -118,7 +118,7 @@ template <typename S> struct HamiltonianSCI {
                     ops[abs_value(x)] = nullptr;
                     break;
                 case OpTypes::Sum:
-                    for (auto &r : dynamic_pointer_cast<OpSum<S>>(x)->strings)
+                    for (auto &r : dynamic_pointer_cast<OpSum<S, double>>(x)->strings)
                         ops[abs_value((shared_ptr<OpExpr<S>>)r->get_op())] =
                             nullptr;
                     break;
@@ -126,8 +126,8 @@ template <typename S> struct HamiltonianSCI {
                     assert(false);
                 }
             }
-        const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), vacuum);
+        const shared_ptr<OpElement<S, double>> i_op =
+            make_shared<OpElement<S, double>>(OpNames::I, SiteIndex(), vacuum);
         ops[i_op] = nullptr;
         // hrl: specifying value
         get_site_ops(m, ops);
@@ -150,20 +150,20 @@ template <typename S> struct HamiltonianSCI {
                 case OpTypes::Sum:
                     kk = 0;
                     for (size_t i = 0;
-                         i < dynamic_pointer_cast<OpSum<S>>(x)->strings.size();
+                         i < dynamic_pointer_cast<OpSum<S, double>>(x)->strings.size();
                          i++) {
                         // TODO hrl why abs_value? => to remove "phase" for
                         // getting key in ops
                         xx = abs_value((shared_ptr<OpExpr<S>>)
-                                           dynamic_pointer_cast<OpSum<S>>(x)
+                                           dynamic_pointer_cast<OpSum<S, double>>(x)
                                                ->strings[i]
                                                ->get_op());
-                        shared_ptr<SparseMatrix<S>> &mat = ops[xx];
+                        shared_ptr<SparseMatrix<S, double>> &mat = ops[xx];
                         if (!(mat->factor == 0.0 || mat->info->n == 0 ||
                               mat->norm() < TINY)) {
                             if (i != kk)
-                                dynamic_pointer_cast<OpSum<S>>(x)->strings[kk] =
-                                    dynamic_pointer_cast<OpSum<S>>(x)
+                                dynamic_pointer_cast<OpSum<S, double>>(x)->strings[kk] =
+                                    dynamic_pointer_cast<OpSum<S, double>>(x)
                                         ->strings[i];
                             kk++;
                         }
@@ -171,8 +171,8 @@ template <typename S> struct HamiltonianSCI {
                     if (kk == 0)
                         x = zero;
                     else if (kk !=
-                             dynamic_pointer_cast<OpSum<S>>(x)->strings.size())
-                        dynamic_pointer_cast<OpSum<S>>(x)->strings.resize(kk);
+                             dynamic_pointer_cast<OpSum<S, double>>(x)->strings.size())
+                        dynamic_pointer_cast<OpSum<S, double>>(x)->strings.resize(kk);
                     break;
                 default:
                     assert(false);
@@ -202,7 +202,7 @@ template <typename S> struct HamiltonianSCI {
     }
 
     static bool cmp_site_norm_op(
-        const pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &p,
+        const pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>> &p,
         const shared_ptr<OpExpr<S>> &q) {
         return op_expr_less<S>()(p.first, q);
     }
@@ -217,7 +217,7 @@ template <typename S> struct HamiltonianSCI {
     /* @param m: site */
     virtual void get_site_ops(
         uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>
             &ops) const {};
 
   protected:
@@ -238,14 +238,14 @@ template <typename S> struct HamiltonianSCI {
     }
 
     // Find site normal operator with the given symbol q
-    shared_ptr<SparseMatrix<S>>
+    shared_ptr<SparseMatrix<S, double>>
     find_site_norm_op(const shared_ptr<OpExpr<S>> &q, uint16_t iSite) const {
         auto p = lower_bound(site_norm_ops[iSite].begin(),
                              site_norm_ops[iSite].end(), q, cmp_site_norm_op);
         if (p == site_norm_ops[iSite].end() || !(p->first == q)) {
             cout << "FIND SITE NORM OP FOR" << iSite << endl;
             cout << "fail for site" << iSite << endl;
-            auto opQ = dynamic_pointer_cast<OpElement<S>>(q);
+            auto opQ = dynamic_pointer_cast<OpElement<S, double>>(q);
             cout << " that is:" << *opQ << endl;
             throw std::runtime_error("Fail in find_site_norm_op");
             assert(false);
@@ -258,17 +258,17 @@ template <typename S> struct HamiltonianSCI {
 
 // Delayed site operator
 template <typename S>
-struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, OpExpr<S>> {
+struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, double, OpExpr<S>> {
     shared_ptr<HamiltonianSCI<S>> hamil;
-    using DelayedSparseMatrix<S, OpExpr<S>>::m;
-    using DelayedSparseMatrix<S, OpExpr<S>>::op;
+    using DelayedSparseMatrix<S, double, OpExpr<S>>::m;
+    using DelayedSparseMatrix<S, double, OpExpr<S>>::op;
     DelayedSparseMatrix(const shared_ptr<HamiltonianSCI<S>> &hamil, uint16_t m,
                         const shared_ptr<OpExpr<S>> &op,
                         const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
         : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {
     }
-    shared_ptr<SparseMatrix<S>> build() override {
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
+    shared_ptr<SparseMatrix<S, double>> build() override {
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>
             ops;
         assert(hamil != nullptr);
         assert(hamil->delayed == DelayedSCIOpNames::None);
@@ -277,11 +277,11 @@ struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, OpExpr
         if (this->info->n == ops.at(op)->info->n)
             return ops.at(op);
         else {
-            shared_ptr<SparseMatrix<S>> new_mat;
+            shared_ptr<SparseMatrix<S, double>> new_mat;
             if (ops.at(op)->get_type() == SparseMatrixTypes::Normal)
-                new_mat = make_shared<SparseMatrix<S>>();
+                new_mat = make_shared<SparseMatrix<S, double>>();
             else
-                new_mat = make_shared<CSRSparseMatrix<S>>();
+                new_mat = make_shared<CSRSparseMatrix<S, double>>();
             new_mat->allocate(this->info);
             new_mat->selective_copy_from(ops.at(op), false);
             new_mat->factor = ops.at(op)->factor;
@@ -289,10 +289,10 @@ struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, OpExpr
             return new_mat;
         }
     }
-    shared_ptr<DelayedSparseMatrix<S>> copy() override {
+    shared_ptr<DelayedSparseMatrix<S, double>> copy() override {
         return make_shared<DelayedSparseMatrix>(*this);
     }
-    shared_ptr<DelayedSparseMatrix<S>>
+    shared_ptr<DelayedSparseMatrix<S, double>>
     selective_copy(const shared_ptr<SparseMatrixInfo<S>> &info) override {
         shared_ptr<DelayedSparseMatrix> mat =
             make_shared<DelayedSparseMatrix>(*this);

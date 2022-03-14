@@ -83,10 +83,10 @@ public:
     using HamiltonianSCI<S>::orb_sym;
     using HamiltonianSCI<S>::delayed;
 
-    map<OpNames, shared_ptr<SparseMatrix<S>>>
+    map<OpNames, shared_ptr<SparseMatrix<S, double>>>
         op_prims_normal[4]; //!< Primitive operators for normal spatial orbitals
     //!! This is only used in get_site_ops
-    shared_ptr<FCIDUMP> fcidump;
+    shared_ptr<FCIDUMP<double>> fcidump;
     double mu = 0; //!> Chemical potential
     std::shared_ptr<sci::AbstractSciWrapper<S>>
         sciWrapperLeft, sciWrapperRight; //!< Wrapper classes for the
@@ -96,10 +96,10 @@ public:
     int nOrbCas; //!> Number of spatial orbitals in CAS (handled by normal MPS)
     bool sci_finalize = true;
     bool useRuleQC = true; // Use RuleQC for big sites
-    mutable std::shared_ptr<Rule<S>> ruleQC = nullptr; // Will be changed in const method
-    std::shared_ptr<ParallelRuleQC<S>> parallelRule = nullptr; // Enable it for big site in useRuleQC
+    mutable std::shared_ptr<Rule<S, double>> ruleQC = nullptr; // Will be changed in const method
+    std::shared_ptr<ParallelRuleQC<S, double>> parallelRule = nullptr; // Enable it for big site in useRuleQC
     HamiltonianQCSCI(const S vacuum, const int nOrbTot, const vector<uint8_t> &orb_sym,
-        const shared_ptr<FCIDUMP> &fcidump,
+        const shared_ptr<FCIDUMP<double>> &fcidump,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperLeft = nullptr,
         const std::shared_ptr<sci::AbstractSciWrapper<S>> &sciWrapperRight = nullptr)
             : HamiltonianSCI<S>(vacuum, getNSites(nOrbTot, sciWrapperLeft,sciWrapperRight), orb_sym),
@@ -190,7 +190,7 @@ public:
 
   protected:
     void get_site_ops(uint16_t m,
-                      unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>> &ops) const override {
+                      unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>> &ops) const override {
         shared_ptr<HamiltonianQCSCI> ph = nullptr;
         if (delayed != DelayedSCIOpNames::None) {
             ph = make_shared<HamiltonianQCSCI>(*this);
@@ -203,8 +203,8 @@ public:
                 get_site_ops_big_site(sciWrapperRight, ops, m);
             else {
                 for (auto &p : ops) {
-                    OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
-                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                    OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
+                    p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
                         ph, pm, p.first, find_site_op_info(op.q_label, pm));
                 }
             }
@@ -214,8 +214,8 @@ public:
                 get_site_ops_big_site(sciWrapperLeft, ops, m);
             else {
                 for (auto &p : ops) {
-                    OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
-                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                    OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
+                    p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
                         ph, pm, p.first, find_site_op_info(op.q_label, pm));
                 }
             }
@@ -223,11 +223,11 @@ public:
         } else m = nOrbLeft == 0 ? m : m + nOrbLeft - 1;
         uint16_t i, j, k;
         uint8_t s;
-        shared_ptr<SparseMatrix<S>> zero = make_shared<SparseMatrix<S>>();
-        shared_ptr<SparseMatrix<S>> tmp = make_shared<SparseMatrix<S>>();
+        shared_ptr<SparseMatrix<S, double>> zero = make_shared<SparseMatrix<S, double>>();
+        shared_ptr<SparseMatrix<S, double>> tmp = make_shared<SparseMatrix<S, double>>();
         zero->factor = 0.0;
         for (auto &p : ops) {
-            OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
+            OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
             switch (op.name) {
             case OpNames::I: // hrl: these are just normal operators so we can
                              // apply find_site_norm_op
@@ -243,7 +243,7 @@ public:
                 break;
             case OpNames::H: // hrl: Here we need to take integrals into account
                 if (!(delayed & DelayedSCIOpNames::H)) {
-                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second = make_shared<SparseMatrix<S, double>>();
                     p.second->allocate(find_site_op_info(op.q_label, pm));
                     (*p.second)[S(0, 0, 0)](0, 0) = 0.0;
                     (*p.second)[S(1, -1, orb_sym[m])](0, 0) = t(1, m, m);
@@ -263,7 +263,7 @@ public:
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
                 else if (!(delayed & DelayedSCIOpNames::R)) {
-                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second = make_shared<SparseMatrix<S, double>>();
                     p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::D));
                     p.second->factor *= t(s, i, m) * 0.5;
@@ -288,7 +288,7 @@ public:
                      abs(v(s, 1, i, m, m, m)) < TINY))
                     p.second = zero;
                 else if (!(delayed & DelayedSCIOpNames::RD)) {
-                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second = make_shared<SparseMatrix<S, double>>();
                     p.second->allocate(find_site_op_info(op.q_label, pm));
                     p.second->copy_data_from(op_prims_normal[s].at(OpNames::C));
                     p.second->factor *= t(s, i, m) * 0.5;
@@ -311,7 +311,7 @@ public:
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
                 else if (!(delayed & DelayedSCIOpNames::P)) {
-                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second = make_shared<SparseMatrix<S, double>>();
                     p.second->allocate(
                         find_site_op_info(op.q_label, pm),
                         op_prims_normal[s].at(OpNames::AD)->data);
@@ -325,7 +325,7 @@ public:
                 if (abs(v(s & 1, s >> 1, i, m, k, m)) < TINY)
                     p.second = zero;
                 else if (!(delayed & DelayedSCIOpNames::PD)) {
-                    p.second = make_shared<SparseMatrix<S>>();
+                    p.second = make_shared<SparseMatrix<S, double>>();
                     p.second->allocate(find_site_op_info(op.q_label, pm),
                                        op_prims_normal[s].at(OpNames::A)->data);
                     p.second->factor *= v(s & 1, s >> 1, i, m, k, m);
@@ -343,7 +343,7 @@ public:
                         abs(v(s & 1, 1, i, j, m, m)) < TINY)
                         p.second = zero;
                     else if (!(delayed & DelayedSCIOpNames::Q)) {
-                        p.second = make_shared<SparseMatrix<S>>();
+                        p.second = make_shared<SparseMatrix<S, double>>();
                         p.second->allocate(find_site_op_info(op.q_label, pm));
                         p.second->copy_data_from(
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)].at(
@@ -366,7 +366,7 @@ public:
                     if (abs(v(s & 1, s >> 1, i, m, m, j)) < TINY)
                         p.second = zero;
                     else if (!(delayed & DelayedSCIOpNames::Q)) {
-                        p.second = make_shared<SparseMatrix<S>>();
+                        p.second = make_shared<SparseMatrix<S, double>>();
                         p.second->allocate(
                             find_site_op_info(op.q_label, pm),
                             op_prims_normal[(s >> 1) | ((s & 1) << 1)]
@@ -381,7 +381,7 @@ public:
                 assert(false);
             }
             if (p.second == nullptr)
-                p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
+                p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
                     ph, pm, p.first, find_site_op_info(op.q_label, pm));
         }
     }
@@ -421,7 +421,7 @@ public:
         // pg symmetry for reference orbital
         // op_prims_normal need normal site as reference => use first normal orbital
         const uint8_t ipg = orb_sym[nOrbLeft];
-        op_prims_normal[0][OpNames::I] = make_shared<SparseMatrix<S>>();
+        op_prims_normal[0][OpNames::I] = make_shared<SparseMatrix<S, double>>();
         op_prims_normal[0][OpNames::I]->allocate(
             find_site_op_info(S(0, 0, 0), iStart));
         (*op_prims_normal[0][OpNames::I])[S(0, 0, 0)](0, 0) = 1.0; //  |00>
@@ -432,20 +432,20 @@ public:
         (*op_prims_normal[0][OpNames::I])[S(2, 0, 0)](0, 0) = 1.0; //  |11>
         const int sz[2] = {1, -1};
         for (uint8_t s = 0; s < 2; s++) {
-            op_prims_normal[s][OpNames::N] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::N] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::N]->allocate(
                 find_site_op_info(S(0, 0, 0), iStart));
             (*op_prims_normal[s][OpNames::N])[S(0, 0, 0)](0, 0) = 0.0;
             (*op_prims_normal[s][OpNames::N])[S(1, -1, ipg)](0, 0) = s;
             (*op_prims_normal[s][OpNames::N])[S(1, 1, ipg)](0, 0) = 1 - s;
             (*op_prims_normal[s][OpNames::N])[S(2, 0, 0)](0, 0) = 1.0;
-            op_prims_normal[s][OpNames::C] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::C] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::C]->allocate(
                 find_site_op_info(S(1, sz[s], ipg), iStart));
             (*op_prims_normal[s][OpNames::C])[S(0, 0, 0)](0, 0) = 1.0;
             (*op_prims_normal[s][OpNames::C])[S(1, -sz[s], ipg)](0, 0) =
                 s ? -1.0 : 1.0;
-            op_prims_normal[s][OpNames::D] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::D] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::D]->allocate(
                 find_site_op_info(S(-1, -sz[s], ipg), iStart));
             (*op_prims_normal[s][OpNames::D])[S(1, sz[s], ipg)](0, 0) = 1.0;
@@ -455,7 +455,7 @@ public:
         // low (&1): left index, high (>>1): right index
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint8_t s = 0; s < 4; s++) {
-            op_prims_normal[s][OpNames::NN] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::NN] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::NN]->allocate(
                 find_site_op_info(S(0, 0, 0), iStart));
             // hrl: s & 1 : 0 => 0; 1 => 1; 2 => 0; 3 => 1 (first index)
@@ -463,19 +463,19 @@ public:
             opf->product(0, op_prims_normal[s & 1][OpNames::N],
                          op_prims_normal[s >> 1][OpNames::N],
                          op_prims_normal[s][OpNames::NN]);
-            op_prims_normal[s][OpNames::A] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::A] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::A]->allocate(
                 find_site_op_info(S(2, sz_plus[s], 0), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
                          op_prims_normal[s >> 1][OpNames::C],
                          op_prims_normal[s][OpNames::A]);
-            op_prims_normal[s][OpNames::AD] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::AD] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::AD]->allocate(
                 find_site_op_info(S(-2, -sz_plus[s], 0), iStart));
             opf->product(0, op_prims_normal[s >> 1][OpNames::D],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::AD]);
-            op_prims_normal[s][OpNames::B] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::B] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::B]->allocate(
                 find_site_op_info(S(0, sz_minus[s], 0), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
@@ -484,13 +484,13 @@ public:
         }
         // low (&1): R index, high (>>1): B index
         for (uint8_t s = 0; s < 4; s++) {
-            op_prims_normal[s][OpNames::R] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::R] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::R]->allocate(
                 find_site_op_info(S(-1, -sz[s & 1], ipg), iStart));
             opf->product(0, op_prims_normal[(s >> 1) | (s & 2)][OpNames::B],
                          op_prims_normal[s & 1][OpNames::D],
                          op_prims_normal[s][OpNames::R]);
-            op_prims_normal[s][OpNames::RD] = make_shared<SparseMatrix<S>>();
+            op_prims_normal[s][OpNames::RD] = make_shared<SparseMatrix<S, double>>();
             op_prims_normal[s][OpNames::RD]->allocate(
                 find_site_op_info(S(1, sz[s & 1], ipg), iStart));
             opf->product(0, op_prims_normal[s & 1][OpNames::C],
@@ -498,23 +498,23 @@ public:
                          op_prims_normal[s][OpNames::RD]);
         }
         // site norm operators
-        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>, op_expr_less<S>>
+        map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>, op_expr_less<S>>
             ops[8];
-        const shared_ptr<OpElement<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), this->vacuum);
-        const shared_ptr<OpElement<S>> n_op[2] = {
-            make_shared<OpElement<S>>(OpNames::N, SiteIndex({}, {0}),
+        const shared_ptr<OpElement<S, double>> i_op =
+            make_shared<OpElement<S, double>>(OpNames::I, SiteIndex(), this->vacuum);
+        const shared_ptr<OpElement<S, double>> n_op[2] = {
+            make_shared<OpElement<S, double>>(OpNames::N, SiteIndex({}, {0}),
                                       this->vacuum),
-            make_shared<OpElement<S>>(OpNames::N, SiteIndex({}, {1}),
+            make_shared<OpElement<S, double>>(OpNames::N, SiteIndex({}, {1}),
                                       this->vacuum)};
-        const shared_ptr<OpElement<S>> nn_op[4] = {
-            make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {0, 0}),
+        const shared_ptr<OpElement<S, double>> nn_op[4] = {
+            make_shared<OpElement<S, double>>(OpNames::NN, SiteIndex({}, {0, 0}),
                                       this->vacuum),
-            make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {1, 0}),
+            make_shared<OpElement<S, double>>(OpNames::NN, SiteIndex({}, {1, 0}),
                                       this->vacuum),
-            make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {0, 1}),
+            make_shared<OpElement<S, double>>(OpNames::NN, SiteIndex({}, {0, 1}),
                                       this->vacuum),
-            make_shared<OpElement<S>>(OpNames::NN, SiteIndex({}, {1, 1}),
+            make_shared<OpElement<S, double>>(OpNames::NN, SiteIndex({}, {1, 1}),
                                       this->vacuum)};
         for (uint8_t i = 0; i < 8; i++) {
             ops[i][i_op] = nullptr;
@@ -527,24 +527,24 @@ public:
         //                vvv needs to include all left and cas orbitals for NC scheme
         for (uint16_t m = nOrbLeft; m < nOrbLeft + nOrbCas; m++) {
             for (uint8_t s = 0; s < 2; s++) {
-                ops[orb_sym[m]][make_shared<OpElement<S>>(
+                ops[orb_sym[m]][make_shared<OpElement<S, double>>(
                     OpNames::C, SiteIndex({m}, {s}), S(1, sz[s], orb_sym[m]))] =
                     nullptr;
                 ops[orb_sym[m]]
-                   [make_shared<OpElement<S>>(OpNames::D, SiteIndex({m}, {s}),
+                   [make_shared<OpElement<S, double>>(OpNames::D, SiteIndex({m}, {s}),
                                               S(-1, -sz[s], orb_sym[m]))] =
                        nullptr;
             }
             for (uint8_t s = 0; s < 4; s++) {
-                ops[orb_sym[m]][make_shared<OpElement<S>>(
+                ops[orb_sym[m]][make_shared<OpElement<S, double>>(
                     OpNames::A,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(2, sz_plus[s], 0))] = nullptr;
-                ops[orb_sym[m]][make_shared<OpElement<S>>(
+                ops[orb_sym[m]][make_shared<OpElement<S, double>>(
                     OpNames::AD,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(-2, -sz_plus[s], 0))] = nullptr;
-                ops[orb_sym[m]][make_shared<OpElement<S>>(
+                ops[orb_sym[m]][make_shared<OpElement<S, double>>(
                     OpNames::B,
                     SiteIndex({m, m}, {(uint8_t)(s & 1), (uint8_t)(s >> 1)}),
                     S(0, sz_minus[s], 0))] = nullptr;
@@ -554,11 +554,11 @@ public:
         for (uint16_t iSite = iStart; iSite < iEnd; ++iSite) {
             const auto iSym = orb_sym[nOrbLeft == 0 ? iSite : iSite + nOrbLeft - 1];
             site_norm_ops[iSite] = vector<
-                pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>>(
+                pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>>(
                 ops[iSym].begin(), ops[iSym].end());
             for (auto &p : this->site_norm_ops[iSite]) {
-                OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(p.first);
-                p.second = make_shared<SparseMatrix<S>>();
+                OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
+                p.second = make_shared<SparseMatrix<S, double>>();
                 p.second->allocate(
                     find_site_op_info(op.q_label, iSite),
                     op_prims_normal[op.site_index.ss()][op.name]->data);
@@ -606,7 +606,7 @@ public:
         }
     }
     void get_site_ops_big_site(const std::shared_ptr<sci::AbstractSciWrapper<S>>& sciWrapper,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>
             &ops, int iSite) const {
         int ii, jj; // spin orbital indices
         // For optimization purposes (parallelization + orbital loop elsewhere
@@ -621,19 +621,19 @@ public:
             throw std::invalid_argument("HamiltonianQCSCI: ruleQC is set but useRuleQC is false");
         }
         if(useRuleQC and ruleQC == nullptr){
-            ruleQC = std::make_shared<RuleQC<S>>();
+            ruleQC = std::make_shared<RuleQC<S, double>>();
         }
         for (auto &p : ops) {
-            shared_ptr<OpElement<S>> pop = dynamic_pointer_cast<OpElement<S>>(p.first);
-            OpElement<S> &op = *pop;
+            shared_ptr<OpElement<S, double>> pop = dynamic_pointer_cast<OpElement<S, double>>(p.first);
+            OpElement<S, double> &op = *pop;
             auto canBeSkipped = parallelRule != nullptr and not parallelRule->available(pop);
             canBeSkipped = canBeSkipped or (useRuleQC and (*ruleQC)(pop) != nullptr);
             if(canBeSkipped){
-                p.second = make_shared<DelayedSparseMatrix < S, OpExpr < S>>>(
+                p.second = make_shared<DelayedSparseMatrix < S, double, OpExpr < S>>>(
                         iSite, p.first, find_site_op_info(op.q_label, iSite));
                 continue;
             }
-            auto pmat = make_shared<CSRSparseMatrix<S>>();
+            auto pmat = make_shared<CSRSparseMatrix<S, double>>();
             auto &mat = *pmat;
             p.second = pmat;
             // ATTENTION vv if you change allocation, you need to change the
@@ -746,7 +746,7 @@ public:
             // Take care operators are fully "symmetric" for simplification.
             // E.g. if P[i,j] is 0, PD[j,i] should be 0 as well
             for (auto &p : ops) {
-                auto pop = dynamic_pointer_cast<OpElement<S>>(p.first);
+                auto pop = dynamic_pointer_cast<OpElement<S, double>>(p.first);
                 if(parallelRule != nullptr and not parallelRule->available(pop)){
                     continue;
                 }

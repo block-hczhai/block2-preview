@@ -41,19 +41,19 @@ namespace block2 {
 template <typename, typename = void> struct MPOQCSCI;
 
 // Quantum chemistry MPO (non-spin-adapted)
-template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
-    using MPO<S>::n_sites;
-    using MPO<S>::sparse_form;
-    using MPO<S>::site_op_infos;
-    using MPO<S>::op;
-    using MPO<S>::const_e;
-    using MPO<S>::tf;
+template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S, double> {
+    using MPO<S, double>::n_sites;
+    using MPO<S, double>::sparse_form;
+    using MPO<S, double>::site_op_infos;
+    using MPO<S, double>::op;
+    using MPO<S, double>::const_e;
+    using MPO<S, double>::tf;
     QCTypes mode;
     bool symmetrized_p; //!> If true, conventional P operator; symmetrized P
     bool firstSiteIsSCI, lastSiteIsSCI;
     MPOQCSCI(const HamiltonianQCSCI<S> &hamil, QCTypes mode = QCTypes::NC,
           bool symmetrized_p = true)
-        : MPO<S>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
+        : MPO<S, double>(hamil.n_sites), mode(mode), symmetrized_p(symmetrized_p) {
         int nOrbFirst = 1; // #Orbitals of first site
         if(hamil.sciWrapperLeft != nullptr){
             sparse_form[0] = 'S'; // Big site will be sparse
@@ -69,9 +69,9 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
             lastSiteIsSCI = false;
         }
         shared_ptr<OpExpr<S>> h_op =
-            make_shared<OpElement<S>>(OpNames::H, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S, double>>(OpNames::H, SiteIndex(), hamil.vacuum);
         shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S>>(OpNames::I, SiteIndex(), hamil.vacuum);
+            make_shared<OpElement<S, double>>(OpNames::I, SiteIndex(), hamil.vacuum);
         const auto nOrb = hamil.nOrbLeft + hamil.nOrbCas + hamil.nOrbRight;
         if(nOrb > numeric_limits<uint16_t>::max()){
             cerr << "value of nOrb " << nOrb << endl;
@@ -94,17 +94,17 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         OpExprTens4 p_op(nOrb, OpExprMat4(nOrb));
         OpExprTens4 pd_op(nOrb, OpExprMat4(nOrb));
         OpExprTens4 q_op(nOrb, OpExprMat4(nOrb));
-        op = dynamic_pointer_cast<OpElement<S>>(h_op);
+        op = dynamic_pointer_cast<OpElement<S, double>>(h_op);
         const_e = hamil.e();
-        //tf = make_shared<TensorFunctions<S>>(hamil.opf);
-        tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        //tf = make_shared<TensorFunctions<S, double>>(hamil.opf);
+        tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         if (hamil.delayed == DelayedSCIOpNames::None)
-            tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         else
-            tf = make_shared<DelayedTensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<DelayedTensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         tf->opf->seq = hamil.opf->seq; // seq_type
         site_op_infos = hamil.site_op_infos;
         if(mode != QCTypes::NC){
@@ -118,27 +118,27 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
         for (uint16_t iOrb = 0; iOrb < nOrb; iOrb++)
             for (uint8_t s = 0; s < 2; s++) {
                 c_op[iOrb][s] =
-                    make_shared<OpElement<S>>(OpNames::C, SiteIndex({iOrb}, {s}),
+                    make_shared<OpElement<S, double>>(OpNames::C, SiteIndex({iOrb}, {s}),
                                               S(1, sz[s], hamil.orb_sym[iOrb]));
                 d_op[iOrb][s] =
-                    make_shared<OpElement<S>>(OpNames::D, SiteIndex({iOrb}, {s}),
+                    make_shared<OpElement<S, double>>(OpNames::D, SiteIndex({iOrb}, {s}),
                                               S(-1, -sz[s], hamil.orb_sym[iOrb]));
-                mc_op[iOrb][s] = make_shared<OpElement<S>>(
+                mc_op[iOrb][s] = make_shared<OpElement<S, double>>(
                         OpNames::C, SiteIndex({iOrb}, {s}),
                         S(1, sz[s], hamil.orb_sym[iOrb]), -1.0);
-                md_op[iOrb][s] = make_shared<OpElement<S>>(
+                md_op[iOrb][s] = make_shared<OpElement<S, double>>(
                         OpNames::D, SiteIndex({iOrb}, {s}),
                         S(-1, -sz[s], hamil.orb_sym[iOrb]), -1.0);
                 rd_op[iOrb][s] =
-                    make_shared<OpElement<S>>(OpNames::RD, SiteIndex({iOrb}, {s}),
+                    make_shared<OpElement<S, double>>(OpNames::RD, SiteIndex({iOrb}, {s}),
                                               S(1, sz[s], hamil.orb_sym[iOrb]));
                 r_op[iOrb][s] =
-                    make_shared<OpElement<S>>(OpNames::R, SiteIndex({iOrb}, {s}),
+                    make_shared<OpElement<S, double>>(OpNames::R, SiteIndex({iOrb}, {s}),
                                               S(-1, -sz[s], hamil.orb_sym[iOrb]));
-                mrd_op[iOrb][s] = make_shared<OpElement<S>>(
+                mrd_op[iOrb][s] = make_shared<OpElement<S, double>>(
                         OpNames::RD, SiteIndex({iOrb}, {s}),
                         S(1, sz[s], hamil.orb_sym[iOrb]), -1.0);
-                mr_op[iOrb][s] = make_shared<OpElement<S>>(
+                mr_op[iOrb][s] = make_shared<OpElement<S, double>>(
                         OpNames::R, SiteIndex({iOrb}, {s}),
                         S(-1, -sz[s], hamil.orb_sym[iOrb]), -1.0);
             }
@@ -147,24 +147,24 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 for (uint8_t s = 0; s < 4; s++) {
                     SiteIndex sidx({i, j},
                                    {(uint8_t)(s & 1), (uint8_t)(s >> 1)});
-                    a_op[i][j][s] = make_shared<OpElement<S>>(
+                    a_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::A, sidx,
                         S(2, sz_plus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                    ad_op[i][j][s] = make_shared<OpElement<S>>(
+                    ad_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::AD, sidx,
                         S(-2, -sz_plus[s],
                           hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                    b_op[i][j][s] = make_shared<OpElement<S>>(
+                    b_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::B, sidx,
                         S(0, sz_minus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                    p_op[i][j][s] = make_shared<OpElement<S>>(
+                    p_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::P, sidx,
                         S(-2, -sz_plus[s],
                           hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                    pd_op[i][j][s] = make_shared<OpElement<S>>(
+                    pd_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::PD, sidx,
                         S(2, sz_plus[s], hamil.orb_sym[i] ^ hamil.orb_sym[j]));
-                    q_op[i][j][s] = make_shared<OpElement<S>>(
+                    q_op[i][j][s] = make_shared<OpElement<S, double>>(
                         OpNames::Q, sidx,
                         S(0, -sz_minus[s],
                           hamil.orb_sym[i] ^ hamil.orb_sym[j]));
@@ -514,7 +514,7 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
                 }
                 assert(p == mat.n);
             }
-            shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, double>> opt = make_shared<OperatorTensor<S, double>>();
             if (not (m == 0 and m == lastSite)) {
                 opt->lmat = opt->rmat = pmat;
             } else{ // should only occur for n_sites = 2
@@ -630,10 +630,10 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
     }
     void deallocate() override {
         for (uint16_t m = n_sites - 1; m < n_sites; m--) {
-            vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S>>>> vps(
+            vector<pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>> vps(
                 this->tensors[m]->ops.cbegin(), this->tensors[m]->ops.cend());
             for (auto it = vps.crbegin(); it != vps.crend(); ++it) {
-                OpElement<S> &op = *dynamic_pointer_cast<OpElement<S>>(it->first);
+                OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(it->first);
                 //cout << "m == " << (int) m << "deallocate" << op.name << "s" << (int) op.site_index[0] << ","
                 //     << (int) op.site_index[1] << "ss" << (int) op.site_index.s(0) << (int) op.site_index.s(1) << endl;
                 if ( (m == n_sites - 1 and lastSiteIsSCI) or (m==0 and firstSiteIsSCI)) {
@@ -650,17 +650,17 @@ template <typename S> struct MPOQCSCI<S, typename S::is_sz_t> : MPO<S> {
 };
 
 // MPO of single site operator
-template <typename S> struct SiteMPOSCI : MPO<S> {
-    using MPO<S>::sparse_form;
-    using MPO<S>::n_sites;
-    using MPO<S>::site_op_infos;
-    using MPO<S>::op;
-    using MPO<S>::const_e;
-    using MPO<S>::tf;
-    SiteMPOSCI(const HamiltonianQCSCI<S> &hamil, const shared_ptr<OpElement<S>> &op_,
+template <typename S> struct SiteMPOSCI : MPO<S, double> {
+    using MPO<S, double>::sparse_form;
+    using MPO<S, double>::n_sites;
+    using MPO<S, double>::site_op_infos;
+    using MPO<S, double>::op;
+    using MPO<S, double>::const_e;
+    using MPO<S, double>::tf;
+    SiteMPOSCI(const HamiltonianQCSCI<S> &hamil, const shared_ptr<OpElement<S, double>> &op_,
                int k = -1)
-        : MPO<S>(hamil.n_sites) {
-            shared_ptr<OpElement<S>> i_op = make_shared<OpElement<S>>(
+        : MPO<S, double>(hamil.n_sites) {
+            shared_ptr<OpElement<S, double>> i_op = make_shared<OpElement<S, double>>(
                     OpNames::I, SiteIndex(), hamil.vacuum);
         if (hamil.sciWrapperLeft != nullptr)
             sparse_form[0] = 'S';
@@ -668,14 +668,14 @@ template <typename S> struct SiteMPOSCI : MPO<S> {
             sparse_form[hamil.n_sites - 1] = 'S';
         op = op_;
         const_e = 0.0;
-        tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         if (hamil.delayed == DelayedSCIOpNames::None)
-            tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         else
-            tf = make_shared<DelayedTensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<DelayedTensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         tf->opf->seq = hamil.opf->seq; // seq_type
         if (k == -1) {
             assert(op->site_index.size() >= 1);
@@ -692,7 +692,7 @@ template <typename S> struct SiteMPOSCI : MPO<S> {
             else
                 pmat = make_shared<SymbolicMatrix<S>>(1, 1);
             (*pmat)[{0, 0}] = m == k ? op : i_op;
-            shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, double>> opt = make_shared<OperatorTensor<S, double>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop = make_shared<SymbolicRowVector<S>>(1);
@@ -709,15 +709,15 @@ template <typename S> struct SiteMPOSCI : MPO<S> {
 };
 
 // MPO of single site operator
-template <typename S> struct IdentityMPOSCI : MPO<S> {
-    using MPO<S>::sparse_form;
-    using MPO<S>::n_sites;
-    using MPO<S>::site_op_infos;
-    using MPO<S>::op;
-    using MPO<S>::const_e;
-    using MPO<S>::tf;
-    IdentityMPOSCI(const HamiltonianQCSCI<S> &hamil): MPO<S>(hamil.n_sites) {
-        shared_ptr<OpElement<S>> i_op = make_shared<OpElement<S>>(
+template <typename S> struct IdentityMPOSCI : MPO<S, double> {
+    using MPO<S, double>::sparse_form;
+    using MPO<S, double>::n_sites;
+    using MPO<S, double>::site_op_infos;
+    using MPO<S, double>::op;
+    using MPO<S, double>::const_e;
+    using MPO<S, double>::tf;
+    IdentityMPOSCI(const HamiltonianQCSCI<S> &hamil): MPO<S, double>(hamil.n_sites) {
+        shared_ptr<OpElement<S, double>> i_op = make_shared<OpElement<S, double>>(
                 OpNames::I, SiteIndex(), hamil.vacuum);
         if (hamil.sciWrapperLeft != nullptr)
             sparse_form[0] = 'S';
@@ -725,14 +725,14 @@ template <typename S> struct IdentityMPOSCI : MPO<S> {
             sparse_form[hamil.n_sites - 1] = 'S';
         op = i_op;
         const_e = 0.0;
-        tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+        tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         if (hamil.delayed == DelayedSCIOpNames::None)
-            tf = make_shared<TensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<TensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         else
-            tf = make_shared<DelayedTensorFunctions<S>>(
-                make_shared<CSROperatorFunctions<S>>(hamil.opf->cg));
+            tf = make_shared<DelayedTensorFunctions<S, double>>(
+                make_shared<CSROperatorFunctions<S, double>>(hamil.opf->cg));
         tf->opf->seq = hamil.opf->seq; // seq_type
         site_op_infos = hamil.site_op_infos;
         for (uint16_t m = 0; m < hamil.n_sites; m++) {
@@ -745,7 +745,7 @@ template <typename S> struct IdentityMPOSCI : MPO<S> {
             else
             pmat = make_shared<SymbolicMatrix<S>>(1, 1);
             (*pmat)[{0, 0}] = i_op;
-            shared_ptr<OperatorTensor<S>> opt = make_shared<OperatorTensor<S>>();
+            shared_ptr<OperatorTensor<S, double>> opt = make_shared<OperatorTensor<S, double>>();
             opt->lmat = opt->rmat = pmat;
             // operator names
             shared_ptr<SymbolicRowVector<S>> plop = make_shared<SymbolicRowVector<S>>(1);
