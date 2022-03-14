@@ -36,6 +36,7 @@
 #include "core/fft.hpp"
 #include "core/fp_codec.hpp"
 #include "core/hamiltonian.hpp"
+#include "core/heisenberg.hpp"
 #include "core/hubbard.hpp"
 #include "core/integral.hpp"
 #include "core/integral_compressed.hpp"

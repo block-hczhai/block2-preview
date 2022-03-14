@@ -13,7 +13,7 @@ from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, T
 from block2 import VectorUInt8, VectorUBond, VectorVectorUBond, VectorDouble, PointGroup, DoubleFPCodec
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, FinkFCIDUMP, ConvergenceTypes
-from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, ExpectationAlgorithmTypes
+from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, HeisenbergFCIDUMP, ExpectationAlgorithmTypes
 from block2 import SpinOrbitalFCIDUMP, MRCISFCIDUMP, VectorVectorInt
 import numpy as np
 import time
@@ -602,6 +602,8 @@ if pre_run or not no_pre_run:
         fcidump = MRCISFCIDUMP(fcidump, n_inactive, n_external)
     if "trans_integral_to_spin_orbital" in dic:
         fcidump = SpinOrbitalFCIDUMP(fcidump)
+    if "heisenberg" in dic:
+        fcidump = HeisenbergFCIDUMP(fcidump)
 
     swap_pg = getattr(PointGroup, "swap_" + dic.get("sym", "d2h"))
 
