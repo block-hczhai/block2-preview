@@ -204,7 +204,7 @@ public:
             else {
                 for (auto &p : ops) {
                     OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
-                    p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
+                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
                         ph, pm, p.first, find_site_op_info(op.q_label, pm));
                 }
             }
@@ -215,7 +215,7 @@ public:
             else {
                 for (auto &p : ops) {
                     OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
-                    p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
+                    p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
                         ph, pm, p.first, find_site_op_info(op.q_label, pm));
                 }
             }
@@ -381,7 +381,7 @@ public:
                 assert(false);
             }
             if (p.second == nullptr)
-                p.second = make_shared<DelayedSparseMatrix<S, double, HamiltonianSCI<S>>>(
+                p.second = make_shared<DelayedSparseMatrix<S, HamiltonianSCI<S>>>(
                     ph, pm, p.first, find_site_op_info(op.q_label, pm));
         }
     }
@@ -629,7 +629,8 @@ public:
             auto canBeSkipped = parallelRule != nullptr and not parallelRule->available(pop);
             canBeSkipped = canBeSkipped or (useRuleQC and (*ruleQC)(pop) != nullptr);
             if(canBeSkipped){
-                p.second = make_shared<DelayedSparseMatrix < S, double, OpExpr < S>>>(
+                p.second =
+                    make_shared<DelayedSparseMatrix<S, double, OpExpr<S>>>(
                         iSite, p.first, find_site_op_info(op.q_label, iSite));
                 continue;
             }

@@ -1667,7 +1667,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     template <typename MatMul, typename PComm>
     static FL
     idrs(MatMul &op, const GDiagonalMatrix<FL> &a_diagonal, GMatrix<FL> x,
-         GMatrix<FL> b, int &nmult, int &niter, int S = 8,
+         GMatrix<FL> b, int &nmult, int &niter, MKL_INT S = 8,
          const bool iprint = false, const PComm &pcomm = nullptr,
          const FP precond_reg = 1E-8, const FP tol = 1E-3, const FP atol = 0.0,
          const int max_iter = 5000, const int soft_max_iter = -1,

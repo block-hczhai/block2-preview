@@ -265,7 +265,7 @@ struct DelayedSparseMatrix<S, HamiltonianSCI<S>> : DelayedSparseMatrix<S, double
     DelayedSparseMatrix(const shared_ptr<HamiltonianSCI<S>> &hamil, uint16_t m,
                         const shared_ptr<OpExpr<S>> &op,
                         const shared_ptr<SparseMatrixInfo<S>> &info = nullptr)
-        : DelayedSparseMatrix<S, OpExpr<S>>(m, op, info), hamil(hamil) {
+        : DelayedSparseMatrix<S, double, OpExpr<S>>(m, op, info), hamil(hamil) {
     }
     shared_ptr<SparseMatrix<S, double>> build() override {
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>

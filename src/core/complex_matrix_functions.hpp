@@ -1288,12 +1288,12 @@ template <> struct GMatrixFunctions<complex<double>> {
         const double scale = -1.0;
         MKL_INT lwork = 34 * a.n, n = a.m * a.n, incx = 2, info;
         complex<double> *work = d_alloc->complex_allocate(lwork);
-        double *rwork = d_alloc->allocate(max(1, 3 * a.n - 2));
+        double *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
         zheev("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, rwork, &info);
         assert((size_t)a.m * a.n == n);
         dscal(&n, &scale, (double *)a.data + 1, &incx);
         assert(info == 0);
-        d_alloc->deallocate(rwork, max(1, 3 * a.n - 2));
+        d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
         d_alloc->complex_deallocate(work, lwork);
     }
     // z = r / aa
