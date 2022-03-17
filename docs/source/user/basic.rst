@@ -306,7 +306,7 @@ Instead, we can do several DMRG, and each time projecting out MPSs from all prev
     It is recommended to use ``noreorder`` or fixed manual orbital reordering for this approach.
     Otherwise, one should carefully check that the orbital reordering in all DMRG calculations are the same.
 
-We first get the ground state using the folloiwng input file ``dmrg-1.conf``: ::
+We first get the ground state using the following input file ``dmrg-1.conf``: ::
 
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
@@ -320,7 +320,7 @@ We first get the ground state using the folloiwng input file ``dmrg-1.conf``: ::
     maxiter 30
     mps_tags KET1
 
-After this is finished, we compute the first excited state using the folloiwng input file ``dmrg-2.conf``: ::
+After this is finished, we compute the first excited state using the following input file ``dmrg-2.conf``: ::
     
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
@@ -337,7 +337,7 @@ After this is finished, we compute the first excited state using the folloiwng i
     proj_mps_tags KET1
     proj_weights 5
 
-Then we compute the second excited state using the folloiwng input file ``dmrg-3.conf``: ::
+Then we compute the second excited state using the following input file ``dmrg-3.conf``: ::
 
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
@@ -376,7 +376,7 @@ state-averaged MPS into individual MPSs, so that they can be used for projection
 
 Currently, this type of state-average calulcation cannot be used together with multiple targets.
 
-We first get the two lowest states using the folloiwng input file ``dmrg-1.conf``: ::
+We first get the two lowest states using the following input file ``dmrg-1.conf``: ::
 
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
@@ -395,7 +395,7 @@ We first get the two lowest states using the folloiwng input file ``dmrg-1.conf`
     copy_mps
     split_states
 
-After this is finished, we compute the next three states using the folloiwng input file ``dmrg-2.conf``: ::
+After this is finished, we compute the next three states using the following input file ``dmrg-2.conf``: ::
 
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
@@ -417,7 +417,7 @@ After this is finished, we compute the next three states using the folloiwng inp
     copy_mps
     split_states
 
-After this is finished, we compute the next one states using the folloiwng input file ``dmrg-3.conf``: ::
+After this is finished, we compute the next one state using the following input file ``dmrg-3.conf``: ::
 
     sym d2h
     orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
