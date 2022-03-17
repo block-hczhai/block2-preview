@@ -500,6 +500,22 @@ read\_mps\_tags
     Optional. Followed by a string. The tag for the constant (right hand side) MPS for compression.
     The tag of the output MPS in compression is set using ``mps_tags``.
 
+proj\_mps\_tags
+    Optional. Followed by a single string or a list of strings. The tag for the MPSs to be projected out during DMRG.
+    Must be used together with ``proj_weights``. The projection will be done by changing Hamiltonian from :math:`\hat{H}`
+    to :math:`\hat{H} + \sum_i w_i |\phi_i\rangle \langle \phi_i|` (the level shift approach),
+    where :math:`|\phi_i\rangle` are the MPSs to be projected out. :math:`w_i` are the weights.
+
+proj\_weights
+    Optional. Followed by a single float number or a list of float numbers.
+    Can be used together with ``proj_mps_tags``. The number of float numbers in this keyword must be equal to the
+    length of ``proj_mps_tags``. Normally, the weights are positive and they should be larger than the energy gap.
+    If the weight is too small, you will get unphyiscal eigenvalues as ``Ei + wi``, where ``Ei`` is the energy of the
+    MPSs to be projected out.
+    If ``statespecific`` keyword is in the input, it will change the projection method from the orthogonalization method
+    :math:`\hat{H} - \sum_i |\phi_i\rangle \langle \phi_i|` to the level shift approach 
+    :math:`\hat{H} + \sum_i w_i |\phi_i\rangle \langle \phi_i|`.
+
 symmetrize\_ints
     Optional. Followed by a small float number.
     Setting the largest allowed value for the integral element that violates the point group or K symmetry.

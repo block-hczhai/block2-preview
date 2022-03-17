@@ -1089,7 +1089,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 center = end_site - 1;
                 ket->canonical_form[center] =
                     ket->canonical_form[center] == 'C' ? 'S' : 'T';
-                if (bra != ket)
+                if (bra != ket && (bra->canonical_form[center] == 'C' ||
+                                   bra->canonical_form[center] == 'M'))
                     bra->canonical_form[center] =
                         bra->canonical_form[center] == 'C' ? 'S' : 'T';
                 fuse_center = mpo->schemer == nullptr
@@ -1528,7 +1529,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     eff_ham(FuseTypes fuse_type, bool forward, bool compute_diag,
             const shared_ptr<SparseMatrix<S, FLS>> &bra_wfn,
             const shared_ptr<SparseMatrix<S, FLS>> &ket_wfn) {
-        assert(!(bra->get_type() & MPSTypes::MultiWfn));
+        // for level shift projection, we can have mixed multibra + single ket
+        // assert(!(bra->get_type() & MPSTypes::MultiWfn));
         assert(!(ket->get_type() & MPSTypes::MultiWfn));
         const bool delay_left = center <= fuse_center;
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos,

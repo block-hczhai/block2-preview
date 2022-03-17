@@ -365,7 +365,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
          const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
-             vector<shared_ptr<SparseMatrix<S, FL>>>()) {
+             vector<shared_ptr<SparseMatrix<S, FL>>>(),
+         const vector<FP> &projection_weights = vector<FP>()) {
         int ndav = 0;
         assert(compute_diag);
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
@@ -387,11 +388,13 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors)
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
+                      projection_weights)
                 : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors);
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
+                      projection_weights);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1327,7 +1330,10 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
-         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+         const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+         const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+             vector<shared_ptr<SparseMatrix<S, FL>>>(),
+         const vector<FP> &projection_weights = vector<FP>()) {
         int ndav = 0;
         assert(compute_diag);
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
@@ -1335,6 +1341,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(
                 GMatrix<FL>(ket[i]->data, (MKL_INT)ket[i]->total_memory, 1));
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame->activate(0);
         Timer t;
         t.get_time();
@@ -1346,11 +1357,13 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter)
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
+                      projection_weights)
                 : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter);
+                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
+                      projection_weights);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)

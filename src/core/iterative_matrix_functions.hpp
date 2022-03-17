@@ -111,11 +111,19 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
              bool iprint = false, const PComm &pcomm = nullptr,
              FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
              int deflation_min_size = 2, int deflation_max_size = 50,
-             const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>()) {
+             const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
+             const vector<FP> &proj_weights = vector<FP>()) {
         assert(!(davidson_type & DavidsonTypes::Harmonic));
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
-        int k = (int)vs.size(), nor = (int)ors.size();
+        int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
+        // if proj_weights is empty, then projection is done by (1 - |v><v|)
+        // if proj_weights is not empty, projection is done by change H to (H +
+        // w |v><v|)
+        if (proj_weights.size() != 0) {
+            assert(proj_weights.size() == ors.size());
+            nwg = (int)ors.size(), nor = 0;
+        }
         if (deflation_min_size < k)
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
@@ -180,6 +188,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             for (int i = msig; i < m; i++, msig++) {
                 sigmas[i].clear();
                 op(bs[i], sigmas[i]);
+                for (int j = 0; j < nwg; j++)
+                    iadd(sigmas[i], ors[j],
+                         complex_dot(ors[j], bs[i]) * proj_weights[j]);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 GDiagonalMatrix<FP> ld(nullptr, m);
@@ -386,14 +397,23 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         const PComm &pcomm = nullptr, FP conv_thrd = 5E-6, int max_iter = 5000,
         int soft_max_iter = -1, int deflation_min_size = 2,
         int deflation_max_size = 50,
-        const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>()) {
+        const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
+        const vector<FP> &proj_weights = vector<FP>()) {
         if (!(davidson_type & DavidsonTypes::Harmonic))
             return davidson(op, aa, vs, shift, davidson_type, ndav, iprint,
                             pcomm, conv_thrd, max_iter, soft_max_iter,
-                            deflation_min_size, deflation_max_size, ors);
+                            deflation_min_size, deflation_max_size, ors,
+                            proj_weights);
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
-        int k = (int)vs.size(), nor = (int)ors.size();
+        int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
+        // if proj_weights is empty, then projection is done by (1 - |v><v|)
+        // if proj_weights is not empty, projection is done by change H to (H +
+        // w |v><v|)
+        if (proj_weights.size() != 0) {
+            assert(proj_weights.size() == ors.size());
+            nwg = (int)ors.size(), nor = 0;
+        }
         if (deflation_min_size < k)
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
@@ -439,6 +459,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (int i = 0; i < k; i++) {
             sigmas[i].clear();
             op(bs[i], sigmas[i]);
+            for (int j = 0; j < nwg; j++)
+                iadd(sigmas[i], ors[j],
+                     complex_dot(ors[j], bs[i]) * proj_weights[j]);
             if (shift != 0.0)
                 iadd(sigmas[i], bs[i], -shift);
             num_matmul++;
@@ -583,6 +606,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     pcomm->broadcast(bs[m].data, bs[m].size(), pcomm->root);
                 sigmas[m].clear();
                 op(bs[m], sigmas[m]);
+                for (int j = 0; j < nwg; j++)
+                    iadd(sigmas[m], ors[j],
+                         complex_dot(ors[j], bs[m]) * proj_weights[j]);
                 if (shift != 0.0)
                     iadd(sigmas[m], bs[m], -shift);
                 num_matmul++;
@@ -2202,7 +2228,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             beta = norm_accurate(u);
         }
         if (beta > 0.0) {
-            //iscale(u, 1.0 / beta); // vv is more accurate
+            // iscale(u, 1.0 / beta); // vv is more accurate
             for (size_t i = 0; i < N; ++i) {
                 u(i, 0) /= beta;
             }
@@ -2212,7 +2238,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (pcomm != nullptr) {
                 pcomm->broadcast(&alpha, 1, pcomm->root);
             }
-            //iscale(v, 1.0 / alpha); // vv is more accurate
+            // iscale(v, 1.0 / alpha); // vv is more accurate
             for (size_t i = 0; i < N; ++i) {
                 v(i, 0) /= alpha;
             }
@@ -2469,13 +2495,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     // TODO allow for preconditioner
     // TODO allow for zero eta, using numerical expansion
     template <typename MatMul, typename PComm>
-    static FC cheby(MatMul &op, GMatrix<FC> x, // ATTENTION: Assume x and shift is complex but op is real
-                   const GMatrix<FL> b,
-                   const FC evalShift,
-                   const FP tol, const int max_iter,
-                   FP eMin, FP eMax, const FP maxInterval,
-                   const int damping, // 0 1 2
-                   const bool iprint = false, const PComm &pcomm = nullptr) {
+    static FC cheby(MatMul &op, GMatrix<FC> x, // ATTENTION: Assume x and shift
+                                               // is complex but op is real
+                    const GMatrix<FL> b, const FC evalShift, const FP tol,
+                    const int max_iter, FP eMin, FP eMax, const FP maxInterval,
+                    const int damping, // 0 1 2
+                    const bool iprint = false, const PComm &pcomm = nullptr) {
         assert(maxInterval <= 1 && maxInterval > 0);
         assert(eMin < eMax);
         const auto scale = 2 * maxInterval / (eMax - eMin); // 1/a = deltaH
@@ -2486,12 +2511,14 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         //
         // Compute max cheby expansion from numerical coefficient
         //
-        const auto chebCoeffNum = [scale, Hbar, evalShift](int j, int polOrder) {
+        const auto chebCoeffNum = [scale, Hbar, evalShift](int j,
+                                                           int polOrder) {
             FC c{0., 0.};
             const auto pi = acos(-1.);
             for (int k = 0; k < polOrder; ++k) {
                 auto pix = cos(pi * (k + .5) / polOrder) / scale + Hbar;
-                auto fct = 1. / (pix + evalShift); //Function f(pix) to approximate
+                auto fct =
+                    1. / (pix + evalShift); // Function f(pix) to approximate
                 c += fct * cos(pi * j * (k + .5) / polOrder);
             }
             c *= 2. / polOrder;
@@ -2499,7 +2526,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         };
         const auto eta = imag(evalShift);
         assert(eta >= 0.);
-        int nCheby = min(static_cast<int>(ceil(1.1 / (scale * eta))), max_iter); // just an estimate
+        int nCheby = min(static_cast<int>(ceil(1.1 / (scale * eta))),
+                         max_iter); // just an estimate
         if (abs(chebCoeffNum(nCheby - 1, nCheby)) < tol) {
             for (; nCheby >= 3; --nCheby) {
                 if (abs(chebCoeffNum(nCheby - 1, nCheby)) > tol) {
@@ -2526,18 +2554,22 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         phiMinus.allocate();
         phiMinusMinus.allocate();
 
-        const auto AshiftOp = [&op, scale, Ashift, N](const GMatrix<FL> &in, GMatrix<FL> &out) {
+        const auto AshiftOp = [&op, scale, Ashift, N](const GMatrix<FL> &in,
+                                                      GMatrix<FL> &out) {
             op(in, out);
             for (size_t i = 0; i < N; ++i)
-                out(i, 0) = scale * out(i, 0) + Ashift * in(i,0);
+                out(i, 0) = scale * out(i, 0) + Ashift * in(i, 0);
         };
         //
         // Series
         //
         complex<long double> zs = evalShift;
         constexpr complex<long double> zone{1., 0.};
-        const auto cast = [](const double in) { return static_cast<long double>(in); };
-        //                  vv original formula was for (-A + w); so need to change sign here
+        const auto cast = [](const double in) {
+            return static_cast<long double>(in);
+        };
+        //                  vv original formula was for (-A + w); so need to
+        //                  change sign here
         zs = cast(scale) * -zs + cast(Ashift);
         const auto zs2 = zs * zs;
         vector<complex<long double>> xOut(N, {0., 0.});
@@ -2554,22 +2586,27 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             }
             // add
             auto fac = iCheb == 0 ? zone : zone + zone;
-            auto damp = zone; // TODO add damping option
+            auto damp = zone;             // TODO add damping option
             auto fa = pow(zs, iCheb + 1); // TODO compute iteratively.
             auto fu = pow(zone + sqrt(zs2) * sqrt(zs2 - zone) / zs2, -iCheb);
             auto prec = fa * sqrt(zone - zone / zs2);
             // alternative vv; less accurate but seems to be more stable
-            //prec = -static_cast<complex<long double>>(chebCoeffNum(iCheb, nCheby));
-            if (prec != zone and not isnan(real(fu/prec)) and not isnan(imag(fu/prec))) {
+            // prec = -static_cast<complex<long double>>(chebCoeffNum(iCheb,
+            // nCheby));
+            if (prec != zone and not isnan(real(fu / prec)) and
+                not isnan(imag(fu / prec))) {
                 prec = damp * fac * fu / prec;
-                if(iprint)
-                    cout << iCheb << " " << prec <<", " << dot(phi,phi) << endl;
+                if (iprint)
+                    cout << iCheb << " " << prec << ", " << dot(phi, phi)
+                         << endl;
                 for (size_t i = 0; i < N; ++i)
-                    //      vv original formula was for (-A + w); so need to change sign here
+                    //      vv original formula was for (-A + w); so need to
+                    //      change sign here
                     xOut[i] -= cast(scale) * prec * cast(phi(i, 0));
             } else {
                 break; // Only gets worse!
-                // Can I abort expansion?; With the tol criterium, this should not occur, though
+                // Can I abort expansion?; With the tol criterium, this should
+                // not occur, though
             }
             // next
             // vv could also be done much cheaper using pointers
@@ -2580,10 +2617,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         phiMinus.deallocate();
         phi.deallocate();
 
-        FC out{0.,0.};
+        FC out{0., 0.};
         for (size_t i = 0; i < N; ++i) {
             x(i, 0) = xOut[i];
-            out += conj(x(i,0)) * b(i,0);
+            out += conj(x(i, 0)) * b(i, 0);
         }
         if (pcomm != nullptr) {
             pcomm->broadcast(x.data, x.size(), pcomm->root);

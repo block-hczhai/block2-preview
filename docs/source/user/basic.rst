@@ -220,7 +220,10 @@ This will generate the following output: ::
 State-Specific Calculation
 --------------------------
 
-The state-specific calculation is implemented as a restart calculation which assumes that a previous
+Orthogonalization Approach
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The state-specific calculation can be done as a restart calculation which assumes that a previous
 state-averaged DMRG calculation has been converged. The state-specific DMRG calculation then reads the MPS
 from scratch folder and refines them for each root separately.
 The state-specific DMRG calculation can be done with any of ``onedot``, ``twodot`` or ``twodot_to_onedot`` (default)
@@ -257,6 +260,188 @@ This will generate the following output: ::
     $ grep Energy dmrg.out
     DMRG Energy for root    0 =  -75.728342642601376
     DMRG Energy for root    1 =  -75.638959372610813
+
+Sometimes, the orthogonalization approach can be unstable and when computing the exciated state
+it may fall back to the ground state. Adding the keyword ``onedot`` for the second step can alleviate this problem.
+
+Level Shift Approach
+^^^^^^^^^^^^^^^^^^^^
+
+The second step of the above can also be done with the level shift approach,
+by changing Hamiltonian from :math:`\hat{H}` to :math:`\hat{H} + \sum_i w_i |\phi_i\rangle \langle \phi_i|`.
+Normally, the weights :math:`w_i` are positive and they should be larger than the energy gap.
+
+The following input file can be used for the second step: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+    nroots 2
+    weights 0.5 0.5
+    statespecific
+    proj_weights 5 5
+
+    hf_occ integral
+    schedule default
+    maxM 500
+    maxiter 30
+
+This will generate the following output: ::
+
+    $ grep Energy dmrg.out
+    DMRG Energy for root    0 =  -75.728341047222145
+    DMRG Energy for root    1 =  -75.638958637510370
+
+Without State-Average
+^^^^^^^^^^^^^^^^^^^^^
+
+The excited MPS and energies can also be obtained without performing a state-averaged calculation as the first step.
+Instead, we can do several DMRG, and each time projecting out MPSs from all previous DMRG.
+
+.. note ::
+
+    It is recommended to use ``noreorder`` or fixed manual orbital reordering for this approach.
+    Otherwise, one should carefully check that the orbital reordering in all DMRG calculations are the same.
+
+We first get the ground state using the folloiwng input file ``dmrg-1.conf``: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags KET1
+
+After this is finished, we compute the first excited state using the folloiwng input file ``dmrg-2.conf``: ::
+    
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags KET2
+
+    proj_mps_tags KET1
+    proj_weights 5
+
+Then we compute the second excited state using the folloiwng input file ``dmrg-3.conf``: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags KET3
+
+    proj_mps_tags KET1 KET2
+    proj_weights 5 5
+
+And so on.
+
+This will generate the following output: ::
+
+    $ grep Energy dmrg-*.out
+    dmrg-1.out:DMRG Energy =  -75.728342508616663
+    dmrg-2.out:DMRG Energy =  -75.638961566176221
+    dmrg-3.out:DMRG Energy =  -75.629597871820607
+    dmrg-4.out:DMRG Energy =  -75.467766576734363
+    dmrg-5.out:DMRG Energy =  -75.350470798772307
+    dmrg-6.out:DMRG Energy =  -75.312672909521751
+
+Mixed with State-Average
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The above approach can also be used together with the state-average approach. Namely, we can first compute the two lowest
+states, then we compute the next three lowest states, by projecting out the two lowest states.
+The MPS to be projected must not be in state-averaged format, so we need to use the ``split_states`` keyword to break
+state-averaged MPS into individual MPSs, so that they can be used for projection in the subsequent calculations.
+
+Currently, this type of state-average calulcation cannot be used together with multiple targets.
+
+We first get the two lowest states using the folloiwng input file ``dmrg-1.conf``: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+    nroots 2
+    weights 0.5 0.5
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags KET
+
+    copy_mps
+    split_states
+
+After this is finished, we compute the next three states using the folloiwng input file ``dmrg-2.conf``: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+    nroots 3
+    weights 0.5 0.5 0.5
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags EXKET
+
+    proj_mps_tags KET-0 KET-1
+    proj_weights 5 5
+
+    copy_mps
+    split_states
+
+After this is finished, we compute the next one states using the folloiwng input file ``dmrg-3.conf``: ::
+
+    sym d2h
+    orbitals C2.CAS.PVDZ.FCIDUMP.ORIG
+
+    nelec 8
+    spin 0
+    irrep 1
+
+    schedule default
+    maxM 500
+    maxiter 30
+    mps_tags EXXKET
+
+    proj_mps_tags KET-0 KET-1 EXKET-0 EXKET-1 EXKET-2
+    proj_weights 5 5 5 5 5
+
+This will generate the following output: ::
+
+    $ grep DW dmrg-1.out | tail -1
+    Time elapsed =      5.461 | E[  2] =     -75.7279224622    -75.6386156808 | DE = 9.32e-06 | DW = 8.33e-06
+    $ grep DW dmrg-2.out | tail -1
+    Time elapsed =     13.165 | E[  3] =     -75.6290377907    -75.4669665917    -75.3494878435 | DE = 8.63e-07 | DW = 8.45e-05
+    $ grep DW dmrg-3.out | tail -1
+    Time elapsed =      8.651 | E =     -75.3126745298 | DE = -6.24e-07 | DW = 3.79e-15
 
 n-Particle Reduced Density Matrix
 ---------------------------------

@@ -999,6 +999,8 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)
         .def_readwrite("state_specific", &DMRG<S, FL, FLS>::state_specific)
+        .def_readwrite("projection_weights",
+                       &DMRG<S, FL, FLS>::projection_weights)
         .def_readwrite("bond_dims", &DMRG<S, FL, FLS>::bond_dims)
         .def_readwrite("noises", &DMRG<S, FL, FLS>::noises)
         .def_readwrite("davidson_conv_thrds",

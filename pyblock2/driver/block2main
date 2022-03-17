@@ -917,6 +917,7 @@ dot = 1 if "onedot" in dic or "zerodot" in dic else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
 read_tags = dic.get("read_mps_tags", "KET").split()
+proj_tags = dic.get("proj_mps_tags", "").split()
 soc = "soc" in dic
 overlap = "overlap" in dic
 
@@ -1533,8 +1534,11 @@ def split_mps(iroot, mps, mps_info, mpi=MPI):
     return smps, smps_info, forward
 
 
-def get_mps_from_tags(iroot):
-    if iroot >= 0:
+def get_mps_from_tags(iroot, proj_mps=False, ref_center=0):
+    if proj_mps:
+        _print('----- proj = %3d tag = %s -----' % (iroot, proj_tags[iroot]))
+        tag = proj_tags[iroot]
+    elif iroot >= 0:
         _print('----- root = %3d tag = %s -----' % (iroot, mps_tags[iroot]))
         tag = mps_tags[iroot]
     else:
@@ -1607,7 +1611,7 @@ def get_mps_from_tags(iroot):
         smps.save_data()
         if MPI is not None:
             MPI.barrier()
-    if smps.center != 0:
+    if (smps.center == 0) != (ref_center == 0):
         _print('change canonical form ...')
         cf = str(smps.canonical_form)
         ime = MovingEnvironment(impo, smps, smps, "IEX")
@@ -1647,7 +1651,11 @@ def get_state_specific_mps(iroot, mps_info):
     if smps_info.bond_dim < max_bdim:
         smps_info.bond_dim = max_bdim
     smps.load_data()
-    if smps.dot == 1 and dot == 2:
+    if smps.dot == 2 and smps.center == smps.n_sites - 1 and dot == 1:
+        smps.dot = 1
+    elif smps.dot == 2 and smps.center == 0 and dot == 1:
+        smps.dot = 1
+    elif (smps.dot == 1 or smps.center == smps.n_sites - 1) and dot == 2:
         if smps.center == 0 and smps.canonical_form[0] == 'S':
             cg = CG(200)
             cg.initialize()
@@ -1658,6 +1666,8 @@ def get_state_specific_mps(iroot, mps_info):
             cg.initialize()
             smps.move_left(cg, prule)
             smps.center = smps.n_sites - 2
+        elif smps.center == smps.n_sites - 1 and smps.canonical_form[smps.center] == 'S':
+            smps.center = smps.n_sites - 2
         smps.dot = dot
         if MPI is not None:
             MPI.barrier()
@@ -1665,6 +1675,7 @@ def get_state_specific_mps(iroot, mps_info):
         if MPI is not None:
             MPI.barrier()
     forward = smps.center == 0
+    _print('ss-mps', smps.center, smps.dot, dot, smps.canonical_form)
     return smps, smps_info, forward
 
 
@@ -1718,7 +1729,7 @@ if not pre_run:
                                .make_single(mps.info.tag + "-S%d" % iroot))
             for iex, ext_mps in enumerate(ext_mpss):
                 _print(iex, ext_mpss[iex].canonical_form, ext_mpss[iex].center)
-                if ext_mps.dot == 1 and dot == 2:
+                if (ext_mps.dot == 1 or ext_mps.center == ext_mps.n_sites - 1) and dot == 2:
                     if ext_mps.center == 0 and ext_mps.canonical_form[0] == 'S':
                         cg = CG(200)
                         cg.initialize()
@@ -1728,6 +1739,8 @@ if not pre_run:
                         cg = CG(200)
                         cg.initialize()
                         ext_mps.move_left(cg, prule)
+                        ext_mps.center = ext_mps.n_sites - 2
+                    elif ext_mps.center == ext_mps.n_sites - 1 and ext_mps.canonical_form[ext_mps.center] == 'S':
                         ext_mps.center = ext_mps.n_sites - 2
                     ext_mps.dot = dot
                     ext_mps.save_data()
@@ -1759,6 +1772,9 @@ if not pre_run:
             dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
             dmrg.ext_mpss = VectorMPS(ext_mpss[:iroot])
             dmrg.state_specific = True
+            proj_weights = dic.get("proj_weights", None)
+            if proj_weights is not None:
+                dmrg.projection_weights = VectorDouble([float(x) for x in proj_weights.split()][:iroot])
             dmrg.iprint = max(min(outputlevel, 3), 0)
             for ext_mps in dmrg.ext_mpss:
                 ext_me = MovingEnvironment(
@@ -1804,8 +1820,10 @@ if not pre_run:
                 E_dmrg = dmrg.solve(len(bond_dims) - tto,
                                     ext_mpss[iroot].center == 0, sweep_tol)
                 ext_mpss[iroot].dot = 1
-                if MPI is None or MPI.rank == 0:
-                    ext_mpss[iroot].save_data()
+
+            if MPI is None or MPI.rank == 0:
+                for ir in range(iroot + 1):
+                    ext_mpss[ir].save_data()
 
             if conn_centers is not None:
                 me.finalize_environments()
@@ -1830,6 +1848,9 @@ if not pre_run:
                     scratch + '/mps_info-ss-%d.bin' % iroot)
                 ext_mpss[iroot].info.save_data(
                     scratch + '/%s-mps_info-ss-%d.bin' % (mps_tags[0], iroot))
+        
+        if "twodot_to_onedot" in dic:
+            dot = 1
 
     # GS DMRG
     if "restart_onepdm" not in dic and "restart_twopdm" not in dic \
@@ -1873,6 +1894,24 @@ if not pre_run:
         if "use_hybrid_complex" in dic:
             dmrg.cpx_me = cpx_me
 
+        # projection
+        if len(proj_tags) != 0:
+            proj_weights = dic.get("proj_weights", None)
+            assert proj_weights is not None
+            proj_weights = VectorDouble([float(x) for x in proj_weights.split()])
+            assert len(proj_weights) == len(proj_tags)
+            ext_mpss = []
+            for ipj in range(len(proj_weights)):
+                xmps, xmps_info, _ = get_mps_from_tags(ipj, True, mps.center)
+                ext_mpss.append(xmps)
+            dmrg.projection_weights = proj_weights
+            dmrg.ext_mpss = VectorMPS(ext_mpss)
+            for ext_mps in dmrg.ext_mpss:
+                ext_me = MovingEnvironment(impo, mps, ext_mps, "PJ" + ext_mps.info.tag)
+                ext_me.delayed_contraction = OpNamesSet.normal_ops()
+                ext_me.init_environments(outputlevel >= 2)
+                dmrg.ext_mes.append(ext_me)
+
         if "lowmem_noise" in dic:
             dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollectedLowMem
         elif decomp_type != DecompositionTypes.SVD:
@@ -1914,9 +1953,12 @@ if not pre_run:
             dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
             dmrg.site_dependent_bond_dims = site_dependent_bdims[tto:]
             dmrg.me.dot = 1
+            for ext_me in dmrg.ext_mes:
+                ext_me.dot = 1
             E_dmrg = dmrg.solve(len(bond_dims) - tto,
                                 mps.center == dmrg.sweep_start_site, sweep_tol)
             mps.dot = 1
+            dot = 1
             if MPI is None or MPI.rank == 0:
                 mps.save_data()
 
