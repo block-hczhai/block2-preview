@@ -237,8 +237,8 @@ try:
     elif "use_general_spin" in dic:
         from block2.sgf import MPICommunicator
     MPI = MPICommunicator()
-    from mpi4py import MPI as PYMPI
-    comm = PYMPI.COMM_WORLD
+    # from mpi4py import MPI as PYMPI
+    # comm = PYMPI.COMM_WORLD
 
     def _print(*args, **kwargs):
         if MPI.rank == 0 and outputlevel > -1:
