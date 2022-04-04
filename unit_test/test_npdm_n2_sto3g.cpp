@@ -1019,7 +1019,7 @@ TEST_F(TestNPDM, TestSZ) {
 
                     EXPECT_EQ(i, get<0>(one_pdm[k]));
                     EXPECT_EQ(j, get<1>(one_pdm[k]));
-                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-5);
 
                     k++;
                 }
@@ -1046,7 +1046,7 @@ TEST_F(TestNPDM, TestSZ) {
 
                     EXPECT_EQ(ii, get<0>(one_pdm[kk[p]]));
                     EXPECT_EQ(jj, get<1>(one_pdm[kk[p]]));
-                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-6);
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-5);
 
                     kk[p]++;
                 }
@@ -1112,7 +1112,7 @@ TEST_F(TestNPDM, TestSZ) {
                             EXPECT_EQ(ll, get<3>(two_pdm[p][m[p]]));
                             EXPECT_LT(abs((*dm2)({i, j, k, l}) -
                                           f * get<4>(two_pdm[p][m[p]])),
-                                      1E-6);
+                                      1E-5);
 
                             max_error = max(max_error,
                                             abs((*dm2)({i, j, k, l}) -
@@ -1154,7 +1154,7 @@ TEST_F(TestNPDM, TestSZ) {
                                                get<4>(two_pdm[2][m[2]])))
                                 v += get<4>(two_pdm[2][m[2]]) * 2, m[2]++;
 
-                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-6);
+                            EXPECT_LT(abs((*dm2)({i, j, k, l}) - v), 1E-5);
 
                             max_error =
                                 max(max_error, abs((*dm2)({i, j, k, l}) - v));
@@ -1198,7 +1198,7 @@ TEST_F(TestNPDM, TestSZ) {
 
                     EXPECT_EQ(i, get<0>(one_npc_pure[kx]));
                     EXPECT_EQ(j, get<1>(one_npc_pure[kx]));
-                    EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[kx])), 1E-6);
+                    EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure[kx])), 1E-5);
 
                     kx++;
                 }
@@ -1226,7 +1226,7 @@ TEST_F(TestNPDM, TestSZ) {
 
                     EXPECT_EQ(i, get<0>(v));
                     EXPECT_EQ(j, get<1>(v));
-                    EXPECT_LT(abs(dmy(i, j) - get<2>(v)), 1E-6);
+                    EXPECT_LT(abs(dmy(i, j) - get<2>(v)), 1E-5);
 
                     while (kx < one_npc_pure.size() &&
                            get<0>(one_npc_pure[kx]) % 2 !=
@@ -1255,7 +1255,7 @@ TEST_F(TestNPDM, TestSZ) {
                     EXPECT_EQ(i, get<0>(one_npc_pure_spatial[kx]));
                     EXPECT_EQ(j, get<1>(one_npc_pure_spatial[kx]));
                     EXPECT_LT(abs(dmx(i, j) - get<2>(one_npc_pure_spatial[kx])),
-                              1E-6);
+                              1E-5);
 
                     kx++;
                 }
@@ -1281,7 +1281,7 @@ TEST_F(TestNPDM, TestSZ) {
                     EXPECT_EQ(j, get<1>(one_npc_mixed_spatial[kx]));
                     EXPECT_LT(
                         abs(dmy(i, j) - get<2>(one_npc_mixed_spatial[kx])),
-                        1E-6);
+                        1E-5);
 
                     kx++;
                 }
@@ -1428,7 +1428,7 @@ TEST_F(TestNPDM, TestSGF) {
 
                     EXPECT_EQ(i, get<0>(one_pdm[k]));
                     EXPECT_EQ(j, get<1>(one_pdm[k]));
-                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-6);
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[k])), 1E-5);
 
                     k++;
                 }
@@ -1442,7 +1442,7 @@ TEST_F(TestNPDM, TestSGF) {
         for (int i = 0; i < dm.m; i++)
             for (int j = 0; j < dm.n; j++)
                 if (i % 2 != j % 2)
-                    EXPECT_LT(abs(dm(i, j)), 1E-6);
+                    EXPECT_LT(abs(dm(i, j)), 1E-5);
                 else if (abs(dm(i, j)) > TINY) {
                     int ii = i / 2, jj = j / 2, p = i % 2;
 
@@ -1456,7 +1456,7 @@ TEST_F(TestNPDM, TestSGF) {
 
                     EXPECT_EQ(ii, get<0>(one_pdm[kk[p]]));
                     EXPECT_EQ(jj, get<1>(one_pdm[kk[p]]));
-                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-6);
+                    EXPECT_LT(abs(dm(i, j) - get<2>(one_pdm[kk[p]]) / 2), 1E-5);
 
                     kk[p]++;
                 }
