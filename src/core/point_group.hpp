@@ -26,10 +26,11 @@ using namespace std;
 
 namespace block2 {
 
-enum struct PGTypes : uint8_t { C1, C2, CI, CS, D2, C2V, C2H, D2H };
+enum struct PGTypes : uint8_t { C1, C2, CI, CS, D2, C2V, C2H, D2H, NOPG };
 
 // PYSCF convention
-// https://sunqm.github.io/pyscf/symm.html
+// https://sunqm.github.io/pyscf/symm.html (deleted)
+// https://github.com/pyscf/pyscf/blob/1.7/doc_legacy/source/symm.rst
 struct PointGroup {
     // D2H
     // 0   1   2   3   4   5   6   7   8   (FCIDUMP)
@@ -103,6 +104,10 @@ struct PointGroup {
         static int16_t arr_swap[] = {8, 0};
         return arr_swap[isym];
     }
+    static int16_t swap_nopg(int16_t isym) {
+        static int16_t arr_swap[] = {8, 0, 0, 0, 0, 0, 0, 0, 0};
+        return arr_swap[isym];
+    }
     static auto swap_pg(PGTypes pg) -> int16_t (*)(int16_t isym) {
         switch (pg) {
         case PGTypes::C1:
@@ -121,6 +126,8 @@ struct PointGroup {
             return swap_c2h;
         case PGTypes::D2H:
             return swap_d2h;
+        case PGTypes::NOPG:
+            return swap_nopg;
         default:
             return swap_c1;
         }
