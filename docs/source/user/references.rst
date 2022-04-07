@@ -78,6 +78,8 @@ Multi-Reference Correlation Theories
 * Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. doi: `10.1063/1.4928643 <https://doi.org/10.1063/1.4928643>`_
 * Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. doi: `10.1063/1.4939752 <https://doi.org/10.1063/1.4939752>`_
 
+* Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762. doi: `10.1021/acs.jctc.1c00957 <https://doi.org/10.1021/acs.jctc.1c00957>`_
+
 Determinant Coefficients
 ------------------------
 

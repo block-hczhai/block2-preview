@@ -74,6 +74,7 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
+* DMRG-CASSCF (pyscf interface)
 * Stochastic perturbative DMRG
 * Uncontracted dynamic correlation
     * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order

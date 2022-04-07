@@ -175,6 +175,8 @@ References
 * Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. https://doi.org/10.1063/1.4928643.
 * Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. https://doi.org/10.1063/1.4939752.
 
+* Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762. https://doi.org/10.1021/acs.jctc.1c00957.
+
 ### Determinant Coefficients
 
 * Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. L. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425. https://doi.org/10.1021/acs.jctc.1c00205.
