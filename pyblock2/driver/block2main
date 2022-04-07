@@ -566,7 +566,11 @@ if pre_run or not no_pre_run:
             assert n_orbs == n_inactive + n_cas + n_external
         _print("dynamic correlation space : inactive = %d, cas = %d, external = %d"
                % (n_inactive, n_cas, n_external))
-    if "nofiedler" in dic or "noreorder" in dic:
+    if "fullrestart" in dic and os.path.isfile(scratch + '/orbital_reorder.npy'):
+        orb_idx = np.load(scratch + '/orbital_reorder.npy')
+        _print("loading reorder for restarting = ", orb_idx)
+        fcidump.reorder(VectorUInt16(orb_idx))
+    elif "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
         np.save(scratch + '/orbital_reorder.npy',
                 np.arange(0, fcidump.n_sites, dtype=int))
@@ -2999,9 +3003,9 @@ if not pre_run:
         if MPI is not None:
             MPI.barrier()
         if bra.center == 0 and bra.dot == 2:
-            bra.move_left(hamil.opf.cg, prule)
+            bra.move_left(hamil.opf.cg, prule if MPI is not None else None)
         elif bra.center == bra.n_sites - 2 and bra.dot == 2:
-            bra.move_right(hamil.opf.cg, prule)
+            bra.move_right(hamil.opf.cg, prule if MPI is not None else None)
         bra.center = mps.center
         if MPI is not None:
             MPI.barrier()

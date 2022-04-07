@@ -99,6 +99,7 @@ Features
    user/basic
    user/advanced
    user/keywords
+   user/dmrg-scf
    user/mps-io
    user/references
 

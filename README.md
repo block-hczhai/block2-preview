@@ -46,6 +46,8 @@ To run a DMRG calculation, please use the following command:
 
 where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
 
+For DMRGSCF calculation, please have a look at the [documentation](https://block2.readthedocs.io/en/latest/user/dmrg-scf.html).
+
 Documentation: https://block2.readthedocs.io/en/latest/
 
 Source code: https://github.com/block-hczhai/block2-preview
@@ -97,6 +99,7 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
+* DMRG-CASSCF (pyscf interface)
 * Stochastic perturbative DMRG
 * Uncontracted dynamic correlation
     * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
