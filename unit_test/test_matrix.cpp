@@ -1166,10 +1166,10 @@ TYPED_TEST(TestMatrix, TestGCROT) {
 
 TYPED_TEST(TestMatrix, TestIDRS) {
     using FL = TypeParam;
-    const int sz = is_same<FL, double>::value ? 200 : 75;
+    const int sz = is_same<FL, double>::value ? 200 : 50;
     const FL conv = is_same<FL, double>::value ? 1E-8 : 1E-6;
     const FL conv2 = is_same<FL, double>::value ? 1E-7 : 1E-5;
-    const FL thrd = is_same<FL, double>::value ? 1E-3 : 5E-1;
+    const FL thrd = is_same<FL, double>::value ? 1E-3 : 2E+0;
     using MatMul = typename TestMatrix<FL>::MatMul;
     for (int i = 0; i < this->n_tests; i++) {
         MKL_INT m = Random::rand_int(1, sz);

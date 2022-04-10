@@ -1340,10 +1340,10 @@ TYPED_TEST(TestComplexMatrix, TestIDRS) {
     using FL = TypeParam;
     using MatMul = typename TestComplexMatrix<FL>::MatMul;
     typedef typename GMatrix<FL>::FP FP;
-    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const int sz = is_same<FP, double>::value ? 200 : 50;
     const FP conv = is_same<FP, double>::value ? 1E-8 : 1E-6;
     const FP conv2 = is_same<FP, double>::value ? 1E-7 : 1E-5;
-    const FP thrd = is_same<FP, double>::value ? 1E-3 : 5E-1;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 2E+0;
     for (int i = 0; i < this->n_tests; i++) {
         MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
