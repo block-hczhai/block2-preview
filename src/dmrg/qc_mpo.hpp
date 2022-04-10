@@ -2100,7 +2100,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                     su2_factor[s] * pd_op[j][k][s];
                             p += m;
                         }
-                    su2_factor = {1.0, sqrt(3)};
+                    su2_factor = {(FL)1.0, (FL)sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint16_t j = 0; j < m; j++) {
                             for (uint16_t k = 0; k < m; k++)
@@ -2311,7 +2311,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                     su2_factor[s] * pd_op[j][k][s];
                             p += n_orbs - m - 1;
                         }
-                    su2_factor = {1.0, sqrt(3)};
+                    su2_factor = {(FL)1.0, (FL)sqrt(3)};
                     for (uint8_t s = 0; s < 2; s++)
                         for (uint16_t j = m + 1; j < n_orbs; j++) {
                             for (uint16_t k = m + 1; k < n_orbs; k++)
@@ -2551,7 +2551,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                         su2_factor[s] * pd_op[j][k][s];
                                 p += n_orbs - m - 1;
                             }
-                        su2_factor = {1.0, sqrt(3)};
+                        su2_factor = {(FL)1.0, (FL)sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
                             for (uint16_t j = m + 1; j < n_orbs; j++) {
                                 for (uint16_t k = m + 1; k < n_orbs; k++)
@@ -2609,7 +2609,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                     rop[p + k] = su2_factor[s] * pd_op[j][k][s];
                                 p += m;
                             }
-                        su2_factor = {1.0, sqrt(3)};
+                        su2_factor = {(FL)1.0, (FL)sqrt(3)};
                         for (uint8_t s = 0; s < 2; s++)
                             for (uint16_t j = 0; j < m; j++) {
                                 for (uint16_t k = 0; k < m; k++)

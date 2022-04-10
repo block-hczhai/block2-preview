@@ -12,14 +12,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  test:
     name: ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
         os: [ ubuntu-latest, macos-latest ]
-        python: [ 3.7, 3.8, 3.9 ]
+        python: [ 3.9 ]
         manylinux: [ 2010 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial ]
@@ -76,7 +76,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
-          make -j 2
+          make -j 4
 
       - name: build test (serial, macos)
         if: matrix.parallel == 'serial' && matrix.os == 'macos-latest'
@@ -86,7 +86,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
-          make -j 2
+          make -j 4
 
       - name: run test (serial)
         if: matrix.parallel == 'serial'
@@ -103,7 +103,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
-          make -j 2
+          make -j 4
 
       - name: run test (mpi)
         if: matrix.parallel == 'mpi'
@@ -111,11 +111,49 @@ jobs:
           cd build_test
           mpirun -n 2 ./block2_tests
 
+  build:
+    name: ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+        python: [ 3.7, 3.8, 3.9 ]
+        manylinux: [ 2010 ]
+        plat: [ x86_64 ]
+        parallel: [ mpi, serial ]
+        exclude:
+          - os: macos-latest
+            parallel: mpi
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: install requirements
+        env:
+          MKLROOT: ~/.local
+        run: |
+          export PYT=$(which python)
+          python -m pip install pip build twine --upgrade
+          python -m pip install mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
+
+      - name: install requirements (linux / mpi)
+        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libopenmpi-dev
+          python -m pip install mpi4py
+
       - name: build wheels (macos)
         if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
+          brew update
+          brew install libomp
           echo ${TAG_STRING:11}
           sed -i "" "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           python -m pip install wheel
@@ -153,7 +191,7 @@ jobs:
 
   publish:
     name: publish
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
