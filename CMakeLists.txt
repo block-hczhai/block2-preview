@@ -518,7 +518,9 @@ IF (${BUILD_TEST})
     FILE(GLOB TSRCS unit_test/test_*.cpp)
     MESSAGE(STATUS "TSRCS = ${TSRCS}")
 
-    SET(OPT_FLAG ${OPT_FLAG} -fcompare-debug-second)
+    IF ((NOT APPLE) AND (NOT WIN32))
+        SET(OPT_FLAG ${OPT_FLAG} -fcompare-debug-second)
+    ENDIF()
 
     ADD_EXECUTABLE(${PROJECT_NAME}_tests ${TSRCS} ${SRCS})
     TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME}_tests PUBLIC src ${MKL_INCLUDE_DIR} ${MPI_INCLUDE_DIR} ${TBB_INCLUDE_DIR})
