@@ -72,7 +72,7 @@ class CMakeBuild(build_ext):
             subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args,
                                   cwd=self.build_temp)
 
-            subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=4'],
+            subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=2'],
                                   cwd=self.build_temp)
 
 
