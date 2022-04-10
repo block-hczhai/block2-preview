@@ -114,7 +114,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
     Iteration update_one_dot(int i, bool forward, bool advance, FPS beta,
                              ubond_t bond_dim, FPS noise) {
         assert(rme->bra != rme->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= rme->fuse_center;
         vector<shared_ptr<MPS<S, FLS>>> mpss = {rme->bra, rme->ket};
         for (auto &mps : mpss) {
@@ -427,7 +427,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
     Iteration update_two_dot(int i, bool forward, bool advance, FPS beta,
                              ubond_t bond_dim, FPS noise) {
         assert(rme->bra != rme->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss = {rme->bra, rme->ket};
         for (auto &mps : mpss) {
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
@@ -642,7 +642,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         vector<FLS> energies;
         vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;
-        frame->reset_peak_used_memory();
+        frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         FPS largest_error = 0.0;
         if (forward)
@@ -752,10 +752,10 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                     cout << " | DW = " << scientific << setw(9)
                          << setprecision(2) << get<2>(sweep_results);
                     if (iprint >= 2) {
-                        size_t dmain = frame->peak_used_memory[0];
-                        size_t dseco = frame->peak_used_memory[1];
-                        size_t imain = frame->peak_used_memory[2];
-                        size_t iseco = frame->peak_used_memory[3];
+                        size_t dmain = frame_<FPS>()->peak_used_memory[0];
+                        size_t dseco = frame_<FPS>()->peak_used_memory[1];
+                        size_t imain = frame_<FPS>()->peak_used_memory[2];
+                        size_t iseco = frame_<FPS>()->peak_used_memory[3];
                         cout << " | DMEM = "
                              << Parsing::to_size_string(dmain + dseco) << " ("
                              << (dmain * 100 / (dmain + dseco)) << "%)";
@@ -846,7 +846,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     // one-site algorithm - real MPS - imag time
     Iteration update_one_dot(int i, bool forward, bool advance, FLS beta,
                              ubond_t bond_dim, FPS noise) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (me->ket->canonical_form[i] == 'C') {
             if (i == 0)
@@ -963,10 +963,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                     noise_type, weights[0]);
                 MovingEnvironment<S, FL, FLS>::density_matrix_add_matrices(
                     dm, me->ket->tensors[i], forward, pdpf, weights);
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             } else
                 dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                     me->ket->info->vacuum, me->ket->tensors[i], forward, noise,
@@ -983,10 +983,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 cutoff, store_wfn_spectra, wfn_spectra, trunc_type);
         } else {
             if (pdpf.size() != 0) {
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             }
             old_wfn = me->ket->tensors[i];
         }
@@ -1147,7 +1147,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     // two-site algorithm - real MPS - imag time
     Iteration update_two_dot(int i, bool forward, bool advance, FLS beta,
                              ubond_t bond_dim, FPS noise) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr)
             MovingEnvironment<S, FL, FLS>::contract_two_dot(i, me->ket);
@@ -1204,10 +1204,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                     noise_type, weights[0]);
                 MovingEnvironment<S, FL, FLS>::density_matrix_add_matrices(
                     dm, h_eff->ket, forward, pdpf, weights);
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             } else
                 dm = MovingEnvironment<S, FL, FLS>::density_matrix(
                     me->ket->info->vacuum, h_eff->ket, forward, noise,
@@ -1223,10 +1223,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 trunc_type);
         } else {
             if (pdpf.size() != 0) {
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             }
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1331,7 +1331,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                                    ubond_t bond_dim, FPS noise) {
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (mket->canonical_form[i] == 'M') {
             if (i == 0)
@@ -1481,10 +1481,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                         noise, noise_type, weights[0]);
                 MovingEnvironment<S, FL, FLS>::density_matrix_add_matrix_groups(
                     dm, mket->wfns, forward, pdpf, weights);
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             } else
                 dm = MovingEnvironment<S, FL, FLS>::
                     density_matrix_with_multi_target(
@@ -1501,10 +1501,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 store_wfn_spectra, wfn_spectra, trunc_type);
         } else {
             if (pdpf.size() != 0) {
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             }
             old_wfns = mket->wfns;
         }
@@ -1714,7 +1714,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                                    ubond_t bond_dim, FPS noise) {
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         if (mket->tensors[i] != nullptr || mket->tensors[i + 1] != nullptr)
             MovingEnvironment<S, FL, FLS>::contract_multi_two_dot(i, mket);
         else {
@@ -1779,10 +1779,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                         noise, noise_type, weights[0]);
                 MovingEnvironment<S, FL, FLS>::density_matrix_add_matrix_groups(
                     dm, old_wfns, forward, pdpf, weights);
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             } else
                 dm = MovingEnvironment<S, FL, FLS>::
                     density_matrix_with_multi_target(
@@ -1799,10 +1799,10 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 store_wfn_spectra, wfn_spectra, trunc_type);
         } else {
             if (pdpf.size() != 0) {
-                frame->activate(1);
+                frame_<FPS>()->activate(1);
                 for (int i = (int)pdpf.size() - 1; i >= 0; i--)
                     pdpf[i].deallocate();
-                frame->activate(0);
+                frame_<FPS>()->activate(0);
             }
         }
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1956,10 +1956,11 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     }
     tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
                                ubond_t bond_dim, FPS noise) {
-        frame->twrite = frame->tread = frame->tasync = 0;
-        frame->fpwrite = frame->fpread = 0;
-        if (frame->fp_codec != nullptr)
-            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         me->prepare();
         vector<FLS> energies;
         vector<FPS> normsqs;
@@ -2079,18 +2080,18 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                          << Parsing::to_size_string(sweep_cumulative_nflop,
                                                     "FLOP/SWP")
                          << endl;
-                    cout << " | Tread = " << frame->tread
-                         << " | Twrite = " << frame->twrite
-                         << " | Tfpread = " << frame->fpread
-                         << " | Tfpwrite = " << frame->fpwrite;
-                    if (frame->fp_codec != nullptr)
+                    cout << " | Tread = " << frame_<FPS>()->tread
+                         << " | Twrite = " << frame_<FPS>()->twrite
+                         << " | Tfpread = " << frame_<FPS>()->fpread
+                         << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
+                    if (frame_<FPS>()->fp_codec != nullptr)
                         cout << " | data = "
-                             << Parsing::to_size_string(frame->fp_codec->ndata *
-                                                        8)
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ndata * 8)
                              << " | cpsd = "
-                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
-                                                        8);
-                    cout << " | Tasync = " << frame->tasync << endl;
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ncpsd * 8);
+                    cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                 }
                 if (isw == n_sub_sweeps - 1) {
                     energies.push_back(get<0>(r));

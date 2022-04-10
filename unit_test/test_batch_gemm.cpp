@@ -4,135 +4,152 @@
 
 using namespace block2;
 
-class TestBatchGEMM : public ::testing::Test {
+template <typename FL> class TestBatchGEMM : public ::testing::Test {
   protected:
+    typedef typename GMatrix<FL>::FP FP;
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
     static const int n_tests = 200;
     void SetUp() override {
         Random::rand_seed(1969);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             4);
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
-TEST_F(TestBatchGEMM, TestRotate) {
-    shared_ptr<BatchGEMMSeq<double>> seq =
-        make_shared<BatchGEMMSeq<double>>(1 << 24);
+#ifdef _USE_SINGLE_PREC
+typedef ::testing::Types<complex<float>, complex<double>> TestFL;
+#else
+typedef ::testing::Types<complex<double>> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestBatchGEMM, TestFL);
+
+TYPED_TEST(TestBatchGEMM, TestRotate) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-10 : 1E-5;
+    shared_ptr<BatchGEMMSeq<FP>> seq = make_shared<BatchGEMMSeq<FP>>(1 << 24);
     seq->mode = SeqTypes::Auto;
-    for (int i = 0; i < n_tests; i++) {
+    for (int i = 0; i < this->n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mc = Random::rand_int(1, 100), nc = Random::rand_int(1, 100);
         int ncbatch = Random::rand_int(1, 30);
         int nbatch = Random::rand_int(1, 30);
-        MatrixRef a(dalloc_()->allocate(ma * na * nbatch), ma, na);
-        MatrixRef c(dalloc_()->allocate(mc * nc * ncbatch), mc, nc);
-        MatrixRef d(dalloc_()->allocate(ncbatch), ncbatch, 1);
-        MatrixRef l(dalloc_()->allocate(ma * mc), mc, ma);
-        MatrixRef r(dalloc_()->allocate(na * nc), na, nc);
-        Random::fill<double>(l.data, l.size());
-        Random::fill<double>(r.data, r.size());
-        Random::fill<double>(a.data, a.size() * nbatch);
-        Random::fill<double>(d.data, d.size());
+        GMatrix<FP> a(dalloc_<FP>()->allocate(ma * na * nbatch), ma, na);
+        GMatrix<FP> c(dalloc_<FP>()->allocate(mc * nc * ncbatch), mc, nc);
+        GMatrix<FP> d(dalloc_<FP>()->allocate(ncbatch), ncbatch, 1);
+        GMatrix<FP> l(dalloc_<FP>()->allocate(ma * mc), mc, ma);
+        GMatrix<FP> r(dalloc_<FP>()->allocate(na * nc), na, nc);
+        Random::fill<FP>(l.data, l.size());
+        Random::fill<FP>(r.data, r.size());
+        Random::fill<FP>(a.data, a.size() * nbatch);
+        Random::fill<FP>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         bool conjl = Random::rand_int(0, 2);
         bool conjr = Random::rand_int(0, 2);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = a.shift_ptr(ma * na * ii);
-                MatrixRef xc = MatrixRef(c.data + mc * nc * ic, mc, nc);
+                GMatrix<FP> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FP> xc = GMatrix<FP>(c.data + mc * nc * ic, mc, nc);
                 seq->rotate(xa, xc, conjl ? l.flip_dims() : l, conjl,
                             conjr ? r.flip_dims() : r, conjr, d(ic, 0));
             }
         seq->auto_perform();
-        MatrixRef cstd(dalloc_()->allocate(mc * nc), mc, nc);
+        GMatrix<FP> cstd(dalloc_<FP>()->allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = a.shift_ptr(ma * na * ii);
-                MatrixFunctions::rotate(xa, cstd, conjl ? l.flip_dims() : l,
-                                        conjl, conjr ? r.flip_dims() : r, conjr,
-                                        d(ic, 0));
+                GMatrix<FP> xa = a.shift_ptr(ma * na * ii);
+                GMatrixFunctions<FP>::rotate(
+                    xa, cstd, conjl ? l.flip_dims() : l, conjl,
+                    conjr ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 1E-10));
+            ASSERT_TRUE(GMatrixFunctions<FP>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd));
         }
         cstd.deallocate();
         r.deallocate();
         l.deallocate();
         d.deallocate();
-        dalloc_()->deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->deallocate(a.data, ma * na * nbatch);
     }
 }
 
-TEST_F(TestBatchGEMM, TestRotateTasked) {
-    shared_ptr<BatchGEMMSeq<double>> seq =
-        make_shared<BatchGEMMSeq<double>>(1 << 24);
+TYPED_TEST(TestBatchGEMM, TestRotateTasked) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-10 : 1E-5;
+    shared_ptr<BatchGEMMSeq<FP>> seq = make_shared<BatchGEMMSeq<FP>>(1 << 24);
     seq->mode = SeqTypes::Tasked;
-    for (int i = 0; i < n_tests; i++) {
+    for (int i = 0; i < this->n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mc = Random::rand_int(1, 100), nc = Random::rand_int(1, 100);
         int ncbatch = Random::rand_int(1, 30);
         int nbatch = Random::rand_int(1, 30);
-        MatrixRef a(dalloc_()->allocate(ma * na * nbatch), ma, na);
-        MatrixRef c(dalloc_()->allocate(mc * nc * ncbatch), mc, nc);
-        MatrixRef xxa(nullptr, ma, na);
-        MatrixRef xxc(nullptr, mc, nc);
-        MatrixRef d(dalloc_()->allocate(ncbatch), ncbatch, 1);
-        MatrixRef l(dalloc_()->allocate(ma * mc), mc, ma);
-        MatrixRef r(dalloc_()->allocate(na * nc), na, nc);
-        Random::fill<double>(l.data, l.size());
-        Random::fill<double>(r.data, r.size());
-        Random::fill<double>(a.data, a.size() * nbatch);
-        Random::fill<double>(d.data, d.size());
+        GMatrix<FP> a(dalloc_<FP>()->allocate(ma * na * nbatch), ma, na);
+        GMatrix<FP> c(dalloc_<FP>()->allocate(mc * nc * ncbatch), mc, nc);
+        GMatrix<FP> xxa(nullptr, ma, na);
+        GMatrix<FP> xxc(nullptr, mc, nc);
+        GMatrix<FP> d(dalloc_<FP>()->allocate(ncbatch), ncbatch, 1);
+        GMatrix<FP> l(dalloc_<FP>()->allocate(ma * mc), mc, ma);
+        GMatrix<FP> r(dalloc_<FP>()->allocate(na * nc), na, nc);
+        Random::fill<FP>(l.data, l.size());
+        Random::fill<FP>(r.data, r.size());
+        Random::fill<FP>(a.data, a.size() * nbatch);
+        Random::fill<FP>(d.data, d.size());
         for (int ic = 0; ic < ncbatch; ic++)
             c.shift_ptr(mc * nc * ic).clear();
         bool conjl = Random::rand_int(0, 2);
         bool conjr = Random::rand_int(0, 2);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = xxa.shift_ptr(ma * na * ii);
-                MatrixRef xc = MatrixRef(xxc.data + mc * nc * ic, mc, nc);
+                GMatrix<FP> xa = xxa.shift_ptr(ma * na * ii);
+                GMatrix<FP> xc = GMatrix<FP>(xxc.data + mc * nc * ic, mc, nc);
                 seq->rotate(xa, xc, conjl ? l.flip_dims() : l, conjl,
                             conjr ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-        seq->operator()(a, MatrixRef(c.data, mc * ncbatch, nc));
+        seq->operator()(a, GMatrix<FP>(c.data, mc * ncbatch, nc));
         seq->deallocate();
         seq->clear();
-        MatrixRef cstd(dalloc_()->allocate(mc * nc), mc, nc);
+        GMatrix<FP> cstd(dalloc_<FP>()->allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = a.shift_ptr(ma * na * ii);
-                MatrixFunctions::rotate(xa, cstd, conjl ? l.flip_dims() : l,
-                                        conjl, conjr ? r.flip_dims() : r, conjr,
-                                        d(ic, 0));
+                GMatrix<FP> xa = a.shift_ptr(ma * na * ii);
+                GMatrixFunctions<FP>::rotate(
+                    xa, cstd, conjl ? l.flip_dims() : l, conjl,
+                    conjr ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 1E-10));
+            ASSERT_TRUE(GMatrixFunctions<FP>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd));
         }
         cstd.deallocate();
         r.deallocate();
         l.deallocate();
         d.deallocate();
-        dalloc_()->deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->deallocate(a.data, ma * na * nbatch);
     }
 }
 
-TEST_F(TestBatchGEMM, TestTensorProduct) {
-    shared_ptr<BatchGEMMSeq<double>> seq = make_shared<BatchGEMMSeq<double>>();
+TYPED_TEST(TestBatchGEMM, TestTensorProduct) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-6;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-6;
+    shared_ptr<BatchGEMMSeq<FP>> seq = make_shared<BatchGEMMSeq<FP>>();
     seq->mode = SeqTypes::Auto;
-    for (int i = 0; i < n_tests; i++) {
+    for (int i = 0; i < this->n_tests; i++) {
         int ii = Random::rand_int(0, 4), jj = Random::rand_int(0, 2);
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mb = Random::rand_int(1, 100), nb = Random::rand_int(1, 100);
@@ -150,22 +167,22 @@ TEST_F(TestBatchGEMM, TestTensorProduct) {
         int mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
         int ncbatch = Random::rand_int(1, 20);
         int nbatch = Random::rand_int(1, 20);
-        MatrixRef a(dalloc_()->allocate(ma * na * nbatch), ma, na);
-        MatrixRef b(dalloc_()->allocate(mb * nb * nbatch), mb, nb);
-        MatrixRef c(dalloc_()->allocate(mc * nc * ncbatch), mc, nc);
-        MatrixRef d(dalloc_()->allocate(ncbatch), ncbatch, 1);
-        Random::fill<double>(a.data, a.size() * nbatch);
-        Random::fill<double>(b.data, b.size() * nbatch);
-        Random::fill<double>(d.data, d.size());
+        GMatrix<FP> a(dalloc_<FP>()->allocate(ma * na * nbatch), ma, na);
+        GMatrix<FP> b(dalloc_<FP>()->allocate(mb * nb * nbatch), mb, nb);
+        GMatrix<FP> c(dalloc_<FP>()->allocate(mc * nc * ncbatch), mc, nc);
+        GMatrix<FP> d(dalloc_<FP>()->allocate(ncbatch), ncbatch, 1);
+        Random::fill<FP>(a.data, a.size() * nbatch);
+        Random::fill<FP>(b.data, b.size() * nbatch);
+        Random::fill<FP>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         bool conja = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = a.shift_ptr(ma * na * ii);
-                MatrixRef xb = b.shift_ptr(mb * nb * ii);
-                MatrixRef xc = c.shift_ptr(mc * nc * ic);
+                GMatrix<FP> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FP> xb = b.shift_ptr(mb * nb * ii);
+                GMatrix<FP> xc = c.shift_ptr(mc * nc * ic);
                 for (int j = 0; j < jj + 1; j++)
                     for (int k = 0; k < jj + 1; k++)
                         seq->tensor_product(conja ? xa.flip_dims() : xa, conja,
@@ -174,50 +191,52 @@ TEST_F(TestBatchGEMM, TestTensorProduct) {
                                             j * nc * ma * mb + k * na * nb);
             }
         seq->auto_perform();
-        MatrixRef cstd(dalloc_()->allocate(mc * nc), mc, nc);
+        GMatrix<FP> cstd(dalloc_<FP>()->allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                MatrixRef xa = a.shift_ptr(ma * na * ii);
-                MatrixRef xb = b.shift_ptr(mb * nb * ii);
+                GMatrix<FP> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FP> xb = b.shift_ptr(mb * nb * ii);
                 for (int j = 0; j < jj + 1; j++)
                     for (int k = 0; k < jj + 1; k++)
-                        MatrixFunctions::tensor_product(
+                        GMatrixFunctions<FP>::tensor_product(
                             conja ? xa.flip_dims() : xa, conja,
                             conjb ? xb.flip_dims() : xb, conjb, cstd, d(ic, 0),
                             j * nc * ma * mb + k * na * nb);
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-12, 0.0));
+            ASSERT_TRUE(GMatrixFunctions<FP>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd2));
         }
         cstd.deallocate();
         d.deallocate();
-        dalloc_()->deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->deallocate(b.data, mb * nb * nbatch);
-        dalloc_()->deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->deallocate(b.data, mb * nb * nbatch);
+        dalloc_<FP>()->deallocate(a.data, ma * na * nbatch);
     }
 }
 
-TEST_F(TestBatchGEMM, TestComplexRotate) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(1 << 24);
+TYPED_TEST(TestBatchGEMM, TestComplexRotate) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    shared_ptr<BatchGEMMSeq<FL>> seq = make_shared<BatchGEMMSeq<FL>>(1 << 24);
     seq->mode = SeqTypes::Auto;
-    for (int i = 0; i < n_tests; i++) {
+    const FP thrd = is_same<FP, double>::value ? 1E-10 : 1E-5;
+    for (int i = 0; i < this->n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mc = Random::rand_int(1, 100), nc = Random::rand_int(1, 100);
         int ncbatch = Random::rand_int(1, 30);
         int nbatch = Random::rand_int(1, 30);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(ma * na * nbatch), ma,
-                           na);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mc * nc * ncbatch), mc,
-                           nc);
-        ComplexMatrixRef d(dalloc_()->complex_allocate(ncbatch), ncbatch, 1);
-        ComplexMatrixRef l(dalloc_()->complex_allocate(ma * mc), mc, ma);
-        ComplexMatrixRef r(dalloc_()->complex_allocate(na * nc), na, nc);
-        Random::complex_fill<double>(l.data, l.size());
-        Random::complex_fill<double>(r.data, r.size());
-        Random::complex_fill<double>(a.data, a.size() * nbatch);
-        Random::complex_fill<double>(d.data, d.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(ma * na * nbatch), ma,
+                      na);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mc * nc * ncbatch), mc,
+                      nc);
+        GMatrix<FL> d(dalloc_<FP>()->complex_allocate(ncbatch), ncbatch, 1);
+        GMatrix<FL> l(dalloc_<FP>()->complex_allocate(ma * mc), mc, ma);
+        GMatrix<FL> r(dalloc_<FP>()->complex_allocate(na * nc), na, nc);
+        Random::complex_fill<FP>(l.data, l.size());
+        Random::complex_fill<FP>(r.data, r.size());
+        Random::complex_fill<FP>(a.data, a.size() * nbatch);
+        Random::complex_fill<FP>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         uint8_t conjl = Random::rand_int(0, 2);
@@ -226,56 +245,57 @@ TEST_F(TestBatchGEMM, TestComplexRotate) {
             conjl = Random::rand_int(0, 4), conjr = Random::rand_int(0, 4);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
-                ComplexMatrixRef xc =
-                    ComplexMatrixRef(c.data + mc * nc * ic, mc, nc);
+                GMatrix<FL> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FL> xc = GMatrix<FL>(c.data + mc * nc * ic, mc, nc);
                 seq->rotate(xa, xc, (conjl & 1) ? l.flip_dims() : l, conjl,
                             (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
         seq->auto_perform();
-        ComplexMatrixRef cstd(dalloc_()->complex_allocate(mc * nc), mc, nc);
+        GMatrix<FL> cstd(dalloc_<FP>()->complex_allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
-                ComplexMatrixFunctions::rotate(
+                GMatrix<FL> xa = a.shift_ptr(ma * na * ii);
+                GMatrixFunctions<FL>::rotate(
                     xa, cstd, (conjl & 1) ? l.flip_dims() : l, conjl,
                     (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 1E-10));
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd));
         }
         cstd.deallocate();
         r.deallocate();
         l.deallocate();
         d.deallocate();
-        dalloc_()->complex_deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->complex_deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->complex_deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->complex_deallocate(a.data, ma * na * nbatch);
     }
 }
 
-TEST_F(TestBatchGEMM, TestComplexRotateTasked) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(1 << 24);
+TYPED_TEST(TestBatchGEMM, TestComplexRotateTasked) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    shared_ptr<BatchGEMMSeq<FL>> seq = make_shared<BatchGEMMSeq<FL>>(1 << 24);
     seq->mode = SeqTypes::Tasked;
-    for (int i = 0; i < n_tests; i++) {
+    const FP thrd = is_same<FP, double>::value ? 1E-10 : 1E-5;
+    for (int i = 0; i < this->n_tests; i++) {
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mc = Random::rand_int(1, 100), nc = Random::rand_int(1, 100);
         int ncbatch = Random::rand_int(1, 30);
         int nbatch = Random::rand_int(1, 30);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(ma * na * nbatch), ma,
-                           na);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mc * nc * ncbatch), mc,
-                           nc);
-        ComplexMatrixRef xxa(nullptr, ma, na);
-        ComplexMatrixRef xxc(nullptr, mc, nc);
-        ComplexMatrixRef d(dalloc_()->complex_allocate(ncbatch), ncbatch, 1);
-        ComplexMatrixRef l(dalloc_()->complex_allocate(ma * mc), mc, ma);
-        ComplexMatrixRef r(dalloc_()->complex_allocate(na * nc), na, nc);
-        Random::complex_fill<double>(l.data, l.size());
-        Random::complex_fill<double>(r.data, r.size());
-        Random::complex_fill<double>(a.data, a.size() * nbatch);
-        Random::complex_fill<double>(d.data, d.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(ma * na * nbatch), ma,
+                      na);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mc * nc * ncbatch), mc,
+                      nc);
+        GMatrix<FL> xxa(nullptr, ma, na);
+        GMatrix<FL> xxc(nullptr, mc, nc);
+        GMatrix<FL> d(dalloc_<FP>()->complex_allocate(ncbatch), ncbatch, 1);
+        GMatrix<FL> l(dalloc_<FP>()->complex_allocate(ma * mc), mc, ma);
+        GMatrix<FL> r(dalloc_<FP>()->complex_allocate(na * nc), na, nc);
+        Random::complex_fill<FP>(l.data, l.size());
+        Random::complex_fill<FP>(r.data, r.size());
+        Random::complex_fill<FP>(a.data, a.size() * nbatch);
+        Random::complex_fill<FP>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         uint8_t conjl = Random::rand_int(0, 4);
@@ -284,41 +304,43 @@ TEST_F(TestBatchGEMM, TestComplexRotateTasked) {
             conjl = Random::rand_int(0, 4), conjr = Random::rand_int(0, 4);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = xxa.shift_ptr(ma * na * ii);
-                ComplexMatrixRef xc =
-                    ComplexMatrixRef(xxc.data + mc * nc * ic, mc, nc);
+                GMatrix<FL> xa = xxa.shift_ptr(ma * na * ii);
+                GMatrix<FL> xc = GMatrix<FL>(xxc.data + mc * nc * ic, mc, nc);
                 seq->rotate(xa, xc, (conjl & 1) ? l.flip_dims() : l, conjl,
                             (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-        seq->operator()(a, ComplexMatrixRef(c.data, mc * ncbatch, nc));
+        seq->operator()(a, GMatrix<FL>(c.data, mc * ncbatch, nc));
         seq->deallocate();
         seq->clear();
-        ComplexMatrixRef cstd(dalloc_()->complex_allocate(mc * nc), mc, nc);
+        GMatrix<FL> cstd(dalloc_<FP>()->complex_allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
-                ComplexMatrixFunctions::rotate(
+                GMatrix<FL> xa = a.shift_ptr(ma * na * ii);
+                GMatrixFunctions<FL>::rotate(
                     xa, cstd, (conjl & 1) ? l.flip_dims() : l, conjl,
                     (conjr & 1) ? r.flip_dims() : r, conjr, d(ic, 0));
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-10, 1E-10));
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd));
         }
         cstd.deallocate();
         r.deallocate();
         l.deallocate();
         d.deallocate();
-        dalloc_()->complex_deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->complex_deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->complex_deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->complex_deallocate(a.data, ma * na * nbatch);
     }
 }
 
-TEST_F(TestBatchGEMM, TestComplexTensorProduct) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>();
+TYPED_TEST(TestBatchGEMM, TestComplexTensorProduct) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    shared_ptr<BatchGEMMSeq<FL>> seq = make_shared<BatchGEMMSeq<FL>>();
     seq->mode = SeqTypes::Auto;
-    for (int i = 0; i < n_tests; i++) {
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-6;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-6;
+    for (int i = 0; i < this->n_tests; i++) {
         int ii = Random::rand_int(0, 4), jj = Random::rand_int(0, 2);
         int ma = Random::rand_int(1, 100), na = Random::rand_int(1, 100);
         int mb = Random::rand_int(1, 100), nb = Random::rand_int(1, 100);
@@ -336,25 +358,25 @@ TEST_F(TestBatchGEMM, TestComplexTensorProduct) {
         int mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
         int ncbatch = Random::rand_int(1, 20);
         int nbatch = Random::rand_int(1, 20);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(ma * na * nbatch), ma,
-                           na);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(mb * nb * nbatch), mb,
-                           nb);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mc * nc * ncbatch), mc,
-                           nc);
-        ComplexMatrixRef d(dalloc_()->complex_allocate(ncbatch), ncbatch, 1);
-        Random::complex_fill<double>(a.data, a.size() * nbatch);
-        Random::complex_fill<double>(b.data, b.size() * nbatch);
-        Random::complex_fill<double>(d.data, d.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(ma * na * nbatch), ma,
+                      na);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(mb * nb * nbatch), mb,
+                      nb);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mc * nc * ncbatch), mc,
+                      nc);
+        GMatrix<FL> d(dalloc_<FP>()->complex_allocate(ncbatch), ncbatch, 1);
+        Random::complex_fill<FP>(a.data, a.size() * nbatch);
+        Random::complex_fill<FP>(b.data, b.size() * nbatch);
+        Random::complex_fill<FP>(d.data, d.size());
         for (int ii = 0; ii < ncbatch; ii++)
             c.shift_ptr(mc * nc * ii).clear();
         bool conja = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
         for (int ic = 0; ic < ncbatch; ic++)
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
-                ComplexMatrixRef xb = b.shift_ptr(mb * nb * ii);
-                ComplexMatrixRef xc = c.shift_ptr(mc * nc * ic);
+                GMatrix<FL> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FL> xb = b.shift_ptr(mb * nb * ii);
+                GMatrix<FL> xc = c.shift_ptr(mc * nc * ic);
                 for (int j = 0; j < jj + 1; j++)
                     for (int k = 0; k < jj + 1; k++)
                         seq->tensor_product(conja ? xa.flip_dims() : xa, conja,
@@ -363,26 +385,26 @@ TEST_F(TestBatchGEMM, TestComplexTensorProduct) {
                                             j * nc * ma * mb + k * na * nb);
             }
         seq->auto_perform();
-        ComplexMatrixRef cstd(dalloc_()->complex_allocate(mc * nc), mc, nc);
+        GMatrix<FL> cstd(dalloc_<FP>()->complex_allocate(mc * nc), mc, nc);
         for (int ic = 0; ic < ncbatch; ic++) {
             cstd.clear();
             for (int ii = 0; ii < nbatch; ii++) {
-                ComplexMatrixRef xa = a.shift_ptr(ma * na * ii);
-                ComplexMatrixRef xb = b.shift_ptr(mb * nb * ii);
+                GMatrix<FL> xa = a.shift_ptr(ma * na * ii);
+                GMatrix<FL> xb = b.shift_ptr(mb * nb * ii);
                 for (int j = 0; j < jj + 1; j++)
                     for (int k = 0; k < jj + 1; k++)
-                        ComplexMatrixFunctions::tensor_product(
+                        GMatrixFunctions<FL>::tensor_product(
                             conja ? xa.flip_dims() : xa, conja,
                             conjb ? xb.flip_dims() : xb, conjb, cstd, d(ic, 0),
                             j * nc * ma * mb + k * na * nb);
             }
-            ASSERT_TRUE(MatrixFunctions::all_close(c.shift_ptr(mc * nc * ic),
-                                                   cstd, 1E-12, 0.0));
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                c.shift_ptr(mc * nc * ic), cstd, thrd, thrd2));
         }
         cstd.deallocate();
         d.deallocate();
-        dalloc_()->complex_deallocate(c.data, mc * nc * ncbatch);
-        dalloc_()->complex_deallocate(b.data, mb * nb * nbatch);
-        dalloc_()->complex_deallocate(a.data, ma * na * nbatch);
+        dalloc_<FP>()->complex_deallocate(c.data, mc * nc * ncbatch);
+        dalloc_<FP>()->complex_deallocate(b.data, mb * nb * nbatch);
+        dalloc_<FP>()->complex_deallocate(a.data, ma * na * nbatch);
     }
 }

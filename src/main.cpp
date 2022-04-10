@@ -53,6 +53,7 @@ map<string, string> read_input(const string &filename) {
 }
 
 template <typename S, typename FL> void run(const map<string, string> &params) {
+    typedef typename GMatrix<FL>::FP FP;
 
     size_t memory = 4ULL << 30;
     if (params.count("memory") != 0)
@@ -62,18 +63,18 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("scratch") != 0)
         scratch = params.at("scratch");
 
-    frame_() = make_shared<DataFrame>((size_t)(0.1 * memory),
-                                      (size_t)(0.9 * memory), scratch);
-    frame_()->use_main_stack = false;
+    frame_<FP>() = make_shared<DataFrame<FP>>((size_t)(0.1 * memory),
+                                              (size_t)(0.9 * memory), scratch);
+    frame_<FP>()->use_main_stack = false;
 
     // random scratch file prefix to avoid conflicts
     if (params.count("prefix") != 0 && params.at("prefix") != "auto")
-        frame_()->prefix = params.at("prefix");
+        frame_<FP>()->prefix = params.at("prefix");
     else {
         Random::rand_seed(0);
         stringstream ss;
         ss << hex << Random::rand_int(0, 0xFFFFFF);
-        frame_()->prefix = ss.str();
+        frame_<FP>()->prefix = ss.str();
     }
 
     if (params.count("rand_seed") != 0)
@@ -82,9 +83,9 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         Random::rand_seed(0);
 
     cout << "integer stack memory = " << fixed << setprecision(4)
-         << ((frame_()->isize << 2) / 1E9) << " GB" << endl;
+         << ((frame_<FP>()->isize << 2) / 1E9) << " GB" << endl;
     cout << "double  stack memory = " << fixed << setprecision(4)
-         << ((frame_()->dsize << 3) / 1E9) << " GB" << endl;
+         << ((frame_<FP>()->dsize << 3) / 1E9) << " GB" << endl;
 
     cout << "bond integer size = " << sizeof(ubond_t) << endl;
     cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
@@ -142,7 +143,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global,
             n_threads, n_threads, 1);
         threading_()->seq_type = SeqTypes::None;
-        cout << *frame_() << endl;
+        cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
 
@@ -271,7 +272,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
                             make_shared<CSRSparseMatrix<S, FL>>();
                         if (op.second->get_type() ==
                             SparseMatrixTypes::Normal) {
-                            if (op.second->sparsity() > sparsity) {
+                            if (op.second->sparsity() > (FP)sparsity) {
                                 smat->from_dense(op.second);
                                 op.second->deallocate();
                             } else
@@ -356,9 +357,8 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     vector<ubond_t> bdims = {
         250, 250, 250,
         250, 250, (ubond_t)min(500U, (uint32_t)numeric_limits<ubond_t>::max())};
-    vector<typename GMatrix<FL>::FP> noises = {1E-7, 1E-8, 1E-8,
-                                               1E-9, 1E-9, 0.0};
-    vector<typename GMatrix<FL>::FP> davidson_conv_thrds = {5E-6};
+    vector<FP> noises = {1E-7, 1E-8, 1E-8, 1E-9, 1E-9, 0.0};
+    vector<FP> davidson_conv_thrds = {5E-6};
 
     if (params.count("bond_dims") != 0) {
         vector<string> xbdims =
@@ -372,7 +372,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         vector<string> xnoises = Parsing::split(params.at("noises"), " ", true);
         noises.clear();
         for (auto x : xnoises)
-            noises.push_back(Parsing::to_double(x));
+            noises.push_back((FP)Parsing::to_double(x));
     }
 
     if (params.count("davidson_conv_thrds") != 0) {
@@ -381,7 +381,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
             vector<string> xdavidson_conv_thrds =
                 Parsing::split(params.at("davidson_conv_thrds"), " ", true);
             for (auto x : xdavidson_conv_thrds)
-                davidson_conv_thrds.push_back(Parsing::to_double(x));
+                davidson_conv_thrds.push_back((FP)Parsing::to_double(x));
         }
     }
 
@@ -488,7 +488,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
 
     int n_sweeps = 30;
     bool forward = true;
-    double tol = 1E-6;
+    FP tol = 1E-6;
 
     if (params.count("n_sweeps") != 0)
         n_sweeps = Parsing::to_int(params.at("n_sweeps"));
@@ -497,7 +497,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         forward = !!Parsing::to_int(params.at("forward"));
 
     if (params.count("tol") != 0)
-        tol = Parsing::to_double(params.at("tol"));
+        tol = (FP)Parsing::to_double(params.at("tol"));
 
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
@@ -550,7 +550,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     }
 
     if (params.count("cutoff") != 0)
-        dmrg->cutoff = Parsing::to_double(params.at("cutoff"));
+        dmrg->cutoff = (FP)Parsing::to_double(params.at("cutoff"));
 
     dmrg->solve(n_sweeps, forward, tol);
 
@@ -561,9 +561,10 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     hamil->deallocate();
     fcidump->deallocate();
 
-    frame_()->activate(0);
-    assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-    frame_() = nullptr;
+    frame_<FP>()->activate(0);
+    assert(ialloc_<FP>()->used == 0 &&
+           dalloc_<typename GMatrix<FL>::FP>()->used == 0);
+    frame_<FP>() = nullptr;
 }
 
 int main(int argc, char *argv[]) {

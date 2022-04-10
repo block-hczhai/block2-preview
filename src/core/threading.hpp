@@ -26,6 +26,10 @@
 #include "omp.h"
 #endif
 #ifdef _HAS_INTEL_MKL
+#ifndef MKL_Complex8
+#include <complex>
+#define MKL_Complex8 std::complex<float>
+#endif
 #ifndef MKL_Complex16
 #include <complex>
 #define MKL_Complex16 std::complex<double>
@@ -176,6 +180,14 @@ struct Threading {
     /** Whether complex number extension is used. */
     bool complex_available() const {
 #ifdef _USE_COMPLEX
+        return true;
+#else
+        return false;
+#endif
+    }
+    /** Whether single precision extension is used. */
+    bool single_precision_available() const {
+#ifdef _USE_SINGLE_PREC
         return true;
 #else
         return false;
@@ -471,6 +483,7 @@ struct Threading {
            << " Quanta = " << th.n_threads_quanta
            << " MKL = " << th.n_threads_mkl << endl;
         os << " COMPLEX = " << th.complex_available()
+           << " SINGLE-PREC = " << th.single_precision_available()
            << " KSYMM = " << th.ksymm_available();
         return os;
     }

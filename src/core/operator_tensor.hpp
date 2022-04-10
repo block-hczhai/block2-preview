@@ -105,7 +105,7 @@ template <typename S, typename FL> struct OperatorTensor {
                 assert(false);
             mat->info = make_shared<SparseMatrixInfo<S>>(i_alloc);
             if (pointer_only)
-                mat->alloc = dalloc, mat->info->alloc = ialloc;
+                mat->alloc = dalloc_<FP>(), mat->info->alloc = ialloc;
             mat->info->load_data(ifs, pointer_only);
             mat->load_data(ifs, pointer_only);
             ops[expr] = mat;
@@ -186,6 +186,7 @@ template <typename S, typename FL> struct OperatorTensor {
 // or left and dot / dot and right (for 3-index operations)
 template <typename S, typename FL>
 struct DelayedOperatorTensor : OperatorTensor<S, FL> {
+    typedef typename SparseMatrix<S, FL>::FP FP;
     // Symbol of super block operator(s)
     vector<shared_ptr<OpExpr<S>>> dops;
     // Symbolic expression of super block operator(s)
@@ -214,7 +215,7 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
     }
     void deallocate() override {
         // do not free contracted operators for future reuse in rotation
-        if (!frame->use_main_stack)
+        if (!frame_<FP>()->use_main_stack)
             return;
         vector<pair<FL *, shared_ptr<SparseMatrix<S, FL>>>> mp;
         mp.reserve(lopt->ops.size() + ropt->ops.size());

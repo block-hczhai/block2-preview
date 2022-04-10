@@ -30,13 +30,14 @@ using namespace std;
 namespace block2 {
 
 template <typename S, typename FL> struct ClassicParallelMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
     using MPO<S, FL>::n_sites;
     shared_ptr<ParallelRule<S, FL>> rule;
     shared_ptr<MPO<S, FL>> prim_mpo;
     ClassicParallelMPO(const shared_ptr<MPO<S, FL>> &mpo,
                        const shared_ptr<ParallelRule<S, FL>> &rule)
         : MPO<S, FL>(mpo->n_sites), prim_mpo(mpo), rule(rule) {
-        assert(!frame->minimal_memory_usage);
+        assert(!frame_<FP>()->minimal_memory_usage);
         if (rule->comm->para_type & ParallelTypes::NewScheme)
             rule->comm->para_type =
                 rule->comm->para_type ^ ParallelTypes::NewScheme;
@@ -132,6 +133,7 @@ template <typename S, typename FL> struct ClassicParallelMPO : MPO<S, FL> {
 };
 
 template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
     using MPO<S, FL>::n_sites;
     shared_ptr<ParallelRule<S, FL>> rule;
     shared_ptr<MPO<S, FL>> prim_mpo;
@@ -230,7 +232,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         if (MPO<S, FL>::schemer != nullptr) {
             mpo->load_schemer();
             MPO<S, FL>::schemer =
-                frame->minimal_memory_usage
+                frame_<FP>()->minimal_memory_usage
                     ? make_shared<MPOSchemer<S>>(*mpo->schemer)
                     : mpo->schemer->copy();
             mpo->unload_schemer();
@@ -272,7 +274,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         MPO<S, FL>::save_data(ss);
         shared_ptr<MPO<S, FL>> mpo = make_shared<ParallelMPO>(
             0, rule, xtag == "" ? MPO<S, FL>::tag : xtag);
-        mpo->load_data(ss, frame->minimal_memory_usage, true);
+        mpo->load_data(ss, frame_<FP>()->minimal_memory_usage, true);
         mpo->tf = this->tf;
         return mpo;
     }
@@ -281,7 +283,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
                                        : Parsing::to_string(xreal(d)) + "+" +
                                              Parsing::to_string(ximag(d)) + "I";
         shared_ptr<MPO<S, FL>> rmpo =
-            frame->minimal_memory_usage
+            frame_<FP>()->minimal_memory_usage
                 ? this->deep_copy(MPO<S, FL>::tag + "@" + new_tag)
                 : make_shared<ParallelMPO>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);

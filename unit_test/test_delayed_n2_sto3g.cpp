@@ -18,7 +18,7 @@ template <typename FL> class TestDelayedN2STO3G : public ::testing::Test {
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 1,
             8);
@@ -26,9 +26,9 @@ template <typename FL> class TestDelayedN2STO3G : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 

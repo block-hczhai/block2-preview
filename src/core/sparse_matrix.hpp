@@ -898,8 +898,8 @@ template <typename S, typename FL> struct SparseMatrix {
         if (pointer_only && total_memory != 0) {
             size_t psz;
             ifs.read((char *)&psz, sizeof(psz));
-            assert(alloc == dalloc || alloc == nullptr);
-            data = (FL *)(dalloc->data + psz);
+            assert(alloc == dalloc_<FP>() || alloc == nullptr);
+            data = (FL *)(dalloc_<FP>()->data + psz);
         } else {
             data = (FL *)alloc->allocate(total_memory * cpx_sz);
             ifs.read((char *)data, sizeof(FL) * total_memory);
@@ -908,7 +908,7 @@ template <typename S, typename FL> struct SparseMatrix {
     void load_data(const string &filename, bool load_info = false,
                    const shared_ptr<Allocator<uint32_t>> &i_alloc = nullptr) {
         if (alloc == nullptr)
-            alloc = dalloc;
+            alloc = dalloc_<FP>();
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("SparseMatrix:load_data on '" + filename +
@@ -931,8 +931,8 @@ template <typename S, typename FL> struct SparseMatrix {
             // for 1-site case with middle site transition
             // one can skip the post-middle-transition then
             // there can be some terms not allocated in stack memory
-            // assert(alloc == dalloc);
-            size_t psz = (FP *)data - dalloc->data;
+            // assert(alloc == dalloc_<FP>());
+            size_t psz = (FP *)data - dalloc_<FP>()->data;
             ofs.write((char *)&psz, sizeof(psz));
         } else
             ofs.write((char *)data, sizeof(FL) * total_memory);
@@ -978,7 +978,7 @@ template <typename S, typename FL> struct SparseMatrix {
             return;
         if (ptr == 0) {
             if (alloc == nullptr)
-                alloc = dalloc;
+                alloc = dalloc_<FP>();
             data = (FL *)alloc->allocate(total_memory * cpx_sz);
             memset(data, 0, sizeof(FL) * total_memory);
         } else
@@ -1041,7 +1041,7 @@ template <typename S, typename FL> struct SparseMatrix {
         return 1.0 - (FP)nnz / total_memory;
     }
     void iscale(FL d) const {
-        assert(factor == 1.0);
+        assert(factor == (FP)1.0);
         assert(total_memory <= (size_t)numeric_limits<MKL_INT>::max());
         GMatrixFunctions<FL>::iscale(
             GMatrix<FL>(data, (MKL_INT)total_memory, 1), d);
@@ -1214,7 +1214,7 @@ template <typename S, typename FL> struct SparseMatrix {
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
-        FL *dt = (FL *)dalloc->allocate(tmp[nr] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nr] * cpx_sz);
         vector<MKL_INT> it(nr, 0), sz(nr, 0);
         for (int i = 0; i < info->n; i++) {
             S q = info->is_wavefunction ? -info->quanta[i].get_ket()
@@ -1287,7 +1287,7 @@ template <typename S, typename FL> struct SparseMatrix {
         }
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == merged_l[ir]->size());
-        dalloc->deallocate(dt, tmp[nr] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nr] * cpx_sz);
     }
     // r will have the same number of non-zero blocks as this matrix
     // s will be labelled by left q labels
@@ -1307,7 +1307,7 @@ template <typename S, typename FL> struct SparseMatrix {
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
-        FL *dt = (FL *)dalloc->allocate(tmp[nl] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nl] * cpx_sz);
         vector<MKL_INT> it(nl, 0), sz(nl, 0);
         for (int i = 0; i < info->n; i++) {
             S q = info->quanta[i].get_bra(info->delta_quantum);
@@ -1386,7 +1386,7 @@ template <typename S, typename FL> struct SparseMatrix {
         }
         for (int il = 0; il < nl; il++)
             assert(it[il] == merged_r[il]->shape[1]);
-        dalloc->deallocate(dt, tmp[nl] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nl] * cpx_sz);
     }
     void left_canonicalize(const shared_ptr<SparseMatrix> &rmat) {
         int nr = rmat->info->n, n = info->n;
@@ -1399,7 +1399,7 @@ template <typename S, typename FL> struct SparseMatrix {
         }
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
-        FL *dt = (FL *)dalloc->allocate(tmp[nr] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nr] * cpx_sz);
         vector<MKL_INT> it(nr, 0);
         for (int i = 0; i < n; i++) {
             int ir = rmat->info->find_state(info->quanta[i].get_ket());
@@ -1428,7 +1428,7 @@ template <typename S, typename FL> struct SparseMatrix {
                    n_states * sizeof(FL));
             it[ir] += n_states;
         }
-        dalloc->deallocate(dt, tmp[nr] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nr] * cpx_sz);
     }
     void right_canonicalize(const shared_ptr<SparseMatrix> &lmat) {
         int nl = lmat->info->n, n = info->n;
@@ -1442,7 +1442,7 @@ template <typename S, typename FL> struct SparseMatrix {
         }
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
-        FL *dt = (FL *)dalloc->allocate(tmp[nl] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nl] * cpx_sz);
         vector<MKL_INT> it(nl, 0);
         for (int i = 0; i < n; i++) {
             int il = lmat->info->find_state(
@@ -1478,7 +1478,7 @@ template <typename S, typename FL> struct SparseMatrix {
                        dt + (tmp[il] + it[il] + k * nxr), inr * sizeof(FL));
             it[il] += inr * nxl;
         }
-        dalloc->deallocate(dt, tmp[nl] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nl] * cpx_sz);
     }
     shared_ptr<SparseMatrix>
     left_multiply(const shared_ptr<SparseMatrix> &lmat, const StateInfo<S> &l,
@@ -1904,7 +1904,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
             }
         ifs.read((char *)&total_memory, sizeof(total_memory));
         if (alloc == nullptr)
-            alloc = dalloc;
+            alloc = dalloc_<FP>();
         data = (FL *)alloc->allocate(total_memory * cpx_sz);
         ifs.read((char *)data, sizeof(FL) * total_memory);
         if (ifs.fail() || ifs.bad())
@@ -1951,7 +1951,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
         }
         if (ptr == 0) {
             if (alloc == nullptr)
-                alloc = dalloc;
+                alloc = dalloc_<FP>();
             data = (FL *)alloc->allocate(total_memory * cpx_sz);
             memset(data, 0, sizeof(FL) * total_memory);
         } else
@@ -2085,7 +2085,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
             rqs[k] = mp.first, tmp[k + 1] = mp.second, k++;
         for (int ir = 0; ir < nr; ir++)
             tmp[ir + 1] += tmp[ir];
-        FL *dt = (FL *)dalloc->allocate(tmp[nr] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nr] * cpx_sz);
         memset(dt, 0, sizeof(FL) * tmp[nr]);
         vector<size_t> it(nr, 0), sz(nr, 0);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
@@ -2158,7 +2158,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
         }
         for (int ir = 0; ir < nr; ir++)
             assert(it[ir] == merged_l[ir]->size());
-        dalloc->deallocate(dt, tmp[nr] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nr] * cpx_sz);
     }
     // r will have the same number of non-zero blocks as this matrix group
     // s will be labelled by left q labels
@@ -2196,7 +2196,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
             lqs[p] = mp.first, tmp[p + 1] = mp.second, p++;
         for (int il = 0; il < nl; il++)
             tmp[il + 1] += tmp[il];
-        FL *dt = (FL *)dalloc->allocate(tmp[nl] * cpx_sz);
+        FL *dt = (FL *)dalloc_<FP>()->allocate(tmp[nl] * cpx_sz);
         memset(dt, 0, sizeof(FL) * tmp[nl]);
         vector<size_t> it(nl, 0), sz(nl, 0);
         for (int ii = 0; ii < (int)xinfos.size(); ii++) {
@@ -2279,7 +2279,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
         }
         for (int il = 0; il < nl; il++)
             assert(it[il] == merged_r[il]->shape[1]);
-        dalloc->deallocate(dt, tmp[nl] * cpx_sz);
+        dalloc_<FP>()->deallocate(dt, tmp[nl] * cpx_sz);
     }
     friend ostream &operator<<(ostream &os, const SparseMatrixGroup &c) {
         os << "DATA = [ ";

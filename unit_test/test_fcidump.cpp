@@ -8,9 +8,10 @@ class TestFCIDUMP : public ::testing::Test {
   protected:
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
+    typedef double FP;
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             8);
@@ -18,9 +19,9 @@ class TestFCIDUMP : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 

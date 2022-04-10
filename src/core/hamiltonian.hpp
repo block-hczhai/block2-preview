@@ -189,7 +189,7 @@ template <typename S, typename FL> struct Hamiltonian {
                     break;
                 case OpTypes::Elem: {
                     shared_ptr<SparseMatrix<S, FL>> &mat = ops.at(abs_value(x));
-                    if (mat->factor == 0.0 || mat->info->n == 0 ||
+                    if (mat->factor == (FL)0.0 || mat->info->n == 0 ||
                         mat->norm() < TINY)
                         x = zero;
                 } break;
@@ -206,7 +206,7 @@ template <typename S, typename FL> struct Hamiltonian {
                                                ->strings[i]
                                                ->get_op());
                         shared_ptr<SparseMatrix<S, FL>> &mat = ops.at(xx);
-                        if (!(mat->factor == 0.0 || mat->info->n == 0 ||
+                        if (!(mat->factor == (FL)0.0 || mat->info->n == 0 ||
                               mat->norm() < TINY)) {
                             if (i != kk)
                                 dynamic_pointer_cast<OpSum<S, FL>>(x)
@@ -243,7 +243,7 @@ template <typename S, typename FL> struct Hamiltonian {
                 smat->indices.resize(j);
             }
         for (auto it = ops.cbegin(); it != ops.cend();) {
-            if (it->second->factor == 0.0 || it->second->info->n == 0)
+            if (it->second->factor == (FL)0.0 || it->second->info->n == 0)
                 ops.erase(it++);
             else
                 it++;

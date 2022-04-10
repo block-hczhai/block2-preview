@@ -127,6 +127,38 @@ inline void cblas_xgemm_batch<complex<double>>(
         group_size);
 }
 
+template <>
+inline void cblas_xgemm_batch<float>(
+    const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
+    const CBLAS_TRANSPOSE *TransB_Array, const MKL_INT *M_Array,
+    const MKL_INT *N_Array, const MKL_INT *K_Array, const float *alpha_Array,
+    const float **A_Array, const MKL_INT *lda_Array, const float **B_Array,
+    const MKL_INT *ldb_Array, const float *beta_Array, float **C_Array,
+    const MKL_INT *ldc_Array, const MKL_INT group_count,
+    const MKL_INT *group_size) {
+    return cblas_sgemm_batch(Layout, TransA_Array, TransB_Array, M_Array,
+                             N_Array, K_Array, alpha_Array, A_Array, lda_Array,
+                             B_Array, ldb_Array, beta_Array, C_Array, ldc_Array,
+                             group_count, group_size);
+}
+
+template <>
+inline void cblas_xgemm_batch<complex<float>>(
+    const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
+    const CBLAS_TRANSPOSE *TransB_Array, const MKL_INT *M_Array,
+    const MKL_INT *N_Array, const MKL_INT *K_Array,
+    const complex<float> *alpha_Array, const complex<float> **A_Array,
+    const MKL_INT *lda_Array, const complex<float> **B_Array,
+    const MKL_INT *ldb_Array, const complex<float> *beta_Array,
+    complex<float> **C_Array, const MKL_INT *ldc_Array,
+    const MKL_INT group_count, const MKL_INT *group_size) {
+    return cblas_cgemm_batch(
+        Layout, TransA_Array, TransB_Array, M_Array, N_Array, K_Array,
+        alpha_Array, (const void **)A_Array, lda_Array, (const void **)B_Array,
+        ldb_Array, beta_Array, (void **)C_Array, ldc_Array, group_count,
+        group_size);
+}
+
 #endif
 
 template <typename FL>
@@ -363,7 +395,8 @@ template <typename FL> struct BatchGEMMRef {
 template <typename FL, typename = void> struct AdvancedGEMM;
 
 template <typename FL>
-struct AdvancedGEMM<FL, typename enable_if<is_same<FL, double>::value>::type> {
+struct AdvancedGEMM<FL,
+                    typename enable_if<is_floating_point<FL>::value>::type> {
     // [c] = [a] x [b]
     static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
                          const GMatrix<FL> &a, uint8_t conja,
@@ -522,8 +555,7 @@ struct AdvancedGEMM<FL, typename enable_if<is_same<FL, double>::value>::type> {
 };
 
 template <typename FL>
-struct AdvancedGEMM<
-    FL, typename enable_if<is_same<FL, complex<double>>::value>::type> {
+struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
     // [c] = [a] x [b]
     static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
                          const GMatrix<FL> &a, uint8_t conja,
@@ -1422,7 +1454,7 @@ template <typename FL> struct BatchGEMMSeq {
         size_t cshift = c.data - (FL *)0;
         size_t vshift = v.data - (FL *)0;
         if (mode == SeqTypes::Auto) {
-            assert(scale == 1.0);
+            assert(scale == (FP)1.0);
             if (batch[0]->acidxs.size() == 0)
                 for (size_t i = 0; i < batch[0]->a.size(); i++)
                     batch[0]->a[i] += cshift;

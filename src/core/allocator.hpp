@@ -134,7 +134,11 @@ template <typename T> struct StackAllocator : Allocator<T> {
         if (used + n >= size) {
             cout << "exceeding allowed memory"
                  << " (size=" << size << ", trying to allocate " << n << ") "
-                 << (sizeof(T) == 4 ? " (uint32)" : " (double)") << endl;
+                 << (is_same<T, uint32_t>::value
+                         ? " (uint32)"
+                         : (is_same<T, float>::value ? " (float)"
+                                                     : " (double)"))
+                 << endl;
             print_trace();
             return 0;
         } else
@@ -266,21 +270,18 @@ inline shared_ptr<StackAllocator<uint32_t>> &ialloc_() {
 }
 
 /** Implementation of the ``dalloc`` global variable. */
-inline shared_ptr<StackAllocator<double>> &dalloc_() {
-    static shared_ptr<StackAllocator<double>> dalloc;
+template <typename FL> inline shared_ptr<StackAllocator<FL>> &dalloc_() {
+    static shared_ptr<StackAllocator<FL>> dalloc;
     return dalloc;
 }
 
 /** Global variable for the integer stack memory allocator. */
 #define ialloc (ialloc_())
 
-/** Global variable for the double stack memory allocator. */
-#define dalloc (dalloc_())
-
 /** DataFrame includes several (n_frames = 2) frames.
  * Each frame includes one integer stack memory and one double stack memory.
  * The two frames are used alternatively to avoid data copying. */
-struct DataFrame {
+template <typename FL> struct DataFrame {
     string save_dir; //!< Scartch folder for renormalized operators.
     string
         mps_dir; //!< Scartch folder for MPS (default is the same as save_dir).
@@ -329,7 +330,7 @@ struct DataFrame {
         _t2;                   //!< Auxiliary temporary timer.
     vector<shared_ptr<StackAllocator<uint32_t>>>
         iallocs; //!< Integer stacks allocators.
-    vector<shared_ptr<StackAllocator<double>>>
+    vector<shared_ptr<StackAllocator<FL>>>
         dallocs; //!< Double stacks allocators.
     mutable vector<size_t>
         peak_used_memory; //!< Peak used memory by stacks (in Bytes). Even
@@ -364,7 +365,7 @@ struct DataFrame {
         false; //!< Whether MPO should be build in minimal memory mode by saving
                //!< intermediates to disk. In this mode, MPO should have
                //!< different tags.
-    shared_ptr<FPCodec<double>> fp_codec =
+    shared_ptr<FPCodec<FL>> fp_codec =
         nullptr; //!< Floating-point compression codec. If nullptr,
                  //!< floating-point compression will not be used.
     // isize and dsize are in Bytes
@@ -389,22 +390,22 @@ struct DataFrame {
         save_buffers.resize(n_frames);
         save_futures.resize(n_frames);
         this->isize = isize >> 2;
-        this->dsize = dsize >> 3;
+        this->dsize = dsize / sizeof(FL);
         size_t imain = (size_t)(imain_ratio * this->isize);
         size_t dmain = (size_t)(dmain_ratio * this->dsize);
         size_t ir = (this->isize - imain) / (n_frames - 1);
         size_t dr = (this->dsize - dmain) / (n_frames - 1);
-        double *dptr = new double[this->dsize];
+        FL *dptr = new FL[this->dsize];
         uint32_t *iptr = new uint32_t[this->isize];
         iallocs.push_back(make_shared<StackAllocator<uint32_t>>(iptr, imain));
-        dallocs.push_back(make_shared<StackAllocator<double>>(dptr, dmain));
+        dallocs.push_back(make_shared<StackAllocator<FL>>(dptr, dmain));
         iptr += imain;
         dptr += dmain;
         for (int i = 0; i < n_frames - 1; i++) {
             iallocs.push_back(
                 make_shared<StackAllocator<uint32_t>>(iptr + i * ir, ir));
             dallocs.push_back(
-                make_shared<StackAllocator<double>>(dptr + i * dr, dr));
+                make_shared<StackAllocator<FL>>(dptr + i * dr, dr));
         }
         activate(0);
         // may have some mpi problems
@@ -422,7 +423,7 @@ struct DataFrame {
      */
     void activate(int i) {
         ialloc_() = iallocs[i_frame = i];
-        dalloc_() = dallocs[i_frame];
+        dalloc_<FL>() = dallocs[i_frame];
     }
     /** Reset one data frame, marking all stack memory as unused.
      * @param i The index of the data frame to be reset.
@@ -467,8 +468,7 @@ struct DataFrame {
         if (fp_codec != nullptr)
             fp_codec->read_array(ifs, dallocs[i]->data, dallocs[i]->used);
         else
-            ifs.read((char *)dallocs[i]->data,
-                     sizeof(double) * dallocs[i]->used);
+            ifs.read((char *)dallocs[i]->data, sizeof(FL) * dallocs[i]->used);
         fpread += _t2.get_time();
     }
     /** Load one data frame from disk.
@@ -531,8 +531,7 @@ struct DataFrame {
         if (fp_codec != nullptr)
             fp_codec->write_array(ofs, dallocs[i]->data, dallocs[i]->used);
         else
-            ofs.write((char *)dallocs[i]->data,
-                      sizeof(double) * dallocs[i]->used);
+            ofs.write((char *)dallocs[i]->data, sizeof(FL) * dallocs[i]->used);
         fpwrite += _t2.get_time();
     }
     /** Save the data in buffer stream into disk.
@@ -618,14 +617,15 @@ struct DataFrame {
     size_t memory_used() const {
         size_t r = 0;
         for (int i = 0; i < n_frames; i++)
-            r += dallocs[i]->used * 8 + iallocs[i]->used * 4;
+            r += dallocs[i]->used * sizeof(FL) + iallocs[i]->used * 4;
         return r;
     }
     /** Update prak used memory statistics. */
     void update_peak_used_memory() const {
         for (int i = 0; i < n_frames; i++) {
             peak_used_memory[i + 0 * n_frames] =
-                max(peak_used_memory[i + 0 * n_frames], dallocs[i]->used * 8);
+                max(peak_used_memory[i + 0 * n_frames],
+                    dallocs[i]->used * sizeof(FL));
             peak_used_memory[i + 1 * n_frames] =
                 max(peak_used_memory[i + 1 * n_frames], iallocs[i]->used * 4);
         }
@@ -652,25 +652,24 @@ struct DataFrame {
                << df.fp_codec->chunk_size << endl;
         os << " IMain = " << Parsing::to_size_string(df.iallocs[0]->used * 4)
            << " / " << Parsing::to_size_string(df.iallocs[0]->size * 4);
-        os << " DMain = " << Parsing::to_size_string(df.dallocs[0]->used * 8)
-           << " / " << Parsing::to_size_string(df.dallocs[0]->size * 8);
+        os << " DMain = "
+           << Parsing::to_size_string(df.dallocs[0]->used * sizeof(FL)) << " / "
+           << Parsing::to_size_string(df.dallocs[0]->size * sizeof(FL));
         os << " ISeco = " << Parsing::to_size_string(df.iallocs[1]->used * 4)
            << " / " << Parsing::to_size_string(df.iallocs[1]->size * 4);
-        os << " DSeco = " << Parsing::to_size_string(df.dallocs[1]->used * 8)
-           << " / " << Parsing::to_size_string(df.dallocs[1]->size * 8);
+        os << " DSeco = "
+           << Parsing::to_size_string(df.dallocs[1]->used * sizeof(FL)) << " / "
+           << Parsing::to_size_string(df.dallocs[1]->size * sizeof(FL));
         return os;
     }
 };
 
-/** Implementation of the ``frame`` global variable. */
-inline shared_ptr<DataFrame> &frame_() {
-    static shared_ptr<DataFrame> frame;
-    return frame;
-}
-
 /** Global variable for accessing global stack memory and file I/O in scratch
  * space. */
-#define frame (frame_())
+template <typename FL> inline shared_ptr<DataFrame<FL>> &frame_() {
+    static shared_ptr<DataFrame<FL>> frame;
+    return frame;
+}
 
 /** Function pointer for signal checking. */
 inline auto check_signal_() -> void (*&)() {

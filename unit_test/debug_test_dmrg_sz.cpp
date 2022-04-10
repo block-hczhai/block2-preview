@@ -5,30 +5,48 @@
 
 using namespace block2;
 
-class TestDMRG : public ::testing::Test {
+template <typename FL> class TestDMRG : public ::testing::Test {
   protected:
     size_t isize = 1L << 30;
     size_t dsize = 1L << 34;
+    typedef typename GMatrix<FL>::FP FP;
+
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
-            16, 16);
-        threading_()->seq_type = SeqTypes::Simple;
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 28,
+            28, 1);
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
-TEST_F(TestDMRG, Test) {
-    shared_ptr<FCIDUMP> fcidump = make_shared<FCIDUMP>();
+#ifdef _USE_SINGLE_PREC
+typedef ::testing::Types<float> TestFL;
+#elif _USE_COMPLEX
+typedef ::testing::Types<complex<double>> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestDMRG, TestFL);
+
+TYPED_TEST(TestDMRG, Test) {
+    using FL = TypeParam;
+    using FP = typename TestFixture::FP;
+    using S = SZ;
+
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "../my_test/cuprate/new2/CPR.CCSD.OCC";
@@ -42,29 +60,34 @@ TEST_F(TestDMRG, Test) {
     t.get_time();
     cout << "INT start" << endl;
     fcidump->read(filename);
+    cout << "original const = " << fcidump->e() << endl;
+    fcidump->rescale();
+    cout << "rescaled const = " << fcidump->e() << endl;
     cout << "INT end .. T = " << t.get_time() << endl;
-    vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
+    vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_d2h);
-    SZ vacuum(0);
-    SZ target(fcidump->n_elec(), fcidump->twos(),
-              PointGroup::swap_d2h(fcidump->isym()));
+    S vacuum(0);
+    S target(fcidump->n_elec(), fcidump->twos(),
+             PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<SZ>> hamil = make_shared<HamiltonianQC<SZ>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<S, FL>> hamil =
+        make_shared<HamiltonianQC<S, FL>>(vacuum, norb, orbsym, fcidump);
 
     // abort();
 
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<SZ>> mpo =
-        make_shared<MPOQC<SZ>>(hamil, QCTypes::Conventional);
+    shared_ptr<MPO<S, FL>> mpo =
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
-    mpo = make_shared<SimplifiedMPO<SZ>>(mpo, make_shared<RuleQC<SZ>>(), true,
-                                         true);
+    mpo = make_shared<SimplifiedMPO<S, FL>>(
+        mpo, make_shared<RuleQC<S, FL>>(), true, true,
+        OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
@@ -72,8 +95,8 @@ TEST_F(TestDMRG, Test) {
     ubond_t bond_dim = 250;
 
     // MPSInfo
-    shared_ptr<MPSInfo<SZ>> mps_info =
-        make_shared<MPSInfo<SZ>>(norb, vacuum, target, hamil->basis);
+    shared_ptr<MPSInfo<S>> mps_info =
+        make_shared<MPSInfo<S>>(norb, vacuum, target, hamil->basis);
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
     else {
@@ -115,7 +138,7 @@ TEST_F(TestDMRG, Test) {
     // cout << "Random = " << x << endl;
     t.get_time();
     cout << "MPO start" << endl;
-    shared_ptr<MPS<SZ>> mps = make_shared<MPS<SZ>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> mps = make_shared<MPS<S, FL>>(norb, 0, 2);
     mps->initialize(mps_info);
     mps->random_canonicalize();
     cout << "MPS end .. T = " << t.get_time() << endl;
@@ -131,51 +154,56 @@ TEST_F(TestDMRG, Test) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    frame_()->activate(0);
+    frame_<FP>()->activate(0);
     cout << "persistent memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
-    frame_()->activate(1);
+         << " D = " << dalloc_<FP>()->used << endl;
+    frame_<FP>()->activate(1);
     cout << "exclusive  memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
+         << " D = " << dalloc_<FP>()->used << endl;
     // abort();
     // ME
-    shared_ptr<MovingEnvironment<SZ>> me =
-        make_shared<MovingEnvironment<SZ>>(mpo, mps, mps, "DMRG");
+    shared_ptr<MovingEnvironment<S, FL, FL>> me =
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     t.get_time();
     cout << "INIT start" << endl;
-    me->init_environments(true);
+    me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
-    // cout << *frame << endl;
-    // frame->activate(0);
+    // cout << *frame_<FP>() << endl;
+    // frame_<FP>()->activate(0);
     // abort();
 
     // DMRG
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<double> noises = {1E-5, 1E-5, 1E-6, 1E-6, 1E-6, 1E-6, 1E-7, 1E-7,
-                             1E-7, 1E-7, 1E-8, 1E-8, 1E-8, 1E-8, 1E-8, 0.0};
-    vector<double> davthrs = {2.5E-5, 2.5E-5, 2.5E-5, 2.5E-5, 1E-6, 1E-6,
-                              1E-6,   1E-8,   1E-8,   1E-8,   1E-8};
+    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5, 1E-5,
+                         1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 0.0};
+    vector<FP> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6, 1E-6, 1E-6,
+                          1E-6, 1E-6, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
     // vector<ubond_t> bdims = {bond_dim};
     // vector<double> noises = {1E-6};
-    shared_ptr<DMRG<SZ>> dmrg = make_shared<DMRG<SZ>>(me, bdims, noises);
+    shared_ptr<DMRG<S, FL, FL>> dmrg =
+        make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     dmrg->davidson_conv_thrds = davthrs;
+    dmrg->me->cached_contraction = true;
+    dmrg->davidson_soft_max_iter = 200;
+    dmrg->cutoff = 1E-20;
     dmrg->iprint = 2;
     dmrg->decomp_type = DecompositionTypes::SVD;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    dmrg->solve(30, true);
+    dmrg->solve(25, true);
 
-    shared_ptr<MPO<SZ>> pmpo = make_shared<PDM1MPOQC<SZ>>(hamil);
-    pmpo =
-        make_shared<SimplifiedMPO<SZ>>(pmpo, make_shared<RuleQC<SZ>>(), true);
-    shared_ptr<MovingEnvironment<SZ>> pme =
-        make_shared<MovingEnvironment<SZ>>(pmpo, mps, mps, "1PDM");
-    pme->init_environments(true);
-    shared_ptr<Expect<SZ>> expect = make_shared<Expect<SZ>>(pme, 750, 750);
+    shared_ptr<MPO<S, FL>> pmpo = make_shared<PDM1MPOQC<S, FL>>(hamil);
+    pmpo = make_shared<SimplifiedMPO<S, FL>>(pmpo, make_shared<RuleQC<S, FL>>(),
+                                             true);
+    shared_ptr<MovingEnvironment<S, FL, FL>> pme =
+        make_shared<MovingEnvironment<S, FL, FL>>(pmpo, mps, mps, "1PDM");
+    pme->init_environments(false);
+    shared_ptr<Expect<S, FL, FL, FL>> expect =
+        make_shared<Expect<S, FL, FL, FL>>(pme, 750, 750);
     expect->solve(true, mps->center == 0);
-    MatrixRef dm = expect->get_1pdm_spatial();
+    GMatrix<FL> dm = expect->get_1pdm_spatial();
     dm.deallocate();
 
     // deallocate persistent stack memory

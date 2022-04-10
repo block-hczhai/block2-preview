@@ -155,7 +155,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
-            iscale(bs[i], 1.0 / norm(bs[i]));
+            iscale(bs[i], (FP)1.0 / norm(bs[i]));
         }
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < nor; j++)
@@ -168,7 +168,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                      << " for Davidson unitary to all given states!" << endl;
                 assert(false);
             }
-            iscale(bs[i], 1.0 / normx);
+            iscale(bs[i], (FP)1.0 / normx);
         }
         vector<FP> eigvals(k);
         vector<int> eigval_idxs(deflation_max_size);
@@ -355,7 +355,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         if (abs(or_normsqs[j]) > 1E-14)
                             iadd(q, ors[j],
                                  -complex_dot(ors[j], q) / or_normsqs[j]);
-                    iscale(q, 1.0 / norm(q));
+                    iscale(q, (FP)1.0 / norm(q));
                     copy(bs[m], q);
                 }
                 m++;
@@ -399,6 +399,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         int deflation_max_size = 50,
         const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
         const vector<FP> &proj_weights = vector<FP>()) {
+        const FP eps = sizeof(FP) >= 8 ? 1E-14 : 1E-7;
         if (!(davidson_type & DavidsonTypes::Harmonic))
             return davidson(op, aa, vs, shift, davidson_type, ndav, iprint,
                             pcomm, conv_thrd, max_iter, soft_max_iter,
@@ -431,7 +432,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         vector<FL> or_normsqs(nor);
         for (int i = 0; i < nor; i++) {
             for (int j = 0; j < i; j++)
-                if (abs(or_normsqs[j]) > 1E-14)
+                if (abs(or_normsqs[j]) > eps)
                     iadd(ors[i], ors[j],
                          -complex_dot(ors[j], ors[i]) / or_normsqs[j]);
             or_normsqs[i] = complex_dot(ors[i], ors[i]);
@@ -444,16 +445,16 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             copy(bs[i], vs[i]);
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < nor; j++)
-                if (abs(or_normsqs[j]) > 1E-14)
+                if (abs(or_normsqs[j]) > eps)
                     iadd(bs[i], ors[j],
                          -complex_dot(ors[j], bs[i]) / or_normsqs[j]);
             FL normsq = complex_dot(bs[i], bs[i]);
-            if (abs(normsq) < 1E-14) {
+            if (abs(normsq) < eps) {
                 cout << "Cannot generate initial guess " << i
                      << " for Davidson orthogonal to all given states!" << endl;
                 assert(false);
             }
-            iscale(bs[i], 1.0 / sqrt(normsq));
+            iscale(bs[i], (FP)1.0 / sqrt(normsq));
         }
         int num_matmul = 0;
         for (int i = 0; i < k; i++) {
@@ -471,8 +472,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 iadd(bs[i], bs[j], -complex_dot(sigmas[j], sigmas[i]));
                 iadd(sigmas[i], sigmas[j], -complex_dot(sigmas[j], sigmas[i]));
             }
-            iscale(bs[i], 1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
-            iscale(sigmas[i], 1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
+            iscale(bs[i], (FP)1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
+            iscale(sigmas[i],
+                   (FP)1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
         }
         vector<FP> eigvals(k);
         vector<int> eigval_idxs(deflation_max_size);
@@ -568,7 +570,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 copy(q, sigmas[ick]);
                 iadd(q, bs[ick], -ld(ick, ick));
                 for (int j = 0; j < nor; j++)
-                    if (abs(or_normsqs[j]) > 1E-14)
+                    if (abs(or_normsqs[j]) > eps)
                         iadd(q, ors[j],
                              -complex_dot(ors[j], q) / or_normsqs[j]);
                 qq = complex_dot(q, q);
@@ -645,10 +647,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                             iadd(sigmas[i], sigmas[j],
                                  -complex_dot(sigmas[j], sigmas[i]));
                         }
-                        iscale(bs[i],
-                               1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
-                        iscale(sigmas[i],
-                               1.0 / sqrt(complex_dot(sigmas[i], sigmas[i])));
+                        iscale(bs[i], (FP)1.0 / sqrt(complex_dot(sigmas[i],
+                                                                 sigmas[i])));
+                        iscale(sigmas[i], (FP)1.0 / sqrt(complex_dot(
+                                                        sigmas[i], sigmas[i])));
                     }
                 }
                 m++;
@@ -1068,7 +1070,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         r.clear();
         p.clear();
         op(x, r);
-        if (consta != 0.0)
+        if (consta != (FP)0.0)
             iadd(r, x, consta);
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iscale(r, -1);
@@ -1107,7 +1109,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             xiter++;
             hp.clear();
             op(p, hp);
-            if (consta != 0.0)
+            if (consta != (FP)0.0)
                 iadd(hp, p, consta);
 
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
@@ -1131,7 +1133,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     FL gamma = beta / old_beta;
                     old_beta = beta;
-                    iadd(p, z, 1.0 / gamma);
+                    iadd(p, z, (FP)1.0 / gamma);
                     iscale(p, gamma);
                 }
                 if (pcomm != nullptr)
@@ -1181,11 +1183,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 iadd(ws[i], ws[j], -complex_dot(ws[j], ws[i]));
             FL w_normsq = sqrt(complex_dot(ws[i], ws[i]));
             assert(abs(w_normsq) > 1E-14);
-            iscale(ws[i], 1.0 / w_normsq);
+            iscale(ws[i], (FP)1.0 / w_normsq);
             aws[i].data = paws.data + ws[i].size() * i;
             aws[i].clear();
             op(ws[i], aws[i]);
-            if (consta != 0.0)
+            if (consta != (FP)0.0)
                 iadd(aws[i], ws[i], consta);
         }
         GMatrix<FL> winv(nullptr, nw, nw);
@@ -1196,7 +1198,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         p.clear();
         hp.clear();
         op(x, r);
-        if (consta != 0.0)
+        if (consta != (FP)0.0)
             iadd(r, x, consta);
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iscale(r, -1);
@@ -1219,7 +1221,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             cg_precondition(p, r, aa);
             if (nw != 0) {
                 op(p, hp);
-                if (consta != 0.0)
+                if (consta != (FP)0.0)
                     iadd(hp, p, consta);
                 mu.clear();
                 for (int i = 0; i < nw; i++) {
@@ -1267,7 +1269,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (nw == 0) {
                 hp.clear();
                 op(p, hp);
-                if (consta != 0.0)
+                if (consta != (FP)0.0)
                     iadd(hp, p, consta);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
@@ -1296,7 +1298,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     if (nw != 0) {
                         az.clear();
                         op(z, az);
-                        if (consta != 0.0)
+                        if (consta != (FP)0.0)
                             iadd(az, z, consta);
                         iscale(hp, gamma);
                         iadd(hp, az, 1.0);
@@ -1344,7 +1346,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         r.allocate();
         r.clear();
         op(x, r);
-        if (consta != 0.0)
+        if (consta != (FP)0.0)
             iadd(r, x, consta);
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iadd(r, b, -1);
@@ -1379,7 +1381,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         hr.allocate();
         hr.clear();
         op(r, hr);
-        if (consta != 0.0)
+        if (consta != (FP)0.0)
             iadd(hr, r, consta);
         prev_beta = complex_dot(r, hr);
         int xiter = 0;
@@ -1412,7 +1414,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             else {
                 hr.clear();
                 op(r, hr);
-                if (consta != 0.0)
+                if (consta != (FP)0.0)
                     iadd(hr, r, consta);
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     beta = complex_dot(r, hr);
@@ -1453,7 +1455,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         w.allocate();
         r.clear();
         op(x, r);
-        if (consta != 0.0)
+        if (consta != (FP)0.0)
             iadd(r, x, consta);
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iscale(r, -1);
@@ -1498,7 +1500,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 break;
             int ml = m + max(k - ncs, 0), ivz = icu + ncs + 1, nz = 0;
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                iadd(cvs[ivz % nn], r, 1.0 / beta, false, 0.0);
+                iadd(cvs[ivz % nn], r, (FP)1.0 / beta, false, 0.0);
                 hmat.clear();
                 hys.clear();
                 hys.data[0] = beta;
@@ -1512,7 +1514,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     pcomm->broadcast(z.data, z.size(), pcomm->root);
                 w.clear();
                 op(z, w);
-                if (consta != 0.0)
+                if (consta != (FP)0.0)
                     iadd(w, z, consta);
                 nz = j + 1;
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
@@ -1525,8 +1527,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         iadd(w, cvs[(ivz + i) % nn], -hmat(i, j));
                     }
                     hmat(j + 1, j) = norm(w);
-                    iadd(cvs[(ivz + nz) % nn], w, 1.0 / hmat(j + 1, j), false,
-                         0.0);
+                    iadd(cvs[(ivz + nz) % nn], w, (FP)1.0 / hmat(j + 1, j),
+                         false, 0.0);
                     rr = least_squares(GMatrix<FL>(hmat.data, j + 2, hmat.n),
                                        GMatrix<FL>(hys.data, j + 2, 1),
                                        GMatrix<FL>(ys.data, j + 1, 1));
@@ -1553,8 +1555,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     iadd(cvs[(icu + ncs) % nn], cvs[(ivz + i) % nn], hys(i, 0),
                          false, !!i);
                 FP alpha = norm(cvs[(icu + ncs) % nn]);
-                iscale(cvs[(icu + ncs) % nn], 1.0 / alpha);
-                iscale(uzs[(icu + ncs) % nn], 1.0 / alpha);
+                iscale(cvs[(icu + ncs) % nn], (FP)1.0 / alpha);
+                iscale(uzs[(icu + ncs) % nn], (FP)1.0 / alpha);
                 FL gamma = complex_dot(cvs[(icu + ncs) % nn], r);
                 iadd(r, cvs[(icu + ncs) % nn], -gamma);
                 iadd(x, uzs[(icu + ncs) % nn], gamma);
@@ -2514,14 +2516,14 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         const auto chebCoeffNum = [scale, Hbar, evalShift](int j,
                                                            int polOrder) {
             FC c{0., 0.};
-            const auto pi = acos(-1.);
+            const auto pi = acos((FP)-1.);
             for (int k = 0; k < polOrder; ++k) {
-                auto pix = cos(pi * (k + .5) / polOrder) / scale + Hbar;
-                auto fct =
-                    1. / (pix + evalShift); // Function f(pix) to approximate
-                c += fct * cos(pi * j * (k + .5) / polOrder);
+                auto pix = cos(pi * (k + (FP).5) / polOrder) / scale + Hbar;
+                auto fct = (FP)1. /
+                           (pix + evalShift); // Function f(pix) to approximate
+                c += fct * cos(pi * j * (k + (FP).5) / polOrder);
             }
-            c *= 2. / polOrder;
+            c *= (FP)2. / polOrder;
             return c;
         };
         const auto eta = imag(evalShift);
@@ -2563,16 +2565,16 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         //
         // Series
         //
-        complex<long double> zs = evalShift;
-        constexpr complex<long double> zone{1., 0.};
-        const auto cast = [](const double in) {
-            return static_cast<long double>(in);
+        complex<typename GMatrix<FP>::FL> zs = evalShift;
+        constexpr complex<typename GMatrix<FP>::FL> zone{1., 0.};
+        const auto cast = [](const FP in) {
+            return static_cast<typename GMatrix<FP>::FL>(in);
         };
         //                  vv original formula was for (-A + w); so need to
         //                  change sign here
         zs = cast(scale) * -zs + cast(Ashift);
         const auto zs2 = zs * zs;
-        vector<complex<long double>> xOut(N, {0., 0.});
+        vector<complex<typename GMatrix<FP>::FL>> xOut(N, {0., 0.});
         for (int iCheb = 0; iCheb < nCheby; ++iCheb) {
             if (iCheb == 0) {
                 copy(phi, b); // phi0 = b
@@ -2581,7 +2583,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             } else {
                 AshiftOp(phiMinus, phi); // phin = 2 H phi_n-1 - phi_n-2
                 for (size_t i = 0; i < N; ++i) {
-                    phi(i, 0) = 2. * phi(i, 0) - phiMinusMinus(i, 0);
+                    phi(i, 0) = (FP)2. * phi(i, 0) - phiMinusMinus(i, 0);
                 }
             }
             // add
@@ -2591,8 +2593,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             auto fu = pow(zone + sqrt(zs2) * sqrt(zs2 - zone) / zs2, -iCheb);
             auto prec = fa * sqrt(zone - zone / zs2);
             // alternative vv; less accurate but seems to be more stable
-            // prec = -static_cast<complex<long double>>(chebCoeffNum(iCheb,
-            // nCheby));
+            // prec = -static_cast<complex<typename
+            // GMatrix<FP>::FL>>(chebCoeffNum(iCheb, nCheby));
             if (prec != zone and not isnan(real(fu / prec)) and
                 not isnan(imag(fu / prec))) {
                 prec = damp * fac * fu / prec;

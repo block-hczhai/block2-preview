@@ -60,10 +60,25 @@ template <typename S> struct ParallelCommunicator {
               int owner) {
         assert(size == 1);
     }
+    virtual void broadcast(const shared_ptr<SparseMatrix<S, float>> &mat,
+                           int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    broadcast(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+              int owner) {
+        assert(size == 1);
+    }
     virtual void broadcast(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void broadcast(complex<double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void broadcast(float *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void broadcast(complex<float> *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void ibroadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
@@ -75,10 +90,25 @@ template <typename S> struct ParallelCommunicator {
                int owner) {
         assert(size == 1);
     }
+    virtual void ibroadcast(const shared_ptr<SparseMatrix<S, float>> &mat,
+                            int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    ibroadcast(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+               int owner) {
+        assert(size == 1);
+    }
     virtual void ibroadcast(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void ibroadcast(complex<double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ibroadcast(float *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ibroadcast(complex<float> *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void broadcast(int *data, size_t len, int owner) {
@@ -91,6 +121,10 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_sum(complex<double> *data, size_t len) {
         assert(size == 1);
     }
+    virtual void allreduce_sum(float *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_sum(complex<float> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void
     allreduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat) {
         assert(size == 1);
@@ -99,11 +133,26 @@ template <typename S> struct ParallelCommunicator {
         const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat) {
         assert(size == 1);
     }
+    virtual void
+    allreduce_sum(const shared_ptr<SparseMatrixGroup<S, float>> &mat) {
+        assert(size == 1);
+    }
+    virtual void
+    allreduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<float>>> &mat) {
+        assert(size == 1);
+    }
     virtual void allreduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat) {
         assert(size == 1);
     }
     virtual void
     allreduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat) {
+        assert(size == 1);
+    }
+    virtual void allreduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat) {
+        assert(size == 1);
+    }
+    virtual void
+    allreduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat) {
         assert(size == 1);
     }
     virtual void allreduce_sum(vector<S> &vs) { assert(size == 1); }
@@ -115,19 +164,36 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_min(complex<double> *data, size_t len) {
         assert(size == 1);
     }
+    virtual void allreduce_min(float *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_min(complex<float> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_min(vector<vector<double>> &vs) {
         assert(size == 1);
     }
+    virtual void allreduce_min(vector<vector<float>> &vs) { assert(size == 1); }
     virtual void allreduce_min(vector<double> &vs) { assert(size == 1); }
     virtual void allreduce_min(vector<complex<double>> &vs) {
+        assert(size == 1);
+    }
+    virtual void allreduce_min(vector<float> &vs) { assert(size == 1); }
+    virtual void allreduce_min(vector<complex<float>> &vs) {
         assert(size == 1);
     }
     virtual void allreduce_max(double *data, size_t len) { assert(size == 1); }
     virtual void allreduce_max(complex<double> *data, size_t len) {
         assert(size == 1);
     }
+    virtual void allreduce_max(float *data, size_t len) { assert(size == 1); }
+    virtual void allreduce_max(complex<float> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_max(vector<double> &vs) { assert(size == 1); }
     virtual void allreduce_max(vector<complex<double>> &vs) {
+        assert(size == 1);
+    }
+    virtual void allreduce_max(vector<float> &vs) { assert(size == 1); }
+    virtual void allreduce_max(vector<complex<float>> &vs) {
         assert(size == 1);
     }
     virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat,
@@ -136,6 +202,15 @@ template <typename S> struct ParallelCommunicator {
     }
     virtual void
     reduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat,
+               int owner) {
+        assert(size == 1);
+    }
+    virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S, float>> &mat,
+                            int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    reduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<float>>> &mat,
                int owner) {
         assert(size == 1);
     }
@@ -148,6 +223,15 @@ template <typename S> struct ParallelCommunicator {
                int owner) {
         assert(size == 1);
     }
+    virtual void reduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat,
+                            int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    reduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+               int owner) {
+        assert(size == 1);
+    }
     virtual void ireduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
                              int owner) {
         assert(size == 1);
@@ -157,16 +241,37 @@ template <typename S> struct ParallelCommunicator {
                 int owner) {
         assert(size == 1);
     }
+    virtual void ireduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat,
+                             int owner) {
+        assert(size == 1);
+    }
+    virtual void
+    ireduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+                int owner) {
+        assert(size == 1);
+    }
     virtual void reduce_sum(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void reduce_sum(complex<double> *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void reduce_sum(float *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void reduce_sum(complex<float> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void ireduce_sum(double *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void ireduce_sum(complex<double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ireduce_sum(float *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void ireduce_sum(complex<float> *data, size_t len, int owner) {
         assert(size == 1);
     }
     virtual void reduce_sum(uint64_t *data, size_t len, int owner) {
@@ -205,9 +310,16 @@ template <typename S> struct ParallelRule<S> {
     ParallelRule(const shared_ptr<ParallelCommunicator<S>> &comm,
                  ParallelCommTypes comm_type = ParallelCommTypes::None)
         : comm(comm), comm_type(comm_type) {
-        assert(frame != nullptr);
-        frame->prefix_distri = frame->prefix + Parsing::to_string(comm->rank);
-        frame->prefix_can_write = comm->rank == comm->root;
+        if (frame_<double>() != nullptr) {
+            frame_<double>()->prefix_distri =
+                frame_<double>()->prefix + Parsing::to_string(comm->rank);
+            frame_<double>()->prefix_can_write = comm->rank == comm->root;
+        } else if (frame_<float>() != nullptr) {
+            frame_<float>()->prefix_distri =
+                frame_<float>()->prefix + Parsing::to_string(comm->rank);
+            frame_<float>()->prefix_can_write = comm->rank == comm->root;
+        } else
+            throw runtime_error("DataFrame not defined!");
     }
     virtual ~ParallelRule() = default;
     ParallelTypes get_parallel_type() const {
@@ -290,7 +402,7 @@ struct ParallelRule<S, FL> : ParallelRule<S> {
                 dynamic_pointer_cast<OpElement<S, FL>>(ops[i]);
             shared_ptr<OpElement<S, FL>> op =
                 dynamic_pointer_cast<OpElement<S, FL>>(abs_value(ops[i]));
-            shared_ptr<OpExpr<S>> expr = exprs[i] * (1.0 / cop->factor);
+            shared_ptr<OpExpr<S>> expr = exprs[i] * ((FL)1.0 / cop->factor);
             if (get_parallel_type() & ParallelTypes::NewScheme)
                 assert(expr->get_type() == OpTypes::ExprRef);
             if (expr->get_type() != OpTypes::ExprRef) {

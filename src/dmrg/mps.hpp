@@ -614,7 +614,8 @@ template <typename S> struct MPSInfo {
             }
         check_bond_dimensions();
     }
-    void set_bond_dimension_inact_ext_fci(ubond_t m, int n_inactive, int n_external) {
+    void set_bond_dimension_inact_ext_fci(ubond_t m, int n_inactive,
+                                          int n_external) {
         for (int i = 0; i <= n_inactive; i++)
             left_dims[i] =
                 make_shared<StateInfo<S>>(left_dims_fci[i]->deep_copy());
@@ -813,13 +814,21 @@ template <typename S> struct MPSInfo {
     }
     string get_filename(bool left, int i, const string &dir = "") const {
         stringstream ss;
-        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
-           << ".MPS.INFO." << tag << (left ? ".LEFT." : ".RIGHT.")
-           << Parsing::to_string(i);
+        const string mps_dir = frame_<double>() != nullptr
+                                   ? frame_<double>()->mps_dir
+                                   : frame_<float>()->mps_dir;
+        const string prefix = frame_<double>() != nullptr
+                                  ? frame_<double>()->prefix
+                                  : frame_<float>()->prefix;
+        ss << (dir == "" ? mps_dir : dir) << "/" << prefix << ".MPS.INFO."
+           << tag << (left ? ".LEFT." : ".RIGHT.") << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MPSInfo<S>> &info) const {
-        if (frame->prefix_can_write)
+        const bool prefix_can_write = frame_<double>() != nullptr
+                                          ? frame_<double>()->prefix_can_write
+                                          : frame_<float>()->prefix_can_write;
+        if (prefix_can_write)
             for (int i = 0; i < n_sites + 1; i++) {
                 Parsing::link_file(get_filename(true, i),
                                    info->get_filename(true, i));
@@ -841,7 +850,10 @@ template <typename S> struct MPSInfo {
         return info;
     }
     void copy_mutable(const string &dir) const {
-        if (frame->prefix_can_write) {
+        const bool prefix_can_write = frame_<double>() != nullptr
+                                          ? frame_<double>()->prefix_can_write
+                                          : frame_<float>()->prefix_can_write;
+        if (prefix_can_write) {
             for (int i = 0; i < n_sites + 1; i++) {
                 Parsing::copy_file(get_filename(true, i),
                                    get_filename(true, i, dir));
@@ -852,7 +864,10 @@ template <typename S> struct MPSInfo {
         }
     }
     void save_mutable() const {
-        if (frame->prefix_can_write)
+        const bool prefix_can_write = frame_<double>() != nullptr
+                                          ? frame_<double>()->prefix_can_write
+                                          : frame_<float>()->prefix_can_write;
+        if (prefix_can_write)
             for (int i = 0; i < n_sites + 1; i++) {
                 left_dims[i]->save_data(get_filename(true, i));
                 right_dims[i]->save_data(get_filename(false, i));
@@ -877,11 +892,17 @@ template <typename S> struct MPSInfo {
             left_dims[i]->deallocate();
     }
     void save_left_dims(int i) const {
-        if (frame->prefix_can_write)
+        const bool prefix_can_write = frame_<double>() != nullptr
+                                          ? frame_<double>()->prefix_can_write
+                                          : frame_<float>()->prefix_can_write;
+        if (prefix_can_write)
             left_dims[i]->save_data(get_filename(true, i));
     }
     void save_right_dims(int i) const {
-        if (frame->prefix_can_write)
+        const bool prefix_can_write = frame_<double>() != nullptr
+                                          ? frame_<double>()->prefix_can_write
+                                          : frame_<float>()->prefix_can_write;
+        if (prefix_can_write)
             right_dims[i]->save_data(get_filename(false, i));
     }
     void load_left_dims(int i) {
@@ -2145,12 +2166,13 @@ template <typename S, typename FL> struct MPS {
     }
     virtual string get_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
-           << ".MPS." << info->tag << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
+           << frame_<FP>()->prefix << ".MPS." << info->tag << "."
+           << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MPS> &mps) const {
-        if (frame->prefix_can_write)
+        if (frame_<FP>()->prefix_can_write)
             for (int i = 0; i < n_sites; i++)
                 Parsing::link_file(get_filename(i), mps->get_filename(i));
     }
@@ -2181,7 +2203,7 @@ template <typename S, typename FL> struct MPS {
         return xmps;
     }
     virtual void copy_data(const string &dir) const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     Parsing::copy_file(get_filename(i), get_filename(i, dir));
@@ -2225,7 +2247,7 @@ template <typename S, typename FL> struct MPS {
         ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
     }
     virtual void save_data() const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             string filename = get_filename(-1);
             if (Parsing::link_exists(filename))
                 Parsing::remove_file(filename);
@@ -2274,13 +2296,13 @@ template <typename S, typename FL> struct MPS {
             }
     }
     virtual void save_mutable() const {
-        if (frame->prefix_can_write)
+        if (frame_<FP>()->prefix_can_write)
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     tensors[i]->save_data(get_filename(i), true);
     }
     virtual void save_tensor(int i) const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             assert(tensors[i] != nullptr);
             tensors[i]->save_data(get_filename(i), true);
         }

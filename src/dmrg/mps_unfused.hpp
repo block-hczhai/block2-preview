@@ -147,7 +147,7 @@ struct TransSparseTensor<S1, S2, FL, typename S1::is_su2_t,
                             for (MKL_INT i = 0; i < r.second->shape[0]; i++)
                                 for (MKL_INT j = 0; j < r.second->shape[2]; j++)
                                     (*x)({i + lsh, 0, j + rsh}) =
-                                        factor * (*r.second)({i, 0, j});
+                                        (FL)factor * (*r.second)({i, 0, j});
                         }
             }
         }

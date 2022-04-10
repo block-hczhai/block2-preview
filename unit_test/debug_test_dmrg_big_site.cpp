@@ -1,7 +1,7 @@
 
+#include "block2_big_site.hpp"
 #include "block2_core.hpp"
 #include "block2_dmrg.hpp"
-#include "block2_big_site.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;
@@ -14,17 +14,17 @@ class TestDMRG : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16, 16,
-            1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
+            16, 1);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
@@ -59,8 +59,8 @@ TEST_F(TestDMRG, Test) {
     shared_ptr<BigSite<SZ>> big_left = make_shared<SCIFockBigSite<SZ>>(
         norb, norb_thaw, false, fcidump, orbsym, n_alpha, n_beta,
         n_alpha + n_beta, true);
-    big_left = make_shared<SimplifiedBigSite<SZ>>(big_left,
-                                                   make_shared<RuleQC<SZ>>());
+    big_left =
+        make_shared<SimplifiedBigSite<SZ>>(big_left, make_shared<RuleQC<SZ>>());
 
     // BIG RIGHT
     shared_ptr<BigSite<SZ>> big_right = make_shared<SCIFockBigSite<SZ>>(
@@ -79,8 +79,7 @@ TEST_F(TestDMRG, Test) {
     cout << "ORB RIGHT = " << hamil->n_orbs_right << endl;
     int ntg = threading_()->n_threads_global;
     threading_()->n_threads_global = 1;
-    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(
-        hamil, QCTypes::NC);
+    shared_ptr<MPO<SZ>> mpo = make_shared<MPOQC<SZ>>(hamil, QCTypes::NC);
     threading_()->n_threads_global = ntg;
     cout << "MPO end .. T = " << t.get_time() << endl;
 
@@ -154,12 +153,12 @@ TEST_F(TestDMRG, Test) {
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
 
-    frame_()->activate(0);
+    frame_<double>()->activate(0);
     cout << "persistent memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
-    frame_()->activate(1);
+         << " D = " << dalloc_<FP>()->used << endl;
+    frame_<double>()->activate(1);
     cout << "exclusive  memory used :: I = " << ialloc_()->used
-         << " D = " << dalloc_()->used << endl;
+         << " D = " << dalloc_<FP>()->used << endl;
     // abort();
     // ME
     shared_ptr<MovingEnvironment<SZ>> me =
@@ -169,8 +168,8 @@ TEST_F(TestDMRG, Test) {
     me->init_environments(true);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
-    // cout << *frame << endl;
-    // frame->activate(0);
+    // cout << *frame_<double>() << endl;
+    // frame_<double>()->activate(0);
     // abort();
 
     // DMRG

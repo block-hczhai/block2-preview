@@ -21,3 +21,4 @@
 #include "../pybind_core.hpp"
 
 template void bind_io<>(py::module &m);
+template void bind_fl_io<double>(py::module &m, const string& name);

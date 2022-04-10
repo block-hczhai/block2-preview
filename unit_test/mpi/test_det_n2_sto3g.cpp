@@ -39,13 +39,14 @@ class TestDETN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 22;
     size_t dsize = 1L << 30;
+    typedef double FP;
     template <typename S, typename FL>
     void test_dmrg(const S target,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name);
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             4);
@@ -53,9 +54,9 @@ class TestDETN2STO3G : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
@@ -158,8 +159,8 @@ void TestDETN2STO3G::test_dmrg(const S target,
     me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
-    cout << *frame_() << endl;
-    frame_()->activate(0);
+    cout << *frame_<FP>() << endl;
+    frame_<FP>()->activate(0);
 
     // DMRG
     vector<ubond_t> bdims = {bond_dim};

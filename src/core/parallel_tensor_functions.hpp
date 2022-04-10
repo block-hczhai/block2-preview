@@ -49,7 +49,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         return TensorFunctionsTypes::Parallel;
     }
     void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c,
-                    FL scale = 1.0) override {
+                    FL scale = (FL)1.0) override {
         opf->seq->operator()(b, c, scale);
         rule->comm->allreduce_sum(c.data, c.size());
     }
@@ -76,7 +76,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                     if (c->ops[pc]->alloc != nullptr)
                         return;
                     assert(c->ops[pc]->data == nullptr);
-                    if (frame->use_main_stack)
+                    if (frame_<FP>()->use_main_stack)
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
@@ -92,7 +92,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 size_t i = idxs[ii];
                 shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
                                       pc = abs_value(c->lmat->data[i]);
-                if (!frame->use_main_stack) {
+                if (!frame_<FP>()->use_main_stack) {
                     // skip cached part
                     if (c->ops[pc]->alloc != nullptr)
                         return;
@@ -128,7 +128,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                     if (c->ops[pc]->alloc != nullptr)
                         return;
                     assert(c->ops[pc]->data == nullptr);
-                    if (frame->use_main_stack)
+                    if (frame_<FP>()->use_main_stack)
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     idxs.push_back(i);
                     c->ops[pc]->factor = a->ops[pa]->factor;
@@ -144,7 +144,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 size_t i = idxs[ii];
                 shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
                                       pc = abs_value(c->rmat->data[i]);
-                if (!frame->use_main_stack) {
+                if (!frame_<FP>()->use_main_stack) {
                     // skip cached part
                     if (c->ops[pc]->alloc != nullptr)
                         return;
@@ -442,8 +442,9 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
             shared_ptr<OpExpr<S>> expr =
                 exprs->data[k] *
-                (1.0 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
-                         ->factor);
+                ((FL)1.0 /
+                 dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
+                     ->factor);
             shared_ptr<OpExprRef<S>> lexpr;
             int ip = rule->owner(nop);
             if (expr->get_type() != OpTypes::ExprRef)
@@ -613,7 +614,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
                 if (!delayed(
                         dynamic_pointer_cast<OpElement<S, FL>>(op)->name)) {
-                    if (!frame->use_main_stack) {
+                    if (!frame_<FP>()->use_main_stack) {
                         // skip cached part
                         if (c->ops.at(op)->alloc != nullptr)
                             continue;
@@ -626,7 +627,8 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
                 for (size_t i = 0; i < local_exprs.size(); i++)
-                    if (frame->use_main_stack && local_exprs[i] != nullptr) {
+                    if (frame_<FP>()->use_main_stack &&
+                        local_exprs[i] != nullptr) {
                         assert(mats[i]->data == nullptr);
                         mats[i]->allocate(mats[i]->info);
                     }
@@ -636,7 +638,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                      &local_exprs](const shared_ptr<TensorFunctions<S, FL>> &tf,
                                    size_t i) {
                         if (local_exprs[i] != nullptr) {
-                            if (!frame->use_main_stack)
+                            if (!frame_<FP>()->use_main_stack)
                                 mats[i]->allocate(mats[i]->info);
                             tf->tensor_product(local_exprs[i], a->ops, b->ops,
                                                mats[i]);
@@ -665,7 +667,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
                 if (!delayed(
                         dynamic_pointer_cast<OpElement<S, FL>>(op)->name)) {
-                    if (!frame->use_main_stack) {
+                    if (!frame_<FP>()->use_main_stack) {
                         // skip cached part
                         if (c->ops.at(op)->alloc != nullptr)
                             continue;
@@ -678,7 +680,8 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             auto f = [&a, &b, &mats,
                       this](const vector<shared_ptr<OpExpr<S>>> &local_exprs) {
                 for (size_t i = 0; i < local_exprs.size(); i++)
-                    if (frame->use_main_stack && local_exprs[i] != nullptr) {
+                    if (frame_<FP>()->use_main_stack &&
+                        local_exprs[i] != nullptr) {
                         assert(mats[i]->data == nullptr);
                         mats[i]->allocate(mats[i]->info);
                     }
@@ -688,7 +691,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                      &local_exprs](const shared_ptr<TensorFunctions<S, FL>> &tf,
                                    size_t i) {
                         if (local_exprs[i] != nullptr) {
-                            if (!frame->use_main_stack)
+                            if (!frame_<FP>()->use_main_stack)
                                 mats[i]->allocate(mats[i]->info);
                             tf->tensor_product(local_exprs[i], b->ops, a->ops,
                                                mats[i]);

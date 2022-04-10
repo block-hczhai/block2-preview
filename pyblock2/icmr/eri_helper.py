@@ -50,6 +50,10 @@ def get_h1_eri(chem_eris, pkey):
     kmap = {'A': 'a', 'E': 'v', 'I': 'c'}
     return getattr(chem_eris, 'h' + ''.join([kmap.get(k, k) for k in pkey]))
 
+def get_h1eff_eri(chem_eris, pkey):
+    kmap = {'A': 'a', 'E': 'v', 'I': 'c'}
+    return getattr(chem_eris, 'heff' + ''.join([kmap.get(k, k) for k in pkey]))
+
 class _ChemistsERIs:
     '''(pq|rs)'''
     def __init__(self, mol=None):
@@ -70,6 +74,7 @@ class _ChemistsERIs:
     get_chem = get_chem_eri
     get_phys = get_phys_eri
     get_h1 = get_h1_eri
+    get_h1eff = get_h1eff_eri
 
 def init_eris(mc, mo_coeff=None, mrci=False):
     from pyscf import ao2mo, lib
@@ -91,6 +96,8 @@ def init_eris(mc, mo_coeff=None, mrci=False):
             setattr(eris, k, g2e[tuple(imap[x] for x in k)].copy())
         for k in [a + b for a in 'cav' for b in 'cav']:
             setattr(eris, 'h' + k, h1e[tuple(imap[x] for x in k)].copy())
+        for k in [a + b for a in 'cav' for b in 'cav']:
+            setattr(eris, 'heff' + k, eris.h1eff[tuple(imap[x] for x in k)].copy())
     else:
         # adapted from pyscf.mrpt.nevpt2.py _trans
         eris.known = ['ppaa', 'papa', 'pacv', 'cvcv']

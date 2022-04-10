@@ -46,7 +46,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra",
               "tran_bra_range", "tran_ket_range", "tran_triangular", "use_hybrid_complex",
               "mem_ratio", "min_mpo_mem", "qc_mpo_type", "full_integral", "skip_inact_ext_sites",
-              "proj_weights", "proj_mps_tags"}
+              "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -496,7 +496,10 @@ def get_schedule(dic):
             elif def_m[i] >= start_m:
                 schedule.append([isweep, def_m[i], def_tol[i], def_noise[i]])
                 isweep += def_iter[i]
-        schedule.append([schedule[-1][0] + 8, max_m, sweep_tol / 10, 0.0])
+        if "single_prec" in dic:
+            schedule.append([schedule[-1][0] + 8, max_m, sweep_tol / 2.0, 0.0])
+        else:
+            schedule.append([schedule[-1][0] + 8, max_m, sweep_tol / 10, 0.0])
         last_iter = schedule[-1][0]
         if "twodot" not in dic and "onedot" not in dic and "twodot_to_onedot" not in dic:
             dic["twodot_to_onedot"] = str(last_iter + 2)

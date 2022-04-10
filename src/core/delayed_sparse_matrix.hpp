@@ -104,7 +104,7 @@ struct DelayedSparseMatrix<S, FL, OpExpr<S>> : DelayedSparseMatrix<S, FL> {
         assert(false);
         return nullptr;
     }
-    double norm() const override { return 1.0; }
+    typename GMatrix<FL>::FP norm() const override { return 1.0; }
     shared_ptr<DelayedSparseMatrix<S, FL>> copy() override {
         return make_shared<DelayedSparseMatrix>(*this);
     }

@@ -68,6 +68,24 @@ inline sparse_status_t mkl_sparse_x_create_csr<complex<double>>(
                                    rows_end, col_indx, values);
 }
 
+template <>
+inline sparse_status_t mkl_sparse_x_create_csr<float>(
+    sparse_matrix_t *A, const sparse_index_base_t indexing, const MKL_INT rows,
+    const MKL_INT cols, MKL_INT *rows_start, MKL_INT *rows_end,
+    MKL_INT *col_indx, float *values) {
+    return mkl_sparse_s_create_csr(A, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_create_csr<complex<float>>(
+    sparse_matrix_t *A, const sparse_index_base_t indexing, const MKL_INT rows,
+    const MKL_INT cols, MKL_INT *rows_start, MKL_INT *rows_end,
+    MKL_INT *col_indx, complex<float> *values) {
+    return mkl_sparse_c_create_csr(A, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
 template <typename FL>
 inline sparse_status_t
 mkl_sparse_x_create_csc(sparse_matrix_t *A, const sparse_index_base_t indexing,
@@ -90,6 +108,24 @@ inline sparse_status_t mkl_sparse_x_create_csc<complex<double>>(
     const MKL_INT cols, MKL_INT *rows_start, MKL_INT *rows_end,
     MKL_INT *col_indx, complex<double> *values) {
     return mkl_sparse_z_create_csc(A, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_create_csc<float>(
+    sparse_matrix_t *A, const sparse_index_base_t indexing, const MKL_INT rows,
+    const MKL_INT cols, MKL_INT *rows_start, MKL_INT *rows_end,
+    MKL_INT *col_indx, float *values) {
+    return mkl_sparse_s_create_csc(A, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_create_csc<complex<float>>(
+    sparse_matrix_t *A, const sparse_index_base_t indexing, const MKL_INT rows,
+    const MKL_INT cols, MKL_INT *rows_start, MKL_INT *rows_end,
+    MKL_INT *col_indx, complex<float> *values) {
+    return mkl_sparse_c_create_csc(A, indexing, rows, cols, rows_start,
                                    rows_end, col_indx, values);
 }
 
@@ -118,6 +154,24 @@ inline sparse_status_t mkl_sparse_x_export_csr<complex<double>>(
                                    rows_end, col_indx, values);
 }
 
+template <>
+inline sparse_status_t mkl_sparse_x_export_csr<float>(
+    const sparse_matrix_t source, sparse_index_base_t *indexing, MKL_INT *rows,
+    MKL_INT *cols, MKL_INT **rows_start, MKL_INT **rows_end, MKL_INT **col_indx,
+    float **values) {
+    return mkl_sparse_s_export_csr(source, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_export_csr<complex<float>>(
+    const sparse_matrix_t source, sparse_index_base_t *indexing, MKL_INT *rows,
+    MKL_INT *cols, MKL_INT **rows_start, MKL_INT **rows_end, MKL_INT **col_indx,
+    complex<float> **values) {
+    return mkl_sparse_c_export_csr(source, indexing, rows, cols, rows_start,
+                                   rows_end, col_indx, values);
+}
+
 template <typename FL>
 inline sparse_status_t
 mkl_sparse_x_add(const sparse_operation_t operation, const sparse_matrix_t A,
@@ -136,6 +190,21 @@ inline sparse_status_t mkl_sparse_x_add<complex<double>>(
     const sparse_operation_t operation, const sparse_matrix_t A,
     const complex<double> alpha, const sparse_matrix_t B, sparse_matrix_t *C) {
     return mkl_sparse_z_add(operation, A, alpha, B, C);
+}
+
+template <>
+inline sparse_status_t
+mkl_sparse_x_add<float>(const sparse_operation_t operation,
+                        const sparse_matrix_t A, const float alpha,
+                        const sparse_matrix_t B, sparse_matrix_t *C) {
+    return mkl_sparse_s_add(operation, A, alpha, B, C);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_add<complex<float>>(
+    const sparse_operation_t operation, const sparse_matrix_t A,
+    const complex<float> alpha, const sparse_matrix_t B, sparse_matrix_t *C) {
+    return mkl_sparse_c_add(operation, A, alpha, B, C);
 }
 
 template <typename FL>
@@ -164,6 +233,28 @@ inline sparse_status_t mkl_sparse_x_mm<complex<double>>(
     const MKL_INT columns, const MKL_INT ldx, const complex<double> beta,
     complex<double> *y, const MKL_INT ldy) {
     return mkl_sparse_z_mm(operation, alpha, A, descr, layout, x, columns, ldx,
+                           beta, y, ldy);
+}
+
+template <>
+inline sparse_status_t
+mkl_sparse_x_mm<float>(const sparse_operation_t operation, const float alpha,
+                       const sparse_matrix_t A, const struct matrix_descr descr,
+                       const sparse_layout_t layout, const float *x,
+                       const MKL_INT columns, const MKL_INT ldx,
+                       const float beta, float *y, const MKL_INT ldy) {
+    return mkl_sparse_s_mm(operation, alpha, A, descr, layout, x, columns, ldx,
+                           beta, y, ldy);
+}
+
+template <>
+inline sparse_status_t mkl_sparse_x_mm<complex<float>>(
+    const sparse_operation_t operation, const complex<float> alpha,
+    const sparse_matrix_t A, const struct matrix_descr descr,
+    const sparse_layout_t layout, const complex<float> *x,
+    const MKL_INT columns, const MKL_INT ldx, const complex<float> beta,
+    complex<float> *y, const MKL_INT ldy) {
+    return mkl_sparse_c_mm(operation, alpha, A, descr, layout, x, columns, ldx,
                            beta, y, ldy);
 }
 
@@ -475,7 +566,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             jp = c.rows[i], jr = i == c.m - 1 ? c.nnz : c.rows[i + 1];
             jr = jr - jp;
             tcols.clear(), tdata.clear();
-            if (jr != 0 && cfactor != 0.0) {
+            if (jr != 0 && cfactor != (FL)0.0) {
                 tcols.resize(jr), tdata.resize(jr);
                 memcpy(tcols.data(), c.cols + jp, jr * sizeof(MKL_INT));
                 memcpy(tdata.data(), c.data + jp, jr * sizeof(FL));

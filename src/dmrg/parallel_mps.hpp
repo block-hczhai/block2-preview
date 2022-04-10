@@ -113,7 +113,8 @@ template <typename S, typename FL> struct ParallelMPS : MPS<S, FL> {
     }
     void enable_parallel_writing() const {
         if (rule != nullptr) {
-            frame->prefix_can_write = rule->comm->grank == rule->comm->root;
+            frame_<FP>()->prefix_can_write =
+                rule->comm->grank == rule->comm->root;
             if (rule->comm->grank == rule->comm->root)
                 cout.clear();
             else
@@ -122,7 +123,8 @@ template <typename S, typename FL> struct ParallelMPS : MPS<S, FL> {
     }
     void disable_parallel_writing() const {
         if (rule != nullptr) {
-            frame->prefix_can_write = rule->comm->rank == rule->comm->root;
+            frame_<FP>()->prefix_can_write =
+                rule->comm->rank == rule->comm->root;
             if (rule->comm->rank == rule->comm->root)
                 cout.clear();
             else
@@ -229,7 +231,7 @@ template <typename S, typename FL> struct ParallelMPS : MPS<S, FL> {
         ifs.close();
     }
     void save_data() const override {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             string filename = get_filename(-1);
             if (Parsing::link_exists(filename))
                 Parsing::remove_file(filename);
@@ -250,12 +252,13 @@ template <typename S, typename FL> struct ParallelMPS : MPS<S, FL> {
     }
     string get_conn_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
-           << ".MPS-CONN." << info->tag << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
+           << frame_<FP>()->prefix << ".MPS-CONN." << info->tag << "."
+           << Parsing::to_string(i);
         return ss.str();
     }
     virtual void save_conn_matrix(int i) const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             assert(conn_matrices[i] != nullptr);
             conn_matrices[i]->save_data(get_conn_filename(i), true);
         }

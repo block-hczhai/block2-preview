@@ -143,6 +143,25 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void broadcast(float *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Bcast(data + offset, min(chunk_size, len - offset),
+                                 MPI_FLOAT, owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void broadcast(complex<float> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Bcast((float *)(data + offset),
+                                 min(chunk_size, len - offset) * 2, MPI_FLOAT,
+                                 owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void ibroadcast(double *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -160,6 +179,29 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             MPI_Request req;
             int ierr = MPI_Ibcast((double *)(data + offset),
                                   min(chunk_size, len - offset) * 2, MPI_DOUBLE,
+                                  owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
+    void ibroadcast(float *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ibcast(data + offset, min(chunk_size, len - offset),
+                                  MPI_FLOAT, owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
+    void ibroadcast(complex<float> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ibcast((float *)(data + offset),
+                                  min(chunk_size, len - offset) * 2, MPI_FLOAT,
                                   owner, comm, &req);
             assert(ierr == 0);
             reqs.push_back(req);
@@ -193,6 +235,14 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                    int owner) override {
         broadcast_impl<complex<double>>(mat, owner);
     }
+    void broadcast(const shared_ptr<SparseMatrix<S, float>> &mat,
+                   int owner) override {
+        broadcast_impl<float>(mat, owner);
+    }
+    void broadcast(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+                   int owner) override {
+        broadcast_impl<complex<float>>(mat, owner);
+    }
     void ibroadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
                     int owner) override {
         if (mat->get_type() == SparseMatrixTypes::Normal) {
@@ -201,6 +251,20 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             assert(false);
     }
     void ibroadcast(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                    int owner) override {
+        if (mat->get_type() == SparseMatrixTypes::Normal)
+            ibroadcast(mat->data, mat->total_memory, owner);
+        else
+            assert(false);
+    }
+    void ibroadcast(const shared_ptr<SparseMatrix<S, float>> &mat,
+                    int owner) override {
+        if (mat->get_type() == SparseMatrixTypes::Normal) {
+            ibroadcast(mat->data, mat->total_memory, owner);
+        } else
+            assert(false);
+    }
+    void ibroadcast(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
                     int owner) override {
         if (mat->get_type() == SparseMatrixTypes::Normal)
             ibroadcast(mat->data, mat->total_memory, owner);
@@ -227,6 +291,26 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_sum(float *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_FLOAT,
+                                     MPI_SUM, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void allreduce_sum(complex<float> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (float *)(data + offset),
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_FLOAT, MPI_SUM, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_max(double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -247,10 +331,36 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_max(float *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_FLOAT,
+                                     MPI_MAX, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void allreduce_max(complex<float> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (float *)data + offset,
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_FLOAT, MPI_MAX, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_max(vector<double> &vs) override {
         allreduce_max(vs.data(), vs.size());
     }
     void allreduce_max(vector<complex<double>> &vs) override {
+        allreduce_max(vs.data(), vs.size());
+    }
+    void allreduce_max(vector<float> &vs) override {
+        allreduce_max(vs.data(), vs.size());
+    }
+    void allreduce_max(vector<complex<float>> &vs) override {
         allreduce_max(vs.data(), vs.size());
     }
     void allreduce_min(double *data, size_t len) override {
@@ -273,10 +383,36 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_min(float *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, data + offset,
+                                     min(chunk_size, len - offset), MPI_FLOAT,
+                                     MPI_MIN, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void allreduce_min(complex<float> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (float *)(data + offset),
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_FLOAT, MPI_MIN, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_min(vector<double> &vs) override {
         allreduce_min(vs.data(), vs.size());
     }
     void allreduce_min(vector<complex<double>> &vs) override {
+        allreduce_min(vs.data(), vs.size());
+    }
+    void allreduce_min(vector<float> &vs) override {
+        allreduce_min(vs.data(), vs.size());
+    }
+    void allreduce_min(vector<complex<float>> &vs) override {
         allreduce_min(vs.data(), vs.size());
     }
     void allreduce_sum(
@@ -285,6 +421,14 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void allreduce_sum(
         const shared_ptr<SparseMatrixGroup<S, complex<double>>> &mat) override {
+        allreduce_sum(mat->data, mat->total_memory);
+    }
+    void
+    allreduce_sum(const shared_ptr<SparseMatrixGroup<S, float>> &mat) override {
+        allreduce_sum(mat->data, mat->total_memory);
+    }
+    void allreduce_sum(
+        const shared_ptr<SparseMatrixGroup<S, complex<float>>> &mat) override {
         allreduce_sum(mat->data, mat->total_memory);
     }
     void
@@ -297,6 +441,15 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         assert(mat->get_type() == SparseMatrixTypes::Normal);
         allreduce_sum(mat->data, mat->total_memory);
     }
+    void allreduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat) override {
+        assert(mat->get_type() == SparseMatrixTypes::Normal);
+        allreduce_sum(mat->data, mat->total_memory);
+    }
+    void allreduce_sum(
+        const shared_ptr<SparseMatrix<S, complex<float>>> &mat) override {
+        assert(mat->get_type() == SparseMatrixTypes::Normal);
+        allreduce_sum(mat->data, mat->total_memory);
+    }
     void allreduce_min(vector<vector<double>> &vs) override {
         vector<double> vx;
         for (size_t i = 0; i < vs.size(); i++)
@@ -304,6 +457,16 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         allreduce_min(vx.data(), vx.size());
         for (size_t i = 0, j = 0; i < vs.size(); i++) {
             memcpy(vs[i].data(), vx.data() + j, vs[i].size() * sizeof(double));
+            j += vs[i].size();
+        }
+    }
+    void allreduce_min(vector<vector<float>> &vs) override {
+        vector<float> vx;
+        for (size_t i = 0; i < vs.size(); i++)
+            vx.insert(vx.end(), vs[i].begin(), vs[i].end());
+        allreduce_min(vx.data(), vx.size());
+        for (size_t i = 0, j = 0; i < vs.size(); i++) {
+            memcpy(vs[i].data(), vx.data() + j, vs[i].size() * sizeof(float));
             j += vs[i].size();
         }
     }
@@ -366,6 +529,27 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void reduce_sum(float *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data + offset,
+                                  data + offset, min(chunk_size, len - offset),
+                                  MPI_FLOAT, MPI_SUM, owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void reduce_sum(complex<float> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Reduce(
+                rank == owner ? MPI_IN_PLACE : (float *)(data + offset),
+                (float *)(data + offset), min(chunk_size, len - offset) * 2,
+                MPI_FLOAT, MPI_SUM, owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void ireduce_sum(double *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -391,6 +575,31 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void ireduce_sum(float *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ireduce(rank == owner ? MPI_IN_PLACE : data + offset,
+                                   data + offset, min(chunk_size, len - offset),
+                                   MPI_FLOAT, MPI_SUM, owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
+    void ireduce_sum(complex<float> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            MPI_Request req;
+            int ierr = MPI_Ireduce(
+                rank == owner ? MPI_IN_PLACE : (float *)(data + offset),
+                (float *)(data + offset), min(chunk_size, len - offset) * 2,
+                MPI_FLOAT, MPI_SUM, owner, comm, &req);
+            assert(ierr == 0);
+            reqs.push_back(req);
+        }
+        tcomm += _t.get_time();
+    }
     void reduce_sum(uint64_t *data, size_t len, int owner) override {
         _t.get_time();
         int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
@@ -407,11 +616,27 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
                int owner) override {
         return reduce_sum(mat->data, mat->total_memory, owner);
     }
+    void reduce_sum(const shared_ptr<SparseMatrixGroup<S, float>> &mat,
+                    int owner) override {
+        return reduce_sum(mat->data, mat->total_memory, owner);
+    }
+    void reduce_sum(const shared_ptr<SparseMatrixGroup<S, complex<float>>> &mat,
+                    int owner) override {
+        return reduce_sum(mat->data, mat->total_memory, owner);
+    }
     void ireduce_sum(const shared_ptr<SparseMatrix<S, double>> &mat,
                      int owner) override {
         return ireduce_sum(mat->data, mat->total_memory, owner);
     }
     void ireduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
+                     int owner) override {
+        return ireduce_sum(mat->data, mat->total_memory, owner);
+    }
+    void ireduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat,
+                     int owner) override {
+        return ireduce_sum(mat->data, mat->total_memory, owner);
+    }
+    void ireduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
                      int owner) override {
         return ireduce_sum(mat->data, mat->total_memory, owner);
     }
@@ -430,6 +655,14 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void reduce_sum(const shared_ptr<SparseMatrix<S, complex<double>>> &mat,
                     int owner) override {
         reduce_sum_impl<complex<double>>(mat, owner);
+    }
+    void reduce_sum(const shared_ptr<SparseMatrix<S, float>> &mat,
+                    int owner) override {
+        reduce_sum_impl<float>(mat, owner);
+    }
+    void reduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
+                    int owner) override {
+        reduce_sum_impl<complex<float>>(mat, owner);
     }
     void waitall() override {
         _t.get_time();

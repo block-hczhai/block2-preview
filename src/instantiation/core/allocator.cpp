@@ -20,5 +20,11 @@
 
 #include "../block2_core.hpp"
 
+template struct block2::Allocator<uint32_t>;
 template struct block2::StackAllocator<uint32_t>;
+template struct block2::VectorAllocator<uint32_t>;
+
+template struct block2::Allocator<double>;
 template struct block2::StackAllocator<double>;
+template struct block2::VectorAllocator<double>;
+template struct block2::DataFrame<double>;

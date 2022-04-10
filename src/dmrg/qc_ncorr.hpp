@@ -501,9 +501,9 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++) {
                 if (s == 0)
-                    r(i, j) = 2.0 * (*t)({i, j, 0});
+                    r(i, j) = (FL)2.0 * (*t)({i, j, 0});
                 else
-                    r(i, j) = (*t)({i, j, 0}) - sqrt(3) * (*t)({i, j, 1});
+                    r(i, j) = (*t)({i, j, 0}) - (FL)sqrt(3) * (*t)({i, j, 1});
             }
         return r;
     }

@@ -30,10 +30,10 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
-#include <type_traits>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <type_traits>
 #ifndef _WIN32
 #include <sys/time.h>
 #include <unistd.h>
@@ -71,11 +71,19 @@ template <> inline complex<double> xconj<complex<double>>(complex<double> x) {
     return conj(x);
 }
 
+template <> inline complex<float> xconj<complex<float>>(complex<float> x) {
+    return conj(x);
+}
+
 template <typename FL> inline decltype(abs((FL)0.0)) ximag(FL x) {
     return (decltype(abs((FL)0.0)))0.0;
 }
 
 template <> inline double ximag<complex<double>>(complex<double> x) {
+    return imag(x);
+}
+
+template <> inline float ximag<complex<float>>(complex<float> x) {
     return imag(x);
 }
 
@@ -86,6 +94,20 @@ template <typename FL> inline decltype(abs((FL)0.0)) xreal(FL x) {
 template <> inline double xreal<complex<double>>(complex<double> x) {
     return real(x);
 }
+
+template <> inline float xreal<complex<float>>(complex<float> x) {
+    return real(x);
+}
+
+template <typename FL> struct alt_fl_type;
+
+template <> struct alt_fl_type<float> { typedef double FL; };
+
+template <> struct alt_fl_type<double> { typedef float FL; };
+
+template <> struct alt_fl_type<complex<float>> { typedef complex<double> FL; };
+
+template <> struct alt_fl_type<complex<double>> { typedef complex<float> FL; };
 
 template <typename T> struct is_complex : integral_constant<bool, false> {};
 

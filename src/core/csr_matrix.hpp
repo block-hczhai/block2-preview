@@ -123,7 +123,7 @@ template <typename FL> struct GCSRMatrix {
     void allocate(FL *ptr = nullptr) {
         if (ptr == nullptr) {
             if (alloc == nullptr)
-                alloc = dalloc;
+                alloc = dalloc_<FP>();
             data = (FL *)alloc->allocate(memory_size() * cpx_sz);
         } else
             data = ptr;

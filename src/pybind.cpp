@@ -65,23 +65,43 @@ PYBIND11_MODULE(block2, m) {
         m_cpx.def_submodule("sz", "Non-spin-adapted (complex).");
 #endif
 
+#ifdef _USE_SINGLE_PREC
+
+    py::module m_sp = m.def_submodule("sp", "Single precision.");
+    py::module m_su2_sp =
+        m_sp.def_submodule("su2", "Spin-adapted (single precision).");
+    py::module m_sz_sp =
+        m_sp.def_submodule("sz", "Non-spin-adapted (single precision).");
+
+#ifdef _USE_COMPLEX
+    py::module m_cpx_sp =
+        m_sp.def_submodule("cpx", "Complex single precision.");
+    py::module m_su2_cpx_sp = m_cpx_sp.def_submodule(
+        "su2", "Spin-adapted (complex single precision).");
+    py::module m_sz_cpx_sp = m_cpx_sp.def_submodule(
+        "sz", "Non-spin-adapted (complex single precision).");
+#endif
+
+#endif
+
 #ifdef _USE_CORE
     bind_types<>(m);
     bind_io<>(m);
-    bind_matrix<>(m);
+    bind_fl_io<double>(m, "Double");
+    bind_matrix<double>(m);
     bind_symmetry<>(m);
     bind_fl_matrix<double>(m);
     bind_post_matrix<>(m);
 
-    bind_core<SU2, double>(m_su2, "SU2");
-    bind_core<SZ, double>(m_sz, "SZ");
+    bind_core<SU2, double>(m_su2, "SU2", "Double");
+    bind_core<SZ, double>(m_sz, "SZ", "Double");
     bind_trans_state_info<SU2, SZ>(m_su2, "sz");
     bind_trans_state_info<SZ, SU2>(m_sz, "su2");
     bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
 #ifdef _USE_COMPLEX
     bind_fl_matrix<complex<double>>(m_cpx);
-    bind_core<SU2, complex<double>>(m_su2_cpx, "SU2");
-    bind_core<SZ, complex<double>>(m_sz_cpx, "SZ");
+    bind_core<SU2, complex<double>>(m_su2_cpx, "SU2", "Double");
+    bind_core<SZ, complex<double>>(m_sz_cpx, "SZ", "Double");
 #endif
 
 #ifdef _USE_KSYMM
@@ -89,8 +109,8 @@ PYBIND11_MODULE(block2, m) {
         m.def_submodule("su2k", "Spin-adapted with k symmetry.");
     py::module m_szk =
         m.def_submodule("szk", "Non-spin-adapted with k symmetry.");
-    bind_core<SU2K, double>(m_su2k, "SU2K");
-    bind_core<SZK, double>(m_szk, "SZK");
+    bind_core<SU2K, double>(m_su2k, "SU2K", "Double");
+    bind_core<SZK, double>(m_szk, "SZK", "Double");
     bind_trans_state_info<SU2K, SZK>(m_su2k, "szk");
     bind_trans_state_info<SZK, SU2K>(m_szk, "su2k");
     bind_trans_state_info_spin_specific<SU2K, SZK>(m_su2k, "szk");
@@ -99,26 +119,57 @@ PYBIND11_MODULE(block2, m) {
         m_cpx.def_submodule("su2k", "Spin-adapted with k symmetry (complex).");
     py::module m_szk_cpx = m_cpx.def_submodule(
         "szk", "Non-spin-adapted with k symmetry (complex).");
-    bind_core<SU2K, complex<double>>(m_su2k_cpx, "SU2K");
-    bind_core<SZK, complex<double>>(m_szk_cpx, "SZK");
+    bind_core<SU2K, complex<double>>(m_su2k_cpx, "SU2K", "Double");
+    bind_core<SZK, complex<double>>(m_szk_cpx, "SZK", "Double");
 #endif
 #endif
 
 #ifdef _USE_SG
-    py::module m_sgf =
-        m.def_submodule("sgf", "General spin (fermionic).");
-    py::module m_sgb =
-        m.def_submodule("sgb", "General spin (bosonic).");
-    bind_core<SGF, double>(m_sgf, "SGF");
-    bind_core<SGB, double>(m_sgb, "SGB");
+    py::module m_sgf = m.def_submodule("sgf", "General spin (fermionic).");
+    py::module m_sgb = m.def_submodule("sgb", "General spin (bosonic).");
+    bind_core<SGF, double>(m_sgf, "SGF", "Double");
+    bind_core<SGB, double>(m_sgb, "SGB", "Double");
 #ifdef _USE_COMPLEX
     py::module m_sgf_cpx =
         m_cpx.def_submodule("sgf", "General spin (fermionic, complex).");
-    py::module m_sgb_cpx = m_cpx.def_submodule(
-        "sgb", "General spin (bosonic, complex).");
-    bind_core<SGF, complex<double>>(m_sgf_cpx, "SGF");
-    bind_core<SGB, complex<double>>(m_sgb_cpx, "SGB");
+    py::module m_sgb_cpx =
+        m_cpx.def_submodule("sgb", "General spin (bosonic, complex).");
+    bind_core<SGF, complex<double>>(m_sgf_cpx, "SGF", "Double");
+    bind_core<SGB, complex<double>>(m_sgb_cpx, "SGB", "Double");
 #endif
+#endif
+
+#ifdef _USE_SINGLE_PREC
+
+    bind_fl_io<float>(m, "Float");
+    bind_matrix<float>(m_sp);
+    bind_fl_matrix<float>(m_sp);
+
+    bind_core<SU2, float>(m_su2_sp, "SU2", "Float");
+    bind_core<SZ, float>(m_sz_sp, "SZ", "Float");
+#ifdef _USE_COMPLEX
+    bind_fl_matrix<complex<float>>(m_cpx_sp);
+    bind_core<SU2, complex<float>>(m_su2_cpx_sp, "SU2", "Float");
+    bind_core<SZ, complex<float>>(m_sz_cpx_sp, "SZ", "Float");
+#endif
+
+#ifdef _USE_SG
+    py::module m_sgf_sp =
+        m_sp.def_submodule("sgf", "General spin (fermionic single precision).");
+    py::module m_sgb_sp =
+        m_sp.def_submodule("sgb", "General spin (bosonic single precision).");
+    bind_core<SGF, float>(m_sgf_sp, "SGF", "Float");
+    bind_core<SGB, float>(m_sgb_sp, "SGB", "Float");
+#ifdef _USE_COMPLEX
+    py::module m_sgf_cpx_sp = m_cpx_sp.def_submodule(
+        "sgf", "General spin (fermionic, complex single precision).");
+    py::module m_sgb_cpx_sp = m_cpx_sp.def_submodule(
+        "sgb", "General spin (bosonic, complex single precision).");
+    bind_core<SGF, complex<float>>(m_sgf_cpx_sp, "SGF", "Float");
+    bind_core<SGB, complex<float>>(m_sgb_cpx_sp, "SGB", "Float");
+#endif
+#endif
+
 #endif
 
 #endif
@@ -158,6 +209,28 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg<SGF, complex<double>>(m_sgf_cpx, "SGF");
     bind_dmrg<SGB, complex<double>>(m_sgb_cpx, "SGB");
 #endif
+#endif
+
+#ifdef _USE_SINGLE_PREC
+
+    bind_dmrg<SU2, float>(m_su2_sp, "SU2");
+    bind_dmrg<SZ, float>(m_sz_sp, "SZ");
+    bind_fl_trans_mps_spin_specific<SU2, SZ, float>(m_su2_sp, "sz");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SU2, complex<float>>(m_su2_cpx_sp, "SU2");
+    bind_dmrg<SZ, complex<float>>(m_sz_cpx_sp, "SZ");
+    bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(m_su2_cpx_sp, "sz");
+#endif
+
+#ifdef _USE_SG
+    bind_dmrg<SGF, float>(m_sgf_sp, "SGF");
+    bind_dmrg<SGB, float>(m_sgb_sp, "SGB");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SGF, complex<float>>(m_sgf_cpx_sp, "SGF");
+    bind_dmrg<SGB, complex<float>>(m_sgb_cpx_sp, "SGB");
+#endif
+#endif
+
 #endif
 
 #endif

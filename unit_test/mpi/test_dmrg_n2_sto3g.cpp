@@ -49,21 +49,21 @@ template <typename FL> class TestDMRGN2STO3G : public ::testing::Test {
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        frame_()->use_main_stack = false;
-        frame_()->minimal_disk_usage = true;
-        frame_()->minimal_memory_usage = false;
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
+        frame_<FP>()->minimal_memory_usage = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             1);
         threading_()->seq_type = SeqTypes::Tasked;
-        cout << *frame_() << endl;
+        cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
@@ -106,9 +106,11 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
     mpo = make_shared<ParallelMPO<S, FL>>(mpo, para_rule);
     cout << "MPO parallelization end .. T = " << t.get_time() << endl;
 
+    const FP noise_base = is_same<FP, double>::value ? 1E-8 : 1E-4;
+    const FP conv = is_same<FP, double>::value ? 1E-7 : 1E-3;
     ubond_t bond_dim = 200;
     vector<ubond_t> bdims = {bond_dim};
-    vector<FP> noises = {1E-8, 1E-9, 0.0};
+    vector<FP> noises = {noise_base, noise_base * (FP)0.1, 0.0};
 
     t.get_time();
 
@@ -149,8 +151,8 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
-            dmrg->davidson_soft_max_iter = 4000;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            dmrg->davidson_soft_max_iter = 200;
+            FP energy = dmrg->solve(10, mps->center == 0, conv * 0.1);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -170,13 +172,13 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
 
             para_comm->tcomm = 0.0;
 
-            if (abs(energy - energies[i][j]) >= 1E-7 && k < 3) {
+            if (abs(energy - energies[i][j]) >= conv && k < 5) {
                 k++, j--;
                 cout << "!!! RETRY ... " << endl;
                 continue;
             }
 
-            EXPECT_LT(abs(energy - energies[i][j]), 1E-7);
+            EXPECT_LT(abs(energy - energies[i][j]), conv);
 
             k = 0;
         }
@@ -184,10 +186,22 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
     mpo->deallocate();
 }
 
+#ifdef _USE_SINGLE_PREC
+
+#ifdef _USE_COMPLEX
+typedef ::testing::Types<complex<float>, float, complex<double>, double> TestFL;
+#else
+typedef ::testing::Types<double, float> TestFL;
+#endif
+
+#else
+
 #ifdef _USE_COMPLEX
 typedef ::testing::Types<complex<double>, double> TestFL;
 #else
 typedef ::testing::Types<double> TestFL;
+#endif
+
 #endif
 
 TYPED_TEST_CASE(TestDMRGN2STO3G, TestFL);
@@ -199,6 +213,9 @@ TYPED_TEST(TestDMRGN2STO3G, TestSU2) {
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
+    cout << "original const = " << fcidump->e() << endl;
+    fcidump->rescale();
+    cout << "rescaled const = " << fcidump->e() << endl;
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
@@ -257,6 +274,9 @@ TYPED_TEST(TestDMRGN2STO3G, TestSZ) {
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
+    cout << "original const = " << fcidump->e() << endl;
+    fcidump->rescale();
+    cout << "rescaled const = " << fcidump->e() << endl;
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
@@ -325,6 +345,9 @@ TYPED_TEST(TestDMRGN2STO3G, TestSGF) {
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
+    cout << "original const = " << fcidump->e() << endl;
+    fcidump->rescale();
+    cout << "rescaled const = " << fcidump->e() << endl;
     fcidump = make_shared<SpinOrbitalFCIDUMP<FL>>(fcidump);
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
@@ -352,9 +375,10 @@ TYPED_TEST(TestDMRGN2STO3G, TestSGF) {
     shared_ptr<HamiltonianQC<SGF, FL>> hamil =
         make_shared<HamiltonianQC<SGF, FL>>(vacuum, norb, orbsym, fcidump);
 
-    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF",
-                                  DecompositionTypes::DensityMatrix,
-                                  NoiseTypes::DensityMatrix);
+    if (!is_same<FL, complex<float>>::value && !is_same<FL, float>::value)
+        this->template test_dmrg<SGF>(targets, energies, hamil, "SGF",
+                                      DecompositionTypes::DensityMatrix,
+                                      NoiseTypes::DensityMatrix);
 
     targets.resize(2);
     energies.resize(2);
@@ -365,9 +389,10 @@ TYPED_TEST(TestDMRGN2STO3G, TestSGF) {
     this->template test_dmrg<SGF>(targets, energies, hamil, "SGF PERT COL",
                                   DecompositionTypes::DensityMatrix,
                                   NoiseTypes::ReducedPerturbativeCollected);
-    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF SVD",
-                                  DecompositionTypes::SVD,
-                                  NoiseTypes::Wavefunction);
+    if (!is_same<FL, complex<float>>::value && !is_same<FL, float>::value)
+        this->template test_dmrg<SGF>(targets, energies, hamil, "SGF SVD",
+                                      DecompositionTypes::SVD,
+                                      NoiseTypes::Wavefunction);
     this->template test_dmrg<SGF>(targets, energies, hamil, "SGF PERT SVD",
                                   DecompositionTypes::SVD,
                                   NoiseTypes::ReducedPerturbative);

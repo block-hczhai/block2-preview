@@ -1609,15 +1609,15 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     for (uint16_t j = m + 1; j < n_sites; j++) {
                         (*pmop)[p] = pdm2_op[m][m][m][j][s];
                         (*pmexpr)[p] =
-                            (s ? 0 : -2) * (ccd_op[m][m][s] * d_op[j]);
+                            (FL)(s ? 0 : -2) * (ccd_op[m][m][s] * d_op[j]);
                         p++;
                         (*pmop)[p] = pdm2_op[m][m][j][m][s];
                         (*pmexpr)[p] =
-                            (s ? -1 : 1) * (ccd_op[m][m][s] * d_op[j]);
+                            (FL)(s ? -1 : 1) * (ccd_op[m][m][s] * d_op[j]);
                         p++;
                         (*pmop)[p] = pdm2_op[m][j][m][m][s];
                         (*pmexpr)[p] =
-                            (s ? -1 : 1) * (cdd_op[m][m][s] * c_op[j]);
+                            (FL)(s ? -1 : 1) * (cdd_op[m][m][s] * c_op[j]);
                         p++;
                         (*pmop)[p] = pdm2_op[j][m][m][m][s];
                         (*pmexpr)[p] = cdd_op[m][m][s] * c_op[j];
@@ -1633,19 +1633,19 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         for (uint16_t j = m + 1; j < n_sites; j++) {
                             (*pmop)[p] = pdm2_op[i][m][m][j][s];
                             (*pmexpr)[p] =
-                                (s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
+                                (FL)(s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[i][m][j][m][s];
                             (*pmexpr)[p] =
-                                (s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
+                                (FL)(s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[i][j][m][m][s];
                             (*pmexpr)[p] =
-                                (s ? -1 : 1) * (cdd_op[i][m][s] * c_op[j]);
+                                (FL)(s ? -1 : 1) * (cdd_op[i][m][s] * c_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][m][i][s];
                             (*pmexpr)[p] =
-                                (s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
+                                (FL)(s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][i][m][s];
                             (*pmexpr)[p] = dcd_op[i][m][s] * c_op[j];
@@ -1655,22 +1655,22 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             p++;
                             (*pmop)[p] = pdm2_op[m][m][i][j][s];
                             (*pmexpr)[p] =
-                                (s ? -1 : 1) * (dcc_op[i][m][s] * d_op[j]);
+                                (FL)(s ? -1 : 1) * (dcc_op[i][m][s] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][m][j][i][s];
                             (*pmexpr)[p] = dcc_op[i][m][s] * d_op[j];
                             p++;
                             (*pmop)[p] = pdm2_op[m][i][j][m][s];
                             (*pmexpr)[p] =
-                                (s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
+                                (FL)(s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][i][m][s];
                             (*pmexpr)[p] =
-                                (s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
+                                (FL)(s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][i][m][j][s];
                             (*pmexpr)[p] =
-                                (s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
+                                (FL)(s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][m][i][s];
                             (*pmexpr)[p] = dcd_op[i][m][s] * c_op[j];
@@ -1689,7 +1689,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         p++;
                         (*pmop)[p] = pdm2_op[m][j][j][m][s];
                         (*pmexpr)[p] =
-                            (s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
+                            (FL)(s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
                         p++;
                         (*pmop)[p] = pdm2_op[j][j][m][m][s];
                         (*pmexpr)[p] = ad_op[m][m][s] * a_op[j][j][s];
@@ -1699,7 +1699,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         p++;
                         (*pmop)[p] = pdm2_op[j][m][m][j][s];
                         (*pmexpr)[p] =
-                            (s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
+                            (FL)(s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
                         p++;
                     }
                     // 12*2*m*(n-m-1) : / ccdd cdcd cddc dccd dcdc ddcc (all)
@@ -1717,8 +1717,8 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             (*pmexpr)[p] = b_op[i][m][s] * b_op[j][j][s];
                             p++;
                             (*pmop)[p] = pdm2_op[i][j][j][m][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[i][m][s] * b_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][j][i][m][s];
                             (*pmexpr)[p] = ad_op[i][m][s] * a_op[j][j][s];
@@ -1727,32 +1727,32 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             (*pmexpr)[p] = b_op[i][m][s] * b_op[j][j][s];
                             p++;
                             (*pmop)[p] = pdm2_op[j][i][m][j][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[i][m][s] * b_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][i][j][j][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (a_op[i][m][s] * ad_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (a_op[i][m][s] * ad_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][i][j][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (bd_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][j][i][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (bd_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][j][m][i][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (ad_op[i][m][s] * a_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (ad_op[i][m][s] * a_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][j][i][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (bd_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][i][j][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (bd_op[i][m][s] * b_op[j][j][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
                         }
                     //   12*2*(n-m-2)*(n-m-1)/2 : / ccdd cdcd cddc dccd dcdc
@@ -1768,27 +1768,27 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             (*pmexpr)[p] = a_op[m][m][s] * ad_op[j][k][s];
                             p++;
                             (*pmop)[p] = pdm2_op[m][m][k][j][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (a_op[m][m][s] * ad_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (a_op[m][m][s] * ad_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][m][k][s];
                             (*pmexpr)[p] = b_op[m][m][s] * b_op[j][k][s];
                             p++;
                             (*pmop)[p] = pdm2_op[m][k][m][j][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (b_op[m][m][s] * bd_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][j][k][m][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[m][m][s] * b_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[m][m][s] * b_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[m][k][j][m][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[m][m][s] * bd_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][m][k][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[m][m][s] * b_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[m][m][s] * b_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[j][m][k][m][s];
                             (*pmexpr)[p] = b_op[m][m][s] * b_op[j][k][s];
@@ -1797,16 +1797,16 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             (*pmexpr)[p] = ad_op[m][m][s] * a_op[j][k][s];
                             p++;
                             (*pmop)[p] = pdm2_op[k][m][m][j][s];
-                            (*pmexpr)[p] =
-                                (s ? 0 : -2) * (b_op[m][m][s] * bd_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? 0 : -2) *
+                                           (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[k][m][j][m][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (b_op[m][m][s] * bd_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
                             (*pmop)[p] = pdm2_op[k][j][m][m][s];
-                            (*pmexpr)[p] =
-                                (s ? -1 : 1) * (ad_op[m][m][s] * a_op[j][k][s]);
+                            (*pmexpr)[p] = (FL)(s ? -1 : 1) *
+                                           (ad_op[m][m][s] * a_op[j][k][s]);
                             p++;
                         }
                     //   24*2*m*(n-m-2)*(n-m-1)/2 : / ccdd cdcd cddc dccd dcdc
@@ -1829,91 +1829,93 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                 (*pmexpr)[p] = a_op[i][m][s] * ad_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[i][m][k][j][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (a_op[i][m][s] * ad_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[i][j][m][k][s];
                                 (*pmexpr)[p] = b_op[i][m][s] * b_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[i][j][k][m][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[i][k][m][j][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[i][k][j][m][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 // [0] (+mijk:+mikj:+mjik:-2mjki:+mkij:-2mkji)
                                 // [1] (-mijk:+mikj:-mjik:+0mjki:+mkij:+0mkji)
                                 (*pmop)[p] = pdm2_op[m][i][j][k][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (a_op[i][m][s] * ad_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[m][i][k][j][s];
                                 (*pmexpr)[p] = a_op[i][m][s] * ad_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[m][j][i][k][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[m][j][k][i][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[m][k][i][j][s];
                                 (*pmexpr)[p] = bd_op[i][m][s] * bd_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[m][k][j][i][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) * (bd_op[i][m][s] *
-                                                               bd_op[j][k][s]);
+                                (*pmexpr)[p] =
+                                    (FL)(s ? 0 : -2) *
+                                    (bd_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 // [0] (-2jimk:+jikm:-2jmik:+jmki:+jkim:+jkmi)
                                 // [1] (+0jimk:+jikm:+0jmik:-jmki:+jkim:-jkmi)
                                 (*pmop)[p] = pdm2_op[j][i][m][k][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[j][i][k][m][s];
                                 (*pmexpr)[p] = b_op[i][m][s] * b_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[j][m][i][k][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[j][m][k][i][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[j][k][i][m][s];
                                 (*pmexpr)[p] = ad_op[i][m][s] * a_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[j][k][m][i][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (ad_op[i][m][s] * a_op[j][k][s]);
                                 p++;
                                 // [0] (-2kimj:+kijm:-2kmij:+kmji:+kjim:+kjmi)
                                 // [1] (+0kimj:-kijm:+0kmij:+kmji:-kjim:+kjmi)
                                 (*pmop)[p] = pdm2_op[k][i][m][j][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) *
+                                (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[k][i][j][m][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[k][m][i][j][s];
-                                (*pmexpr)[p] = (s ? 0 : -2) * (bd_op[i][m][s] *
-                                                               bd_op[j][k][s]);
+                                (*pmexpr)[p] =
+                                    (FL)(s ? 0 : -2) *
+                                    (bd_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[k][m][j][i][s];
                                 (*pmexpr)[p] = bd_op[i][m][s] * bd_op[j][k][s];
                                 p++;
                                 (*pmop)[p] = pdm2_op[k][j][i][m][s];
-                                (*pmexpr)[p] = (s ? -1 : 1) *
+                                (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (ad_op[i][m][s] * a_op[j][k][s]);
                                 p++;
                                 (*pmop)[p] = pdm2_op[k][j][m][i][s];
@@ -1929,15 +1931,15 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         p++;
                         (*pmop)[p] = pdm2_op[j][m][j][j][s];
                         (*pmexpr)[p] =
-                            (s ? -1 : 1) * (c_op[m] * cdd_op[j][j][s]);
+                            (FL)(s ? -1 : 1) * (c_op[m] * cdd_op[j][j][s]);
                         p++;
                         (*pmop)[p] = pdm2_op[j][j][m][j][s];
                         (*pmexpr)[p] =
-                            (s ? -1 : 1) * (d_op[m] * ccd_op[j][j][s]);
+                            (FL)(s ? -1 : 1) * (d_op[m] * ccd_op[j][j][s]);
                         p++;
                         (*pmop)[p] = pdm2_op[j][j][j][m][s];
                         (*pmexpr)[p] =
-                            (s ? 0 : -2) * (d_op[m] * ccd_op[j][j][s]);
+                            (FL)(s ? 0 : -2) * (d_op[m] * ccd_op[j][j][s]);
                         p++;
                     }
                 }
@@ -2304,27 +2306,27 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 for (uint16_t k = 0; k < n_sites; k++)
                     for (uint16_t l = 0; l <= k; l++) {
                         FL a = -(*t)({i, j, k, l, 0}) +
-                               sqrt(3) * (*t)({i, j, k, l, 1});
+                               (FL)sqrt(3) * (*t)({i, j, k, l, 1});
                         FL b = -(*t)({i, j, l, k, 0}) +
-                               sqrt(3) * (*t)({i, j, l, k, 1});
+                               (FL)sqrt(3) * (*t)({i, j, l, k, 1});
                         (*r)({i * 2 + 0, j * 2 + 0, k * 2 + 0, l * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 1, k * 2 + 1, l * 2 + 1}) =
-                                (a - b) / 6.0;
+                                (a - b) / (FL)6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, k * 2 + 1, l * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 0, k * 2 + 0, l * 2 + 1}) =
-                                (2.0 * a + b) / 6.0;
+                                ((FL)2.0 * a + b) / (FL)6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, k * 2 + 0, l * 2 + 1}) =
                             (*r)({i * 2 + 1, j * 2 + 0, k * 2 + 1, l * 2 + 0}) =
-                                -(2.0 * b + a) / 6.0;
+                                -((FL)2.0 * b + a) / (FL)6.0;
                         (*r)({i * 2 + 0, j * 2 + 0, l * 2 + 0, k * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 1, l * 2 + 1, k * 2 + 1}) =
-                                (b - a) / 6.0;
+                                (b - a) / (FL)6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, l * 2 + 1, k * 2 + 0}) =
                             (*r)({i * 2 + 1, j * 2 + 0, l * 2 + 0, k * 2 + 1}) =
-                                (2.0 * b + a) / 6.0;
+                                ((FL)2.0 * b + a) / (FL)6.0;
                         (*r)({i * 2 + 0, j * 2 + 1, l * 2 + 0, k * 2 + 1}) =
                             (*r)({i * 2 + 1, j * 2 + 0, l * 2 + 1, k * 2 + 0}) =
-                                -(2.0 * a + b) / 6.0;
+                                -((FL)2.0 * a + b) / (FL)6.0;
                     }
         return r;
     }
@@ -2339,8 +2341,9 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             for (uint16_t j = 0; j < n_sites; j++)
                 for (uint16_t k = 0; k < n_sites; k++)
                     for (uint16_t l = 0; l < n_sites; l++)
-                        (*r)({i, j, k, l}) = -(*t)({i, j, k, l, 0}) +
-                                             sqrt(3) * (*t)({i, j, k, l, 1});
+                        (*r)({i, j, k, l}) =
+                            -(*t)({i, j, k, l, 0}) +
+                            (FL)sqrt(3) * (*t)({i, j, k, l, 1});
         return r;
     }
 };

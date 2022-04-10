@@ -15,10 +15,10 @@ template <typename FL> class TestDMRG : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
-        frame_()->use_main_stack = false;
-        frame_()->minimal_disk_usage = true;
-        frame_()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodexx");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
+        frame_<FP>()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
         // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
         // ThreadingTypes::Global, 8, 8);
         threading_() = make_shared<Threading>(
@@ -28,13 +28,13 @@ template <typename FL> class TestDMRG : public ::testing::Test {
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
         threading_()->seq_type = SeqTypes::Tasked;
-        cout << *frame_() << endl;
+        cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
@@ -127,8 +127,8 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "INIT start" << endl;
     me_cpx->init_environments(false);
 
-    cout << *frame_() << endl;
-    frame_()->activate(0);
+    cout << *frame_<FP>() << endl;
+    frame_<FP>()->activate(0);
 
     // DMRG
     // vector<ubond_t> bdims = {50};

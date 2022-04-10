@@ -6,6 +6,7 @@ using namespace block2;
 
 class TestCG : public ::testing::Test {
   protected:
+    typedef double FP;
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
     static const int max_twoj = 300;
@@ -15,7 +16,7 @@ class TestCG : public ::testing::Test {
     void SetUp() override {
         Random::rand_seed(0);
         cg = CG<SU2>(max_twoj);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         cg.initialize();
         factorial[0] = 1;
         for (int i = 1; i < max_twoj; i++)
@@ -23,9 +24,9 @@ class TestCG : public ::testing::Test {
     }
     void TearDown() override {
         cg.deallocate();
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
     int rand_proj(int tj) { return Random::rand_int(0, tj + 1) * 2 - tj; }
     int rand_triangle(int tj1, int tj2) {
