@@ -176,6 +176,101 @@ PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<double>>>>>>);
 #endif
 
+#ifdef _USE_SINGLE_PREC
+
+PYBIND11_MAKE_OPAQUE(vector<float>);
+PYBIND11_MAKE_OPAQUE(vector<complex<float>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<float>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<complex<float>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<float>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<complex<float>>>>);
+// double
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<float>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<float>>>);
+// SZ
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, float>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, float>>,
+        op_expr_less<SZ>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<float>>>>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, float>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, float>>,
+        op_expr_less<SU2>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<float>>>>>);
+
+#ifdef _USE_COMPLEX
+// complex
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<float>>>>);
+// SZ
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, complex<float>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<shared_ptr<OpExpr<SZ>>, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, complex<float>>>,
+        op_expr_less<SZ>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<complex<float>>>>>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, complex<float>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<shared_ptr<OpExpr<SU2>>, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, complex<float>>>,
+        op_expr_less<SU2>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<float>>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<float>>>>>>);
+#endif
+
+#endif
+
 template <typename T> struct Array {
     T *data;
     size_t n;
@@ -490,11 +585,13 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
         });
 }
 
-template <typename S, typename FL> void bind_fl_state_info(py::module &m) {
-    py::bind_vector<vector<pair<S, FL>>>(m, "VectorPSDouble");
-    py::bind_vector<vector<vector<pair<S, FL>>>>(m, "VectorVectorPSDouble");
+template <typename S, typename FL>
+void bind_fl_state_info(py::module &m, const string &fname) {
+    py::bind_vector<vector<pair<S, FL>>>(m, ("VectorPS" + fname).c_str());
+    py::bind_vector<vector<vector<pair<S, FL>>>>(
+        m, ("VectorVectorPS" + fname).c_str());
     py::bind_vector<vector<vector<vector<pair<S, FL>>>>>(
-        m, "VectorVectorVectorPSDouble");
+        m, ("VectorVectorVectorPS" + fname).c_str());
 }
 
 template <typename S> void bind_sparse(py::module &m) {
@@ -1064,9 +1161,9 @@ template <typename S, typename FL> void bind_fl_rule(py::module &m) {
 }
 
 template <typename S, typename FL>
-void bind_core(py::module &m, const string &name) {
+void bind_core(py::module &m, const string &name, const string &fname) {
 
-    if (is_same<typename GMatrix<FL>::FP, FL>::value) {
+    if (is_same<typename GMatrix<FL>::FP, FL>::value && fname == "Double") {
         bind_cg<S>(m);
         bind_expr<S>(m);
         bind_state_info<S>(m, name);
@@ -1075,7 +1172,7 @@ void bind_core(py::module &m, const string &name) {
     }
 
     bind_fl_expr<S, FL>(m);
-    bind_fl_state_info<S, FL>(m);
+    bind_fl_state_info<S, FL>(m, fname);
     bind_fl_sparse<S, FL>(m);
     bind_fl_operator<S, FL>(m);
     bind_fl_hamiltonian<S, FL>(m);
@@ -1125,6 +1222,21 @@ template <typename S = void> void bind_data(py::module &m) {
                                                     "VectorVectorVectorDouble");
     py::bind_vector<vector<vector<vector<complex<double>>>>>(
         m, "VectorVectorVectorComplexDouble");
+
+#ifdef _USE_SINGLE_PREC
+
+    py::bind_vector<vector<float>>(m, "VectorFloat");
+    py::bind_vector<vector<complex<float>>>(m, "VectorComplexFloat");
+    py::bind_vector<vector<vector<float>>>(m, "VectorVectorFloat");
+    py::bind_vector<vector<vector<complex<float>>>>(m,
+                                                    "VectorVectorComplexFloat");
+    py::bind_vector<vector<vector<vector<float>>>>(m,
+                                                   "VectorVectorVectorFloat");
+    py::bind_vector<vector<vector<vector<complex<float>>>>>(
+        m, "VectorVectorVectorComplexFloat");
+
+#endif
+
     py::bind_vector<vector<uint8_t>>(m, "VectorUInt8")
         .def_property_readonly(
             "ptr",
@@ -1401,24 +1513,6 @@ template <typename S = void> void bind_types(py::module &m) {
 
 template <typename S = void> void bind_io(py::module &m) {
 
-    m.def(
-        "init_memory",
-        [](size_t isize, size_t dsize, const string &save_dir,
-           double dmain_ratio, double imain_ratio, int n_frames) {
-            frame_() = make_shared<DataFrame>(
-                isize, dsize, save_dir, dmain_ratio, imain_ratio, n_frames);
-        },
-        py::arg("isize") = size_t(1L << 28),
-        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
-        py::arg("dmain_ratio") = 0.7, py::arg("imain_ratio") = 0.7,
-        py::arg("n_frames") = 2);
-
-    m.def("release_memory", []() {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
-    });
-
     m.def("set_mkl_num_threads", [](int n) {
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n);
@@ -1444,18 +1538,9 @@ template <typename S = void> void bind_io(py::module &m) {
         m, "IntAllocator")
         .def(py::init<>());
 
-    py::class_<Allocator<double>, shared_ptr<Allocator<double>>>(
-        m, "DoubleAllocator")
-        .def(py::init<>());
-
     py::class_<VectorAllocator<uint32_t>, shared_ptr<VectorAllocator<uint32_t>>,
                Allocator<uint32_t>>(m, "IntVectorAllocator")
         .def_readwrite("data", &VectorAllocator<uint32_t>::data)
-        .def(py::init<>());
-
-    py::class_<VectorAllocator<double>, shared_ptr<VectorAllocator<double>>,
-               Allocator<double>>(m, "DoubleVectorAllocator")
-        .def_readwrite("data", &VectorAllocator<double>::data)
         .def(py::init<>());
 
     py::class_<StackAllocator<uint32_t>, shared_ptr<StackAllocator<uint32_t>>,
@@ -1465,95 +1550,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("used", &StackAllocator<uint32_t>::used)
         .def_readwrite("shift", &StackAllocator<uint32_t>::shift);
 
-    py::class_<StackAllocator<double>, shared_ptr<StackAllocator<double>>,
-               Allocator<double>>(m, "DoubleStackAllocator")
-        .def(py::init<>())
-        .def_readwrite("size", &StackAllocator<double>::size)
-        .def_readwrite("used", &StackAllocator<double>::used)
-        .def_readwrite("shift", &StackAllocator<double>::shift);
-
     struct Global {};
-
-    py::class_<FPCodec<double>, shared_ptr<FPCodec<double>>>(m, "DoubleFPCodec")
-        .def(py::init<double>())
-        .def(py::init<double, size_t>())
-        .def_readwrite("ndata", &FPCodec<double>::ndata)
-        .def_readwrite("ncpsd", &FPCodec<double>::ncpsd)
-        .def("encode",
-             [](FPCodec<double> *self, py::array_t<double> arr) {
-                 double *tmp = new double[arr.size() + 2];
-                 size_t len = self->encode(arr.mutable_data(), arr.size(), tmp);
-                 assert(len <= arr.size() + 2);
-                 py::array_t<double> arx = py::array_t<double>(len + 1);
-                 arx.mutable_data()[0] = arr.size();
-                 memcpy(arx.mutable_data() + 1, tmp, len * sizeof(double));
-                 delete[] tmp;
-                 return arx;
-             })
-        .def("decode",
-             [](FPCodec<double> *self, py::array_t<double> arr) {
-                 size_t arr_len = arr.mutable_data()[0];
-                 py::array_t<double> arx = py::array_t<double>(arr_len);
-                 size_t len = self->decode(arr.mutable_data() + 1, arr_len,
-                                           arx.mutable_data());
-                 assert(len == arr.size() - 1);
-                 return arx;
-             })
-        .def("write_array",
-             [](FPCodec<double> *self, py::array_t<double> arr) {
-                 stringstream ss;
-                 self->write_array(ss, arr.mutable_data(), arr.size());
-                 assert(ss.tellp() % sizeof(double) == 0);
-                 size_t len = ss.tellp() / sizeof(double);
-                 py::array_t<double> arx = py::array_t<double>(len + 1);
-                 arx.mutable_data()[0] = arr.size();
-                 ss.clear();
-                 ss.seekg(0);
-                 ss.read((char *)(arx.mutable_data() + 1),
-                         sizeof(double) * len);
-                 return arx;
-             })
-        .def("read_array",
-             [](FPCodec<double> *self, py::array_t<double> arr) {
-                 size_t arr_len = arr.mutable_data()[0];
-                 stringstream ss;
-                 ss.write((char *)(arr.mutable_data() + 1),
-                          (arr.size() - 1) * sizeof(double));
-                 py::array_t<double> arx = py::array_t<double>(arr_len);
-                 ss.clear();
-                 ss.seekg(0);
-                 self->read_array(ss, arx.mutable_data(), arr_len);
-                 return arx;
-             })
-        .def("save",
-             [](FPCodec<double> *self, const string &filename,
-                py::array_t<double> arr) {
-                 ofstream ofs(filename.c_str(), ios::binary);
-                 if (!ofs.good())
-                     throw runtime_error("DoubleFPCodec::save on '" + filename +
-                                         "' failed.");
-                 ofs << arr.size();
-                 self->write_array(ofs, arr.mutable_data(), arr.size());
-                 if (!ofs.good())
-                     throw runtime_error("DoubleFPCodec::save on '" + filename +
-                                         "' failed.");
-                 ofs.close();
-             })
-        .def("load", [](FPCodec<double> *self, const string &filename) {
-            ifstream ifs(filename.c_str(), ios::binary);
-            if (!ifs.good())
-                throw runtime_error("DoubleFPCodec::load_data on '" + filename +
-                                    "' failed.");
-            size_t arr_len;
-            ifs >> arr_len;
-            py::array_t<double> arx = py::array_t<double>(arr_len);
-            self->read_array(ifs, arx.mutable_data(), arr_len);
-            if (ifs.fail() || ifs.bad())
-                throw runtime_error("DoubleFPCodec::load on '" + filename +
-                                    "' failed.");
-            ifs.close();
-            return arx;
-        });
 
     py::class_<KuhnMunkres, shared_ptr<KuhnMunkres>>(m, "KuhnMunkres")
         .def(py::init([](const py::array_t<double> &cost) {
@@ -1666,57 +1663,6 @@ template <typename S = void> void bind_io(py::module &m) {
             return arx;
         });
 
-    py::class_<DataFrame, shared_ptr<DataFrame>>(m, "DataFrame")
-        .def(py::init<>())
-        .def(py::init<size_t, size_t>())
-        .def(py::init<size_t, size_t, const string &>())
-        .def(py::init<size_t, size_t, const string &, double>())
-        .def(py::init<size_t, size_t, const string &, double, double>())
-        .def(py::init<size_t, size_t, const string &, double, double, int>())
-        .def_readwrite("save_dir", &DataFrame::save_dir)
-        .def_readwrite("mps_dir", &DataFrame::mps_dir)
-        .def_readwrite("mpo_dir", &DataFrame::mpo_dir)
-        .def_readwrite("restart_dir", &DataFrame::restart_dir)
-        .def_readwrite("restart_dir_per_sweep",
-                       &DataFrame::restart_dir_per_sweep)
-        .def_readwrite("restart_dir_optimal_mps",
-                       &DataFrame::restart_dir_optimal_mps)
-        .def_readwrite("restart_dir_optimal_mps_per_sweep",
-                       &DataFrame::restart_dir_optimal_mps_per_sweep)
-        .def_readwrite("prefix", &DataFrame::prefix)
-        .def_readwrite("prefix_distri", &DataFrame::prefix_distri)
-        .def_readwrite("prefix_can_write", &DataFrame::prefix_can_write)
-        .def_readwrite("partition_can_write", &DataFrame::partition_can_write)
-        .def_readwrite("isize", &DataFrame::isize)
-        .def_readwrite("dsize", &DataFrame::dsize)
-        .def_readwrite("tread", &DataFrame::tread)
-        .def_readwrite("twrite", &DataFrame::twrite)
-        .def_readwrite("tasync", &DataFrame::tasync)
-        .def_readwrite("fpread", &DataFrame::fpread)
-        .def_readwrite("fpwrite", &DataFrame::fpwrite)
-        .def_readwrite("n_frames", &DataFrame::n_frames)
-        .def_readwrite("i_frame", &DataFrame::i_frame)
-        .def_readwrite("iallocs", &DataFrame::iallocs)
-        .def_readwrite("dallocs", &DataFrame::dallocs)
-        .def_readwrite("peak_used_memory", &DataFrame::peak_used_memory)
-        .def_readwrite("load_buffering", &DataFrame::load_buffering)
-        .def_readwrite("save_buffering", &DataFrame::save_buffering)
-        .def_readwrite("use_main_stack", &DataFrame::use_main_stack)
-        .def_readwrite("minimal_disk_usage", &DataFrame::minimal_disk_usage)
-        .def_readwrite("minimal_memory_usage", &DataFrame::minimal_memory_usage)
-        .def_readwrite("fp_codec", &DataFrame::fp_codec)
-        .def("update_peak_used_memory", &DataFrame::update_peak_used_memory)
-        .def("reset_peak_used_memory", &DataFrame::reset_peak_used_memory)
-        .def("activate", &DataFrame::activate)
-        .def("load_data", &DataFrame::load_data)
-        .def("save_data", &DataFrame::save_data)
-        .def("reset", &DataFrame::reset)
-        .def("__repr__", [](DataFrame *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-
     py::enum_<ThreadingTypes>(m, "ThreadingTypes", py::arithmetic())
         .value("SequentialGEMM", ThreadingTypes::SequentialGEMM)
         .value("BatchedGEMM", ThreadingTypes::BatchedGEMM)
@@ -1761,8 +1707,6 @@ template <typename S = void> void bind_io(py::module &m) {
 
     py::bind_vector<vector<shared_ptr<StackAllocator<uint32_t>>>>(
         m, "VectorIntStackAllocator");
-    py::bind_vector<vector<shared_ptr<StackAllocator<double>>>>(
-        m, "VectorDoubleStackAllocator");
 
     py::class_<Global>(m, "Global")
         .def_property_static(
@@ -1771,13 +1715,27 @@ template <typename S = void> void bind_io(py::module &m) {
                 ialloc_() = ia;
             })
         .def_property_static(
-            "dalloc", [](py::object) { return dalloc_(); },
+            "dalloc", [](py::object) { return dalloc_<double>(); },
             [](py::object, shared_ptr<StackAllocator<double>> da) {
-                dalloc_() = da;
+                dalloc_<double>() = da;
             })
         .def_property_static(
-            "frame", [](py::object) { return frame_(); },
-            [](py::object, shared_ptr<DataFrame> fr) { frame_() = fr; })
+            "frame", [](py::object) { return frame_<double>(); },
+            [](py::object, shared_ptr<DataFrame<double>> fr) {
+                frame_<double>() = fr;
+            })
+#ifdef _USE_SINGLE_PREC
+        .def_property_static(
+            "dalloc_float", [](py::object) { return dalloc_<float>(); },
+            [](py::object, shared_ptr<StackAllocator<float>> da) {
+                dalloc_<float>() = da;
+            })
+        .def_property_static(
+            "frame_float", [](py::object) { return frame_<float>(); },
+            [](py::object, shared_ptr<DataFrame<float>> fr) {
+                frame_<float>() = fr;
+            })
+#endif
         .def_property_static(
             "threading", [](py::object) { return threading_(); },
             [](py::object, shared_ptr<Threading> th) { threading_() = th; });
@@ -1815,92 +1773,266 @@ template <typename S = void> void bind_io(py::module &m) {
 #endif
 }
 
-template <typename S = void> void bind_matrix(py::module &m) {
-    py::class_<MatrixRef, shared_ptr<MatrixRef>>(m, "Matrix",
-                                                 py::buffer_protocol())
-        .def(py::init([](py::array_t<double> mat) {
-                 assert(mat.ndim() == 2);
-                 assert(mat.strides()[1] == sizeof(double));
-                 return MatrixRef(mat.mutable_data(), mat.shape()[0],
-                                  mat.shape()[1]);
-             }),
-             py::keep_alive<0, 1>())
-        .def_buffer([](MatrixRef *self) -> py::buffer_info {
-            return py::buffer_info(
-                self->data, sizeof(double),
-                py::format_descriptor<double>::format(), 2,
-                {(ssize_t)self->m, (ssize_t)self->n},
-                {sizeof(double) * (ssize_t)self->n, sizeof(double)});
-        })
-        .def_readwrite("m", &MatrixRef::m)
-        .def_readwrite("n", &MatrixRef::n)
-        .def("__repr__",
-             [](MatrixRef *self) {
-                 stringstream ss;
-                 ss << *self;
-                 return ss.str();
-             })
-        .def("allocate", &MatrixRef::allocate, py::arg("alloc") = nullptr)
-        .def("deallocate", &MatrixRef::deallocate, py::arg("alloc") = nullptr);
+template <typename FL> void bind_fl_io(py::module &m, const string &name) {
 
-    py::class_<ComplexMatrixRef, shared_ptr<ComplexMatrixRef>>(
-        m, "ComplexMatrix", py::buffer_protocol())
-        .def(py::init([](py::array_t<complex<double>> mat) {
-                 assert(mat.ndim() == 2);
-                 assert(mat.strides()[1] == sizeof(complex<double>));
-                 return ComplexMatrixRef(mat.mutable_data(), mat.shape()[0],
-                                         mat.shape()[1]);
-             }),
-             py::keep_alive<0, 1>())
-        .def_buffer([](ComplexMatrixRef *self) -> py::buffer_info {
-            return py::buffer_info(
-                self->data, sizeof(complex<double>),
-                py::format_descriptor<complex<double>>::format(), 2,
-                {(ssize_t)self->m, (ssize_t)self->n},
-                {sizeof(complex<double>) * (ssize_t)self->n,
-                 sizeof(complex<double>)});
-        })
-        .def_readwrite("m", &ComplexMatrixRef::m)
-        .def_readwrite("n", &ComplexMatrixRef::n)
-        .def("__repr__",
-             [](ComplexMatrixRef *self) {
-                 stringstream ss;
-                 ss << *self;
-                 return ss.str();
-             })
-        .def("allocate", &ComplexMatrixRef::allocate,
-             py::arg("alloc") = nullptr)
-        .def("deallocate", &ComplexMatrixRef::deallocate,
-             py::arg("alloc") = nullptr);
+    m.def(
+        name == "Float" ? "init_memory_float" : "init_memory",
+        [](size_t isize, size_t dsize, const string &save_dir,
+           double dmain_ratio, double imain_ratio, int n_frames) {
+            frame_<FL>() = make_shared<DataFrame<FL>>(
+                isize, dsize, save_dir, dmain_ratio, imain_ratio, n_frames);
+        },
+        py::arg("isize") = size_t(1L << 28),
+        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
+        py::arg("dmain_ratio") = 0.7, py::arg("imain_ratio") = 0.7,
+        py::arg("n_frames") = 2);
 
-    py::class_<MatrixFunctions>(m, "MatrixFunctions")
-        .def_static("det",
-                    [](py::array_t<double> &a) {
-                        MKL_INT n = (MKL_INT)Prime::sqrt((Prime::LL)a.size());
-                        assert(n * n == (MKL_INT)a.size());
-                        return MatrixFunctions::det(
-                            MatrixRef(a.mutable_data(), n, n));
-                    })
-        .def_static("eigs",
-                    [](py::array_t<double> &a, py::array_t<double> &w) {
-                        MKL_INT n = (MKL_INT)w.size();
-                        MatrixFunctions::eigs(
-                            MatrixRef(a.mutable_data(), n, n),
-                            DiagonalMatrix(w.mutable_data(), n));
-                    })
-        .def_static("block_eigs", [](py::array_t<double> &a,
-                                     py::array_t<double> &w,
-                                     const vector<uint8_t> &x) {
-            MKL_INT n = (MKL_INT)w.size();
-            MatrixFunctions::block_eigs(MatrixRef(a.mutable_data(), n, n),
-                                        DiagonalMatrix(w.mutable_data(), n), x);
+    m.def(name == "Float" ? "release_memory_float" : "release_memory", []() {
+        frame_<FL>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FL>()->used == 0);
+        frame_<FL>() = nullptr;
+    });
+
+    py::class_<Allocator<FL>, shared_ptr<Allocator<FL>>>(
+        m, (name + "Allocator").c_str())
+        .def(py::init<>());
+
+    py::class_<VectorAllocator<FL>, shared_ptr<VectorAllocator<FL>>,
+               Allocator<FL>>(m, (name + "VectorAllocator").c_str())
+        .def_readwrite("data", &VectorAllocator<FL>::data)
+        .def(py::init<>());
+
+    py::class_<StackAllocator<FL>, shared_ptr<StackAllocator<FL>>,
+               Allocator<FL>>(m, (name + "StackAllocator").c_str())
+        .def(py::init<>())
+        .def_readwrite("size", &StackAllocator<FL>::size)
+        .def_readwrite("used", &StackAllocator<FL>::used)
+        .def_readwrite("shift", &StackAllocator<FL>::shift);
+
+    py::class_<FPCodec<FL>, shared_ptr<FPCodec<FL>>>(m,
+                                                     (name + "FPCodec").c_str())
+        .def(py::init<FL>())
+        .def(py::init<FL, size_t>())
+        .def_readwrite("ndata", &FPCodec<FL>::ndata)
+        .def_readwrite("ncpsd", &FPCodec<FL>::ncpsd)
+        .def("encode",
+             [](FPCodec<FL> *self, py::array_t<FL> arr) {
+                 FL *tmp = new FL[arr.size() + 2];
+                 size_t len = self->encode(arr.mutable_data(), arr.size(), tmp);
+                 assert(len <= arr.size() + 2);
+                 py::array_t<FL> arx = py::array_t<FL>(len + 1);
+                 arx.mutable_data()[0] = arr.size();
+                 memcpy(arx.mutable_data() + 1, tmp, len * sizeof(FL));
+                 delete[] tmp;
+                 return arx;
+             })
+        .def("decode",
+             [](FPCodec<FL> *self, py::array_t<FL> arr) {
+                 size_t arr_len = arr.mutable_data()[0];
+                 py::array_t<FL> arx = py::array_t<FL>(arr_len);
+                 size_t len = self->decode(arr.mutable_data() + 1, arr_len,
+                                           arx.mutable_data());
+                 assert(len == arr.size() - 1);
+                 return arx;
+             })
+        .def("write_array",
+             [](FPCodec<FL> *self, py::array_t<FL> arr) {
+                 stringstream ss;
+                 self->write_array(ss, arr.mutable_data(), arr.size());
+                 assert(ss.tellp() % sizeof(FL) == 0);
+                 size_t len = ss.tellp() / sizeof(FL);
+                 py::array_t<FL> arx = py::array_t<FL>(len + 1);
+                 arx.mutable_data()[0] = arr.size();
+                 ss.clear();
+                 ss.seekg(0);
+                 ss.read((char *)(arx.mutable_data() + 1), sizeof(FL) * len);
+                 return arx;
+             })
+        .def("read_array",
+             [](FPCodec<FL> *self, py::array_t<FL> arr) {
+                 size_t arr_len = arr.mutable_data()[0];
+                 stringstream ss;
+                 ss.write((char *)(arr.mutable_data() + 1),
+                          (arr.size() - 1) * sizeof(FL));
+                 py::array_t<FL> arx = py::array_t<FL>(arr_len);
+                 ss.clear();
+                 ss.seekg(0);
+                 self->read_array(ss, arx.mutable_data(), arr_len);
+                 return arx;
+             })
+        .def(
+            "save",
+            [](FPCodec<FL> *self, const string &filename, py::array_t<FL> arr) {
+                ofstream ofs(filename.c_str(), ios::binary);
+                if (!ofs.good())
+                    throw runtime_error("FPCodec::save on '" + filename +
+                                        "' failed.");
+                ofs << arr.size();
+                self->write_array(ofs, arr.mutable_data(), arr.size());
+                if (!ofs.good())
+                    throw runtime_error("FPCodec::save on '" + filename +
+                                        "' failed.");
+                ofs.close();
+            })
+        .def("load", [](FPCodec<FL> *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("FPCodec::load_data on '" + filename +
+                                    "' failed.");
+            size_t arr_len;
+            ifs >> arr_len;
+            py::array_t<FL> arx = py::array_t<FL>(arr_len);
+            self->read_array(ifs, arx.mutable_data(), arr_len);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("FPCodec::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return arx;
         });
 
-    py::class_<ComplexMatrixFunctions>(m, "ComplexMatrixFunctions");
+    py::class_<DataFrame<FL>, shared_ptr<DataFrame<FL>>>(
+        m, (name + "DataFrame").c_str())
+        .def(py::init<>())
+        .def(py::init<size_t, size_t>())
+        .def(py::init<size_t, size_t, const string &>())
+        .def(py::init<size_t, size_t, const string &, FL>())
+        .def(py::init<size_t, size_t, const string &, FL, FL>())
+        .def(py::init<size_t, size_t, const string &, FL, FL, int>())
+        .def_readwrite("save_dir", &DataFrame<FL>::save_dir)
+        .def_readwrite("mps_dir", &DataFrame<FL>::mps_dir)
+        .def_readwrite("mpo_dir", &DataFrame<FL>::mpo_dir)
+        .def_readwrite("restart_dir", &DataFrame<FL>::restart_dir)
+        .def_readwrite("restart_dir_per_sweep",
+                       &DataFrame<FL>::restart_dir_per_sweep)
+        .def_readwrite("restart_dir_optimal_mps",
+                       &DataFrame<FL>::restart_dir_optimal_mps)
+        .def_readwrite("restart_dir_optimal_mps_per_sweep",
+                       &DataFrame<FL>::restart_dir_optimal_mps_per_sweep)
+        .def_readwrite("prefix", &DataFrame<FL>::prefix)
+        .def_readwrite("prefix_distri", &DataFrame<FL>::prefix_distri)
+        .def_readwrite("prefix_can_write", &DataFrame<FL>::prefix_can_write)
+        .def_readwrite("partition_can_write",
+                       &DataFrame<FL>::partition_can_write)
+        .def_readwrite("isize", &DataFrame<FL>::isize)
+        .def_readwrite("dsize", &DataFrame<FL>::dsize)
+        .def_readwrite("tread", &DataFrame<FL>::tread)
+        .def_readwrite("twrite", &DataFrame<FL>::twrite)
+        .def_readwrite("tasync", &DataFrame<FL>::tasync)
+        .def_readwrite("fpread", &DataFrame<FL>::fpread)
+        .def_readwrite("fpwrite", &DataFrame<FL>::fpwrite)
+        .def_readwrite("n_frames", &DataFrame<FL>::n_frames)
+        .def_readwrite("i_frame", &DataFrame<FL>::i_frame)
+        .def_readwrite("iallocs", &DataFrame<FL>::iallocs)
+        .def_readwrite("dallocs", &DataFrame<FL>::dallocs)
+        .def_readwrite("peak_used_memory", &DataFrame<FL>::peak_used_memory)
+        .def_readwrite("load_buffering", &DataFrame<FL>::load_buffering)
+        .def_readwrite("save_buffering", &DataFrame<FL>::save_buffering)
+        .def_readwrite("use_main_stack", &DataFrame<FL>::use_main_stack)
+        .def_readwrite("minimal_disk_usage", &DataFrame<FL>::minimal_disk_usage)
+        .def_readwrite("minimal_memory_usage",
+                       &DataFrame<FL>::minimal_memory_usage)
+        .def_readwrite("fp_codec", &DataFrame<FL>::fp_codec)
+        .def("update_peak_used_memory", &DataFrame<FL>::update_peak_used_memory)
+        .def("reset_peak_used_memory", &DataFrame<FL>::reset_peak_used_memory)
+        .def("activate", &DataFrame<FL>::activate)
+        .def("load_data", &DataFrame<FL>::load_data)
+        .def("save_data", &DataFrame<FL>::save_data)
+        .def("reset", &DataFrame<FL>::reset)
+        .def("__repr__", [](DataFrame<FL> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
 
-    py::class_<IterativeMatrixFunctions<double>>(m, "IterativeMatrixFunctions");
+    py::bind_vector<vector<shared_ptr<StackAllocator<FL>>>>(
+        m, ("Vector" + name + "StackAllocator").c_str());
+}
 
-    py::class_<IterativeMatrixFunctions<complex<double>>>(
+template <typename FL> void bind_matrix(py::module &m) {
+    py::class_<GMatrix<FL>, shared_ptr<GMatrix<FL>>>(m, "Matrix",
+                                                     py::buffer_protocol())
+        .def(py::init([](py::array_t<FL> mat) {
+                 assert(mat.ndim() == 2);
+                 assert(mat.strides()[1] == sizeof(FL));
+                 return GMatrix<FL>(mat.mutable_data(), mat.shape()[0],
+                                    mat.shape()[1]);
+             }),
+             py::keep_alive<0, 1>())
+        .def_buffer([](GMatrix<FL> *self) -> py::buffer_info {
+            return py::buffer_info(self->data, sizeof(FL),
+                                   py::format_descriptor<FL>::format(), 2,
+                                   {(ssize_t)self->m, (ssize_t)self->n},
+                                   {sizeof(FL) * (ssize_t)self->n, sizeof(FL)});
+        })
+        .def_readwrite("m", &GMatrix<FL>::m)
+        .def_readwrite("n", &GMatrix<FL>::n)
+        .def("__repr__",
+             [](GMatrix<FL> *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("allocate", &GMatrix<FL>::allocate, py::arg("alloc") = nullptr)
+        .def("deallocate", &GMatrix<FL>::deallocate,
+             py::arg("alloc") = nullptr);
+
+    py::class_<GMatrix<complex<FL>>, shared_ptr<GMatrix<complex<FL>>>>(
+        m, "ComplexMatrix", py::buffer_protocol())
+        .def(py::init([](py::array_t<complex<FL>> mat) {
+                 assert(mat.ndim() == 2);
+                 assert(mat.strides()[1] == sizeof(complex<FL>));
+                 return GMatrix<complex<FL>>(mat.mutable_data(), mat.shape()[0],
+                                             mat.shape()[1]);
+             }),
+             py::keep_alive<0, 1>())
+        .def_buffer([](GMatrix<complex<FL>> *self) -> py::buffer_info {
+            return py::buffer_info(
+                self->data, sizeof(complex<FL>),
+                py::format_descriptor<complex<FL>>::format(), 2,
+                {(ssize_t)self->m, (ssize_t)self->n},
+                {sizeof(complex<FL>) * (ssize_t)self->n, sizeof(complex<FL>)});
+        })
+        .def_readwrite("m", &GMatrix<complex<FL>>::m)
+        .def_readwrite("n", &GMatrix<complex<FL>>::n)
+        .def("__repr__",
+             [](GMatrix<complex<FL>> *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("allocate", &GMatrix<complex<FL>>::allocate,
+             py::arg("alloc") = nullptr)
+        .def("deallocate", &GMatrix<complex<FL>>::deallocate,
+             py::arg("alloc") = nullptr);
+
+    py::class_<GMatrixFunctions<FL>>(m, "MatrixFunctions")
+        .def_static("det",
+                    [](py::array_t<FL> &a) {
+                        MKL_INT n = (MKL_INT)Prime::sqrt((Prime::LL)a.size());
+                        assert(n * n == (MKL_INT)a.size());
+                        return GMatrixFunctions<FL>::det(
+                            GMatrix<FL>(a.mutable_data(), n, n));
+                    })
+        .def_static("eigs",
+                    [](py::array_t<FL> &a, py::array_t<FL> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        GMatrixFunctions<FL>::eigs(
+                            GMatrix<FL>(a.mutable_data(), n, n),
+                            GDiagonalMatrix<FL>(w.mutable_data(), n));
+                    })
+        .def_static("block_eigs", [](py::array_t<FL> &a, py::array_t<FL> &w,
+                                     const vector<uint8_t> &x) {
+            MKL_INT n = (MKL_INT)w.size();
+            GMatrixFunctions<FL>::block_eigs(
+                GMatrix<FL>(a.mutable_data(), n, n),
+                GDiagonalMatrix<FL>(w.mutable_data(), n), x);
+        });
+
+    py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions");
+
+    py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions");
+
+    py::class_<IterativeMatrixFunctions<complex<FL>>>(
         m, "ComplexIterativeMatrixFunctions");
 }
 
@@ -1947,16 +2079,17 @@ template <typename S = void> void bind_post_matrix(py::module &m) {
              [](DyallFCIDUMP *self, py::array_t<double> &dm) {
                  assert(dm.ndim() == 2);
                  assert(dm.strides()[1] == sizeof(double));
-                 MatrixRef mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
+                 GMatrix<double> mr(dm.mutable_data(), dm.shape()[0],
+                                    dm.shape()[1]);
                  self->initialize_from_1pdm_su2(mr);
              })
-        .def("initialize_from_1pdm_sz",
-             [](DyallFCIDUMP *self, py::array_t<double> &dm) {
-                 assert(dm.ndim() == 2);
-                 assert(dm.strides()[1] == sizeof(double));
-                 MatrixRef mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
-                 self->initialize_from_1pdm_sz(mr);
-             });
+        .def("initialize_from_1pdm_sz", [](DyallFCIDUMP *self,
+                                           py::array_t<double> &dm) {
+            assert(dm.ndim() == 2);
+            assert(dm.strides()[1] == sizeof(double));
+            GMatrix<double> mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
+            self->initialize_from_1pdm_sz(mr);
+        });
 
     py::class_<FinkFCIDUMP, shared_ptr<FinkFCIDUMP>, FCIDUMP<double>>(
         m, "FinkFCIDUMP")
@@ -2102,7 +2235,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("deallocate", &FCIDUMP<FL>::deallocate)
         .def("truncate_small", &FCIDUMP<FL>::truncate_small)
         .def("symmetrize",
-             (double(FCIDUMP<FL>::*)(const vector<uint8_t> &)) &
+             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
+                 const vector<uint8_t> &)) &
                  FCIDUMP<FL>::symmetrize,
              py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
@@ -2110,7 +2244,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              "    Args:\n"
              "        orbsym : in XOR convention")
         .def("symmetrize",
-             (double(FCIDUMP<FL>::*)(const vector<int16_t> &)) &
+             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
+                 const vector<int16_t> &)) &
                  FCIDUMP<FL>::symmetrize,
              py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
@@ -2118,7 +2253,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              "    Args:\n"
              "        orbsym : in Lz convention")
         .def("symmetrize",
-             (double(FCIDUMP<FL>::*)(const vector<int> &, int)) &
+             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(const vector<int> &,
+                                                       int)) &
                  FCIDUMP<FL>::symmetrize,
              py::arg("k_sym"), py::arg("k_mod"),
              "Remove integral elements that violate k symmetry. "
@@ -2177,6 +2313,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("abs_h1e_matrix", &FCIDUMP<FL>::abs_h1e_matrix)
         .def("reorder", (void(FCIDUMP<FL>::*)(const vector<uint16_t> &)) &
                             FCIDUMP<FL>::reorder)
+        .def("rescale", &FCIDUMP<FL>::rescale)
         .def("rotate", &FCIDUMP<FL>::rotate)
         .def("deep_copy", &FCIDUMP<FL>::deep_copy)
         .def_static("array_reorder", &FCIDUMP<FL>::template reorder<double>)
@@ -2684,9 +2821,10 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 extern template void bind_data<>(py::module &m);
 extern template void bind_types<>(py::module &m);
 extern template void bind_io<>(py::module &m);
-extern template void bind_matrix<>(py::module &m);
 extern template void bind_symmetry<>(py::module &m);
 
+extern template void bind_fl_io<double>(py::module &m, const string &name);
+extern template void bind_matrix<double>(py::module &m);
 extern template void bind_fl_matrix<double>(py::module &m);
 
 extern template void bind_post_matrix<>(py::module &m);
@@ -2698,7 +2836,8 @@ extern template void bind_sparse<SZ>(py::module &m);
 extern template void bind_parallel<SZ>(py::module &m);
 
 extern template void bind_fl_expr<SZ, double>(py::module &m);
-extern template void bind_fl_state_info<SZ, double>(py::module &m);
+extern template void bind_fl_state_info<SZ, double>(py::module &m,
+                                                    const string &name);
 extern template void bind_fl_sparse<SZ, double>(py::module &m);
 extern template void bind_fl_parallel<SZ, double>(py::module &m);
 extern template void bind_fl_operator<SZ, double>(py::module &m);
@@ -2712,7 +2851,8 @@ extern template void bind_sparse<SU2>(py::module &m);
 extern template void bind_parallel<SU2>(py::module &m);
 
 extern template void bind_fl_expr<SU2, double>(py::module &m);
-extern template void bind_fl_state_info<SU2, double>(py::module &m);
+extern template void bind_fl_state_info<SU2, double>(py::module &m,
+                                                     const string &name);
 extern template void bind_fl_sparse<SU2, double>(py::module &m);
 extern template void bind_fl_parallel<SU2, double>(py::module &m);
 extern template void bind_fl_operator<SU2, double>(py::module &m);
@@ -2733,7 +2873,8 @@ bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
 extern template void bind_fl_matrix<complex<double>>(py::module &m);
 
 extern template void bind_fl_expr<SZ, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SZ, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SZ, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SZ, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SZ, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SZ, complex<double>>(py::module &m);
@@ -2741,7 +2882,8 @@ extern template void bind_fl_hamiltonian<SZ, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SZ, complex<double>>(py::module &m);
 
 extern template void bind_fl_expr<SU2, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SU2, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SU2, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SU2, complex<double>>(py::module &m);
@@ -2758,7 +2900,8 @@ extern template void bind_sparse<SZK>(py::module &m);
 extern template void bind_parallel<SZK>(py::module &m);
 
 extern template void bind_fl_expr<SZK, double>(py::module &m);
-extern template void bind_fl_state_info<SZK, double>(py::module &m);
+extern template void bind_fl_state_info<SZK, double>(py::module &m,
+                                                     const string &name);
 extern template void bind_fl_sparse<SZK, double>(py::module &m);
 extern template void bind_fl_parallel<SZK, double>(py::module &m);
 extern template void bind_fl_operator<SZK, double>(py::module &m);
@@ -2772,7 +2915,8 @@ extern template void bind_sparse<SU2K>(py::module &m);
 extern template void bind_parallel<SU2K>(py::module &m);
 
 extern template void bind_fl_expr<SU2K, double>(py::module &m);
-extern template void bind_fl_state_info<SU2K, double>(py::module &m);
+extern template void bind_fl_state_info<SU2K, double>(py::module &m,
+                                                      const string &name);
 extern template void bind_fl_sparse<SU2K, double>(py::module &m);
 extern template void bind_fl_parallel<SU2K, double>(py::module &m);
 extern template void bind_fl_operator<SU2K, double>(py::module &m);
@@ -2790,7 +2934,8 @@ bind_trans_state_info_spin_specific<SU2K, SZK>(py::module &m,
 
 #ifdef _USE_COMPLEX
 extern template void bind_fl_expr<SZK, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SZK, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SZK, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SZK, complex<double>>(py::module &m);
@@ -2798,7 +2943,8 @@ extern template void bind_fl_hamiltonian<SZK, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SZK, complex<double>>(py::module &m);
 
 extern template void bind_fl_expr<SU2K, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SU2K, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SU2K, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SU2K, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SU2K, complex<double>>(py::module &m);
@@ -2817,7 +2963,8 @@ extern template void bind_sparse<SGF>(py::module &m);
 extern template void bind_parallel<SGF>(py::module &m);
 
 extern template void bind_fl_expr<SGF, double>(py::module &m);
-extern template void bind_fl_state_info<SGF, double>(py::module &m);
+extern template void bind_fl_state_info<SGF, double>(py::module &m,
+                                                     const string &name);
 extern template void bind_fl_sparse<SGF, double>(py::module &m);
 extern template void bind_fl_parallel<SGF, double>(py::module &m);
 extern template void bind_fl_operator<SGF, double>(py::module &m);
@@ -2831,7 +2978,8 @@ extern template void bind_sparse<SGB>(py::module &m);
 extern template void bind_parallel<SGB>(py::module &m);
 
 extern template void bind_fl_expr<SGB, double>(py::module &m);
-extern template void bind_fl_state_info<SGB, double>(py::module &m);
+extern template void bind_fl_state_info<SGB, double>(py::module &m,
+                                                     const string &name);
 extern template void bind_fl_sparse<SGB, double>(py::module &m);
 extern template void bind_fl_parallel<SGB, double>(py::module &m);
 extern template void bind_fl_operator<SGB, double>(py::module &m);
@@ -2840,7 +2988,8 @@ extern template void bind_fl_rule<SGB, double>(py::module &m);
 
 #ifdef _USE_COMPLEX
 extern template void bind_fl_expr<SGF, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SGF, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SGF, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SGF, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SGF, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SGF, complex<double>>(py::module &m);
@@ -2848,12 +2997,106 @@ extern template void bind_fl_hamiltonian<SGF, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SGF, complex<double>>(py::module &m);
 
 extern template void bind_fl_expr<SGB, complex<double>>(py::module &m);
-extern template void bind_fl_state_info<SGB, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SGB, complex<double>>(py::module &m, const string &name);
 extern template void bind_fl_sparse<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_parallel<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_hamiltonian<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SGB, complex<double>>(py::module &m);
+
+#endif
+
+#endif
+
+#ifdef _USE_SINGLE_PREC
+
+extern template void bind_fl_io<float>(py::module &m, const string &name);
+extern template void bind_matrix<float>(py::module &m);
+extern template void bind_fl_matrix<float>(py::module &m);
+
+extern template void bind_fl_expr<SZ, float>(py::module &m);
+extern template void bind_fl_state_info<SZ, float>(py::module &m,
+                                                   const string &name);
+extern template void bind_fl_sparse<SZ, float>(py::module &m);
+extern template void bind_fl_parallel<SZ, float>(py::module &m);
+extern template void bind_fl_operator<SZ, float>(py::module &m);
+extern template void bind_fl_hamiltonian<SZ, float>(py::module &m);
+extern template void bind_fl_rule<SZ, float>(py::module &m);
+
+extern template void bind_fl_expr<SU2, float>(py::module &m);
+extern template void bind_fl_state_info<SU2, float>(py::module &m,
+                                                    const string &name);
+extern template void bind_fl_sparse<SU2, float>(py::module &m);
+extern template void bind_fl_parallel<SU2, float>(py::module &m);
+extern template void bind_fl_operator<SU2, float>(py::module &m);
+extern template void bind_fl_hamiltonian<SU2, float>(py::module &m);
+extern template void bind_fl_rule<SU2, float>(py::module &m);
+
+#ifdef _USE_COMPLEX
+
+extern template void bind_fl_matrix<complex<float>>(py::module &m);
+
+extern template void bind_fl_expr<SZ, complex<float>>(py::module &m);
+extern template void bind_fl_state_info<SZ, complex<float>>(py::module &m,
+                                                            const string &name);
+extern template void bind_fl_sparse<SZ, complex<float>>(py::module &m);
+extern template void bind_fl_parallel<SZ, complex<float>>(py::module &m);
+extern template void bind_fl_operator<SZ, complex<float>>(py::module &m);
+extern template void bind_fl_hamiltonian<SZ, complex<float>>(py::module &m);
+extern template void bind_fl_rule<SZ, complex<float>>(py::module &m);
+
+extern template void bind_fl_expr<SU2, complex<float>>(py::module &m);
+extern template void
+bind_fl_state_info<SU2, complex<float>>(py::module &m, const string &name);
+extern template void bind_fl_sparse<SU2, complex<float>>(py::module &m);
+extern template void bind_fl_parallel<SU2, complex<float>>(py::module &m);
+extern template void bind_fl_operator<SU2, complex<float>>(py::module &m);
+extern template void bind_fl_hamiltonian<SU2, complex<float>>(py::module &m);
+extern template void bind_fl_rule<SU2, complex<float>>(py::module &m);
+
+#endif
+
+#ifdef _USE_SG
+
+extern template void bind_fl_expr<SGF, float>(py::module &m);
+extern template void bind_fl_state_info<SGF, float>(py::module &m,
+                                                    const string &name);
+extern template void bind_fl_sparse<SGF, float>(py::module &m);
+extern template void bind_fl_parallel<SGF, float>(py::module &m);
+extern template void bind_fl_operator<SGF, float>(py::module &m);
+extern template void bind_fl_hamiltonian<SGF, float>(py::module &m);
+extern template void bind_fl_rule<SGF, float>(py::module &m);
+
+extern template void bind_fl_expr<SGB, float>(py::module &m);
+extern template void bind_fl_state_info<SGB, float>(py::module &m,
+                                                    const string &name);
+extern template void bind_fl_sparse<SGB, float>(py::module &m);
+extern template void bind_fl_parallel<SGB, float>(py::module &m);
+extern template void bind_fl_operator<SGB, float>(py::module &m);
+extern template void bind_fl_hamiltonian<SGB, float>(py::module &m);
+extern template void bind_fl_rule<SGB, float>(py::module &m);
+
+#ifdef _USE_COMPLEX
+extern template void bind_fl_expr<SGF, complex<float>>(py::module &m);
+extern template void
+bind_fl_state_info<SGF, complex<float>>(py::module &m, const string &name);
+extern template void bind_fl_sparse<SGF, complex<float>>(py::module &m);
+extern template void bind_fl_parallel<SGF, complex<float>>(py::module &m);
+extern template void bind_fl_operator<SGF, complex<float>>(py::module &m);
+extern template void bind_fl_hamiltonian<SGF, complex<float>>(py::module &m);
+extern template void bind_fl_rule<SGF, complex<float>>(py::module &m);
+
+extern template void bind_fl_expr<SGB, complex<float>>(py::module &m);
+extern template void
+bind_fl_state_info<SGB, complex<float>>(py::module &m, const string &name);
+extern template void bind_fl_sparse<SGB, complex<float>>(py::module &m);
+extern template void bind_fl_parallel<SGB, complex<float>>(py::module &m);
+extern template void bind_fl_operator<SGB, complex<float>>(py::module &m);
+extern template void bind_fl_hamiltonian<SGB, complex<float>>(py::module &m);
+extern template void bind_fl_rule<SGB, complex<float>>(py::module &m);
+
+#endif
 
 #endif
 

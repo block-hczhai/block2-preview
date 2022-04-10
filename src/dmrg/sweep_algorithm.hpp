@@ -164,7 +164,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     // canonical form for wavefunction: K = left-fused, S = right-fused
     Iteration update_one_dot(int i, bool forward, ubond_t bond_dim, FPS noise,
                              FPS davidson_conv_thrd) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (me->ket->canonical_form[i] == 'C') {
             if (i == 0)
@@ -532,7 +532,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     // canonical form for wavefunction: C = center
     Iteration update_two_dot(int i, bool forward, ubond_t bond_dim, FPS noise,
                              FPS davidson_conv_thrd) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         if (me->ket->tensors[i] != nullptr &&
             me->ket->tensors[i + 1] != nullptr)
             MovingEnvironment<S, FL, FLS>::contract_two_dot(i, me->ket);
@@ -761,7 +761,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                                    FPS noise, FPS davidson_conv_thrd) {
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
         if (mket->canonical_form[i] == 'M') {
             if (i == 0)
@@ -1161,7 +1161,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                                    FPS noise, FPS davidson_conv_thrd) {
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         if (mket->tensors[i] != nullptr || mket->tensors[i + 1] != nullptr)
             MovingEnvironment<S, FL, FLS>::contract_multi_two_dot(i, mket);
         else
@@ -1481,10 +1481,11 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     sweep(bool forward, ubond_t bond_dim, FPS noise, FPS davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
         me->mpo->tread = me->mpo->twrite = 0;
-        frame->twrite = frame->tread = frame->tasync = 0;
-        frame->fpwrite = frame->fpread = 0;
-        if (frame->fp_codec != nullptr)
-            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         if (me->para_rule != nullptr && iprint >= 2) {
             me->para_rule->comm->tcomm = 0;
             me->para_rule->comm->tidle = 0;
@@ -1501,7 +1502,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
-        frame->reset_peak_used_memory();
+        frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < sweep_end_site - me->dot + 1; it++)
@@ -1533,8 +1534,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             sweep_energies.push_back(r.energies);
             sweep_discarded_weights.push_back(r.error);
             sweep_quanta.push_back(r.quanta);
-            if (frame->restart_dir_optimal_mps != "" ||
-                frame->restart_dir_optimal_mps_per_sweep != "") {
+            if (frame_<FPS>()->restart_dir_optimal_mps != "" ||
+                frame_<FPS>()->restart_dir_optimal_mps_per_sweep != "") {
                 size_t midx =
                     min_element(sweep_energies.begin(), sweep_energies.end(),
                                 [](const vector<FPS> &x, const vector<FPS> &y) {
@@ -1543,17 +1544,20 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     sweep_energies.begin();
                 if (midx == sweep_energies.size() - 1) {
                     if (me->para_rule == nullptr || me->para_rule->is_root()) {
-                        if (frame->restart_dir_optimal_mps != "") {
-                            string rdoe = frame->restart_dir_optimal_mps;
+                        if (frame_<FPS>()->restart_dir_optimal_mps != "") {
+                            string rdoe =
+                                frame_<FPS>()->restart_dir_optimal_mps;
                             if (!Parsing::path_exists(rdoe))
                                 Parsing::mkdir(rdoe);
                             me->ket->info->copy_mutable(rdoe);
                             me->ket->copy_data(rdoe);
                         }
-                        if (frame->restart_dir_optimal_mps_per_sweep != "") {
+                        if (frame_<FPS>()->restart_dir_optimal_mps_per_sweep !=
+                            "") {
                             string rdps =
-                                frame->restart_dir_optimal_mps_per_sweep + "." +
-                                Parsing::to_string((int)energies.size());
+                                frame_<FPS>()
+                                    ->restart_dir_optimal_mps_per_sweep +
+                                "." + Parsing::to_string((int)energies.size());
                             if (!Parsing::path_exists(rdps))
                                 Parsing::mkdir(rdps);
                             me->ket->info->copy_mutable(rdps);
@@ -1571,16 +1575,16 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                             return x.back() < y.back();
                         }) -
             sweep_energies.begin();
-        if (frame->restart_dir != "" &&
+        if (frame_<FPS>()->restart_dir != "" &&
             (me->para_rule == nullptr || me->para_rule->is_root())) {
-            if (!Parsing::path_exists(frame->restart_dir))
-                Parsing::mkdir(frame->restart_dir);
-            me->ket->info->copy_mutable(frame->restart_dir);
-            me->ket->copy_data(frame->restart_dir);
+            if (!Parsing::path_exists(frame_<FPS>()->restart_dir))
+                Parsing::mkdir(frame_<FPS>()->restart_dir);
+            me->ket->info->copy_mutable(frame_<FPS>()->restart_dir);
+            me->ket->copy_data(frame_<FPS>()->restart_dir);
         }
-        if (frame->restart_dir_per_sweep != "" &&
+        if (frame_<FPS>()->restart_dir_per_sweep != "" &&
             (me->para_rule == nullptr || me->para_rule->is_root())) {
-            string rdps = frame->restart_dir_per_sweep + "." +
+            string rdps = frame_<FPS>()->restart_dir_per_sweep + "." +
                           Parsing::to_string((int)energies.size());
             if (!Parsing::path_exists(rdps))
                 Parsing::mkdir(rdps);
@@ -1749,10 +1753,11 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             dynamic_pointer_cast<ParallelMPS<S, FLS>>(me->ket);
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
         me->mpo->tread = me->mpo->twrite = 0;
-        frame->twrite = frame->tread = frame->tasync = 0;
-        frame->fpwrite = frame->fpread = 0;
-        if (frame->fp_codec != nullptr)
-            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         if (para_mps->rule != nullptr && iprint >= 2) {
             para_mps->rule->comm->tcomm = 0;
             para_mps->rule->comm->tidle = 0;
@@ -1770,7 +1775,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
-        frame->reset_peak_used_memory();
+        frame_<FPS>()->reset_peak_used_memory();
         sweep_energies.resize(me->n_sites - me->dot + 1, vector<FPS>{1E9});
         sweep_time.resize(me->n_sites - me->dot + 1, 0);
         sweep_discarded_weights.resize(me->n_sites - me->dot + 1);
@@ -1896,20 +1901,20 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             cout << endl;
         }
         para_mps->conn_centers = new_conn_centers;
-        if (frame->restart_dir != "" &&
+        if (frame_<FPS>()->restart_dir != "" &&
             (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) &&
             (me->para_rule == nullptr || me->para_rule->is_root())) {
             para_mps->save_data();
-            if (!Parsing::path_exists(frame->restart_dir))
-                Parsing::mkdir(frame->restart_dir);
-            para_mps->info->copy_mutable(frame->restart_dir);
-            para_mps->copy_data(frame->restart_dir);
+            if (!Parsing::path_exists(frame_<FPS>()->restart_dir))
+                Parsing::mkdir(frame_<FPS>()->restart_dir);
+            para_mps->info->copy_mutable(frame_<FPS>()->restart_dir);
+            para_mps->copy_data(frame_<FPS>()->restart_dir);
         }
-        if (frame->restart_dir_per_sweep != "" &&
+        if (frame_<FPS>()->restart_dir_per_sweep != "" &&
             (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) &&
             (me->para_rule == nullptr || me->para_rule->is_root())) {
             para_mps->save_data();
-            string rdps = frame->restart_dir_per_sweep + "." +
+            string rdps = frame_<FPS>()->restart_dir_per_sweep + "." +
                           Parsing::to_string((int)energies.size());
             if (!Parsing::path_exists(rdps))
                 Parsing::mkdir(rdps);
@@ -1927,10 +1932,15 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (noises.size() < n_sweeps)
             noises.resize(n_sweeps, noises.size() == 0 ? 0.0 : noises.back());
         if (davidson_conv_thrds.size() < n_sweeps)
-            for (size_t i = davidson_conv_thrds.size(); i < noises.size(); i++)
+            for (size_t i = davidson_conv_thrds.size(); i < noises.size();
+                 i++) {
                 davidson_conv_thrds.push_back(
                     (noises[i] == 0 ? (tol == 0 ? 1E-9 : tol) : noises[i]) *
                     0.1);
+                if (is_same<FPS, float>::value)
+                    davidson_conv_thrds.back() =
+                        max(davidson_conv_thrds.back(), (FPS)5E-6);
+            }
         shared_ptr<ParallelMPS<S, FLS>> para_mps =
             me->ket->get_type() == MPSTypes::MultiCenter
                 ? dynamic_pointer_cast<ParallelMPS<S, FLS>>(me->ket)
@@ -2025,10 +2035,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
                     }
-                    size_t dmain = frame->peak_used_memory[0];
-                    size_t dseco = frame->peak_used_memory[1];
-                    size_t imain = frame->peak_used_memory[2];
-                    size_t iseco = frame->peak_used_memory[3];
+                    size_t dmain = frame_<FPS>()->peak_used_memory[0];
+                    size_t dseco = frame_<FPS>()->peak_used_memory[1];
+                    size_t imain = frame_<FPS>()->peak_used_memory[2];
+                    size_t iseco = frame_<FPS>()->peak_used_memory[3];
                     sout << " | Dmem = "
                          << Parsing::to_size_string(dmain + dseco) << " ("
                          << (dmain * 100 / (dmain + dseco)) << "%)";
@@ -2042,19 +2052,19 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                          << Parsing::to_size_string(sweep_max_pket_size *
                                                     sizeof(FLS))
                          << endl;
-                    sout << " | Tread = " << frame->tread
-                         << " | Twrite = " << frame->twrite
-                         << " | Tfpread = " << frame->fpread
-                         << " | Tfpwrite = " << frame->fpwrite
+                    sout << " | Tread = " << frame_<FPS>()->tread
+                         << " | Twrite = " << frame_<FPS>()->twrite
+                         << " | Tfpread = " << frame_<FPS>()->fpread
+                         << " | Tfpwrite = " << frame_<FPS>()->fpwrite
                          << " | Tmporead = " << me->mpo->tread
-                         << " | Tasync = " << frame->tasync << endl;
-                    if (frame->fp_codec != nullptr)
+                         << " | Tasync = " << frame_<FPS>()->tasync << endl;
+                    if (frame_<FPS>()->fp_codec != nullptr)
                         sout << " | data = "
-                             << Parsing::to_size_string(frame->fp_codec->ndata *
-                                                        8)
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ndata * 8)
                              << " | cpsd = "
-                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
-                                                        8)
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ncpsd * 8)
                              << endl;
                     sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
@@ -2260,7 +2270,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                              FPS linear_conv_thrd) {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
         vector<shared_ptr<MPS<S, FLS>>> mpss = {me->bra, me->ket};
         if (tme != nullptr) {
@@ -2409,7 +2419,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                 greens_function_squared(
                                     l_eff, lme->mpo->const_e,
                                     gf_extra_omegas[j],
-                                    gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                    gf_extra_eta == (FLS)0.0 ? gf_eta
+                                                             : gf_extra_eta,
                                     real_bra, cg_n_harmonic_projection,
                                     iprint >= 3, linear_conv_thrd,
                                     linear_max_iter, linear_soft_max_iter,
@@ -2418,7 +2429,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
                                 l_eff, lme->mpo->const_e, solver_type,
                                 gf_extra_omegas[j],
-                                gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                gf_extra_eta == (FLS)0.0 ? gf_eta
+                                                         : gf_extra_eta,
                                 real_bra, linear_solver_params, iprint >= 3,
                                 linear_conv_thrd, linear_max_iter,
                                 linear_soft_max_iter, me->para_rule);
@@ -3001,7 +3013,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                              FPS linear_conv_thrd) {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss = {me->bra, me->ket};
         if (tme != nullptr) {
             if (tme->bra != me->bra && tme->bra != me->ket)
@@ -3119,7 +3131,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                 greens_function_squared(
                                     l_eff, lme->mpo->const_e,
                                     gf_extra_omegas[j],
-                                    gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                    gf_extra_eta == (FLS)0.0 ? gf_eta
+                                                             : gf_extra_eta,
                                     real_bra, cg_n_harmonic_projection,
                                     iprint >= 3, linear_conv_thrd,
                                     linear_max_iter, linear_soft_max_iter,
@@ -3128,7 +3141,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
                                 l_eff, lme->mpo->const_e, solver_type,
                                 gf_extra_omegas[j],
-                                gf_extra_eta == 0.0 ? gf_eta : gf_extra_eta,
+                                gf_extra_eta == (FLS)0.0 ? gf_eta
+                                                         : gf_extra_eta,
                                 real_bra, linear_solver_params, iprint >= 3,
                                 linear_conv_thrd, linear_max_iter,
                                 linear_soft_max_iter, me->para_rule);
@@ -3590,10 +3604,11 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                   ubond_t ket_bond_dim, FPS noise,
                                   FPS linear_conv_thrd) {
         teff = tmult = tprt = tblk = tmve = tdm = tsplt = tsvd = 0;
-        frame->twrite = frame->tread = frame->tasync = 0;
-        frame->fpwrite = frame->fpread = 0;
-        if (frame->fp_codec != nullptr)
-            frame->fp_codec->ndata = frame->fp_codec->ncpsd = 0;
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         if (lme != nullptr && lme->para_rule != nullptr) {
             lme->para_rule->comm->tcomm = 0;
             lme->para_rule->comm->tidle = 0;
@@ -3611,7 +3626,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
-        frame->reset_peak_used_memory();
+        frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
             for (int it = rme->center; it < sweep_end_site - rme->dot + 1; it++)
@@ -3642,8 +3657,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                      << fixed << t.get_time() << endl;
             sweep_targets.push_back(r.targets);
             sweep_discarded_weights.push_back(r.error);
-            if (frame->restart_dir_optimal_mps != "" ||
-                frame->restart_dir_optimal_mps_per_sweep != "") {
+            if (frame_<FPS>()->restart_dir_optimal_mps != "" ||
+                frame_<FPS>()->restart_dir_optimal_mps_per_sweep != "") {
                 size_t midx = -1;
                 switch (conv_type) {
                 case ConvergenceTypes::MiddleSite:
@@ -3705,17 +3720,20 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 if (midx == sweep_targets.size() - 1) {
                     if (rme->para_rule == nullptr ||
                         rme->para_rule->is_root()) {
-                        if (frame->restart_dir_optimal_mps != "") {
-                            string rdoe = frame->restart_dir_optimal_mps;
+                        if (frame_<FPS>()->restart_dir_optimal_mps != "") {
+                            string rdoe =
+                                frame_<FPS>()->restart_dir_optimal_mps;
                             if (!Parsing::path_exists(rdoe))
                                 Parsing::mkdir(rdoe);
                             rme->bra->info->copy_mutable(rdoe);
                             rme->bra->copy_data(rdoe);
                         }
-                        if (frame->restart_dir_optimal_mps_per_sweep != "") {
+                        if (frame_<FPS>()->restart_dir_optimal_mps_per_sweep !=
+                            "") {
                             string rdps =
-                                frame->restart_dir_optimal_mps_per_sweep + "." +
-                                Parsing::to_string((int)targets.size());
+                                frame_<FPS>()
+                                    ->restart_dir_optimal_mps_per_sweep +
+                                "." + Parsing::to_string((int)targets.size());
                             if (!Parsing::path_exists(rdps))
                                 Parsing::mkdir(rdps);
                             rme->bra->info->copy_mutable(rdps);
@@ -3779,16 +3797,16 @@ template <typename S, typename FL, typename FLS> struct Linear {
         default:
             assert(false);
         }
-        if (frame->restart_dir != "" &&
+        if (frame_<FPS>()->restart_dir != "" &&
             (rme->para_rule == nullptr || rme->para_rule->is_root())) {
-            if (!Parsing::path_exists(frame->restart_dir))
-                Parsing::mkdir(frame->restart_dir);
-            rme->bra->info->copy_mutable(frame->restart_dir);
-            rme->bra->copy_data(frame->restart_dir);
+            if (!Parsing::path_exists(frame_<FPS>()->restart_dir))
+                Parsing::mkdir(frame_<FPS>()->restart_dir);
+            rme->bra->info->copy_mutable(frame_<FPS>()->restart_dir);
+            rme->bra->copy_data(frame_<FPS>()->restart_dir);
         }
-        if (frame->restart_dir_per_sweep != "" &&
+        if (frame_<FPS>()->restart_dir_per_sweep != "" &&
             (rme->para_rule == nullptr || rme->para_rule->is_root())) {
-            string rdps = frame->restart_dir_per_sweep + "." +
+            string rdps = frame_<FPS>()->restart_dir_per_sweep + "." +
                           Parsing::to_string((int)targets.size());
             if (!Parsing::path_exists(rdps))
                 Parsing::mkdir(rdps);
@@ -3897,10 +3915,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                              << " | Twait = " << tt[2];
                         cout << endl;
                     }
-                    size_t dmain = frame->peak_used_memory[0];
-                    size_t dseco = frame->peak_used_memory[1];
-                    size_t imain = frame->peak_used_memory[2];
-                    size_t iseco = frame->peak_used_memory[3];
+                    size_t dmain = frame_<FPS>()->peak_used_memory[0];
+                    size_t dseco = frame_<FPS>()->peak_used_memory[1];
+                    size_t imain = frame_<FPS>()->peak_used_memory[2];
+                    size_t iseco = frame_<FPS>()->peak_used_memory[3];
                     cout << " | Dmem = "
                          << Parsing::to_size_string(dmain + dseco) << " ("
                          << (dmain * 100 / (dmain + dseco)) << "%)";
@@ -3914,18 +3932,18 @@ template <typename S, typename FL, typename FLS> struct Linear {
                          << Parsing::to_size_string(sweep_max_pket_size *
                                                     sizeof(FLS))
                          << endl;
-                    cout << " | Tread = " << frame->tread
-                         << " | Twrite = " << frame->twrite
-                         << " | Tfpread = " << frame->fpread
-                         << " | Tfpwrite = " << frame->fpwrite;
-                    if (frame->fp_codec != nullptr)
+                    cout << " | Tread = " << frame_<FPS>()->tread
+                         << " | Twrite = " << frame_<FPS>()->twrite
+                         << " | Tfpread = " << frame_<FPS>()->fpread
+                         << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
+                    if (frame_<FPS>()->fp_codec != nullptr)
                         cout << " | data = "
-                             << Parsing::to_size_string(frame->fp_codec->ndata *
-                                                        8)
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ndata * 8)
                              << " | cpsd = "
-                             << Parsing::to_size_string(frame->fp_codec->ncpsd *
-                                                        8);
-                    cout << " | Tasync = " << frame->tasync << endl;
+                             << Parsing::to_size_string(
+                                    frame_<FPS>()->fp_codec->ncpsd * 8);
+                    cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                     if (lme != nullptr)
                         cout << " | Trot = " << lme->trot
                              << " | Tctr = " << lme->tctr
@@ -3954,24 +3972,26 @@ template <typename S, typename FL, typename FLS> struct Linear {
     }
 };
 
-template <typename FL> struct PartitionWeights;
+template <typename FL, typename = void> struct PartitionWeights;
 
-template <> struct PartitionWeights<double> {
-    typedef vector<long double> type;
-    inline static vector<long double> get_partition_weights() {
-        return vector<long double>{1.0L};
+template <typename FL>
+struct PartitionWeights<
+    FL, typename enable_if<is_floating_point<FL>::value>::type> {
+    typedef typename GMatrix<FL>::FL LFL;
+    typedef vector<LFL> type;
+    inline static vector<LFL> get_partition_weights() {
+        return vector<LFL>{(LFL)1.0};
     }
-    inline static vector<long double>
-    get_partition_weights(double beta, const vector<double> &energies,
+    inline static vector<LFL>
+    get_partition_weights(FL beta, const vector<FL> &energies,
                           const vector<int> &multiplicities) {
-        vector<long double> partition_weights(energies.size());
+        vector<LFL> partition_weights(energies.size());
         for (size_t i = 0; i < energies.size(); i++)
             partition_weights[i] =
                 multiplicities[i] *
-                expl(-(long double)beta *
-                     ((long double)energies[i] - (long double)energies[0]));
-        long double psum = accumulate(partition_weights.begin(),
-                                      partition_weights.end(), 0.0L);
+                exp(-(LFL)beta * ((LFL)energies[i] - (LFL)energies[0]));
+        LFL psum = accumulate(partition_weights.begin(),
+                              partition_weights.end(), (LFL)0.0);
         for (size_t i = 0; i < energies.size(); i++)
             partition_weights[i] /= psum;
         return partition_weights;
@@ -3979,18 +3999,18 @@ template <> struct PartitionWeights<double> {
     inline static ExpectationTypes get_type() { return ExpectationTypes::Real; }
 };
 
-template <> struct PartitionWeights<complex<double>> {
-    typedef vector<complex<double>> type;
-    inline static vector<complex<double>> get_partition_weights() {
-        return vector<complex<double>>{complex<double>(1, 0),
-                                       complex<double>(0, 1)};
+template <typename FL>
+struct PartitionWeights<FL, typename enable_if<is_complex<FL>::value>::type> {
+    typedef typename GMatrix<FL>::FP FP;
+    typedef vector<FL> type;
+    inline static vector<FL> get_partition_weights() {
+        return vector<FL>{FL(1, 0), FL(0, 1)};
     }
-    inline static vector<complex<double>>
-    get_partition_weights(double beta, const vector<double> &energies,
+    inline static vector<FL>
+    get_partition_weights(FP beta, const vector<FP> &energies,
                           const vector<int> &multiplicities) {
         throw runtime_error("Not implemented!");
-        return vector<complex<double>>{complex<double>(1, 0),
-                                       complex<double>(0, 1)};
+        return vector<FL>{FL(1, 0), FL(0, 1)};
     }
     inline static ExpectationTypes get_type() {
         return ExpectationTypes::Complex;
@@ -4062,7 +4082,7 @@ struct Expect {
     // expeditious zero-dot algorithm for fast one-dot pdm expectation
     Iteration update_zero_dot(int i, bool forward, bool propagate,
                               ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         assert(propagate);
         vector<shared_ptr<MPS<S, FLS>>> mpss =
             me->bra == me->ket
@@ -4300,7 +4320,7 @@ struct Expect {
     }
     Iteration update_one_dot(int i, bool forward, bool propagate,
                              ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss =
             me->bra == me->ket
                 ? vector<shared_ptr<MPS<S, FLS>>>{me->bra}
@@ -4482,7 +4502,7 @@ struct Expect {
     }
     Iteration update_two_dot(int i, bool forward, bool propagate,
                              ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss =
             me->bra == me->ket
                 ? vector<shared_ptr<MPS<S, FLS>>>{me->bra}
@@ -4597,7 +4617,7 @@ struct Expect {
                                              me->bra);
         if (me->bra == me->ket)
             assert(mbra == mket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MultiMPS<S, FLS>>> mpss =
             me->bra == me->ket
                 ? vector<shared_ptr<MultiMPS<S, FLS>>>{mbra}
@@ -4840,7 +4860,7 @@ struct Expect {
                                              me->bra);
         if (me->bra == me->ket)
             assert(mbra == mket);
-        frame->activate(0);
+        frame_<FPS>()->activate(0);
         vector<shared_ptr<MultiMPS<S, FLS>>> mpss =
             me->bra == me->ket
                 ? vector<shared_ptr<MultiMPS<S, FLS>>>{mbra}

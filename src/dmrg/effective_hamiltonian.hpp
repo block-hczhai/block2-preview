@@ -254,7 +254,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             perturb_ket->allocate(all_infos);
         }
         // connection infos
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         vector<vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             cinfos;
         cinfos.resize(psubsl.size());
@@ -377,7 +377,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         for (size_t i = 0; i < ortho_bra.size(); i++)
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
@@ -413,7 +413,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         if (solver_type == LinearSolverTypes::Automatic)
             solver_type = LinearSolverTypes::MinRes;
         int nmult = 0, niter = 0;
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         GMatrix<FL> mket(ket->data, (MKL_INT)ket->total_memory, 1);
@@ -465,7 +465,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     shared_ptr<OpExpr<S>>
     add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != 0.0) {
+        if (const_e != (FP)0.0) {
             // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
@@ -532,7 +532,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0.0 && op->mat->data.size() > 0)
+        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         assert(ex_type == ExpectationTypes::Real || is_complex<FL>::value);
         if (algo_type == ExpectationAlgorithmTypes::Automatic)
@@ -605,7 +605,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         } else
             expectations = tf->tensor_product_expectation(
                 op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
-        if (const_e != 0.0 && op->mat->data.size() > 0)
+        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -647,7 +647,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         add_const_term(1.0, para_rule);
         f(kk, r0, 1.0);
         op->mat->data[0] = expr;
-        // if (const_e != 0.0)
+        // if (const_e != (FL)0.0)
         //     MatrixFunctions::iadd(r1, r0, beta * const_e);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -705,7 +705,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            FL factor = exp(beta * (i + 1.0) / 3.0 * const_e);
+            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * const_e);
             GMatrixFunctions<FL>::copy(r[i], v);
             GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
@@ -738,12 +738,12 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         vector<GMatrix<FL>> k, r;
         Timer t;
         t.get_time();
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         for (int i = 0; i < 3; i++) {
             r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             r[i].allocate();
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int i = 0; i < 4; i++) {
             k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             k[i].allocate(), k[i].clear();
@@ -775,7 +775,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            FL factor = exp(beta * (i + 1.0) / 3.0 * const_e);
+            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * const_e);
             GMatrixFunctions<FL>::copy(r[i], v);
             GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
@@ -839,7 +839,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
     void deallocate() {
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int i = (int)wfn_infos.size() - 1; i >= 0; i--)
             if (wfn_infos[i] != nullptr)
                 wfn_infos[i]->deallocate();
@@ -929,7 +929,7 @@ template <typename S, typename FL> struct LinearEffectiveHamiltonian {
         }
         vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{GMatrix<FL>(
             h_effs[0]->ket->data, (MKL_INT)h_effs[0]->ket->total_memory, 1)};
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
@@ -1209,7 +1209,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             perturb_ket->allocate(all_infos);
         }
         // connection infos
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         vector<vector<
             vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>>
             cinfos;
@@ -1346,7 +1346,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         for (size_t i = 0; i < ortho_bra.size(); i++)
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
@@ -1374,7 +1374,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     shared_ptr<OpExpr<S>>
     add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != 0.0) {
+        if (const_e != (FL)0.0) {
             // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
@@ -1414,7 +1414,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
            ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != 0.0 && op->mat->data.size() > 0)
+        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         Timer t;
         t.get_time();
@@ -1501,7 +1501,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 assert(false);
         }
         btmp.deallocate();
-        if (const_e != 0.0 && op->mat->data.size() > 0)
+        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         if (results.size() != 0) {
             assert(para_rule != nullptr);
@@ -1528,14 +1528,14 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         vector<GMatrix<FL>> k, r;
         Timer t;
         t.get_time();
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         for (int i = 0; i < 3; i++) {
             r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[0]->total_memory, 1));
             r[i + i].allocate();
             r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[1]->total_memory, 1));
             r[i + i + 1].allocate();
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int i = 0; i < 4; i++) {
             k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket[0]->total_memory, 1));
             k[i + i].allocate(), k[i + i].clear();
@@ -1636,7 +1636,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                        (size_t)nflop, t.get_time()));
     }
     void deallocate() {
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int i = (int)wfn_infos.size() - 1; i >= 0; i--) {
             vector<pair<
                 S *, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>

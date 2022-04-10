@@ -39,6 +39,7 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
+    typedef double FP;
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
@@ -49,20 +50,20 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        frame_()->use_main_stack = false;
-        frame_()->minimal_disk_usage = true;
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
             1);
         threading_()->seq_type = SeqTypes::Tasked;
-        cout << *frame_() << endl;
+        cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 

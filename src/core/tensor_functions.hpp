@@ -196,7 +196,7 @@ template <typename S, typename FL> struct TensorFunctions {
                     assert(a->lmat->data[i] == c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
                                           pc = abs_value(c->lmat->data[i]);
-                    if (!frame->use_main_stack) {
+                    if (!frame_<FP>()->use_main_stack) {
                         // skip cached part
                         if (c->ops[pc]->alloc != nullptr)
                             return;
@@ -228,7 +228,7 @@ template <typename S, typename FL> struct TensorFunctions {
                     assert(a->rmat->data[i] == c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
                                           pc = abs_value(c->rmat->data[i]);
-                    if (!frame->use_main_stack) {
+                    if (!frame_<FP>()->use_main_stack) {
                         // skip cached part
                         if (c->ops[pc]->alloc != nullptr)
                             return;
@@ -1091,8 +1091,9 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
             shared_ptr<OpExpr<S>> expr =
                 exprs->data[k] *
-                (1.0 / dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
-                           ->factor);
+                ((FP)1.0 /
+                 dynamic_pointer_cast<OpElement<S, FL>>(names->data[k])
+                     ->factor);
             assert(a->ops.count(nop) != 0);
             shared_ptr<SparseMatrix<S, FL>> anop = a->ops.at(nop);
             switch (expr->get_type()) {
@@ -1143,7 +1144,7 @@ template <typename S, typename FL> struct TensorFunctions {
         mp_ext.reserve(a->ops.size());
         for (auto it = a->ops.cbegin(); it != a->ops.cend(); it++)
             if (it->second->total_memory != 0) {
-                if (it->second->alloc == dalloc)
+                if (it->second->alloc == dalloc_<FP>())
                     mp.emplace_back(it->second->data, it->second,
                                     del_ops.count(it->first));
                 else
@@ -1168,7 +1169,7 @@ template <typename S, typename FL> struct TensorFunctions {
             if (get<2>(t))
                 get<1>(t)->deallocate();
             else
-                get<1>(t)->reallocate(dalloc);
+                get<1>(t)->reallocate(dalloc_<FP>());
     }
     // Substituing delayed left experssions
     // Return sum of three-operator tensor products
@@ -1185,7 +1186,8 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpElement<S, FL>> aop =
                 dynamic_pointer_cast<OpElement<S, FL>>(amat->data[i]);
             shared_ptr<OpExpr<S>> op = abs_value(amat->data[i]);
-            shared_ptr<OpExpr<S>> expr = a->mat->data[i] * (1.0 / aop->factor);
+            shared_ptr<OpExpr<S>> expr =
+                a->mat->data[i] * ((FP)1.0 / aop->factor);
             aops[op] = expr;
         }
         vector<shared_ptr<OpExpr<S>>> rexpr(exprs->data.size());
@@ -1435,7 +1437,7 @@ template <typename S, typename FL> struct TensorFunctions {
                                shared_ptr<OperatorTensor<S, FL>> &c,
                                const shared_ptr<Symbolic<S>> &cexprs = nullptr,
                                OpNamesSet delayed = OpNamesSet()) const {
-        if (frame->use_main_stack)
+        if (frame_<FP>()->use_main_stack)
             for (auto &p : c->ops) {
                 shared_ptr<OpElement<S, FL>> op =
                     dynamic_pointer_cast<OpElement<S, FL>>(p.first);
@@ -1457,9 +1459,9 @@ template <typename S, typename FL> struct TensorFunctions {
                             c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> op = abs_value(c->lmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
-                        exprs->data[i] * (1.0 / cop->factor);
+                        exprs->data[i] * ((FP)1.0 / cop->factor);
                     if (!delayed(cop->name)) {
-                        if (!frame->use_main_stack) {
+                        if (!frame_<FP>()->use_main_stack) {
                             // skip cached part
                             if (c->ops.at(op)->alloc != nullptr)
                                 return;
@@ -1480,7 +1482,7 @@ template <typename S, typename FL> struct TensorFunctions {
                                 shared_ptr<OperatorTensor<S, FL>> &c,
                                 const shared_ptr<Symbolic<S>> &cexprs = nullptr,
                                 OpNamesSet delayed = OpNamesSet()) const {
-        if (frame->use_main_stack)
+        if (frame_<FP>()->use_main_stack)
             for (auto &p : c->ops) {
                 shared_ptr<OpElement<S, FL>> op =
                     dynamic_pointer_cast<OpElement<S, FL>>(p.first);
@@ -1502,9 +1504,9 @@ template <typename S, typename FL> struct TensorFunctions {
                             c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> op = abs_value(c->rmat->data[i]);
                     shared_ptr<OpExpr<S>> expr =
-                        exprs->data[i] * (1.0 / cop->factor);
+                        exprs->data[i] * ((FP)1.0 / cop->factor);
                     if (!delayed(cop->name)) {
-                        if (!frame->use_main_stack) {
+                        if (!frame_<FP>()->use_main_stack) {
                             // skip cached part
                             if (c->ops.at(op)->alloc != nullptr)
                                 return;

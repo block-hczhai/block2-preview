@@ -4,47 +4,56 @@
 
 using namespace block2;
 
-class TestOperator : public ::testing::Test {
+template <typename FL> class TestOperator : public ::testing::Test {
   protected:
+    typedef typename GMatrix<FL>::FP FP;
     vector<shared_ptr<OpExpr<SZ>>> ops;
     vector<string> reprs;
     shared_ptr<OpExpr<SZ>> zero;
     void SetUp() override {
-        ops.push_back(make_shared<OpElement<SZ, double>>(
-            OpNames::H, SiteIndex(), SZ(0, 0, 0), 2.0));
+        ops.push_back(make_shared<OpElement<SZ, FL>>(OpNames::H, SiteIndex(),
+                                                     SZ(0, 0, 0), 2.0));
         reprs.push_back("(2 H)");
-        ops.push_back(make_shared<OpElement<SZ, double>>(
-            OpNames::I, SiteIndex(), SZ(0, 0, 0)));
+        ops.push_back(make_shared<OpElement<SZ, FL>>(OpNames::I, SiteIndex(),
+                                                     SZ(0, 0, 0)));
         reprs.push_back("I");
-        ops.push_back(make_shared<OpElement<SZ, double>>(
+        ops.push_back(make_shared<OpElement<SZ, FL>>(
             OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
         reprs.push_back("C0");
-        ops.push_back(make_shared<OpElement<SZ, double>>(
+        ops.push_back(make_shared<OpElement<SZ, FL>>(
             OpNames::Q, SiteIndex(1, 1, 0), SZ(0, 0, 0)));
         reprs.push_back("Q[ 1 1 0 ]");
-        ops.push_back(make_shared<OpElement<SZ, double>>(
+        ops.push_back(make_shared<OpElement<SZ, FL>>(
             OpNames::P, SiteIndex(1, 2, 1), SZ(2, 0, 0)));
         reprs.push_back("P[ 1 2 1 ]");
-        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
-            OpNames::H, SiteIndex(), SZ(0, 0, 0), complex<double>(2.0, -1.0)));
+        ops.push_back(make_shared<OpElement<SZ, complex<FL>>>(
+            OpNames::H, SiteIndex(), SZ(0, 0, 0), complex<FL>(2.0, -1.0)));
         reprs.push_back("((2,-1) H)");
-        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+        ops.push_back(make_shared<OpElement<SZ, complex<FL>>>(
             OpNames::I, SiteIndex(), SZ(0, 0, 0)));
         reprs.push_back("I");
-        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+        ops.push_back(make_shared<OpElement<SZ, complex<FL>>>(
             OpNames::C, SiteIndex((uint16_t)0), SZ(1, 1, 0)));
         reprs.push_back("C0");
-        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+        ops.push_back(make_shared<OpElement<SZ, complex<FL>>>(
             OpNames::Q, SiteIndex(1, 1, 0), SZ(0, 0, 0)));
         reprs.push_back("Q[ 1 1 0 ]");
-        ops.push_back(make_shared<OpElement<SZ, complex<double>>>(
+        ops.push_back(make_shared<OpElement<SZ, complex<FL>>>(
             OpNames::P, SiteIndex(1, 2, 1), SZ(2, 0, 0)));
         reprs.push_back("P[ 1 2 1 ]");
         zero = make_shared<OpExpr<SZ>>();
     }
 };
 
-TEST_F(TestOperator, TestSiteIndex) {
+#ifdef _USE_SINGLE_PREC
+typedef ::testing::Types<double, float> TestFL;
+#else
+typedef ::testing::Types<double> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestOperator, TestFL);
+
+TYPED_TEST(TestOperator, TestSiteIndex) {
     EXPECT_EQ(SiteIndex().size(), 0);
     EXPECT_EQ(SiteIndex().spin_size(), 0);
     EXPECT_EQ(SiteIndex()[0], 0);
@@ -63,7 +72,10 @@ TEST_F(TestOperator, TestSiteIndex) {
               SiteIndex({4, 3}, {0, 1}).flip().data);
 }
 
-TEST_F(TestOperator, TestExpr) {
+TYPED_TEST(TestOperator, TestExpr) {
+    const auto &ops = this->ops;
+    const auto &reprs = this->reprs;
+    const auto &zero = this->zero;
     for (size_t i = 0; i < ops.size(); i++) {
         EXPECT_EQ(ops[i]->to_str(), reprs[i]);
         EXPECT_TRUE(ops[i] * (-5.0) == (-5.0) * ops[i]);

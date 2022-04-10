@@ -167,12 +167,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         mat[{0, p++}] = d_op[j][s];
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = m + 1; j < n_sites; j++)
-                        mat[{0, p + j - m - 1}] = 0.5 * tr_op[j][s];
+                        mat[{0, p + j - m - 1}] = (FL)0.5 * tr_op[j][s];
                     p += n_sites - m - 1;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = m + 1; pit && j < n_sites; j++)
-                        mat[{0, p + j - m - 1}] = 0.5 * ts_op[j][s];
+                        mat[{0, p + j - m - 1}] = (FL)0.5 * ts_op[j][s];
                     p += n_sites - m - 1;
                 }
                 for (uint8_t s = 0; s < 4; s++)
@@ -189,12 +189,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint16_t t : ts)
                         if (t > m)
                             for (uint16_t j = m + 1; j < n_sites; j++)
-                                mat[{0, p++}] = 0.5 * p_op[t][j][s];
+                                mat[{0, p++}] = (FL)0.5 * p_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t > m)
                             for (uint16_t j = m + 1; j < n_sites; j++)
-                                mat[{0, p++}] = 0.5 * q_op[t][j][s];
+                                mat[{0, p++}] = (FL)0.5 * q_op[t][j][s];
                 assert(p == mat.n);
             } else {
                 mat[{0, 0}] = i_op;
@@ -203,12 +203,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 p = 2;
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = 0; j < m; j++)
-                        mat[{p + j, 0}] = (-0.5) * tr_op[j][s];
+                        mat[{p + j, 0}] = (FL)(-0.5) * tr_op[j][s];
                     p += m;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = 0; pit && j < m; j++)
-                        mat[{p + j, 0}] = (-0.5) * ts_op[j][s];
+                        mat[{p + j, 0}] = (FL)(-0.5) * ts_op[j][s];
                     p += m;
                 }
                 for (uint8_t s = 0; s < 2; s++)
@@ -223,12 +223,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint16_t t : ts)
                         if (t < m)
                             for (uint16_t j = 0; j < m; j++)
-                                mat[{p++, 0}] = 0.5 * p_op[t][j][s];
+                                mat[{p++, 0}] = (FL)0.5 * p_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t < m)
                             for (uint16_t j = 0; j < m; j++)
-                                mat[{p++, 0}] = 0.5 * q_op[t][j][s];
+                                mat[{p++, 0}] = (FL)0.5 * q_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t == m) {
@@ -297,24 +297,24 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     int pik = 0;
                     for (uint16_t k = m + 1; k < n_sites; k++) {
                         mat[{ptr[sp] + k, p}] = i_op;
-                        mat[{pi, p}] = 0.5 * tr_op[k][sp];
+                        mat[{pi, p}] = (FL)0.5 * tr_op[k][sp];
                         if (count(ts.begin(), ts.end(), k)) {
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t j = 0; j < m; j++)
                                     mat[{pc[s] + j, p}] =
-                                        -0.5 * p_op[k][j][sp | (s << 1)];
+                                        (FL)-0.5 * p_op[k][j][sp | (s << 1)];
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t j = 0; j < m; j++)
                                     mat[{pd[s] + j, p}] =
-                                        -0.5 * q_op[k][j][sp | (s << 1)];
+                                        (FL)-0.5 * q_op[k][j][sp | (s << 1)];
                             for (uint8_t s = 0; s < 2; s++)
                                 mat[{pp[sp | (s << 1)] +
                                          (pit + pik) * (n_sites - m),
-                                     p}] = -1.0 * c_op[m][s];
+                                     p}] = (FL)-1.0 * c_op[m][s];
                             for (uint8_t s = 0; s < 2; s++)
                                 mat[{pq[sp | (s << 1)] +
                                          (pit + pik) * (n_sites - m),
-                                     p}] = -1.0 * d_op[m][s];
+                                     p}] = (FL)-1.0 * d_op[m][s];
                             pik++;
                         }
                         if (pit) {
@@ -324,28 +324,31 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++)
                                     mat[{pd[s] + l, p}] +=
-                                        (0.5 * hamil->v(s, sp, m, l, k, m)) *
+                                        ((FL)0.5 *
+                                         hamil->v(s, sp, m, l, k, m)) *
                                         b_op[m][m][s | (sp << 1)];
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++)
                                     mat[{pd[sp] + l, p}] +=
-                                        (-0.5 * hamil->v(s, sp, m, m, k, l)) *
+                                        ((FL)-0.5 *
+                                         hamil->v(s, sp, m, m, k, l)) *
                                         b_op[m][m][s | (s << 1)];
                         }
                         for (uint8_t s = 0; s < 2; s++)
                             for (uint16_t i : ts)
                                 if (i < m)
                                     mat[{pc[s] + i, p}] +=
-                                        0.5 * p_op[i][k][s | (sp << 1)];
+                                        (FL)0.5 * p_op[i][k][s | (sp << 1)];
                         for (uint8_t s = 0; s < 2; s++) {
                             int pii = 0;
                             for (uint16_t i : ts)
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++)
                                         mat[{pb[s | (sp << 1)] + pii * m + l,
-                                             p}] = (0.5 * hamil->v(s, sp, i, m,
-                                                                   k, l)) *
-                                                   d_op[m][s];
+                                             p}] =
+                                            ((FL)0.5 *
+                                             hamil->v(s, sp, i, m, k, l)) *
+                                            d_op[m][s];
                                     pii++;
                                 }
                         }
@@ -355,9 +358,10 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++)
                                         mat[{pb[s | (s << 1)] + pii * m + l,
-                                             p}] += (-0.5 * hamil->v(s, sp, i,
-                                                                     l, k, m)) *
-                                                    d_op[m][sp];
+                                             p}] +=
+                                            ((FL)-0.5 *
+                                             hamil->v(s, sp, i, l, k, m)) *
+                                            d_op[m][sp];
                                     pii++;
                                 }
                         }
@@ -369,26 +373,30 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint16_t j = m + 1; j < n_sites; j++) {
                         mat[{pts[sp] + j, p}] = i_op;
                         if (pit) {
-                            mat[{pi, p}] = 0.5 * ts_op[j][sp];
+                            mat[{pi, p}] = (FL)0.5 * ts_op[j][sp];
                             for (uint8_t s = 0; s < 2; s++)
                                 mat[{pq[s | (sp << 1)] + j - m, p}] =
                                     c_op[m][s];
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++) {
                                     mat[{pd[s] + l, p}] +=
-                                        (0.5 * hamil->v(sp, s, m, j, m, l)) *
+                                        ((FL)0.5 *
+                                         hamil->v(sp, s, m, j, m, l)) *
                                         a_op[m][m][sp | (s << 1)];
                                     mat[{pd[s] + l, p}] +=
-                                        (-0.5 * hamil->v(s, sp, m, l, m, j)) *
+                                        ((FL)-0.5 *
+                                         hamil->v(s, sp, m, l, m, j)) *
                                         a_op[m][m][s | (sp << 1)];
                                 }
                             for (uint8_t s = 0; s < 2; s++)
                                 for (uint16_t l = 0; l < m; l++) {
                                     mat[{pc[s] + l, p}] +=
-                                        (-0.5 * hamil->v(sp, s, m, j, l, m)) *
+                                        ((FL)-0.5 *
+                                         hamil->v(sp, s, m, j, l, m)) *
                                         b_op[m][m][sp | (s << 1)];
                                     mat[{pc[sp] + l, p}] +=
-                                        (0.5 * hamil->v(s, sp, m, m, l, j)) *
+                                        ((FL)0.5 *
+                                         hamil->v(s, sp, m, m, l, j)) *
                                         b_op[m][m][s | (s << 1)];
                                 }
                         }
@@ -396,20 +404,22 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                             for (uint16_t i : ts)
                                 if (i < m)
                                     mat[{pc[s] + i, p}] =
-                                        0.5 * q_op[i][j][s | (sp << 1)];
+                                        (FL)0.5 * q_op[i][j][s | (sp << 1)];
                         for (uint8_t s = 0; s < 2; s++) {
                             int pii = 0;
                             for (uint16_t i : ts)
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++) {
                                         mat[{pb[sp | (s << 1)] + pii * m + l,
-                                             p}] = (-0.5 * hamil->v(sp, s, i, j,
-                                                                    m, l)) *
-                                                   c_op[m][s];
+                                             p}] =
+                                            ((FL)-0.5 *
+                                             hamil->v(sp, s, i, j, m, l)) *
+                                            c_op[m][s];
                                         mat[{pb[s | (s << 1)] + pii * m + l,
-                                             p}] += (0.5 * hamil->v(s, sp, i, l,
-                                                                    m, j)) *
-                                                    c_op[m][sp];
+                                             p}] +=
+                                            ((FL)0.5 *
+                                             hamil->v(s, sp, i, l, m, j)) *
+                                            c_op[m][sp];
                                     }
                                     pii++;
                                 }
@@ -420,13 +430,15 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                 if (i < m) {
                                     for (uint16_t l = 0; l < m; l++) {
                                         mat[{pa[sp | (s << 1)] + pii * m + l,
-                                             p}] = (0.5 * hamil->v(sp, s, i, j,
-                                                                   l, m)) *
-                                                   d_op[m][s];
+                                             p}] =
+                                            ((FL)0.5 *
+                                             hamil->v(sp, s, i, j, l, m)) *
+                                            d_op[m][s];
                                         mat[{pa[s | (sp << 1)] + pii * m + l,
-                                             p}] += (-0.5 * hamil->v(s, sp, i,
-                                                                     m, l, j)) *
-                                                    d_op[m][s];
+                                             p}] +=
+                                            ((FL)-0.5 *
+                                             hamil->v(s, sp, i, m, l, j)) *
+                                            d_op[m][s];
                                     }
                                     pii++;
                                 }
@@ -448,7 +460,7 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         } else if (i == m) {
                             for (uint16_t j = 0; j < m; j++)
                                 mat[{pc[s >> 1] + j, p + pii * (m + 1) + j}] =
-                                    (-1.0) * c_op[m][s & 1];
+                                    (FL)(-1.0) * c_op[m][s & 1];
                             mat[{pi, p + pii * (m + 1) + m}] = a_op[m][m][s];
                         }
                     assert(mt[m] == pii);
@@ -468,7 +480,7 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         } else if (i == m) {
                             for (uint16_t j = 0; j < m; j++)
                                 mat[{pd[s >> 1] + j, p + pii * (m + 1) + j}] =
-                                    (-1.0) * c_op[m][s & 1];
+                                    (FL)(-1.0) * c_op[m][s & 1];
                             mat[{pi, p + pii * (m + 1) + m}] = b_op[m][m][s];
                         }
                     assert(mt[m] == pii);
@@ -485,18 +497,18 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                      p + pii * (n_sites - m - 1) + k - m - 1}] =
                                     i_op;
                                 mat[{pi, p + pii * (n_sites - m - 1) + k - m -
-                                             1}] = 0.5 * p_op[i][k][s];
+                                             1}] = (FL)0.5 * p_op[i][k][s];
                                 for (uint16_t j = 0; j < m; j++) {
                                     mat[{pd[s & 1] + j,
                                          p + pii * (n_sites - m - 1) + k - m -
                                              1}] +=
-                                        (-0.5 *
+                                        ((FL)-0.5 *
                                          hamil->v(s & 1, s >> 1, i, j, k, m)) *
                                         d_op[m][s >> 1];
                                     mat[{pd[s >> 1] + j,
                                          p + pii * (n_sites - m - 1) + k - m -
                                              1}] +=
-                                        (0.5 *
+                                        ((FL)0.5 *
                                          hamil->v(s & 1, s >> 1, i, m, k, j)) *
                                         d_op[m][s & 1];
                                 }
@@ -517,33 +529,35 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                      p + pii * (n_sites - m - 1) + j - m - 1}] =
                                     i_op;
                                 mat[{pi, p + pii * (n_sites - m - 1) + j - m -
-                                             1}] = 0.5 * q_op[i][j][s];
+                                             1}] = (FL)0.5 * q_op[i][j][s];
                                 for (uint16_t k = 0; k < m; k++) {
                                     if ((s & 1) == (s >> 1))
                                         for (uint8_t spp = 0; spp < 2; spp++) {
                                             mat[{pc[spp] + k,
                                                  p + pii * (n_sites - m - 1) +
                                                      j - m - 1}] +=
-                                                (0.5 * hamil->v(s & 1, spp, i,
-                                                                j, k, m)) *
+                                                ((FL)0.5 * hamil->v(s & 1, spp,
+                                                                    i, j, k,
+                                                                    m)) *
                                                 d_op[m][spp];
                                             mat[{pd[spp] + k,
                                                  p + pii * (n_sites - m - 1) +
                                                      j - m - 1}] +=
-                                                (-0.5 * hamil->v(s & 1, spp, i,
-                                                                 j, m, k)) *
+                                                ((FL)-0.5 * hamil->v(s & 1, spp,
+                                                                     i, j, m,
+                                                                     k)) *
                                                 c_op[m][spp];
                                         }
                                     mat[{pc[s >> 1] + k,
                                          p + pii * (n_sites - m - 1) + j - m -
                                              1}] +=
-                                        (-0.5 *
+                                        ((FL)-0.5 *
                                          hamil->v(s & 1, s >> 1, i, m, k, j)) *
                                         d_op[m][s & 1];
                                     mat[{pd[s & 1] + k,
                                          p + pii * (n_sites - m - 1) + j - m -
                                              1}] +=
-                                        (0.5 *
+                                        ((FL)0.5 *
                                          hamil->v(s & 1, s >> 1, i, k, m, j)) *
                                         c_op[m][s >> 1];
                                 }
@@ -581,12 +595,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = m + 1; j < n_sites; j++)
-                        lop[p + j - (m + 1)] = 0.5 * tr_op[j][s];
+                        lop[p + j - (m + 1)] = (FL)0.5 * tr_op[j][s];
                     p += n_sites - (m + 1);
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = m + 1; j < n_sites; j++)
-                        lop[p + j - (m + 1)] = 0.5 * ts_op[j][s];
+                        lop[p + j - (m + 1)] = (FL)0.5 * ts_op[j][s];
                     p += n_sites - (m + 1);
                 }
                 for (uint8_t s = 0; s < 4; s++)
@@ -603,12 +617,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint16_t t : ts)
                         if (t > m)
                             for (uint16_t j = m + 1; j < n_sites; j++)
-                                lop[p++] = 0.5 * p_op[t][j][s];
+                                lop[p++] = (FL)0.5 * p_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t > m)
                             for (uint16_t j = m + 1; j < n_sites; j++)
-                                lop[p++] = 0.5 * q_op[t][j][s];
+                                lop[p++] = (FL)0.5 * q_op[t][j][s];
                 assert(p == rshape);
             }
             this->left_operator_names.push_back(plop);
@@ -627,12 +641,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 p = 2;
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = 0; j < m; j++)
-                        rop[p + j] = (-0.5) * tr_op[j][s];
+                        rop[p + j] = (FL)(-0.5) * tr_op[j][s];
                     p += m;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
                     for (uint16_t j = 0; j < m; j++)
-                        rop[p + j] = (-0.5) * ts_op[j][s];
+                        rop[p + j] = (FL)(-0.5) * ts_op[j][s];
                     p += m;
                 }
                 for (uint8_t s = 0; s < 2; s++) {
@@ -649,12 +663,12 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint16_t t : ts)
                         if (t < m)
                             for (uint16_t j = 0; j < m; j++)
-                                rop[p++] = 0.5 * p_op[t][j][s];
+                                rop[p++] = (FL)0.5 * p_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t < m)
                             for (uint16_t j = 0; j < m; j++)
-                                rop[p++] = 0.5 * q_op[t][j][s];
+                                rop[p++] = (FL)0.5 * q_op[t][j][s];
                 for (uint8_t s = 0; s < 4; s++)
                     for (uint16_t t : ts)
                         if (t >= m)

@@ -152,6 +152,12 @@ template <typename S> struct OpExpr {
         assert(false);
         return nullptr;
     }
+    virtual shared_ptr<OpExpr> scalar_multiply(float d) const {
+        return scalar_multiply((complex<float>)d);
+    }
+    virtual shared_ptr<OpExpr> scalar_multiply(complex<float> d) const {
+        return make_shared<OpExpr>();
+    }
     virtual shared_ptr<OpExpr> scalar_multiply(double d) const {
         return scalar_multiply((complex<double>)d);
     }
@@ -349,13 +355,17 @@ template <typename S, typename FL> struct OpElement : OpExpr<S> {
         : name(name), site_index(site_index), factor(factor), q_label(q_label) {
     }
     OpTypes get_type() const override { return OpTypes::Elem; }
-    bool is_normalized() const override { return factor == 1.0; }
+    bool is_normalized() const override { return factor == (FL)1; }
     shared_ptr<OpExpr<S>> abs_expr() const override {
         return make_shared<OpElement>(abs());
     }
     OpElement abs() const { return OpElement(name, site_index, q_label, 1.0); }
     shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
         return make_shared<OpElement>(*this * d);
+    }
+    shared_ptr<OpExpr<S>>
+    scalar_multiply(typename alt_fl_type<FL>::FL d) const override {
+        return make_shared<OpElement>(*this * (FL)d);
     }
     OpElement operator*(FL d) const {
         return OpElement(name, site_index, q_label, factor * d);
@@ -406,7 +416,7 @@ template <typename S, typename FL> struct OpElement : OpExpr<S> {
     }
     string get_name() const override {
         stringstream ss;
-        if (factor != 1.0)
+        if (factor != (FL)1)
             ss << scientific << setprecision(6) << factor;
         ss << name << site_index.get_name() << endl;
         return ss.str();
@@ -503,7 +513,7 @@ template <typename S, typename FL> struct OpProduct : OpExpr<S> {
           b(b == nullptr ? nullptr : make_shared<OpElement<S, FL>>(b->abs())),
           conj(conj) {}
     virtual OpTypes get_type() const override { return OpTypes::Prod; }
-    bool is_normalized() const override { return factor == 1.0; }
+    bool is_normalized() const override { return factor == (FL)1; }
     shared_ptr<OpExpr<S>> abs_expr() const override {
         return make_shared<OpProduct>(abs());
     }
@@ -514,6 +524,10 @@ template <typename S, typename FL> struct OpProduct : OpExpr<S> {
     }
     shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
         return make_shared<OpProduct>(*this * d);
+    }
+    shared_ptr<OpExpr<S>>
+    scalar_multiply(typename alt_fl_type<FL>::FL d) const override {
+        return make_shared<OpProduct>(*this * (FL)d);
     }
     OpProduct operator*(FL d) const {
         return OpProduct(a, b, factor * d, conj);
@@ -639,6 +653,10 @@ template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
     }
     shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
         return make_shared<OpSumProd>(*this * d);
+    }
+    shared_ptr<OpExpr<S>>
+    scalar_multiply(typename alt_fl_type<FL>::FL d) const override {
+        return make_shared<OpSumProd>(*this * (FL)d);
     }
     OpSumProd operator*(FL d) const {
         if (OpProduct<S, FL>::a == nullptr)
@@ -792,6 +810,10 @@ template <typename S, typename FL> struct OpSum : OpExpr<S> {
     shared_ptr<OpExpr<S>> scalar_multiply(FL d) const override {
         return make_shared<OpSum>(*this * d);
     }
+    shared_ptr<OpExpr<S>>
+    scalar_multiply(typename alt_fl_type<FL>::FL d) const override {
+        return make_shared<OpSum>(*this * (FL)d);
+    }
     OpSum operator*(FL d) const {
         vector<shared_ptr<OpProduct<S, FL>>> strs;
         strs.reserve(strings.size());
@@ -873,6 +895,12 @@ template <typename S> struct OpExprRef : OpExpr<S> {
     }
     OpExprRef abs() const {
         return OpExprRef(op->abs_expr(), is_local, orig->abs_expr());
+    }
+    shared_ptr<OpExpr<S>> scalar_multiply(float d) const override {
+        return make_shared<OpExprRef>(*this * d);
+    }
+    shared_ptr<OpExpr<S>> scalar_multiply(complex<float> d) const override {
+        return make_shared<OpExprRef>(*this * d);
     }
     shared_ptr<OpExpr<S>> scalar_multiply(double d) const override {
         return make_shared<OpExprRef>(*this * d);
@@ -1114,25 +1142,24 @@ inline const shared_ptr<OpExpr<S>> operator+=(shared_ptr<OpExpr<S>> &a,
 // A symbolic expression multiply a scalar
 template <typename S, typename FL,
           typename = typename enable_if<is_complex<FL>::value ||
-                                        is_floating_point<FL>::value ||
-                                        is_integral<FL>::value>::type>
+                                        is_floating_point<FL>::value>::type>
 inline const shared_ptr<OpExpr<S>> operator*(const shared_ptr<OpExpr<S>> &x,
                                              FL d) {
     if (x->get_type() == OpTypes::Zero)
         return x;
-    else if (d == 0.0)
+    else if (d == (FL)0.0)
         return make_shared<OpExpr<S>>();
-    else if (d == 1.0)
+    else if (d == (FL)1.0)
         return x;
     else
-        return x->scalar_multiply(d);
+        return ((*x).*((shared_ptr<OpExpr<S>>(OpExpr<S>::*)(FL) const) &
+                       OpExpr<S>::scalar_multiply))(d);
 }
 
 // A scalar multiply a symbolic expression
 template <typename S, typename FL,
           typename = typename enable_if<is_complex<FL>::value ||
-                                        is_floating_point<FL>::value ||
-                                        is_integral<FL>::value>::type>
+                                        is_floating_point<FL>::value>::type>
 inline const shared_ptr<OpExpr<S>> operator*(FL d,
                                              const shared_ptr<OpExpr<S>> &x) {
     return x * d;

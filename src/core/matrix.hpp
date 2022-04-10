@@ -25,6 +25,7 @@
 #ifdef _HAS_INTEL_MKL
 #ifndef MKL_Complex16
 #include <complex>
+#define MKL_Complex8 std::complex<float>
 #define MKL_Complex16 std::complex<double>
 #endif
 #include "mkl.h"
@@ -45,7 +46,49 @@ namespace block2 {
 template <typename FL> struct GMatrix;
 
 // 2D dense matrix stored in stack memory
+template <> struct GMatrix<float> {
+    typedef double FL;
+    typedef float FP;
+    typedef complex<float> FC;
+    MKL_INT m, n; // m is rows, n is cols
+    float *data;
+    GMatrix(float *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
+    float &operator()(MKL_INT i, MKL_INT j) const {
+        return *(data + (size_t)i * n + j);
+    }
+    size_t size() const { return (size_t)m * n; }
+    void allocate(const shared_ptr<Allocator<float>> &alloc = nullptr) {
+        data = (alloc == nullptr ? dalloc_<float>() : alloc)->allocate(size());
+    }
+    void deallocate(const shared_ptr<Allocator<float>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc_<float>() : alloc)->deallocate(data, size());
+        data = nullptr;
+    }
+    void clear() const { memset(data, 0, size() * sizeof(float)); }
+    GMatrix flip_dims() const { return GMatrix(data, n, m); }
+    GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
+    friend ostream &operator<<(ostream &os, const GMatrix &mat) {
+        os << "MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        for (MKL_INT i = 0; i < mat.m; i++) {
+            os << "[ ";
+            for (MKL_INT j = 0; j < mat.n; j++)
+                os << setw(20) << setprecision(14) << mat(i, j) << " ";
+            os << "]" << endl;
+        }
+        return os;
+    }
+    float trace() const {
+        assert(m == n);
+        float r = 0;
+        for (MKL_INT i = 0; i < m; i++)
+            r += this->operator()(i, i);
+        return r;
+    }
+};
+
+// 2D dense matrix stored in stack memory
 template <> struct GMatrix<double> {
+    typedef long double FL;
     typedef double FP;
     typedef complex<double> FC;
     MKL_INT m, n; // m is rows, n is cols
@@ -56,10 +99,11 @@ template <> struct GMatrix<double> {
     }
     size_t size() const { return (size_t)m * n; }
     void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        data = (alloc == nullptr ? dalloc : alloc)->allocate(size());
+        data = (alloc == nullptr ? dalloc_<double>() : alloc)->allocate(size());
     }
     void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        (alloc == nullptr ? dalloc : alloc)->deallocate(data, size());
+        (alloc == nullptr ? dalloc_<double>() : alloc)
+            ->deallocate(data, size());
         data = nullptr;
     }
     void clear() const { memset(data, 0, size() * sizeof(double)); }
@@ -86,25 +130,31 @@ template <> struct GMatrix<double> {
 
 typedef GMatrix<double> MatrixRef;
 
-template <typename FL> struct GDiagonalMatrix;
+template <typename FL, typename = void> struct GDiagonalMatrix;
 
 // Diagonal matrix
-template <> struct GDiagonalMatrix<double> : GMatrix<double> {
-    double zero = 0.0;
-    GDiagonalMatrix(double *data, MKL_INT n) : GMatrix<double>(data, n, n) {}
-    double &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? *(data + i) : const_cast<double &>(zero);
+template <typename FL>
+struct GDiagonalMatrix<FL,
+                       typename enable_if<is_floating_point<FL>::value>::type>
+    : GMatrix<FL> {
+    using GMatrix<FL>::data;
+    using GMatrix<FL>::m;
+    using GMatrix<FL>::n;
+    FL zero = 0.0;
+    GDiagonalMatrix(FL *data, MKL_INT n) : GMatrix<FL>(data, n, n) {}
+    FL &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? *(data + i) : const_cast<FL &>(zero);
     }
     size_t size() const { return (size_t)m; }
     // need override since size() is changed (which is not virtual)
-    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        data = (alloc == nullptr ? dalloc : alloc)->allocate(size());
+    void allocate(const shared_ptr<Allocator<FL>> &alloc = nullptr) {
+        data = (alloc == nullptr ? dalloc_<FL>() : alloc)->allocate(size());
     }
-    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        (alloc == nullptr ? dalloc : alloc)->deallocate(data, size());
+    void deallocate(const shared_ptr<Allocator<FL>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc_<FL>() : alloc)->deallocate(data, size());
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(double)); }
+    void clear() { memset(data, 0, size() * sizeof(FL)); }
     friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
@@ -117,14 +167,18 @@ template <> struct GDiagonalMatrix<double> : GMatrix<double> {
 
 typedef GDiagonalMatrix<double> DiagonalMatrix;
 
-template <typename FL> struct GIdentityMatrix;
+template <typename FL, typename = void> struct GIdentityMatrix;
 
 // Identity matrix
-template <> struct GIdentityMatrix<double> : GDiagonalMatrix<double> {
-    double one = 1.0;
-    GIdentityMatrix(MKL_INT n) : GDiagonalMatrix<double>(nullptr, n) {}
-    double &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? const_cast<double &>(one) : const_cast<double &>(zero);
+template <typename FL>
+struct GIdentityMatrix<FL,
+                       typename enable_if<is_floating_point<FL>::value>::type>
+    : GDiagonalMatrix<FL> {
+    using GDiagonalMatrix<FL>::zero;
+    FL one = 1.0;
+    GIdentityMatrix(MKL_INT n) : GDiagonalMatrix<FL>(nullptr, n) {}
+    FL &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? const_cast<FL &>(one) : const_cast<FL &>(zero);
     }
     void allocate() {}
     void deallocate() {}
@@ -136,6 +190,49 @@ template <> struct GIdentityMatrix<double> : GDiagonalMatrix<double> {
 };
 
 typedef GIdentityMatrix<double> IdentityMatrix;
+
+// complex dense matrix
+template <> struct GMatrix<complex<float>> {
+    typedef float FP;
+    typedef complex<float> FC;
+    MKL_INT m, n; // m is rows, n is cols
+    complex<float> *data;
+    GMatrix(complex<float> *data, MKL_INT m, MKL_INT n)
+        : data(data), m(m), n(n) {}
+    complex<float> &operator()(MKL_INT i, MKL_INT j) const {
+        return *(data + (size_t)i * n + j);
+    }
+    size_t size() const { return (size_t)m * n; }
+    void allocate(const shared_ptr<Allocator<float>> &alloc = nullptr) {
+        data = (complex<float> *)(alloc == nullptr ? dalloc_<float>() : alloc)
+                   ->allocate(size() * 2);
+    }
+    void deallocate(const shared_ptr<Allocator<float>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc_<float>() : alloc)
+            ->deallocate((float *)data, size() * 2);
+        data = nullptr;
+    }
+    void clear() const { memset(data, 0, size() * sizeof(complex<float>)); }
+    GMatrix flip_dims() const { return GMatrix(data, n, m); }
+    GMatrix shift_ptr(size_t l) const { return GMatrix(data + l, m, n); }
+    friend ostream &operator<<(ostream &os, const GMatrix &mat) {
+        os << "CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
+        for (MKL_INT i = 0; i < mat.m; i++) {
+            os << "[ ";
+            for (MKL_INT j = 0; j < mat.n; j++)
+                os << setw(20) << setprecision(14) << mat(i, j) << " ";
+            os << "]" << endl;
+        }
+        return os;
+    }
+    complex<float> trace() const {
+        assert(m == n);
+        complex<float> r = 0;
+        for (MKL_INT i = 0; i < m; i++)
+            r += this->operator()(i, i);
+        return r;
+    }
+};
 
 // complex dense matrix
 template <> struct GMatrix<complex<double>> {
@@ -150,11 +247,11 @@ template <> struct GMatrix<complex<double>> {
     }
     size_t size() const { return (size_t)m * n; }
     void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        data = (complex<double> *)(alloc == nullptr ? dalloc : alloc)
+        data = (complex<double> *)(alloc == nullptr ? dalloc_<FP>() : alloc)
                    ->allocate(size() * 2);
     }
     void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        (alloc == nullptr ? dalloc : alloc)
+        (alloc == nullptr ? dalloc_<FP>() : alloc)
             ->deallocate((double *)data, size() * 2);
         data = nullptr;
     }
@@ -183,25 +280,32 @@ template <> struct GMatrix<complex<double>> {
 typedef GMatrix<complex<double>> ComplexMatrixRef;
 
 // Diagonal complex matrix
-template <> struct GDiagonalMatrix<complex<double>> : GMatrix<complex<double>> {
-    complex<double> zero = 0.0;
-    GDiagonalMatrix(complex<double> *data, MKL_INT n)
-        : ComplexMatrixRef(data, n, n) {}
-    complex<double> &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? *(data + i) : const_cast<complex<double> &>(zero);
+template <typename FL>
+struct GDiagonalMatrix<FL, typename enable_if<is_complex<FL>::value>::type>
+    : GMatrix<FL> {
+    using GMatrix<FL>::data;
+    using GMatrix<FL>::m;
+    using GMatrix<FL>::n;
+    FL zero = 0.0;
+    GDiagonalMatrix(FL *data, MKL_INT n) : GMatrix<FL>(data, n, n) {}
+    FL &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? *(data + i) : const_cast<FL &>(zero);
     }
     size_t size() const { return (size_t)m; }
     // need override since size() is changed (which is not virtual)
-    void allocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        data = (complex<double> *)(alloc == nullptr ? dalloc : alloc)
+    void allocate(const shared_ptr<Allocator<typename GMatrix<FL>::FP>> &alloc =
+                      nullptr) {
+        data = (FL *)(alloc == nullptr ? dalloc_<typename GMatrix<FL>::FP>()
+                                       : alloc)
                    ->allocate(size() * 2);
     }
-    void deallocate(const shared_ptr<Allocator<double>> &alloc = nullptr) {
-        (alloc == nullptr ? dalloc : alloc)
-            ->deallocate((double *)data, size() * 2);
+    void deallocate(const shared_ptr<Allocator<typename GMatrix<FL>::FP>>
+                        &alloc = nullptr) {
+        (alloc == nullptr ? dalloc_<typename GMatrix<FL>::FP>() : alloc)
+            ->deallocate((typename GMatrix<FL>::FP *)data, size() * 2);
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(complex<double>)); }
+    void clear() { memset(data, 0, size() * sizeof(FL)); }
     friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";

@@ -28,12 +28,15 @@ using namespace std;
 namespace block2 {
 
 // Symmetric 2D array for storage of one-electron integrals
-template <typename FL> struct CompressedTInt;
+template <typename FL, typename = void> struct CompressedTInt;
 
-template <> struct CompressedTInt<double> {
+template <typename FL>
+struct CompressedTInt<FL,
+                      typename enable_if<is_floating_point<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // Number of orbitals
     uint16_t n;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FL>> cps_data;
     bool general;
     CompressedTInt(uint16_t n, bool general = false)
         : n(n), cps_data(nullptr), general(general) {}
@@ -46,12 +49,11 @@ template <> struct CompressedTInt<double> {
         return general ? (size_t)n * n : ((size_t)n * (n + 1) >> 1);
     }
     void clear() { cps_data->clear(); }
-    double &operator()(uint16_t i, uint16_t j) {
+    FL &operator()(uint16_t i, uint16_t j) {
         return (*cps_data)[find_index(i, j)];
     }
-    double operator()(uint16_t i, uint16_t j) const {
-        return (
-            (const CompressedVector<double> &)(*cps_data))[find_index(i, j)];
+    FL operator()(uint16_t i, uint16_t j) const {
+        return ((const CompressedVector<FL> &)(*cps_data))[find_index(i, j)];
     }
     void reorder(const CompressedTInt &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -63,16 +65,18 @@ template <> struct CompressedTInt<double> {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
             for (uint16_t j = 0; j < (x.general ? x.n : i + 1); j++)
-                if (x(i, j) != 0.0)
+                if (x(i, j) != (FP)0.0)
                     fd_write_line(os, x(i, j), i + 1, j + 1);
         return os;
     }
 };
 
-template <> struct CompressedTInt<complex<double>> {
+template <typename FL>
+struct CompressedTInt<FL, typename enable_if<is_complex<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // Number of orbitals
     uint16_t n;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FP>> cps_data;
     bool general;
     CompressedTInt(uint16_t n, bool general = false)
         : n(n), cps_data(nullptr), general(general) {}
@@ -85,14 +89,14 @@ template <> struct CompressedTInt<complex<double>> {
         return general ? (size_t)n * n : ((size_t)n * (n + 1) >> 1);
     }
     void clear() { cps_data->clear(); }
-    complex<double> &operator()(uint16_t i, uint16_t j) {
-        return (complex<double> &)((*cps_data)[find_index(i, j) * 2]);
+    FL &operator()(uint16_t i, uint16_t j) {
+        return (FL &)((*cps_data)[find_index(i, j) * 2]);
     }
-    complex<double> operator()(uint16_t i, uint16_t j) const {
-        return complex<double>(((const CompressedVector<double>
-                                     &)(*cps_data))[find_index(i, j) * 2],
-                               ((const CompressedVector<double>
-                                     &)(*cps_data))[find_index(i, j) * 2 + 1]);
+    FL operator()(uint16_t i, uint16_t j) const {
+        return FL(
+            ((const CompressedVector<FP> &)(*cps_data))[find_index(i, j) * 2],
+            ((const CompressedVector<FP> &)(*cps_data))[find_index(i, j) * 2 +
+                                                        1]);
     }
     void reorder(const CompressedTInt &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -104,29 +108,32 @@ template <> struct CompressedTInt<complex<double>> {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
             for (uint16_t j = 0; j < (x.general ? x.n : i + 1); j++)
-                if (x(i, j) != 0.0)
+                if (x(i, j) != (FP)0.0)
                     fd_write_line(os, x(i, j), i + 1, j + 1);
         return os;
     }
 };
 
 // General 4D array for storage of two-electron integrals
-template <typename FL> struct CompressedV1Int;
+template <typename FL, typename = void> struct CompressedV1Int;
 
-template <> struct CompressedV1Int<double> {
+template <typename FL>
+struct CompressedV1Int<FL,
+                       typename enable_if<is_floating_point<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // Number of orbitals
     uint32_t n;
     size_t m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FL>> cps_data;
     CompressedV1Int(uint32_t n)
         : n(n), m((size_t)n * n * n * n), cps_data(nullptr) {}
     size_t size() const { return m; }
     void clear() { cps_data->clear(); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return (*cps_data)[(((size_t)i * n + j) * n + k) * n + l];
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
-        return ((const CompressedVector<double>
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return ((const CompressedVector<FL>
                      &)(*cps_data))[(((size_t)i * n + j) * n + k) * n + l];
     }
     void reorder(const CompressedV1Int &other, const vector<uint16_t> &ord) {
@@ -144,33 +151,32 @@ template <> struct CompressedV1Int<double> {
             for (uint32_t j = 0; j < x.n; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l < x.n; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
     }
 };
 
-template <> struct CompressedV1Int<complex<double>> {
+template <typename FL>
+struct CompressedV1Int<FL, typename enable_if<is_complex<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // Number of orbitals
     uint32_t n;
     size_t m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FP>> cps_data;
     CompressedV1Int(uint32_t n)
         : n(n), m((size_t)n * n * n * n), cps_data(nullptr) {}
     size_t size() const { return m; }
     void clear() { cps_data->clear(); }
-    complex<double> &operator()(uint16_t i, uint16_t j, uint16_t k,
-                                uint16_t l) {
-        return (complex<double>
-                    &)(*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2];
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+        return (FL &)(*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2];
     }
-    complex<double> operator()(uint16_t i, uint16_t j, uint16_t k,
-                               uint16_t l) const {
-        return complex<double>(
-            ((const CompressedVector<double>
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return FL(
+            ((const CompressedVector<FP>
                   &)(*cps_data))[((((size_t)i * n + j) * n + k) * n + l) * 2],
-            ((const CompressedVector<double> &)(*cps_data))
+            ((const CompressedVector<FP> &)(*cps_data))
                 [((((size_t)i * n + j) * n + k) * n + l) * 2 + 1]);
     }
     void reorder(const CompressedV1Int &other, const vector<uint16_t> &ord) {
@@ -188,7 +194,7 @@ template <> struct CompressedV1Int<complex<double>> {
             for (uint32_t j = 0; j < x.n; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l < x.n; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -197,12 +203,15 @@ template <> struct CompressedV1Int<complex<double>> {
 
 // 4D array with 4-fold symmetry for storage of two-electron integrals
 // [ijkl] = [jikl] = [jilk] = [ijlk]
-template <typename FL> struct CompressedV4Int;
+template <typename FL, typename = void> struct CompressedV4Int;
 
-template <> struct CompressedV4Int<double> {
+template <typename FL>
+struct CompressedV4Int<FL,
+                       typename enable_if<is_floating_point<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // n: number of orbitals
     uint32_t n, m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FL>> cps_data;
     CompressedV4Int(uint32_t n)
         : n(n), m(n * (n + 1) >> 1), cps_data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
@@ -215,12 +224,12 @@ template <> struct CompressedV4Int<double> {
     }
     size_t size() const { return (size_t)m * m; }
     void clear() { cps_data->clear(); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return (*cps_data)[find_index(i, j, k, l)];
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
-        return ((const CompressedVector<double>
-                     &)(*cps_data))[find_index(i, j, k, l)];
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return (
+            (const CompressedVector<FL> &)(*cps_data))[find_index(i, j, k, l)];
     }
     void reorder(const CompressedV4Int &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -237,17 +246,19 @@ template <> struct CompressedV4Int<double> {
             for (uint32_t j = 0; j <= i; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l <= k; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
     }
 };
 
-template <> struct CompressedV4Int<complex<double>> {
+template <typename FL>
+struct CompressedV4Int<FL, typename enable_if<is_complex<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // n: number of orbitals
     uint32_t n, m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FP>> cps_data;
     CompressedV4Int(uint32_t n)
         : n(n), m(n * (n + 1) >> 1), cps_data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
@@ -260,17 +271,14 @@ template <> struct CompressedV4Int<complex<double>> {
     }
     size_t size() const { return (size_t)m * m; }
     void clear() { cps_data->clear(); }
-    complex<double> &operator()(uint16_t i, uint16_t j, uint16_t k,
-                                uint16_t l) {
-        return (complex<double> &)(*cps_data)[find_index(i, j, k, l) * 2];
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+        return (FL &)(*cps_data)[find_index(i, j, k, l) * 2];
     }
-    complex<double> operator()(uint16_t i, uint16_t j, uint16_t k,
-                               uint16_t l) const {
-        return complex<double>(
-            ((const CompressedVector<double>
-                  &)(*cps_data))[find_index(i, j, k, l) * 2],
-            ((const CompressedVector<double>
-                  &)(*cps_data))[find_index(i, j, k, l) * 2 + 1]);
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return FL(((const CompressedVector<FP>
+                        &)(*cps_data))[find_index(i, j, k, l) * 2],
+                  ((const CompressedVector<FP>
+                        &)(*cps_data))[find_index(i, j, k, l) * 2 + 1]);
     }
     void reorder(const CompressedV4Int &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -287,7 +295,7 @@ template <> struct CompressedV4Int<complex<double>> {
             for (uint32_t j = 0; j <= i; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l <= k; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -296,12 +304,15 @@ template <> struct CompressedV4Int<complex<double>> {
 
 // 4D array with 8-fold symmetry for storage of two-electron integrals
 // [ijkl] = [jikl] = [jilk] = [ijlk] = [klij] = [klji] = [lkji] = [lkij]
-template <typename FL> struct CompressedV8Int;
+template <typename FL, typename = void> struct CompressedV8Int;
 
-template <> struct CompressedV8Int<double> {
+template <typename FL>
+struct CompressedV8Int<FL,
+                       typename enable_if<is_floating_point<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // n: number of orbitals
     uint32_t n, m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FL>> cps_data;
     CompressedV8Int(uint32_t n)
         : n(n), m(n * (n + 1) >> 1), cps_data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
@@ -314,12 +325,12 @@ template <> struct CompressedV8Int<double> {
     }
     size_t size() const { return ((size_t)m * (m + 1) >> 1); }
     void clear() { cps_data->clear(); }
-    double &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
         return (*cps_data)[find_index(i, j, k, l)];
     }
-    double operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
-        return ((const CompressedVector<double>
-                     &)(*cps_data))[find_index(i, j, k, l)];
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return (
+            (const CompressedVector<FL> &)(*cps_data))[find_index(i, j, k, l)];
     }
     void reorder(const CompressedV8Int &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -337,17 +348,19 @@ template <> struct CompressedV8Int<double> {
             for (uint32_t j = 0; j <= i; j++, ij++)
                 for (uint32_t k = 0, kl = 0; k <= i; k++)
                     for (uint32_t l = 0; l <= k; l++, kl++)
-                        if (ij >= kl && x(i, j, k, l) != 0.0)
+                        if (ij >= kl && x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
     }
 };
 
-template <> struct CompressedV8Int<complex<double>> {
+template <typename FL>
+struct CompressedV8Int<FL, typename enable_if<is_complex<FL>::value>::type> {
+    typedef typename FCIDUMP<FL>::FP FP;
     // n: number of orbitals
     uint32_t n, m;
-    shared_ptr<CompressedVector<double>> cps_data;
+    shared_ptr<CompressedVector<FP>> cps_data;
     CompressedV8Int(uint32_t n)
         : n(n), m(n * (n + 1) >> 1), cps_data(nullptr) {}
     size_t find_index(uint32_t i, uint32_t j) const {
@@ -360,17 +373,14 @@ template <> struct CompressedV8Int<complex<double>> {
     }
     size_t size() const { return ((size_t)m * (m + 1) >> 1); }
     void clear() { cps_data->clear(); }
-    complex<double> &operator()(uint16_t i, uint16_t j, uint16_t k,
-                                uint16_t l) {
-        return (complex<double> &)(*cps_data)[find_index(i, j, k, l) * 2];
+    FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
+        return (FL &)(*cps_data)[find_index(i, j, k, l) * 2];
     }
-    complex<double> operator()(uint16_t i, uint16_t j, uint16_t k,
-                               uint16_t l) const {
-        return complex<double>(
-            ((const CompressedVector<double>
-                  &)(*cps_data))[find_index(i, j, k, l) * 2],
-            ((const CompressedVector<double>
-                  &)(*cps_data))[find_index(i, j, k, l) * 2 + 1]);
+    FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return FL(((const CompressedVector<FP>
+                        &)(*cps_data))[find_index(i, j, k, l) * 2],
+                  ((const CompressedVector<FP>
+                        &)(*cps_data))[find_index(i, j, k, l) * 2 + 1]);
     }
     void reorder(const CompressedV8Int &other, const vector<uint16_t> &ord) {
         assert(n == other.n);
@@ -388,7 +398,7 @@ template <> struct CompressedV8Int<complex<double>> {
             for (uint32_t j = 0; j <= i; j++, ij++)
                 for (uint32_t k = 0, kl = 0; k <= i; k++)
                     for (uint32_t l = 0; l <= k; l++, kl++)
-                        if (ij >= kl && x(i, j, k, l) != 0.0)
+                        if (ij >= kl && x(i, j, k, l) != (FP)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -841,6 +851,32 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                 FCIDUMP<FL>::template orb_sym<int>(), ord));
         freeze();
     }
+    void rescale() override {
+        vector<CompressedTInt<FL>> rts(cps_ts);
+        FL x = 0;
+        uint16_t xn = 0;
+        for (size_t i = 0; i < cps_ts.size(); i++) {
+            rts[i].cps_data = make_shared<CompressedVector<FP>>(
+                rts[i].size() * cpx_sz, prec, chunk_size, ncache);
+            rts[i].clear();
+            xn += cps_ts[i].n;
+            for (uint16_t j = 0; j < cps_ts[i].n; j++)
+                x += ((const CompressedTInt<FL> &)cps_ts[i])(j, j);
+        }
+        x = x / (FP)xn;
+        for (size_t i = 0; i < cps_ts.size(); i++)
+            for (uint16_t j = 0; j < cps_ts[i].n; j++)
+                for (uint16_t k = 0;
+                     k < (cps_ts[i].general ? cps_ts[i].n : j + 1); k++)
+                    rts[i](j, k) =
+                        ((const CompressedTInt<FL> &)cps_ts[i])(j, k) -
+                        (j == k ? x : (FL)0.0);
+        const_e = const_e + x * (FP)n_elec();
+        cps_ts = rts;
+        int ntg = threading->activate_global();
+        for (auto &cs : cps_ts)
+            cs.cps_data = make_shared<CompressedVectorMT<FP>>(cs.cps_data, ntg);
+    }
     // One-electron integral element (SU(2))
     FL t(uint16_t i, uint16_t j) const override { return cps_ts[0](i, j); }
     // One-electron integral element (SZ)
@@ -879,7 +915,6 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
             cs.cps_data = make_shared<CompressedVectorMT<FP>>(cs.cps_data, ntg);
     }
     void unfreeze() {
-        int ntg = threading->activate_global();
         for (auto &cs : cps_ts)
             if (dynamic_pointer_cast<CompressedVectorMT<FP>>(cs.cps_data) !=
                 nullptr)

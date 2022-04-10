@@ -38,6 +38,7 @@ namespace block2 {
  * @tparam S Quantum label type.
  */
 template <typename S, typename FL> struct ArchivedMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
     using MPO<S, FL>::n_sites;
     /** Constructor.
      * @param mpo The original MPO.
@@ -48,8 +49,8 @@ template <typename S, typename FL> struct ArchivedMPO : MPO<S, FL> {
         shared_ptr<ArchivedTensorFunctions<S, FL>> artf =
             make_shared<ArchivedTensorFunctions<S, FL>>(mpo->tf->opf);
         MPO<S, FL>::tf = artf;
-        artf->filename =
-            frame->save_dir + "/" + frame->prefix_distri + ".AR." + tag;
+        artf->filename = frame_<FP>()->save_dir + "/" +
+                         frame_<FP>()->prefix_distri + ".AR." + tag;
         artf->offset = 0;
         for (int16_t m = n_sites - 1; m >= 0; m--)
             artf->archive_tensor(MPO<S, FL>::tensors[m]);

@@ -33,6 +33,7 @@ namespace block2 {
 // CSR Block-sparse Matrix operations
 template <typename S, typename FL>
 struct CSROperatorFunctions : OperatorFunctions<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
     using OperatorFunctions<S, FL>::cg;
     using OperatorFunctions<S, FL>::seq;
     CSROperatorFunctions(const shared_ptr<CG<S>> &cg)
@@ -60,12 +61,12 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         shared_ptr<CSRSparseMatrix<S, FL>> cb =
             dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(b);
         if (a->info == b->info && !conj) {
-            if (a->factor != 1.0) {
+            if (a->factor != (FL)1.0) {
                 for (int i = 0; i < ca->info->n; i++)
                     GCSRMatrixFunctions<FL>::iscale((*ca)[i], a->factor);
                 a->factor = 1.0;
             }
-            if (scale != 0.0)
+            if (scale != (FL)0.0)
                 for (int i = 0; i < a->info->n; i++)
                     GCSRMatrixFunctions<FL>::iadd((*ca)[i], (*cb)[i],
                                                   scale * b->factor);
@@ -79,16 +80,16 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
                     ((ib = b->info->find_state(bq)) != -1)) {
                     FL factor = scale * b->factor;
                     if (conj)
-                        factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
-                                                   ket.twos());
-                    if (a->factor != 1.0)
+                        factor *= (FP)cg->transpose_cg(bdq.twos(), bra.twos(),
+                                                       ket.twos());
+                    if (a->factor != (FP)1.0)
                         GCSRMatrixFunctions<FL>::iscale((*ca)[ia], a->factor);
-                    if (factor != 0.0)
+                    if (factor != (FP)0.0)
                         GCSRMatrixFunctions<FL>::iadd((*ca)[ia], (*cb)[ib],
                                                       factor, conj);
                 }
             }
-            a->factor = 1;
+            a->factor = (FP)1;
         }
     }
     void tensor_rotate(const shared_ptr<SparseMatrix<S, FL>> &a,
@@ -109,7 +110,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         shared_ptr<CSRSparseMatrix<S, FL>> ca =
             dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(a);
         scale = scale * a->factor * rot_bra->factor * rot_ket->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, cdq = c->info->delta_quantum;
@@ -145,7 +146,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         assert(c->get_type() != SparseMatrixTypes::CSR);
         assert(idiag == 1 || idiag == 2 || idiag == 3);
         scale = scale * a->factor * b->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -165,15 +166,15 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             switch (idiag) {
             case 1:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    conj, (*ca)[ia], (*b)[ib], (*c)[ic], scale * factor);
+                    conj, (*ca)[ia], (*b)[ib], (*c)[ic], scale * (FP)factor);
                 break;
             case 2:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    conj, (*a)[ia], (*cb)[ib], (*c)[ic], scale * factor);
+                    conj, (*a)[ia], (*cb)[ib], (*c)[ic], scale * (FP)factor);
                 break;
             case 3:
                 GCSRMatrixFunctions<FL>::tensor_product_diagonal(
-                    conj, (*ca)[ia], (*cb)[ib], (*c)[ic], scale * factor);
+                    conj, (*ca)[ia], (*cb)[ib], (*c)[ic], scale * (FP)factor);
                 break;
             default:
                 assert(false);
@@ -203,7 +204,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         assert(c->get_type() != SparseMatrixTypes::CSR);
         assert(irot == 1);
         scale = scale * a->factor * v->factor * c->factor;
-        assert(b->factor == 1.0);
+        assert(b->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -228,7 +229,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
                     ((conj & 1) ? (*a)[ia].n : (*a)[ia].m);
             GCSRMatrixFunctions<FL>::rotate((*ca)[ia], conj & 1, (*b)[ib],
                                             conj & 2, (*v)[iv], (*c)[ic],
-                                            scale * factor);
+                                            scale * (FP)factor);
         }
     }
     // v = (a x b) @ c
@@ -254,7 +255,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         assert(c->get_type() != SparseMatrixTypes::CSR);
         assert(irot == 1 || irot == 2 || irot == 3);
         scale = scale * a->factor * b->factor * c->factor;
-        assert(v->factor == 1.0);
+        assert(v->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -281,39 +282,39 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             case 1:
                 GCSRMatrixFunctions<FL>::rotate((*c)[ic], (*v)[iv], (*ca)[ia],
                                                 conj & 1, (*b)[ib], !(conj & 2),
-                                                scale * factor);
+                                                scale * (FP)factor);
                 break;
             case 2:
-                GCSRMatrixFunctions<FL>::rotate((*c)[ic], (*v)[iv], (*a)[ia],
-                                                conj & 1, (*cb)[ib],
-                                                !(conj & 2), scale * factor);
+                GCSRMatrixFunctions<FL>::rotate(
+                    (*c)[ic], (*v)[iv], (*a)[ia], conj & 1, (*cb)[ib],
+                    !(conj & 2), scale * (FP)factor);
                 break;
             case 3:
-                GCSRMatrixFunctions<FL>::rotate((*c)[ic], (*v)[iv], (*ca)[ia],
-                                                conj & 1, (*cb)[ib],
-                                                !(conj & 2), scale * factor);
+                GCSRMatrixFunctions<FL>::rotate(
+                    (*c)[ic], (*v)[iv], (*ca)[ia], conj & 1, (*cb)[ib],
+                    !(conj & 2), scale * (FP)factor);
                 break;
             case 1 | ((int)TraceTypes::Left << 2):
                 GMatrixFunctions<FL>::multiply((*c)[ic], false, (*b)[ib],
                                                !(conj & 2), (*v)[iv],
-                                               scale * factor, 1.0);
+                                               scale * (FP)factor, 1.0);
                 break;
             case 2 | ((int)TraceTypes::Left << 2):
             case 3 | ((int)TraceTypes::Left << 2):
                 GCSRMatrixFunctions<FL>::multiply((*c)[ic], false, (*cb)[ib],
                                                   !(conj & 2), (*v)[iv],
-                                                  scale * factor, 1.0);
+                                                  scale * (FP)factor, 1.0);
                 break;
             case 1 | ((int)TraceTypes::Right << 2):
             case 3 | ((int)TraceTypes::Right << 2):
                 GCSRMatrixFunctions<FL>::multiply((*ca)[ia], conj & 1, (*c)[ic],
                                                   false, (*v)[iv],
-                                                  scale * factor, 1.0);
+                                                  scale * (FP)factor, 1.0);
                 break;
             case 2 | ((int)TraceTypes::Right << 2):
                 GMatrixFunctions<FL>::multiply((*a)[ia], conj & 1, (*c)[ic],
-                                               false, (*v)[iv], scale * factor,
-                                               1.0);
+                                               false, (*v)[iv],
+                                               scale * (FP)factor, 1.0);
                 break;
             default:
                 assert(false);
@@ -339,7 +340,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             cc = dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(c), itp |= 4;
         assert(itp == 5 || itp == 6 || itp == 7);
         scale = scale * a->factor * b->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum,
@@ -362,17 +363,17 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             case 5:
                 GCSRMatrixFunctions<FL>::tensor_product(
                     (*ca)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*cc)[ic],
-                    scale * factor, stride);
+                    scale * (FP)factor, stride);
                 break;
             case 6:
                 GCSRMatrixFunctions<FL>::tensor_product(
                     (*a)[ia], conj & 1, (*cb)[ib], (conj & 2) >> 1, (*cc)[ic],
-                    scale * factor, stride);
+                    scale * (FP)factor, stride);
                 break;
             case 7:
                 GCSRMatrixFunctions<FL>::tensor_product(
                     (*ca)[ia], conj & 1, (*cb)[ib], (conj & 2) >> 1, (*cc)[ic],
-                    scale * factor, stride);
+                    scale * (FP)factor, stride);
                 break;
             default:
                 assert(false);

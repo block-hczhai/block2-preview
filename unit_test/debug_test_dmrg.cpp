@@ -15,10 +15,10 @@ template <typename FL> class TestDMRG : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodexx");
-        frame_()->use_main_stack = false;
-        frame_()->minimal_disk_usage = true;
-        frame_()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodexx");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
+        frame_<FP>()->fp_codec = make_shared<FPCodec<FP>>(1E-14, 8 * 1024);
         // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
         // ThreadingTypes::Global, 8, 8);
         threading_() = make_shared<Threading>(
@@ -28,17 +28,19 @@ template <typename FL> class TestDMRG : public ::testing::Test {
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
         threading_()->seq_type = SeqTypes::Tasked;
-        cout << *frame_() << endl;
+        cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
-#ifdef _USE_COMPLEX
+#ifdef _USE_SINGLE_PREC
+typedef ::testing::Types<float> TestFL;
+#elif _USE_COMPLEX
 typedef ::testing::Types<complex<double>> TestFL;
 #else
 typedef ::testing::Types<double> TestFL;
@@ -51,7 +53,8 @@ TYPED_TEST(TestDMRG, Test) {
     using FP = typename TestFixture::FP;
     using S = SU2;
 
-    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<CompressedFCIDUMP<FL>>(1E-13);
+    shared_ptr<FCIDUMP<FL>> fcidump =
+    make_shared<CompressedFCIDUMP<FL>>(1E-13);
     // shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
@@ -62,7 +65,7 @@ TYPED_TEST(TestDMRG, Test) {
     occs = read_occ(occ_filename);
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
-    // occs = read_occ(occ_filename);
+    occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
     // pg = PGTypes::C2V;
     // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
@@ -72,6 +75,9 @@ TYPED_TEST(TestDMRG, Test) {
     t.get_time();
     cout << "INT start" << endl;
     fcidump->read(filename);
+    cout << "original const = " << fcidump->e() << endl;
+    fcidump->rescale();
+    cout << "rescaled const = " << fcidump->e() << endl;
     // fcidump = make_shared<HubbardKSpaceFCIDUMP>(4, 1, 2);
     // fcidump = make_shared<HubbardFCIDUMP>(4, 1, 2, true);
     cout << "INT end .. T = " << t.get_time() << endl;
@@ -258,19 +264,25 @@ TYPED_TEST(TestDMRG, Test) {
     me->init_environments(false);
     cout << "INIT end .. T = " << t.get_time() << endl;
 
-    cout << *frame_() << endl;
-    frame_()->activate(0);
+    cout << *frame_<FP>() << endl;
+    frame_<FP>()->activate(0);
 
     // DMRG
     // vector<ubond_t> bdims = {50};
     vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500, 500,
                              500, 500, 500, 500, 500, 500, 500, 500, 500,
                              500, 500, 750, 750, 750, 750, 750};
-    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5,
-                         1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6};
+    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5, 1E-5,
+                         1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 0.0};
     vector<FP> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
                           1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
                           5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};
+    FP tol = 1E-6;
+    if (is_same<FP, float>::value) {
+        for (auto &x : davthrs)
+            x = max(x, (FP)5E-6);
+        tol = 5E-6;
+    }
     // noises = vector<double>{1E-5};
     // vector<double> noises = {1E-6};
     shared_ptr<DMRG<S, FL, FL>> dmrg =
@@ -278,25 +290,26 @@ TYPED_TEST(TestDMRG, Test) {
     dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
     dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davthrs;
+    dmrg->davidson_soft_max_iter = 200;
     dmrg->iprint = 2;
-    // dmrg->cutoff = 1E-20;
+    dmrg->cutoff = 1E-20;
     // dmrg->noise_type = NoiseTypes::Wavefunction;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     // dmrg->noise_type = NoiseTypes::Perturbative;
     // dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollectedLowMem;
     // dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
-    dmrg->trunc_type =  dmrg->trunc_type;
+    dmrg->trunc_type = dmrg->trunc_type;
     // dmrg->davidson_type = DavidsonTypes::GreaterThan;
     // dmrg->davidson_shift = -2086.4;
-    dmrg->solve(20, true);
+    dmrg->solve(25, true, tol);
 
     shared_ptr<MPSInfo<S>> bra_info =
         make_shared<MPSInfo<S>>(norb, vacuum, target, hamil->basis);
     bra_info->set_bond_dimension(bond_dim);
     bra_info->tag = "BRA";
 
-    shared_ptr<MPS<S, FL>> bra = make_shared<MPS<S, FL>>(norb, 0, 2);
+    shared_ptr<MPS<S, FL>> bra = make_shared<MPS<S, FL>>(norb, mps->center, 2);
     bra->initialize(bra_info);
     bra->random_canonicalize();
     bra->save_mutable();

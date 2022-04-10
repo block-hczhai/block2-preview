@@ -48,5 +48,4 @@
 
 #undef ialloc
 #undef dalloc
-#undef frame
 #undef threading

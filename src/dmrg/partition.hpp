@@ -37,6 +37,7 @@ namespace block2 {
 
 // Represent a specific partition of left block and right block
 template <typename S, typename FL> struct Partition {
+    typedef typename GMatrix<FL>::FP FP;
     // Operator tensor formed by contraction of left block MPO tensors
     shared_ptr<OperatorTensor<S, FL>> left;
     // Operator tensor formed by contraction of right block MPO tensors
@@ -104,7 +105,7 @@ template <typename S, typename FL> struct Partition {
         }
     }
     void save_data(bool left_part, const string &filename) const {
-        if (!frame->partition_can_write)
+        if (!frame_<FP>()->partition_can_write)
             return;
         ofstream ofs(filename.c_str(), ios::binary);
         if (!ofs.good())
@@ -350,14 +351,14 @@ template <typename S, typename FL> struct Partition {
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos) {
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         bra_info->load_left_dims(m + 1);
         StateInfo<S> ibra = *bra_info->left_dims[m + 1], iket = ibra;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m + 1);
             iket = *ket_info->left_dims[m + 1];
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         assert(left_op_infos.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> lop =
@@ -365,7 +366,7 @@ template <typename S, typename FL> struct Partition {
             left_op_infos.push_back(make_pair(sl[i], lop));
             lop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (bra_info != ket_info)
             iket.deallocate();
         ibra.deallocate();
@@ -381,7 +382,7 @@ template <typename S, typename FL> struct Partition {
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &site_op_infos,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos_notrunc,
         const shared_ptr<CG<S>> &cg) {
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         bra_info->load_left_dims(m);
         StateInfo<S> ibra_prev = *bra_info->left_dims[m], iket_prev = ibra_prev;
         StateInfo<S> ibra_notrunc = StateInfo<S>::tensor_product(
@@ -400,7 +401,7 @@ template <typename S, typename FL> struct Partition {
             iket_cinfo = StateInfo<S>::get_connection_info(
                 iket_prev, *ket_info->basis[m], iket_notrunc);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         assert(left_op_infos_notrunc.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> lop_notrunc =
@@ -416,7 +417,7 @@ template <typename S, typename FL> struct Partition {
                 iket_cinfo, prev_left_op_infos, site_op_infos, lop_notrunc, cg);
             lop_notrunc->cinfo = cinfo;
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         if (bra_info != ket_info) {
             iket_cinfo.deallocate();
             iket_notrunc.deallocate();
@@ -432,14 +433,14 @@ template <typename S, typename FL> struct Partition {
         int m, const shared_ptr<MPSInfo<S>> &bra_info,
         const shared_ptr<MPSInfo<S>> &ket_info, const vector<S> &sl,
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos) {
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         bra_info->load_right_dims(m);
         StateInfo<S> ibra = *bra_info->right_dims[m], iket = ibra;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m);
             iket = *ket_info->right_dims[m];
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         assert(right_op_infos.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> rop =
@@ -447,7 +448,7 @@ template <typename S, typename FL> struct Partition {
             right_op_infos.push_back(make_pair(sl[i], rop));
             rop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (bra_info != ket_info)
             iket.deallocate();
         ibra.deallocate();
@@ -464,7 +465,7 @@ template <typename S, typename FL> struct Partition {
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
             &right_op_infos_notrunc,
         const shared_ptr<CG<S>> &cg) {
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         bra_info->load_right_dims(m + 1);
         StateInfo<S> ibra_prev = *bra_info->right_dims[m + 1],
                      iket_prev = ibra_prev;
@@ -483,7 +484,7 @@ template <typename S, typename FL> struct Partition {
             iket_cinfo = StateInfo<S>::get_connection_info(
                 *ket_info->basis[m], iket_prev, iket_notrunc);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         assert(right_op_infos_notrunc.size() == 0);
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> rop_notrunc =
@@ -500,7 +501,7 @@ template <typename S, typename FL> struct Partition {
                                  rop_notrunc, cg);
             rop_notrunc->cinfo = cinfo;
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         if (bra_info != ket_info) {
             iket_cinfo.deallocate();
             iket_notrunc.deallocate();

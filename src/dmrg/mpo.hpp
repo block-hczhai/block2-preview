@@ -278,24 +278,25 @@ template <typename S, typename FL> struct MPO {
         const static string xtag[] = {"TENSOR", "LEFT.OP", "RIGHT.OP",
                                       "MIDDLE.OP"};
         stringstream ss;
-        ss << (dir == "" ? frame->mpo_dir : dir) << "/" << frame->prefix_distri
-           << ".MPO." << tag << "." << xtag[ixtag] << "."
-           << Parsing::to_string(i);
+        ss << (dir == "" ? frame_<FP>()->mpo_dir : dir) << "/"
+           << frame_<FP>()->prefix_distri << ".MPO." << tag << "."
+           << xtag[ixtag] << "." << Parsing::to_string(i);
         return ss.str();
     }
     void load_tensor(int i, bool no_ops = false) {
-        if (archive_filename == "" && !frame->minimal_memory_usage)
+        if (archive_filename == "" && !frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
         assert(i < n_sites);
-        string filename =
-            frame->minimal_memory_usage ? get_filename(i, 0) : archive_filename;
+        string filename = frame_<FP>()->minimal_memory_usage
+                              ? get_filename(i, 0)
+                              : archive_filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_tensor on '" + filename +
                                 "' failed.");
-        if (!frame->minimal_memory_usage) {
+        if (!frame_<FP>()->minimal_memory_usage) {
             ifs.clear();
             ifs.seekg(archive_marks[i][0]);
         }
@@ -309,7 +310,7 @@ template <typename S, typename FL> struct MPO {
         tread += _t.get_time();
     }
     void save_tensor(int i) {
-        if (!frame->minimal_memory_usage)
+        if (!frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
@@ -329,21 +330,22 @@ template <typename S, typename FL> struct MPO {
     }
     void unload_tensor(int i) {
         assert(i < n_sites);
-        if (archive_filename != "" || frame->minimal_memory_usage)
+        if (archive_filename != "" || frame_<FP>()->minimal_memory_usage)
             tensors[i] = nullptr;
     }
     void load_schemer() {
-        if (archive_filename == "" && !frame->minimal_memory_usage)
+        if (archive_filename == "" && !frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
-        string filename = frame->minimal_memory_usage ? get_filename(-1, 0)
-                                                      : archive_filename;
+        string filename = frame_<FP>()->minimal_memory_usage
+                              ? get_filename(-1, 0)
+                              : archive_filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_schemer on '" + filename +
                                 "' failed.");
-        if (!frame->minimal_memory_usage) {
+        if (!frame_<FP>()->minimal_memory_usage) {
             ifs.clear();
             ifs.seekg(archive_schemer_mark);
         }
@@ -356,7 +358,7 @@ template <typename S, typename FL> struct MPO {
         tread += _t.get_time();
     }
     void save_schemer() {
-        if (!frame->minimal_memory_usage)
+        if (!frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
@@ -374,22 +376,23 @@ template <typename S, typename FL> struct MPO {
         twrite += _t.get_time();
     }
     void unload_schemer() {
-        if (archive_filename != "" || frame->minimal_memory_usage)
+        if (archive_filename != "" || frame_<FP>()->minimal_memory_usage)
             schemer->unload_data();
     }
     void load_left_operators(int i) {
-        if (archive_filename == "" && !frame->minimal_memory_usage)
+        if (archive_filename == "" && !frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
         assert(i < n_sites);
-        string filename =
-            frame->minimal_memory_usage ? get_filename(i, 1) : archive_filename;
+        string filename = frame_<FP>()->minimal_memory_usage
+                              ? get_filename(i, 1)
+                              : archive_filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_left_operators on '" + filename +
                                 "' failed.");
-        if (!frame->minimal_memory_usage) {
+        if (!frame_<FP>()->minimal_memory_usage) {
             ifs.clear();
             ifs.seekg(archive_marks[i][1]);
             if (archive_marks[i][1] != 0)
@@ -414,7 +417,7 @@ template <typename S, typename FL> struct MPO {
         tread += _t.get_time();
     }
     void save_left_operators(int i) {
-        if (!frame->minimal_memory_usage)
+        if (!frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
@@ -442,7 +445,7 @@ template <typename S, typename FL> struct MPO {
         twrite += _t.get_time();
     }
     void unload_left_operators(int i) {
-        if (archive_filename != "" || frame->minimal_memory_usage) {
+        if (archive_filename != "" || frame_<FP>()->minimal_memory_usage) {
             assert(i < n_sites);
             left_operator_names[i] = nullptr;
             if (left_operator_exprs.size() != 0)
@@ -450,18 +453,19 @@ template <typename S, typename FL> struct MPO {
         }
     }
     void load_right_operators(int i) {
-        if (archive_filename == "" && !frame->minimal_memory_usage)
+        if (archive_filename == "" && !frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
         assert(i < n_sites);
-        string filename =
-            frame->minimal_memory_usage ? get_filename(i, 2) : archive_filename;
+        string filename = frame_<FP>()->minimal_memory_usage
+                              ? get_filename(i, 2)
+                              : archive_filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_right_operators on '" + filename +
                                 "' failed.");
-        if (!frame->minimal_memory_usage) {
+        if (!frame_<FP>()->minimal_memory_usage) {
             ifs.clear();
             ifs.seekg(archive_marks[i][2]);
             if (archive_marks[i][2] != 0)
@@ -486,7 +490,7 @@ template <typename S, typename FL> struct MPO {
         tread += _t.get_time();
     }
     void save_right_operators(int i) {
-        if (!frame->minimal_memory_usage)
+        if (!frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
@@ -514,7 +518,7 @@ template <typename S, typename FL> struct MPO {
         twrite += _t.get_time();
     }
     void unload_right_operators(int i) {
-        if (archive_filename != "" || frame->minimal_memory_usage) {
+        if (archive_filename != "" || frame_<FP>()->minimal_memory_usage) {
             assert(i < n_sites);
             right_operator_names[i] = nullptr;
             if (right_operator_exprs.size() != 0)
@@ -522,18 +526,19 @@ template <typename S, typename FL> struct MPO {
         }
     }
     void load_middle_operators(int i) {
-        if (archive_filename == "" && !frame->minimal_memory_usage)
+        if (archive_filename == "" && !frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
         assert(i < n_sites);
-        string filename =
-            frame->minimal_memory_usage ? get_filename(i, 3) : archive_filename;
+        string filename = frame_<FP>()->minimal_memory_usage
+                              ? get_filename(i, 3)
+                              : archive_filename;
         ifstream ifs(filename.c_str(), ios::binary);
         if (!ifs.good())
             throw runtime_error("MPO:load_middle_operators on '" + filename +
                                 "' failed.");
-        if (!frame->minimal_memory_usage) {
+        if (!frame_<FP>()->minimal_memory_usage) {
             ifs.clear();
             ifs.seekg(archive_marks[i][3]);
             if (archive_marks[i][3] != 0)
@@ -558,7 +563,7 @@ template <typename S, typename FL> struct MPO {
         tread += _t.get_time();
     }
     void save_middle_operators(int i) {
-        if (!frame->minimal_memory_usage)
+        if (!frame_<FP>()->minimal_memory_usage)
             return;
         Timer _t;
         _t.get_time();
@@ -586,7 +591,7 @@ template <typename S, typename FL> struct MPO {
         twrite += _t.get_time();
     }
     void unload_middle_operators(int i) {
-        if (archive_filename != "" || frame->minimal_memory_usage) {
+        if (archive_filename != "" || frame_<FP>()->minimal_memory_usage) {
             assert(i < n_sites);
             middle_operator_names[i] = nullptr;
             middle_operator_exprs[i] = nullptr;
@@ -851,7 +856,7 @@ template <typename S, typename FL> struct MPO {
         stringstream ss;
         save_data(ss);
         shared_ptr<MPO> mpo = make_shared<MPO>(0, xtag == "" ? tag : xtag);
-        mpo->load_data(ss, frame->minimal_memory_usage, true);
+        mpo->load_data(ss, frame_<FP>()->minimal_memory_usage, true);
         mpo->tf = this->tf;
         return mpo;
     }
@@ -910,7 +915,7 @@ template <typename S, typename FL> struct MPO {
         string new_tag = ximag(d) == 0 ? Parsing::to_string(xreal(d))
                                        : Parsing::to_string(xreal(d)) + "+" +
                                              Parsing::to_string(ximag(d)) + "I";
-        shared_ptr<MPO> rmpo = frame->minimal_memory_usage
+        shared_ptr<MPO> rmpo = frame_<FP>()->minimal_memory_usage
                                    ? this->deep_copy(tag + "@" + new_tag)
                                    : make_shared<MPO>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);
@@ -1062,7 +1067,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                         if (rop != nullptr) {
                             auto ref_op = rop->op;
                             if (r->ops.count(ref_op) &&
-                                (r->ops.at(ref_op)->factor == 0.0 ||
+                                (r->ops.at(ref_op)->factor == (FL)0.0 ||
                                  r->ops.at(ref_op)->info->n == 0 ||
                                  r->ops.at(ref_op)->norm() < TINY))
                                 p.second = zmat;
@@ -1081,7 +1086,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                         break;
                     case OpTypes::Elem:
                         xx = abs_value(x);
-                        if (r->ops[xx]->factor == 0.0 ||
+                        if (r->ops[xx]->factor == (FL)0.0 ||
                             r->ops[xx]->info->n == 0 ||
                             r->ops[xx]->norm() < TINY)
                             x = zero;
@@ -1095,7 +1100,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                             xx = abs_value((shared_ptr<OpExpr<S>>)px->strings[i]
                                                ->get_op());
                             shared_ptr<SparseMatrix<S, FL>> &mat = r->ops[xx];
-                            if (!(mat->factor == 0.0 || mat->info->n == 0 ||
+                            if (!(mat->factor == (FL)0.0 || mat->info->n == 0 ||
                                   mat->norm() < TINY)) {
                                 if (i != kk)
                                     px->strings[kk] = px->strings[i];
@@ -1127,7 +1132,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
                     smat->indices.resize(j);
                 }
             for (auto it = r->ops.cbegin(); it != r->ops.cend();) {
-                if (it->second->factor == 0.0 || it->second->info->n == 0)
+                if (it->second->factor == (FL)0.0 || it->second->info->n == 0)
                     r->ops.erase(it++);
                 else
                     it++;
@@ -1141,6 +1146,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
 // Adding ancilla (identity) sites to a MPO
 // n_sites = 2 * n_physical_sites
 template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
+    using typename MPO<S, FL>::FP;
     int n_physical_sites;
     shared_ptr<MPO<S, FL>> prim_mpo;
     AncillaMPO(const shared_ptr<MPO<S, FL>> &mpo, bool npdm = false,
@@ -1403,7 +1409,7 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
                 2) {
             mpo->load_schemer();
             MPO<S, FL>::schemer =
-                frame->minimal_memory_usage
+                frame_<FP>()->minimal_memory_usage
                     ? make_shared<MPOSchemer<S>>(*mpo->schemer)
                     : mpo->schemer->copy();
             mpo->unload_schemer();
@@ -1438,6 +1444,7 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
 // Add identity operator to MPO (will not change expression of MPO)
 // MPO must be simplified
 template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
+    using typename MPO<S, FL>::FP;
     using MPO<S, FL>::n_sites;
     IdentityAddedMPO(const shared_ptr<MPO<S, FL>> &mpo, const string &tag = "")
         : MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag) {
@@ -1452,7 +1459,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         else {
             mpo->load_schemer();
             MPO<S, FL>::schemer =
-                frame->minimal_memory_usage
+                frame_<FP>()->minimal_memory_usage
                     ? make_shared<MPOSchemer<S>>(*mpo->schemer)
                     : mpo->schemer->copy();
             mpo->unload_schemer();

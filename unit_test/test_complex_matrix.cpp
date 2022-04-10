@@ -4,79 +4,91 @@
 
 using namespace block2;
 
-class TestComplexMatrix : public ::testing::Test {
+template <typename FL> class TestComplexMatrix : public ::testing::Test {
   protected:
+    typedef typename GMatrix<FL>::FP FP;
     static const int n_tests = 100;
     struct MatMul {
-        ComplexMatrixRef a;
-        MatMul(const ComplexMatrixRef &a) : a(a) {}
-        void operator()(const ComplexMatrixRef &b, const ComplexMatrixRef &c) {
-            ComplexMatrixFunctions::multiply(a, false, b, false, c, 1.0, 0.0);
+        GMatrix<FL> a;
+        MatMul(const GMatrix<FL> &a) : a(a) {}
+        void operator()(const GMatrix<FL> &b, const GMatrix<FL> &c) {
+            GMatrixFunctions<FL>::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
     size_t isize = 1L << 24;
     size_t dsize = 1L << 28;
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
-TEST_F(TestComplexMatrix, TestIadd) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(0, SeqTypes::None);
-    for (int i = 0; i < n_tests; i++) {
+#ifdef _USE_SINGLE_PREC
+typedef ::testing::Types<complex<float>, complex<double>> TestFL;
+#else
+typedef ::testing::Types<complex<double>> TestFL;
+#endif
+
+TYPED_TEST_CASE(TestComplexMatrix, TestFL);
+
+TYPED_TEST(TestComplexMatrix, TestIadd) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-6;
+    shared_ptr<BatchGEMMSeq<FL>> seq =
+        make_shared<BatchGEMMSeq<FL>>(0, SeqTypes::None);
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT m = Random::rand_int(1, 200), n = Random::rand_int(1, 200);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * n), m, n);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(m * n), m, n);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(m * n), m, n);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(m * n), m, n);
         uint8_t conjb = Random::rand_int(0, 3);
         bool ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
-        complex<double> scale, cfactor;
-        Random::complex_fill<double>(&scale, 1);
-        Random::complex_fill<double>(&cfactor, 1);
+        FL scale, cfactor;
+        Random::complex_fill<FP>(&scale, 1);
+        Random::complex_fill<FP>(&cfactor, 1);
         if (ii)
             scale = 1.0;
         if (jj)
             cfactor = 1.0;
         if (conjb == 2)
             cfactor = 1;
-        ComplexMatrixRef tb = b;
+        GMatrix<FL> tb = b;
         if (conjb == 1) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(n * m), n, m);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(n * m), n, m);
             for (MKL_INT ik = 0; ik < m; ik++)
                 for (MKL_INT jk = 0; jk < n; jk++)
                     tb(jk, ik) = conj(b(ik, jk));
         } else if (conjb == 2) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(n * m), n, m);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(n * m), n, m);
             for (MKL_INT ik = 0; ik < m; ik++)
                 for (MKL_INT jk = 0; jk < n; jk++)
                     tb(jk, ik) = b(ik, jk);
         }
-        ComplexMatrixFunctions::copy(c, a);
+        GMatrixFunctions<FL>::copy(c, a);
         if (conjb == 2)
-            ComplexMatrixFunctions::transpose(c, tb, scale);
+            GMatrixFunctions<FL>::transpose(c, tb, scale);
         else
-            ComplexMatrixFunctions::iadd(c, tb, scale, conjb, cfactor);
+            GMatrixFunctions<FL>::iadd(c, tb, scale, conjb, cfactor);
         for (MKL_INT ik = 0; ik < m; ik++)
             for (MKL_INT jk = 0; jk < n; jk++)
                 ASSERT_LT(
                     abs(cfactor * a(ik, jk) + scale * b(ik, jk) - c(ik, jk)),
-                    1E-12 + 1E-12 * abs(c(ik, jk)));
+                    thrd + thrd * abs(c(ik, jk)));
         if (conjb != 2) {
-            ComplexMatrixFunctions::copy(c, a);
+            GMatrixFunctions<FL>::copy(c, a);
             seq->iadd(c, tb, scale, conjb, cfactor);
             seq->simple_perform();
             for (MKL_INT ik = 0; ik < m; ik++)
                 for (MKL_INT jk = 0; jk < n; jk++)
                     ASSERT_LT(abs(cfactor * a(ik, jk) + scale * b(ik, jk) -
                                   c(ik, jk)),
-                              1E-12 + 1E-12 * abs(c(ik, jk)));
+                              thrd + thrd * abs(c(ik, jk)));
         }
         if (conjb)
             tb.deallocate();
@@ -86,10 +98,13 @@ TEST_F(TestComplexMatrix, TestIadd) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestMultiply) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(0, SeqTypes::None);
-    for (int i = 0; i < n_tests; i++) {
+TYPED_TEST(TestComplexMatrix, TestMultiply) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-8 : 1E-2;
+    shared_ptr<BatchGEMMSeq<FL>> seq =
+        make_shared<BatchGEMMSeq<FL>>(0, SeqTypes::None);
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT m = Random::rand_int(1, 200), n = Random::rand_int(1, 200),
                 k = Random::rand_int(1, 200);
         uint8_t conja = Random::rand_int(0, 4), conjb = Random::rand_int(0, 4);
@@ -103,20 +118,20 @@ TEST_F(TestComplexMatrix, TestMultiply) {
             lda = Random::rand_int(lda, lda + 200);
         if (exc)
             ldc = Random::rand_int(ldc, ldc + 200);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * k), m, k);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(k * n), k, n);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(m * ldc), m, ldc);
-        ComplexMatrixRef cc(dalloc_()->complex_allocate(m * ldc), m, ldc);
-        ComplexMatrixRef ta(
-            dalloc_()->complex_allocate((conja & 1) ? k * lda : m * lda),
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * k), m, k);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(k * n), k, n);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(m * ldc), m, ldc);
+        GMatrix<FL> cc(dalloc_<FP>()->complex_allocate(m * ldc), m, ldc);
+        GMatrix<FL> ta(
+            dalloc_<FP>()->complex_allocate((conja & 1) ? k * lda : m * lda),
             (conja & 1) ? k : m, lda);
-        ComplexMatrixRef tb(dalloc_()->complex_allocate(k * n),
-                            (conjb & 1) ? n : k, (conjb & 1) ? k : n);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
-        Random::complex_fill<double>(c.data, c.size());
-        Random::complex_fill<double>(ta.data, ta.size());
-        Random::complex_fill<double>(tb.data, tb.size());
+        GMatrix<FL> tb(dalloc_<FP>()->complex_allocate(k * n),
+                       (conjb & 1) ? n : k, (conjb & 1) ? k : n);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        Random::complex_fill<FP>(c.data, c.size());
+        Random::complex_fill<FP>(ta.data, ta.size());
+        Random::complex_fill<FP>(tb.data, tb.size());
         if (conja & 1)
             for (MKL_INT ik = 0; ik < a.m; ik++)
                 for (MKL_INT jk = 0; jk < a.n; jk++)
@@ -142,32 +157,32 @@ TEST_F(TestComplexMatrix, TestMultiply) {
                 for (MKL_INT jk = 0; jk < tb.n; jk++)
                     tb(ik, jk) = conj(tb(ik, jk));
         bool ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
-        complex<double> scale, cfactor;
-        Random::complex_fill<double>(&scale, 1);
-        Random::complex_fill<double>(&cfactor, 1);
+        FL scale, cfactor;
+        Random::complex_fill<FP>(&scale, 1);
+        Random::complex_fill<FP>(&cfactor, 1);
         if (ii)
             scale = 1.0;
         if (jj)
             cfactor = 1.0;
-        ComplexMatrixFunctions::copy(cc, c);
-        ComplexMatrixFunctions::multiply(ta, conja, tb, conjb, cc, scale,
-                                         cfactor);
+        GMatrixFunctions<FL>::copy(cc, c);
+        GMatrixFunctions<FL>::multiply(ta, conja, tb, conjb, cc, scale,
+                                       cfactor);
         for (MKL_INT ik = 0; ik < m; ik++)
             for (MKL_INT jk = 0; jk < n; jk++) {
-                complex<double> x = cfactor * c(ik, jk);
+                FL x = cfactor * c(ik, jk);
                 for (MKL_INT kk = 0; kk < k; kk++)
                     x += scale * a(ik, kk) * b(kk, jk);
-                ASSERT_LT(abs(x - cc(ik, jk)), 1E-8);
+                ASSERT_LT(abs(x - cc(ik, jk)), thrd);
             }
-        ComplexMatrixFunctions::copy(cc, c);
+        GMatrixFunctions<FL>::copy(cc, c);
         seq->multiply(ta, conja, tb, conjb, cc, scale, cfactor);
         seq->simple_perform();
         for (MKL_INT ik = 0; ik < m; ik++)
             for (MKL_INT jk = 0; jk < n; jk++) {
-                complex<double> x = cfactor * c(ik, jk);
+                FL x = cfactor * c(ik, jk);
                 for (MKL_INT kk = 0; kk < k; kk++)
                     x += scale * a(ik, kk) * b(kk, jk);
-                ASSERT_LT(abs(x - cc(ik, jk)), 1E-8);
+                ASSERT_LT(abs(x - cc(ik, jk)), thrd);
             }
         tb.deallocate();
         ta.deallocate();
@@ -178,88 +193,89 @@ TEST_F(TestComplexMatrix, TestMultiply) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestRotate) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(0, SeqTypes::None);
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT mk = Random::rand_int(1, 200), nk = Random::rand_int(1, 200);
-        MKL_INT mb = Random::rand_int(1, 200), nb = Random::rand_int(1, 200);
-        ComplexMatrixRef k(dalloc_()->complex_allocate(mk * nk), mk, nk);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(mb * nb), mb, nb);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(nb * mk), nb, mk);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mb * nk), mb, nk);
-        ComplexMatrixRef ba(dalloc_()->complex_allocate(mb * mk), mb, mk);
-        Random::complex_fill<double>(k.data, k.size());
-        Random::complex_fill<double>(b.data, b.size());
-        Random::complex_fill<double>(a.data, a.size());
+TYPED_TEST(TestComplexMatrix, TestRotate) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 100;
+    const FP thrd = is_same<FP, double>::value ? 1E-8 : 1E-2;
+    shared_ptr<BatchGEMMSeq<FL>> seq =
+        make_shared<BatchGEMMSeq<FL>>(0, SeqTypes::None);
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT mk = Random::rand_int(1, sz), nk = Random::rand_int(1, sz);
+        MKL_INT mb = Random::rand_int(1, sz), nb = Random::rand_int(1, sz);
+        GMatrix<FL> k(dalloc_<FP>()->complex_allocate(mk * nk), mk, nk);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(mb * nb), mb, nb);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(nb * mk), nb, mk);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mb * nk), mb, nk);
+        GMatrix<FL> ba(dalloc_<FP>()->complex_allocate(mb * mk), mb, mk);
+        Random::complex_fill<FP>(k.data, k.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        Random::complex_fill<FP>(a.data, a.size());
         uint8_t conjk = Random::rand_int(0, 4);
         uint8_t conjb = Random::rand_int(0, 4);
-        ComplexMatrixRef tk = k, tb = b;
+        GMatrix<FL> tk = k, tb = b;
         if (conjk == 1) {
-            tk = ComplexMatrixRef(dalloc_()->complex_allocate(mk * nk), nk, mk);
+            tk = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mk * nk), nk, mk);
             for (MKL_INT ik = 0; ik < mk; ik++)
                 for (MKL_INT jk = 0; jk < nk; jk++)
                     tk(jk, ik) = k(ik, jk);
         } else if (conjk == 2) {
-            tk = ComplexMatrixRef(dalloc_()->complex_allocate(mk * nk), mk, nk);
+            tk = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mk * nk), mk, nk);
             for (MKL_INT ik = 0; ik < mk; ik++)
                 for (MKL_INT jk = 0; jk < nk; jk++)
                     tk(ik, jk) = conj(k(ik, jk));
         } else if (conjk == 3) {
-            tk = ComplexMatrixRef(dalloc_()->complex_allocate(mk * nk), nk, mk);
+            tk = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mk * nk), nk, mk);
             for (MKL_INT ik = 0; ik < mk; ik++)
                 for (MKL_INT jk = 0; jk < nk; jk++)
                     tk(jk, ik) = conj(k(ik, jk));
         }
         if (conjb == 1) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nb), nb, mb);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nb), nb, mb);
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT jb = 0; jb < nb; jb++)
                     tb(jb, ib) = b(ib, jb);
         } else if (conjb == 2) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nb), mb, nb);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nb), mb, nb);
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT jb = 0; jb < nb; jb++)
                     tb(ib, jb) = conj(b(ib, jb));
         } else if (conjb == 3) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nb), nb, mb);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nb), nb, mb);
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT jb = 0; jb < nb; jb++)
                     tb(jb, ib) = conj(b(ib, jb));
         }
         c.clear();
-        ComplexMatrixFunctions::rotate(a, c, tb, conjb, tk, conjk,
-                                       complex<double>(2.0, 1.0));
+        GMatrixFunctions<FL>::rotate(a, c, tb, conjb, tk, conjk, FL(2.0, 1.0));
         ba.clear();
         for (MKL_INT jb = 0; jb < nb; jb++)
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT ja = 0; ja < mk; ja++)
-                    ba(ib, ja) +=
-                        b(ib, jb) * a(jb, ja) * complex<double>(2.0, 1.0);
+                    ba(ib, ja) += b(ib, jb) * a(jb, ja) * FL(2.0, 1.0);
         for (MKL_INT ib = 0; ib < mb; ib++)
             for (MKL_INT jk = 0; jk < nk; jk++) {
-                complex<double> x = 0;
+                FL x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
+                ASSERT_LT(abs(x - c(ib, jk)), thrd);
             }
         // batch gemm does not support both conjb/conjk case
         if (conjb != 2 || conjk != 2) {
             c.clear();
-            seq->rotate(a, c, tb, conjb, tk, conjk, complex<double>(2.0, 1.0));
+            seq->rotate(a, c, tb, conjb, tk, conjk, FL(2.0, 1.0));
             seq->simple_perform();
             ba.clear();
             for (MKL_INT jb = 0; jb < nb; jb++)
                 for (MKL_INT ib = 0; ib < mb; ib++)
                     for (MKL_INT ja = 0; ja < mk; ja++)
-                        ba(ib, ja) +=
-                            b(ib, jb) * a(jb, ja) * complex<double>(2.0, 1.0);
+                        ba(ib, ja) += b(ib, jb) * a(jb, ja) * FL(2.0, 1.0);
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT jk = 0; jk < nk; jk++) {
-                    complex<double> x = 0;
+                    FL x = 0;
                     for (MKL_INT ik = 0; ik < mk; ik++)
                         x += ba(ib, ik) * k(ik, jk);
-                    ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
+                    ASSERT_LT(abs(x - c(ib, jk)), thrd);
                 }
         }
         if (conjb)
@@ -268,24 +284,23 @@ TEST_F(TestComplexMatrix, TestRotate) {
             tk.deallocate();
         bool conja = Random::rand_int(0, 2);
         bool conjc = Random::rand_int(0, 2);
-        ComplexMatrixRef ta = a, tc = c;
-        tb = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nb), nb, mb);
+        GMatrix<FL> ta = a, tc = c;
+        tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nb), nb, mb);
         for (MKL_INT ib = 0; ib < mb; ib++)
             for (MKL_INT jb = 0; jb < nb; jb++)
                 tb(jb, ib) = conj(b(ib, jb));
         if (conja) {
-            ta = ComplexMatrixRef(dalloc_()->complex_allocate(mk * nb), mk, nb);
+            ta = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mk * nb), mk, nb);
             for (MKL_INT ia = 0; ia < nb; ia++)
                 for (MKL_INT ja = 0; ja < mk; ja++)
                     ta(ja, ia) = conj(a(ia, ja));
         }
         c.clear();
         if (conjc) {
-            tc = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nk), nk, mb);
+            tc = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nk), nk, mb);
             tc.clear();
         }
-        ComplexMatrixFunctions::rotate(ta, conja, tc, conjc, tb, k,
-                                       complex<double>(2.0, 1.0));
+        GMatrixFunctions<FL>::rotate(ta, conja, tc, conjc, tb, k, FL(2.0, 1.0));
         if (conjc) {
             for (MKL_INT ic = 0; ic < mb; ic++)
                 for (MKL_INT jc = 0; jc < nk; jc++)
@@ -293,19 +308,19 @@ TEST_F(TestComplexMatrix, TestRotate) {
         }
         for (MKL_INT ib = 0; ib < mb; ib++)
             for (MKL_INT jk = 0; jk < nk; jk++) {
-                complex<double> x = 0;
+                FL x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
+                ASSERT_LT(abs(x - c(ib, jk)), thrd);
             }
         if (conjc)
             tc.deallocate();
         c.clear();
         if (conjc) {
-            tc = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nk), nk, mb);
+            tc = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nk), nk, mb);
             tc.clear();
         }
-        seq->rotate(ta, conja, tc, conjc, tb, k, complex<double>(2.0, 1.0));
+        seq->rotate(ta, conja, tc, conjc, tb, k, FL(2.0, 1.0));
         seq->simple_perform();
         if (conjc) {
             for (MKL_INT ic = 0; ic < mb; ic++)
@@ -314,10 +329,10 @@ TEST_F(TestComplexMatrix, TestRotate) {
         }
         for (MKL_INT ib = 0; ib < mb; ib++)
             for (MKL_INT jk = 0; jk < nk; jk++) {
-                complex<double> x = 0;
+                FL x = 0;
                 for (MKL_INT ik = 0; ik < mk; ik++)
                     x += ba(ib, ik) * k(ik, jk);
-                ASSERT_LT(abs(x - c(ib, jk)), 1E-8);
+                ASSERT_LT(abs(x - c(ib, jk)), thrd);
             }
         if (conjc)
             tc.deallocate();
@@ -332,49 +347,55 @@ TEST_F(TestComplexMatrix, TestRotate) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestTensorProductDiagonal) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(0, SeqTypes::None);
-    for (int i = 0; i < n_tests; i++) {
+TYPED_TEST(TestComplexMatrix, TestTensorProductDiagonal) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-14 : 5E-6;
+    shared_ptr<BatchGEMMSeq<FL>> seq =
+        make_shared<BatchGEMMSeq<FL>>(0, SeqTypes::None);
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT ma = Random::rand_int(1, 200), na = ma;
         MKL_INT mb = Random::rand_int(1, 200), nb = mb;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(ma * na), ma, na);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(mb * nb), mb, nb);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(ma * nb), ma, nb);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(ma * na), ma, na);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(mb * nb), mb, nb);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(ma * nb), ma, nb);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
         c.clear();
         uint8_t conj = Random::rand_int(0, 4);
-        ComplexMatrixFunctions::tensor_product_diagonal(
-            conj, a, b, c, complex<double>(2.0, 1.0));
+        GMatrixFunctions<FL>::tensor_product_diagonal(conj, a, b, c,
+                                                      FL(2.0, 1.0));
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
-                ASSERT_LE(abs(complex<double>(2.0, 1.0) *
+                ASSERT_LE(abs(FL(2.0, 1.0) *
                                   ((conj & 1) ? xconj(a(ia, ia)) : a(ia, ia)) *
                                   ((conj & 2) ? xconj(b(ib, ib)) : b(ib, ib)) -
                               c(ia, ib)),
-                          1E-14);
+                          thrd);
         c.clear();
-        seq->tensor_product_diagonal(conj, a, b, c, complex<double>(2.0, 1.0));
+        seq->tensor_product_diagonal(conj, a, b, c, FL(2.0, 1.0));
         seq->simple_perform();
         for (MKL_INT ia = 0; ia < ma; ia++)
             for (MKL_INT ib = 0; ib < mb; ib++)
-                ASSERT_LE(abs(complex<double>(2.0, 1.0) *
+                ASSERT_LE(abs(FL(2.0, 1.0) *
                                   ((conj & 1) ? xconj(a(ia, ia)) : a(ia, ia)) *
                                   ((conj & 2) ? xconj(b(ib, ib)) : b(ib, ib)) -
                               c(ia, ib)),
-                          1E-14);
+                          thrd);
         c.deallocate();
         b.deallocate();
         a.deallocate();
     }
 }
 
-TEST_F(TestComplexMatrix, TestThreeRotate) {
-    shared_ptr<BatchGEMMSeq<complex<double>>> seq =
-        make_shared<BatchGEMMSeq<complex<double>>>(0, SeqTypes::None);
+TYPED_TEST(TestComplexMatrix, TestThreeRotate) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-10 : 1E-3;
+    shared_ptr<BatchGEMMSeq<FL>> seq =
+        make_shared<BatchGEMMSeq<FL>>(0, SeqTypes::None);
     const int sz = 200;
-    for (int i = 0; i < n_tests; i++) {
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
         bool ll = Random::rand_int(0, 2);
         MKL_INT mda = Random::rand_int(1, sz), nda = Random::rand_int(1, sz);
@@ -387,19 +408,19 @@ TEST_F(TestComplexMatrix, TestThreeRotate) {
         MKL_INT mdc = mda * mdb * (jj + 1), ndc = nda * ndb * (jj + 1);
         bool dconja = Random::rand_int(0, 2), dconjb = Random::rand_int(0, 2);
         bool conjk = Random::rand_int(0, 2), conjb = Random::rand_int(0, 2);
-        ComplexMatrixRef da(dalloc_()->complex_allocate(mda * nda), mda, nda);
-        ComplexMatrixRef db(dalloc_()->complex_allocate(mdb * ndb), mdb, ndb);
-        ComplexMatrixRef dc(dalloc_()->complex_allocate(mdc * ndc), mdc, ndc);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(mx * nx), mx, nx);
+        GMatrix<FL> da(dalloc_<FP>()->complex_allocate(mda * nda), mda, nda);
+        GMatrix<FL> db(dalloc_<FP>()->complex_allocate(mdb * ndb), mdb, ndb);
+        GMatrix<FL> dc(dalloc_<FP>()->complex_allocate(mdc * ndc), mdc, ndc);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(mx * nx), mx, nx);
         MKL_INT mb = ll ? mdc : mx, nb = ll ? ndc : nx;
         MKL_INT
         mk = ll ? mx : mdc, nk = ll ? nx : ndc;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(nb * mk), nb, mk);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mb * nk), mb, nk);
-        ComplexMatrixRef cc(dalloc_()->complex_allocate(mb * nk), mb, nk);
-        Random::complex_fill<double>(da.data, da.size());
-        Random::complex_fill<double>(db.data, db.size());
-        Random::complex_fill<double>(a.data, a.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(nb * mk), nb, mk);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mb * nk), mb, nk);
+        GMatrix<FL> cc(dalloc_<FP>()->complex_allocate(mb * nk), mb, nk);
+        Random::complex_fill<FP>(da.data, da.size());
+        Random::complex_fill<FP>(db.data, db.size());
+        Random::complex_fill<FP>(a.data, a.size());
         MKL_INT dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
         MKL_INT dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
         if (conjb)
@@ -414,22 +435,20 @@ TEST_F(TestComplexMatrix, TestThreeRotate) {
             db = db.flip_dims();
         MKL_INT dc_stride = dcm_stride * dc.n + dcn_stride;
         c.clear();
-        ComplexMatrixFunctions::three_rotate(
-            a, c, ll ? dc : x, conjb, ll ? x : dc, conjk, da, dconja, db,
-            dconjb, ll, complex<double>(2.0, 1.0), dc_stride);
+        GMatrixFunctions<FL>::three_rotate(a, c, ll ? dc : x, conjb,
+                                           ll ? x : dc, conjk, da, dconja, db,
+                                           dconjb, ll, FL(2.0, 1.0), dc_stride);
         dc.clear(), cc.clear();
-        ComplexMatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
-                                               dc_stride);
-        ComplexMatrixFunctions::rotate(a, cc, ll ? dc : x, conjb ? 3 : 0,
-                                       ll ? x : dc, conjk ? 1 : 2,
-                                       complex<double>(2.0, 1.0));
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 1E-10));
+        GMatrixFunctions<FL>::tensor_product(da, dconja, db, dconjb, dc, 1.0,
+                                             dc_stride);
+        GMatrixFunctions<FL>::rotate(a, cc, ll ? dc : x, conjb ? 3 : 0,
+                                     ll ? x : dc, conjk ? 1 : 2, FL(2.0, 1.0));
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(c, cc, thrd, thrd));
         c.clear();
         seq->three_rotate(a, c, ll ? dc : x, conjb, ll ? x : dc, conjk, da,
-                          dconja, db, dconjb, ll, complex<double>(2.0, 1.0),
-                          dc_stride);
+                          dconja, db, dconjb, ll, FL(2.0, 1.0), dc_stride);
         seq->simple_perform();
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-10, 1E-10));
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(c, cc, thrd, thrd));
         cc.deallocate();
         c.deallocate();
         a.deallocate();
@@ -440,10 +459,12 @@ TEST_F(TestComplexMatrix, TestThreeRotate) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestThreeTensorProductDiagonal) {
-    shared_ptr<BatchGEMM<complex<double>>> batch =
-        make_shared<BatchGEMM<complex<double>>>();
-    for (int i = 0; i < n_tests; i++) {
+TYPED_TEST(TestComplexMatrix, TestThreeTensorProductDiagonal) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-8 : 1E-3;
+    shared_ptr<BatchGEMM<FL>> batch = make_shared<BatchGEMM<FL>>();
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 2), jj = Random::rand_int(0, 2);
         MKL_INT ll = Random::rand_int(0, 2);
         MKL_INT mda = Random::rand_int(1, 400), nda = mda;
@@ -455,38 +476,38 @@ TEST_F(TestComplexMatrix, TestThreeTensorProductDiagonal) {
             mdb = ndb = 1;
         MKL_INT mdc = mda * mdb * (jj + 1), ndc = nda * ndb * (jj + 1);
         bool dconja = Random::rand_int(0, 2), dconjb = Random::rand_int(0, 2);
-        ComplexMatrixRef da(dalloc_()->complex_allocate(mda * nda), mda, nda);
-        ComplexMatrixRef db(dalloc_()->complex_allocate(mdb * ndb), mdb, ndb);
-        ComplexMatrixRef dc(dalloc_()->complex_allocate(mdc * ndc), mdc, ndc);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(mx * nx), mx, nx);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mdc * mx), mdc, mx);
-        ComplexMatrixRef cc(dalloc_()->complex_allocate(mdc * mx), mdc, mx);
+        GMatrix<FL> da(dalloc_<FP>()->complex_allocate(mda * nda), mda, nda);
+        GMatrix<FL> db(dalloc_<FP>()->complex_allocate(mdb * ndb), mdb, ndb);
+        GMatrix<FL> dc(dalloc_<FP>()->complex_allocate(mdc * ndc), mdc, ndc);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(mx * nx), mx, nx);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mdc * mx), mdc, mx);
+        GMatrix<FL> cc(dalloc_<FP>()->complex_allocate(mdc * mx), mdc, mx);
         if (!ll)
             c = c.flip_dims(), cc = cc.flip_dims();
-        Random::complex_fill<double>(da.data, da.size());
-        Random::complex_fill<double>(db.data, db.size());
+        Random::complex_fill<FP>(da.data, da.size());
+        Random::complex_fill<FP>(db.data, db.size());
         MKL_INT dcm_stride = Random::rand_int(0, mdc - mda * mdb + 1);
         MKL_INT dcn_stride = Random::rand_int(0, ndc - nda * ndb + 1);
         dcn_stride = dcm_stride;
         MKL_INT dc_stride = dcm_stride * dc.n + dcn_stride;
         c.clear();
         uint8_t conj = Random::rand_int(0, 4);
-        ComplexMatrixFunctions::three_tensor_product_diagonal(
+        GMatrixFunctions<FL>::three_tensor_product_diagonal(
             conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb, ll,
-            complex<double>(2.0, 1.0), dc_stride);
+            FL(2.0, 1.0), dc_stride);
         dc.clear(), cc.clear();
-        ComplexMatrixFunctions::tensor_product(da, dconja, db, dconjb, dc, 1.0,
-                                               dc_stride);
-        ComplexMatrixFunctions::tensor_product_diagonal(
-            conj, ll ? dc : x, ll ? x : dc, cc, complex<double>(2.0, 1.0));
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
+        GMatrixFunctions<FL>::tensor_product(da, dconja, db, dconjb, dc, 1.0,
+                                             dc_stride);
+        GMatrixFunctions<FL>::tensor_product_diagonal(
+            conj, ll ? dc : x, ll ? x : dc, cc, FL(2.0, 1.0));
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(c, cc, thrd, thrd));
         c.clear();
-        AdvancedGEMM<complex<double>>::three_tensor_product_diagonal(
+        AdvancedGEMM<FL>::three_tensor_product_diagonal(
             batch, conj, ll ? dc : x, ll ? x : dc, c, da, dconja, db, dconjb,
-            ll, complex<double>(2.0, 1.0), dc_stride);
+            ll, FL(2.0, 1.0), dc_stride);
         batch->perform();
         batch->clear();
-        ASSERT_TRUE(MatrixFunctions::all_close(c, cc, 1E-8, 1E-8));
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(c, cc, thrd, thrd));
         cc.deallocate();
         c.deallocate();
         x.deallocate();
@@ -496,10 +517,12 @@ TEST_F(TestComplexMatrix, TestThreeTensorProductDiagonal) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestTensorProduct) {
-    shared_ptr<BatchGEMM<complex<double>>> batch =
-        make_shared<BatchGEMM<complex<double>>>();
-    for (int i = 0; i < n_tests; i++) {
+TYPED_TEST(TestComplexMatrix, TestTensorProduct) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const FP thrd = is_same<FP, double>::value ? 1E-14 : 5E-6;
+    shared_ptr<BatchGEMM<FL>> batch = make_shared<BatchGEMM<FL>>();
+    for (int i = 0; i < this->n_tests; i++) {
         MKL_INT ii = Random::rand_int(0, 4), jj = Random::rand_int(0, 2);
         MKL_INT ma = Random::rand_int(1, 700), na = Random::rand_int(1, 700);
         MKL_INT mb = Random::rand_int(1, 700), nb = Random::rand_int(1, 700);
@@ -515,23 +538,23 @@ TEST_F(TestComplexMatrix, TestTensorProduct) {
             mb = Random::rand_int(1, 20), nb = Random::rand_int(1, 20);
         }
         MKL_INT mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(ma * na), ma, na);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(mb * nb), mb, nb);
-        ComplexMatrixRef c(dalloc_()->complex_allocate(mc * nc), mc, nc);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(ma * na), ma, na);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(mb * nb), mb, nb);
+        GMatrix<FL> c(dalloc_<FP>()->complex_allocate(mc * nc), mc, nc);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
         c.clear();
         bool conja = Random::rand_int(0, 2);
         bool conjb = Random::rand_int(0, 2);
-        ComplexMatrixRef ta = a, tb = b;
+        GMatrix<FL> ta = a, tb = b;
         if (conja) {
-            ta = ComplexMatrixRef(dalloc_()->complex_allocate(ma * na), na, ma);
+            ta = GMatrix<FL>(dalloc_<FP>()->complex_allocate(ma * na), na, ma);
             for (MKL_INT ia = 0; ia < ma; ia++)
                 for (MKL_INT ja = 0; ja < na; ja++)
                     ta(ja, ia) = conj(a(ia, ja));
         }
         if (conjb) {
-            tb = ComplexMatrixRef(dalloc_()->complex_allocate(mb * nb), nb, mb);
+            tb = GMatrix<FL>(dalloc_<FP>()->complex_allocate(mb * nb), nb, mb);
             for (MKL_INT ib = 0; ib < mb; ib++)
                 for (MKL_INT jb = 0; jb < nb; jb++)
                     tb(jb, ib) = conj(b(ib, jb));
@@ -540,12 +563,11 @@ TEST_F(TestComplexMatrix, TestTensorProduct) {
         MKL_INT cn_stride = Random::rand_int(0, nc - na * nb + 1);
         MKL_INT c_stride = cm_stride * c.n + cn_stride;
         if (Random::rand_int(0, 2))
-            ComplexMatrixFunctions::tensor_product(
-                ta, conja, tb, conjb, c, complex<double>(2.0, 1.0), c_stride);
+            GMatrixFunctions<FL>::tensor_product(ta, conja, tb, conjb, c,
+                                                 FL(2.0, 1.0), c_stride);
         else {
-            AdvancedGEMM<complex<double>>::tensor_product(
-                batch, ta, conja, tb, conjb, c, complex<double>(2.0, 1.0),
-                c_stride);
+            AdvancedGEMM<FL>::tensor_product(batch, ta, conja, tb, conjb, c,
+                                             FL(2.0, 1.0), c_stride);
             batch->perform();
             batch->clear();
         }
@@ -553,11 +575,10 @@ TEST_F(TestComplexMatrix, TestTensorProduct) {
             for (MKL_INT ja = 0; ja < na; ja++)
                 for (MKL_INT ib = 0; ib < mb; ib++)
                     for (MKL_INT jb = 0; jb < nb; jb++)
-                        ASSERT_LE(abs(complex<double>(2.0, 1.0) * a(ia, ja) *
-                                          b(ib, jb) -
+                        ASSERT_LE(abs(FL(2.0, 1.0) * a(ia, ja) * b(ib, jb) -
                                       c(ia * mb + ib + cm_stride,
                                         ja * nb + jb + cn_stride)),
-                                  1E-14);
+                                  thrd);
         if (conjb)
             tb.deallocate();
         if (conja)
@@ -568,41 +589,43 @@ TEST_F(TestComplexMatrix, TestTensorProduct) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestExponentialPade) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT n = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestExponentialPade) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-6 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(1, sz);
         int ideg = 6;
-        double t = Random::rand_double(-0.1, 0.1);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(n * n), n, n);
-        ComplexMatrixRef v(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef u(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef w(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef work(dalloc_()->complex_allocate(4 * n * n + ideg + 1),
-                              4 * n * n + ideg + 1, 1);
-        Random::complex_fill<double>(a.data, a.size());
+        FP t = (FP)Random::rand_double(-0.1, 0.1);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(n * n), n, n);
+        GMatrix<FL> v(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> u(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> w(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> work(dalloc_<FP>()->complex_allocate(4 * n * n + ideg + 1),
+                         4 * n * n + ideg + 1, 1);
+        Random::complex_fill<FP>(a.data, a.size());
         // note that eigs can only work on hermitian matrix
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = conj(a(ki, kj));
             a(ki, ki) = real(a(ki, ki));
         }
-        Random::complex_fill<double>(v.data, v.size());
+        Random::complex_fill<FP>(v.data, v.size());
         for (MKL_INT ki = 0; ki < n; ki++)
             w(ki, 0) = v(ki, 0);
-        auto x = IterativeMatrixFunctions<complex<double>>::expo_pade(
-            ideg, n, a.data, n, t, work.data);
-        ComplexMatrixFunctions::multiply(
-            ComplexMatrixRef(work.data + x.first, n, n), false, v, false, w,
-            1.0, 0.0);
-        DiagonalMatrix ww(dalloc_()->allocate(n), n);
-        ComplexMatrixFunctions::eigs(a, ww);
-        ComplexMatrixFunctions::multiply(v, true, a, 3, u.flip_dims(), 1.0,
-                                         0.0);
+        auto x = IterativeMatrixFunctions<FL>::expo_pade(ideg, n, a.data, n, t,
+                                                         work.data);
+        GMatrixFunctions<FL>::multiply(GMatrix<FL>(work.data + x.first, n, n),
+                                       false, v, false, w, 1.0, 0.0);
+        GDiagonalMatrix<FP> ww(dalloc_<FP>()->allocate(n), n);
+        GMatrixFunctions<FL>::eigs(a, ww);
+        GMatrixFunctions<FL>::multiply(v, true, a, 3, u.flip_dims(), 1.0, 0.0);
         for (MKL_INT i = 0; i < n; i++)
             v(i, 0) = exp(t * ww(i, i)) * u(i, 0);
-        ComplexMatrixFunctions::multiply(v, true, a, false, u.flip_dims(), 1.0,
-                                         0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(u, w, 1E-6, 0.0));
+        GMatrixFunctions<FL>::multiply(v, true, a, false, u.flip_dims(), 1.0,
+                                       0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(u, w, thrd, thrd));
         ww.deallocate();
         work.deallocate();
         w.deallocate();
@@ -612,20 +635,26 @@ TEST_F(TestComplexMatrix, TestExponentialPade) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestExponential) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT n = Random::rand_int(1, 300);
+TYPED_TEST(TestComplexMatrix, TestExponential) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 300 : 150;
+    const FP conv = is_same<FP, double>::value ? 1E-8 : 1E-4;
+    const FP thrd = is_same<FP, double>::value ? 1E-6 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(1, sz);
         bool symm = Random::rand_int(0, 2);
-        complex<double> t(Random::rand_double(-0.1, 0.1),
-                          symm ? 0.0 : Random::rand_double(-0.1, 0.1));
-        double consta = Random::rand_double(-2.0, 2.0);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(n * n), n, n);
-        ComplexMatrixRef aa(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef v(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef u(dalloc_()->complex_allocate(n), n, 1);
-        ComplexMatrixRef w(dalloc_()->complex_allocate(n), n, 1);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(v.data, v.size());
+        FL t((FP)Random::rand_double(-0.1, 0.1),
+             symm ? (FP)0.0 : (FP)Random::rand_double(-0.1, 0.1));
+        FP consta = (FP)Random::rand_double(-2.0, 2.0);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(n * n), n, n);
+        GMatrix<FL> aa(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> v(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> u(dalloc_<FP>()->complex_allocate(n), n, 1);
+        GMatrix<FL> w(dalloc_<FP>()->complex_allocate(n), n, 1);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(v.data, v.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(ki, kj) = conj(a(kj, ki));
@@ -633,20 +662,19 @@ TEST_F(TestComplexMatrix, TestExponential) {
             aa(ki, 0) = a(ki, ki);
             w(ki, 0) = v(ki, 0);
         }
-        double anorm = ComplexMatrixFunctions::norm(a);
+        FP anorm = GMatrixFunctions<FL>::norm(a);
         MatMul mop(a);
-        int nmult = IterativeMatrixFunctions<complex<double>>::expo_apply(
+        int nmult = IterativeMatrixFunctions<FL>::expo_apply(
             mop, t, anorm, w, consta, symm, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8);
-        DiagonalMatrix ww(dalloc_()->allocate(n), n);
-        ComplexMatrixFunctions::eigs(a, ww);
-        ComplexMatrixFunctions::multiply(v, true, a, 3, u.flip_dims(), 1.0,
-                                         0.0);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv);
+        GDiagonalMatrix<FP> ww(dalloc_<FP>()->allocate(n), n);
+        GMatrixFunctions<FL>::eigs(a, ww);
+        GMatrixFunctions<FL>::multiply(v, true, a, 3, u.flip_dims(), 1.0, 0.0);
         for (MKL_INT i = 0; i < n; i++)
             v(i, 0) = exp(t * (ww(i, i) + consta)) * u(i, 0);
-        ComplexMatrixFunctions::multiply(v, true, a, false, u.flip_dims(), 1.0,
-                                         0.0);
-        EXPECT_TRUE(MatrixFunctions::all_close(u, w, 1E-6, 1E-6));
+        GMatrixFunctions<FL>::multiply(v, true, a, false, u.flip_dims(), 1.0,
+                                       0.0);
+        EXPECT_TRUE(GMatrixFunctions<FL>::all_close(u, w, thrd, thrd));
         ww.deallocate();
         w.deallocate();
         u.deallocate();
@@ -656,24 +684,34 @@ TEST_F(TestComplexMatrix, TestExponential) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
+TYPED_TEST(TestComplexMatrix, TestHarmonicDavidson) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 50 : 25;
+    const int sz2 = is_same<FP, double>::value ? 35 : 10;
+    const FP conv = is_same<FP, double>::value ? 1E-9 : 1E-3;
+    const FP thrd = is_same<FP, double>::value ? 1E-6 : 1E+1;
+    const FP thrd2 = is_same<FP, double>::value ? 1E-3 : 1E+1;
+    const FP thrd3 = is_same<FP, double>::value ? 1E-10 : 1E-5;
     // this test is not very stable
     Random::rand_seed(1234);
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT n = Random::rand_int(3, 50);
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(3, sz);
         MKL_INT k = min(n, (MKL_INT)Random::rand_int(1, 5));
         if (k > n / 2)
             k = n / 2;
         int ndav = 0;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(n * n), n, n);
-        ComplexDiagonalMatrix aa(dalloc_()->complex_allocate(n), n);
-        DiagonalMatrix ww(dalloc_()->allocate(n), n);
-        vector<ComplexMatrixRef> bs(k, ComplexMatrixRef(nullptr, n, 1));
-        Random::complex_fill<double>(a.data, a.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(n * n), n, n);
+        GDiagonalMatrix<FL> aa(dalloc_<FP>()->complex_allocate(n), n);
+        GDiagonalMatrix<FP> ww(dalloc_<FP>()->allocate(n), n);
+        vector<GMatrix<FL>> bs(k, GMatrix<FL>(nullptr, n, 1));
+        Random::complex_fill<FP>(a.data, a.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = conj(a(ki, kj));
             a(ki, ki) = real(a(ki, ki));
+            a(ki, ki) += 2.0;
             aa(ki, ki) = a(ki, ki);
         }
         for (int i = 0; i < k; i++) {
@@ -682,19 +720,18 @@ TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
             bs[i].data[i] = 1;
         }
         MatMul mop(a);
-        double shift = 0.1;
+        FP shift = (FP)0.1;
         DavidsonTypes davidson_type =
             Random::rand_int(0, 2)
                 ? DavidsonTypes::HarmonicLessThan | DavidsonTypes::NoPrecond
                 : DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond;
-        vector<double> vw =
-            IterativeMatrixFunctions<complex<double>>::harmonic_davidson(
-                mop, aa, bs, shift, davidson_type, ndav, false,
-                (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-9,
-                n * k * 500, -1, 2, 35);
+        vector<FP> vw = IterativeMatrixFunctions<FL>::harmonic_davidson(
+            mop, aa, bs, shift, davidson_type, ndav, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 500,
+            n * k * 400, 2, sz2);
         ASSERT_EQ((int)vw.size(), k);
-        DiagonalMatrix w(&vw[0], k);
-        ComplexMatrixFunctions::eigs(a, ww);
+        GDiagonalMatrix<FP> w(&vw[0], k);
+        GMatrixFunctions<FL>::eigs(a, ww);
         vector<int> eigval_idxs(ww.size());
         for (int i = 0; i < (int)ww.size(); i++)
             eigval_idxs[i] = i;
@@ -725,17 +762,18 @@ TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
                  });
         // last root may be inaccurate (rare)
         for (int i = 0; i < k - 1; i++)
-            ASSERT_LT(abs(ww.data[eigval_idxs[i]] - vw[i]), 1E-6);
+            ASSERT_LT(abs(ww.data[eigval_idxs[i]] - vw[i]),
+                      thrd + abs(vw[i]) * thrd);
         for (int i = 0; i < k - 1; i++) {
-            complex<double> factor = 0.0;
+            FL factor = 0.0;
             for (int j = 0; j < a.n; j++)
-                if (abs(bs[i].data[j]) > 1E-10)
+                if (abs(bs[i].data[j]) > thrd3)
                     factor += a.data[a.n * eigval_idxs[i] + j] / bs[i].data[j];
             factor = factor / abs(factor);
-            ASSERT_LE(abs(factor) - 1.0, 1E-3);
-            ASSERT_TRUE(ComplexMatrixFunctions::all_close(
-                ComplexMatrixRef(a.data + a.n * eigval_idxs[i], a.n, 1), bs[i],
-                1E-3, 0, factor));
+            ASSERT_LE(abs(factor) - 1.0, thrd2);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                GMatrix<FL>(a.data + a.n * eigval_idxs[i], a.n, 1), bs[i],
+                thrd2, thrd2, factor));
         }
         for (int i = k - 1; i >= 0; i--)
             bs[i].deallocate();
@@ -746,16 +784,24 @@ TEST_F(TestComplexMatrix, TestHarmonicDavidson) {
     Random::rand_seed(0);
 }
 
-TEST_F(TestComplexMatrix, TestDavidson) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT n = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestDavidson) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 120;
+    const FP conv = is_same<FP, double>::value ? 1E-8 : 1E-6;
+    const FP thrd = is_same<FP, double>::value ? 1E-6 : 5E-3;
+    const FP thrd2 = is_same<FP, double>::value ? 1E-3 : 1E-1;
+    const FP thrd3 = is_same<FP, double>::value ? 1E-10 : 1E-5;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(1, sz);
         MKL_INT k = min(n, (MKL_INT)Random::rand_int(1, 10));
         int ndav = 0;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(n * n), n, n);
-        ComplexDiagonalMatrix aa(dalloc_()->complex_allocate(n), n);
-        DiagonalMatrix ww(dalloc_()->allocate(n), n);
-        vector<ComplexMatrixRef> bs(k, ComplexMatrixRef(nullptr, n, 1));
-        Random::complex_fill<double>(a.data, a.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(n * n), n, n);
+        GDiagonalMatrix<FL> aa(dalloc_<FP>()->complex_allocate(n), n);
+        GDiagonalMatrix<FP> ww(dalloc_<FP>()->allocate(n), n);
+        vector<GMatrix<FL>> bs(k, GMatrix<FL>(nullptr, n, 1));
+        Random::complex_fill<FP>(a.data, a.size());
         for (MKL_INT ki = 0; ki < n; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(kj, ki) = conj(a(ki, kj));
@@ -768,24 +814,24 @@ TEST_F(TestComplexMatrix, TestDavidson) {
             bs[i].data[i] = 1;
         }
         MatMul mop(a);
-        vector<double> vw = IterativeMatrixFunctions<complex<double>>::davidson(
+        vector<FP> vw = IterativeMatrixFunctions<FL>::davidson(
             mop, aa, bs, 0, DavidsonTypes::Normal, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, n * k * 2, -1,
-            k * 2, max((MKL_INT)5, k + 10));
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 5,
+            n * k * 4, k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
-        DiagonalMatrix w(&vw[0], k);
-        ComplexMatrixFunctions::eigs(a, ww);
-        DiagonalMatrix w2(ww.data, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(w, w2, 1E-6, 1E-6));
+        GDiagonalMatrix<FP> w(&vw[0], k);
+        GMatrixFunctions<FL>::eigs(a, ww);
+        GDiagonalMatrix<FP> w2(ww.data, k);
+        ASSERT_TRUE(GMatrixFunctions<FP>::all_close(w, w2, thrd, thrd));
         for (int i = 0; i < k; i++) {
-            complex<double> factor = 0.0;
+            FL factor = 0.0;
             for (int j = 0; j < a.n; j++)
-                if (abs(bs[i].data[j]) > 1E-10)
+                if (abs(bs[i].data[j]) > thrd3)
                     factor += a.data[a.n * i + j] / bs[i].data[j];
             factor = factor / abs(factor);
-            ASSERT_LE(abs(factor) - 1.0, 1E-3);
-            ASSERT_TRUE(ComplexMatrixFunctions::all_close(
-                ComplexMatrixRef(a.data + a.n * i, a.n, 1), bs[i], 1E-3, 0,
+            ASSERT_LE(abs(factor) - 1.0, thrd2);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                GMatrix<FL>(a.data + a.n * i, a.n, 1), bs[i], thrd2, thrd2,
                 factor));
         }
         for (int i = k - 1; i >= 0; i--)
@@ -796,23 +842,27 @@ TEST_F(TestComplexMatrix, TestDavidson) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestLinear) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        MKL_INT n = Random::rand_int(1, 200);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef bg(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), n, m);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
-        ComplexMatrixFunctions::copy(af, a);
-        ComplexMatrixFunctions::copy(x, b);
-        ComplexMatrixFunctions::linear(af, x);
+TYPED_TEST(TestComplexMatrix, TestLinear) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-7 : 5E-2;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        MKL_INT n = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> bg(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        GMatrixFunctions<FL>::copy(af, a);
+        GMatrixFunctions<FL>::copy(x, b);
+        GMatrixFunctions<FL>::linear(af, x);
         // note that linear solves the H^T problem
-        ComplexMatrixFunctions::multiply(x, false, a, false, bg, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(bg, b, 1E-7, 1E-7));
+        GMatrixFunctions<FL>::multiply(x, false, a, false, bg, 1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(bg, b, thrd, thrd));
         x.deallocate();
         bg.deallocate();
         b.deallocate();
@@ -821,35 +871,40 @@ TEST_F(TestComplexMatrix, TestLinear) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestCG) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestCG) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP conv = is_same<FP, double>::value ? 1E-14 : 1E-7;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 5E-2;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0;
-        complex<double> eta = 0.05;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexDiagonalMatrix aa(dalloc_()->complex_allocate(m), m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), n, m);
-        Random::complex_fill<double>(af.data, af.size());
-        Random::complex_fill<double>(b.data, b.size());
-        Random::complex_fill<double>(xg.data, xg.size());
-        ComplexMatrixFunctions::multiply(af, false, af, 3, a, 1.0, 0.0);
+        FL eta = 0.05;
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GDiagonalMatrix<FL> aa(dalloc_<FP>()->complex_allocate(m), m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        Random::complex_fill<FP>(af.data, af.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        Random::complex_fill<FP>(xg.data, xg.size());
+        GMatrixFunctions<FL>::multiply(af, false, af, 3, a, 1.0, 0.0);
         for (MKL_INT ki = 0; ki < m; ki++)
             a(ki, ki) += eta, aa(ki, ki) = a(ki, ki);
         af.clear();
-        ComplexMatrixFunctions::transpose(af, a, 1.0);
-        ComplexMatrixFunctions::copy(x, b);
+        GMatrixFunctions<FL>::transpose(af, a, 1.0);
+        GMatrixFunctions<FL>::copy(x, b);
         // note that linear solves the H^T problem
-        ComplexMatrixFunctions::linear(af, x);
+        GMatrixFunctions<FL>::linear(af, x);
         MatMul mop(a);
-        complex<double> func =
-            IterativeMatrixFunctions<complex<double>>::conjugate_gradient(
-                mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-                (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
+        FL func = IterativeMatrixFunctions<FL>::conjugate_gradient(
+            mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -859,34 +914,40 @@ TEST_F(TestComplexMatrix, TestCG) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestMinRes) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestMinRes) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP conv = is_same<FP, double>::value ? 1E-14 : 1E-7;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 1E+1;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), n, m);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
-        Random::complex_fill<double>(xg.data, xg.size());
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        Random::complex_fill<FP>(xg.data, xg.size());
         for (MKL_INT ki = 0; ki < m; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(ki, kj) = conj(a(kj, ki));
             a(ki, ki) = real(a(ki, ki));
         }
         af.clear();
-        ComplexMatrixFunctions::transpose(af, a, 1.0);
-        ComplexMatrixFunctions::copy(x, b);
+        GMatrixFunctions<FL>::transpose(af, a, 1.0);
+        GMatrixFunctions<FL>::copy(x, b);
         // note that linear solves the H^T problem
-        ComplexMatrixFunctions::linear(af, x);
+        GMatrixFunctions<FL>::linear(af, x);
         MatMul mop(a);
-        IterativeMatrixFunctions<complex<double>>::minres(
+        IterativeMatrixFunctions<FL>::minres(
             mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000);
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-3, 1E-3));
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -895,63 +956,72 @@ TEST_F(TestComplexMatrix, TestMinRes) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestInverse) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ap(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ag(dalloc_()->complex_allocate(m * m), m, m);
-        Random::complex_fill<double>(a.data, a.size());
+TYPED_TEST(TestComplexMatrix, TestInverse) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-7 : 1E+1;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ap(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        Random::complex_fill<FP>(a.data, a.size());
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < m; kj++)
                 ap(ki, kj) = a(ki, kj);
-        ComplexMatrixFunctions::inverse(a);
-        ComplexMatrixFunctions::multiply(a, false, ap, false, ag, 1.0, 0.0);
+        GMatrixFunctions<FL>::inverse(a);
+        GMatrixFunctions<FL>::multiply(a, false, ap, false, ag, 1.0, 0.0);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
-                EXPECT_LT(abs(ag(j, k) - (k == j ? 1.0 : 0.0)), 1E-9);
+                EXPECT_LT(abs(ag(j, k) - (FP)(k == j ? 1.0 : 0.0)), thrd);
         ag.deallocate();
         ap.deallocate();
         a.deallocate();
     }
 }
 
-TEST_F(TestComplexMatrix, TestDeflatedCG) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestDeflatedCG) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 50;
+    const FP conv = is_same<FP, double>::value ? 1E-14 : 1E-6;
+    const FP thrd = is_same<FP, double>::value ? 1E-4 : 1E+0;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0;
-        double eta = 0.05;
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ag(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexDiagonalMatrix aa(dalloc_()->complex_allocate(m), m);
-        DiagonalMatrix ww(dalloc_()->allocate(m), m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), n, m);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), n, m);
-        Random::complex_fill<double>(af.data, af.size());
-        Random::complex_fill<double>(b.data, b.size());
-        Random::complex_fill<double>(xg.data, xg.size());
-        ComplexMatrixFunctions::multiply(af, false, af, 3, a, 1.0, 0.0);
+        FP eta = 0.05;
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GDiagonalMatrix<FL> aa(dalloc_<FP>()->complex_allocate(m), m);
+        GDiagonalMatrix<FP> ww(dalloc_<FP>()->allocate(m), m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), n, m);
+        Random::complex_fill<FP>(af.data, af.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        Random::complex_fill<FP>(xg.data, xg.size());
+        GMatrixFunctions<FL>::multiply(af, false, af, 3, a, 1.0, 0.0);
         for (MKL_INT ki = 0; ki < m; ki++)
             a(ki, ki) += eta;
-        ComplexMatrixFunctions::copy(ag, a);
-        ComplexMatrixFunctions::eigs(ag, ww);
-        ComplexMatrixRef w(ag.data, m, 1);
+        GMatrixFunctions<FL>::copy(ag, a);
+        GMatrixFunctions<FL>::eigs(ag, ww);
+        GMatrix<FL> w(ag.data, m, 1);
         af.clear();
-        ComplexMatrixFunctions::transpose(af, a, 1.0);
-        ComplexMatrixFunctions::copy(x, b);
-        ComplexMatrixFunctions::linear(af, x);
+        GMatrixFunctions<FL>::transpose(af, a, 1.0);
+        GMatrixFunctions<FL>::copy(x, b);
+        GMatrixFunctions<FL>::linear(af, x);
         MatMul mop(a);
         for (MKL_INT ki = 0; ki < m; ki++)
             aa(ki, ki) = a(ki, ki);
-        complex<double> func = IterativeMatrixFunctions<complex<double>>::
-            deflated_conjugate_gradient(
-                mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-                (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-14, 5000, -1,
-                vector<ComplexMatrixRef>{w});
-        ASSERT_TRUE(MatrixFunctions::all_close(xg, x, 1E-4, 1E-4));
+        FL func = IterativeMatrixFunctions<FL>::deflated_conjugate_gradient(
+            mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000,
+            vector<GMatrix<FL>>{w});
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -963,26 +1033,30 @@ TEST_F(TestComplexMatrix, TestDeflatedCG) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestEigs) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ap(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ag(dalloc_()->complex_allocate(m * m), m, m);
-        DiagonalMatrix w(dalloc_()->allocate(m), m);
-        Random::complex_fill<double>(a.data, a.size());
+TYPED_TEST(TestComplexMatrix, TestEigs) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-7 : 1E+0;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ap(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GDiagonalMatrix<FP> w(dalloc_<FP>()->allocate(m), m);
+        Random::complex_fill<FP>(a.data, a.size());
         for (MKL_INT ki = 0; ki < m; ki++) {
             for (MKL_INT kj = 0; kj < ki; kj++)
                 a(ki, kj) = conj(a(kj, ki));
             a(ki, ki) = real(a(ki, ki));
         }
-        ComplexMatrixFunctions::copy(ap, a);
-        ComplexMatrixFunctions::eigs(a, w);
-        ComplexMatrixFunctions::multiply(a, false, ap, true, ag, 1.0, 0.0);
+        GMatrixFunctions<FL>::copy(ap, a);
+        GMatrixFunctions<FL>::eigs(a, w);
+        GMatrixFunctions<FL>::multiply(a, false, ap, true, ag, 1.0, 0.0);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 ag(k, j) /= w(k, k);
-        ASSERT_TRUE(MatrixFunctions::all_close(ag, a, 1E-7, 1E-7));
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(ag, a, thrd, thrd));
         w.deallocate();
         ag.deallocate();
         ap.deallocate();
@@ -990,32 +1064,37 @@ TEST_F(TestComplexMatrix, TestEigs) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestEig) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 150);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ap(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef aq(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef ag(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexDiagonalMatrix w(dalloc_()->complex_allocate(m), m);
-        Random::complex_fill<double>(a.data, a.size());
+TYPED_TEST(TestComplexMatrix, TestEig) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 150 : 50;
+    const FP thrd = is_same<FP, double>::value ? 1E-9 : 1E-2;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-2;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ap(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> aq(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GDiagonalMatrix<FL> w(dalloc_<FP>()->complex_allocate(m), m);
+        Random::complex_fill<FP>(a.data, a.size());
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < m; kj++)
                 ap(ki, kj) = a(ki, kj);
-        ComplexMatrixFunctions::eig(a, w);
-        ComplexMatrixFunctions::multiply(a, false, ap, true, ag, 1.0, 0.0);
+        GMatrixFunctions<FL>::eig(a, w);
+        GMatrixFunctions<FL>::multiply(a, false, ap, true, ag, 1.0, 0.0);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 ag(k, j) /= w(k, k);
-        EXPECT_TRUE(MatrixFunctions::all_close(ag, a, 1E-9, 0.0));
+        EXPECT_TRUE(GMatrixFunctions<FL>::all_close(ag, a, thrd, thrd2));
         // a[i, j] u[k, j] = w[k, k] u[k, i]
         // a[i, j] = uinv[j, k] w[k, k] u[k, i] = uinv[j, k] a[i, jp] u[k, jp]
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 ag(k, j) = a(k, j) * w(k, k);
-        ComplexMatrixFunctions::inverse(a);
-        ComplexMatrixFunctions::multiply(ag, true, a, true, aq, 1.0, 0.0);
-        EXPECT_TRUE(MatrixFunctions::all_close(ap, aq, 1E-9, 0.0));
+        GMatrixFunctions<FL>::inverse(a);
+        GMatrixFunctions<FL>::multiply(ag, true, a, true, aq, 1.0, 0.0);
+        EXPECT_TRUE(GMatrixFunctions<FL>::all_close(ap, aq, thrd, thrd2));
         w.deallocate();
         ag.deallocate();
         aq.deallocate();
@@ -1024,88 +1103,99 @@ TEST_F(TestComplexMatrix, TestEig) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestSVD) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        MKL_INT n = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestSVD) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-3;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        MKL_INT n = Random::rand_int(1, sz);
         MKL_INT k = min(m, n);
-        shared_ptr<ComplexTensor> a =
-            make_shared<ComplexTensor>(vector<MKL_INT>{m, n});
-        shared_ptr<ComplexTensor> l =
-            make_shared<ComplexTensor>(vector<MKL_INT>{m, k});
-        shared_ptr<Tensor> s = make_shared<Tensor>(vector<MKL_INT>{k});
-        shared_ptr<ComplexTensor> r =
-            make_shared<ComplexTensor>(vector<MKL_INT>{k, n});
-        shared_ptr<ComplexTensor> aa =
-            make_shared<ComplexTensor>(vector<MKL_INT>{m, n});
-        shared_ptr<ComplexTensor> kk =
-            make_shared<ComplexTensor>(vector<MKL_INT>{k, k});
-        shared_ptr<ComplexTensor> ll =
-            make_shared<ComplexTensor>(vector<MKL_INT>{m, m});
-        shared_ptr<ComplexTensor> rr =
-            make_shared<ComplexTensor>(vector<MKL_INT>{n, n});
-        Random::complex_fill<double>(a->data.data(), a->size());
-        ComplexMatrixFunctions::copy(aa->ref(), a->ref());
+        shared_ptr<GTensor<FL>> a =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, n});
+        shared_ptr<GTensor<FL>> l =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, k});
+        shared_ptr<GTensor<FP>> s =
+            make_shared<GTensor<FP>>(vector<MKL_INT>{k});
+        shared_ptr<GTensor<FL>> r =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{k, n});
+        shared_ptr<GTensor<FL>> aa =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, n});
+        shared_ptr<GTensor<FL>> kk =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{k, k});
+        shared_ptr<GTensor<FL>> ll =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, m});
+        shared_ptr<GTensor<FL>> rr =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{n, n});
+        Random::complex_fill<FP>(a->data.data(), a->size());
+        GMatrixFunctions<FL>::copy(aa->ref(), a->ref());
         if (Random::rand_int(0, 2))
-            ComplexMatrixFunctions::accurate_svd(
+            GMatrixFunctions<FL>::accurate_svd(
                 a->ref(), l->ref(), s->ref().flip_dims(), r->ref(), 1E-1);
         else
-            ComplexMatrixFunctions::svd(a->ref(), l->ref(),
-                                        s->ref().flip_dims(), r->ref());
-        ComplexMatrixFunctions::multiply(l->ref(), 3, l->ref(), false,
-                                         kk->ref(), 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(kk->ref(), IdentityMatrix(k),
-                                               1E-12, 0.0));
-        ComplexMatrixFunctions::multiply(r->ref(), false, r->ref(), 3,
-                                         kk->ref(), 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(kk->ref(), IdentityMatrix(k),
-                                               1E-12, 0.0));
+            GMatrixFunctions<FL>::svd(a->ref(), l->ref(), s->ref().flip_dims(),
+                                      r->ref());
+        GMatrixFunctions<FL>::multiply(l->ref(), 3, l->ref(), false, kk->ref(),
+                                       1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            kk->ref(), IdentityMatrix(k), thrd, thrd2));
+        GMatrixFunctions<FL>::multiply(r->ref(), false, r->ref(), 3, kk->ref(),
+                                       1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            kk->ref(), IdentityMatrix(k), thrd, thrd2));
         if (m <= n) {
-            ComplexMatrixFunctions::multiply(l->ref(), false, l->ref(), 3,
-                                             ll->ref(), 1.0, 0.0);
-            ASSERT_TRUE(MatrixFunctions::all_close(ll->ref(), IdentityMatrix(m),
-                                                   1E-12, 0.0));
+            GMatrixFunctions<FL>::multiply(l->ref(), false, l->ref(), 3,
+                                           ll->ref(), 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                ll->ref(), IdentityMatrix(m), thrd, thrd2));
         }
         if (n <= m) {
-            ComplexMatrixFunctions::multiply(r->ref(), 3, r->ref(), false,
-                                             rr->ref(), 1.0, 0.0);
-            ASSERT_TRUE(MatrixFunctions::all_close(rr->ref(), IdentityMatrix(n),
-                                                   1E-12, 0.0));
+            GMatrixFunctions<FL>::multiply(r->ref(), 3, r->ref(), false,
+                                           rr->ref(), 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                rr->ref(), IdentityMatrix(n), thrd, thrd2));
         }
-        ComplexMatrixRef x(r->data.data(), 1, n);
+        GMatrix<FL> x(r->data.data(), 1, n);
         for (MKL_INT i = 0; i < k; i++) {
             ASSERT_GE((*s)({i}), 0.0);
-            ComplexMatrixFunctions::iscale(x.shift_ptr(i * n), (*s)({i}));
+            GMatrixFunctions<FL>::iscale(x.shift_ptr(i * n), (*s)({i}));
         }
-        ComplexMatrixFunctions::multiply(l->ref(), false, r->ref(), false,
-                                         a->ref(), 1.0, 0.0);
+        GMatrixFunctions<FL>::multiply(l->ref(), false, r->ref(), false,
+                                       a->ref(), 1.0, 0.0);
         ASSERT_TRUE(
-            MatrixFunctions::all_close(aa->ref(), a->ref(), 1E-12, 0.0));
+            GMatrixFunctions<FP>::all_close(aa->ref(), a->ref(), thrd, thrd2));
     }
 }
 
-TEST_F(TestComplexMatrix, TestQR) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        MKL_INT n = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestQR) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 120;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-3;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        MKL_INT n = Random::rand_int(1, sz);
         MKL_INT k = min(m, n);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * n), m, n);
-        ComplexMatrixRef qr(dalloc_()->complex_allocate(m * n), m, n);
-        Random::complex_fill<double>(a.data, a.size());
-        ComplexMatrixRef q(dalloc_()->complex_allocate(m * k), m, k);
-        ComplexMatrixRef qq(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef qqk(dalloc_()->complex_allocate(k * k), k, k);
-        ComplexMatrixRef r(dalloc_()->complex_allocate(n * k), k, n);
-        ComplexMatrixFunctions::qr(a, q, r);
-        ComplexMatrixFunctions::multiply(q, false, r, false, qr, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(a, qr, 1E-12, 0.0));
-        ComplexMatrixFunctions::multiply(q, 3, q, false, qqk, 1.0, 0.0);
-        ASSERT_TRUE(
-            MatrixFunctions::all_close(qqk, IdentityMatrix(k), 1E-12, 0.0));
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        GMatrix<FL> qr(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        Random::complex_fill<FP>(a.data, a.size());
+        GMatrix<FL> q(dalloc_<FP>()->complex_allocate(m * k), m, k);
+        GMatrix<FL> qq(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> qqk(dalloc_<FP>()->complex_allocate(k * k), k, k);
+        GMatrix<FL> r(dalloc_<FP>()->complex_allocate(n * k), k, n);
+        GMatrixFunctions<FL>::qr(a, q, r);
+        GMatrixFunctions<FL>::multiply(q, false, r, false, qr, 1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(a, qr, thrd, thrd2));
+        GMatrixFunctions<FL>::multiply(q, 3, q, false, qqk, 1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(qqk, IdentityMatrix(k),
+                                                    thrd, thrd2));
         if (m <= n) {
-            ComplexMatrixFunctions::multiply(q, false, q, 3, qq, 1.0, 0.0);
-            ASSERT_TRUE(
-                MatrixFunctions::all_close(qq, IdentityMatrix(m), 1E-12, 0.0));
+            GMatrixFunctions<FL>::multiply(q, false, q, 3, qq, 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(qq, IdentityMatrix(m),
+                                                        thrd, thrd2));
         }
         r.deallocate();
         qqk.deallocate();
@@ -1116,28 +1206,33 @@ TEST_F(TestComplexMatrix, TestQR) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestLQ) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
-        MKL_INT n = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestLQ) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 120;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-3;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        MKL_INT n = Random::rand_int(1, sz);
         MKL_INT k = min(m, n);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * n), m, n);
-        ComplexMatrixRef lq(dalloc_()->complex_allocate(m * n), m, n);
-        Random::complex_fill<double>(a.data, a.size());
-        ComplexMatrixRef l(dalloc_()->complex_allocate(m * k), m, k);
-        ComplexMatrixRef q(dalloc_()->complex_allocate(n * k), k, n);
-        ComplexMatrixRef qq(dalloc_()->complex_allocate(n * n), n, n);
-        ComplexMatrixRef qqk(dalloc_()->complex_allocate(k * k), k, k);
-        ComplexMatrixFunctions::lq(a, l, q);
-        ComplexMatrixFunctions::multiply(l, false, q, false, lq, 1.0, 0.0);
-        ASSERT_TRUE(MatrixFunctions::all_close(a, lq, 1E-12, 0.0));
-        ComplexMatrixFunctions::multiply(q, false, q, 3, qqk, 1.0, 0.0);
-        ASSERT_TRUE(
-            MatrixFunctions::all_close(qqk, IdentityMatrix(k), 1E-12, 0.0));
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        GMatrix<FL> lq(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        Random::complex_fill<FP>(a.data, a.size());
+        GMatrix<FL> l(dalloc_<FP>()->complex_allocate(m * k), m, k);
+        GMatrix<FL> q(dalloc_<FP>()->complex_allocate(n * k), k, n);
+        GMatrix<FL> qq(dalloc_<FP>()->complex_allocate(n * n), n, n);
+        GMatrix<FL> qqk(dalloc_<FP>()->complex_allocate(k * k), k, k);
+        GMatrixFunctions<FL>::lq(a, l, q);
+        GMatrixFunctions<FL>::multiply(l, false, q, false, lq, 1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(a, lq, thrd, thrd2));
+        GMatrixFunctions<FL>::multiply(q, false, q, 3, qqk, 1.0, 0.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(qqk, GIdentityMatrix<FP>(k),
+                                                    thrd, thrd2));
         if (m >= n) {
-            ComplexMatrixFunctions::multiply(q, 3, q, false, qq, 1.0, 0.0);
-            ASSERT_TRUE(
-                MatrixFunctions::all_close(qq, IdentityMatrix(n), 1E-12, 0.0));
+            GMatrixFunctions<FL>::multiply(q, 3, q, false, qq, 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                qq, GIdentityMatrix<FP>(n), thrd, thrd2));
         }
         qqk.deallocate();
         qq.deallocate();
@@ -1148,21 +1243,25 @@ TEST_F(TestComplexMatrix, TestLQ) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestLeastSquares) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestLeastSquares) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-9 : 5E-2;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = Random::rand_int(1, m + 1);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * n), m, n);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(m), m, 1);
-        ComplexMatrixRef br(dalloc_()->complex_allocate(m), m, 1);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n), n, 1);
-        Random::complex_fill<double>(a.data, a.size());
-        Random::complex_fill<double>(b.data, b.size());
-        double res = ComplexMatrixFunctions::least_squares(a, b, x);
-        ComplexMatrixFunctions::multiply(a, false, x, false, br, 1.0, 0.0);
-        ComplexMatrixFunctions::iadd(br, b, -1);
-        double cres = ComplexMatrixFunctions::norm(br);
-        EXPECT_LT(abs(res - cres), 1E-9);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * n), m, n);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(m), m, 1);
+        GMatrix<FL> br(dalloc_<FP>()->complex_allocate(m), m, 1);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n), n, 1);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
+        FP res = GMatrixFunctions<FL>::least_squares(a, b, x);
+        GMatrixFunctions<FL>::multiply(a, false, x, false, br, 1.0, 0.0);
+        GMatrixFunctions<FL>::iadd(br, b, -1);
+        FP cres = GMatrixFunctions<FL>::norm(br);
+        EXPECT_LT(abs(res - cres), thrd);
         x.deallocate();
         br.deallocate();
         b.deallocate();
@@ -1170,56 +1269,61 @@ TEST_F(TestComplexMatrix, TestLeastSquares) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestGCROT) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 300);
+TYPED_TEST(TestComplexMatrix, TestGCROT) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP conv = is_same<FP, double>::value ? 1E-14 : 1E-7;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 1E+0;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
-        double eta = 0.05;
-        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
-        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), m, n);
-        Random::fill<double>(ra.data, ra.size());
-        Random::fill<double>(rax.data, rax.size());
-        Random::fill<double>(rb.data, rb.size());
+        FP eta = 0.05;
+        GMatrix<FP> ra(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rax(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rb(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FP> rbg(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        Random::fill<FP>(ra.data, ra.size());
+        Random::fill<FP>(rax.data, rax.size());
+        Random::fill<FP>(rb.data, rb.size());
         a.clear();
         b.clear();
-        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
-        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        GMatrixFunctions<FP>::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        GMatrixFunctions<FL>::fill_complex(a, ra, GMatrix<FP>(nullptr, m, m));
         for (MKL_INT k = 0; k < m; k++)
-            a(k, k) += complex<double>(0, eta);
-        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
+            a(k, k) += FL(0, eta);
+        GMatrixFunctions<FL>::fill_complex(b, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, GMatrix<FP>(nullptr, m, n), rb);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 af(k, j) = a(j, k);
         MatMul mop(a);
-        complex<double> func =
-            IterativeMatrixFunctions<complex<double>>::gcrotmk(
-                mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 20,
-                -1, 0.0, false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
-                1E-14, 10000);
-        ComplexMatrixFunctions::copy(xg, b);
-        ComplexMatrixFunctions::linear(af, xg.flip_dims());
-        ComplexMatrixFunctions::extract_complex(xg, rbg,
-                                                MatrixRef(nullptr, m, n));
-        ComplexMatrixFunctions::extract_complex(x, rb,
-                                                MatrixRef(nullptr, m, n));
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
-        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
-                                                rbg);
-        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
-                                                rb);
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        FL func = IterativeMatrixFunctions<FL>::gcrotmk(
+            mop, GDiagonalMatrix<FL>(nullptr, 0), x, b, nmult, niter, 20, -1,
+            0.0, false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
+            10000);
+        GMatrixFunctions<FL>::copy(xg, b);
+        GMatrixFunctions<FL>::linear(af, xg.flip_dims());
+        GMatrixFunctions<FL>::extract_complex(xg, rbg,
+                                              GMatrix<FP>(nullptr, m, n));
+        GMatrixFunctions<FL>::extract_complex(x, rb,
+                                              GMatrix<FP>(nullptr, m, n));
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
+        GMatrixFunctions<FL>::extract_complex(xg, GMatrix<FP>(nullptr, m, n),
+                                              rbg);
+        GMatrixFunctions<FL>::extract_complex(x, GMatrix<FP>(nullptr, m, n),
+                                              rb);
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -1232,55 +1336,62 @@ TEST_F(TestComplexMatrix, TestGCROT) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestIDRS) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 300);
+TYPED_TEST(TestComplexMatrix, TestIDRS) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP conv = is_same<FP, double>::value ? 1E-8 : 1E-6;
+    const FP conv2 = is_same<FP, double>::value ? 1E-7 : 1E-5;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 5E-1;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
-        double eta = 0.05;
-        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
-        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), m, n);
-        Random::fill<double>(ra.data, ra.size());
-        Random::fill<double>(rax.data, rax.size());
-        Random::fill<double>(rb.data, rb.size());
+        FP eta = 0.05;
+        GMatrix<FP> ra(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rax(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rb(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FP> rbg(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        Random::fill<FP>(ra.data, ra.size());
+        Random::fill<FP>(rax.data, rax.size());
+        Random::fill<FP>(rb.data, rb.size());
         a.clear();
         b.clear();
-        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
-        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        GMatrixFunctions<FP>::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        GMatrixFunctions<FL>::fill_complex(a, ra, GMatrix<FP>(nullptr, m, m));
         for (MKL_INT k = 0; k < m; k++)
-            a(k, k) += complex<double>(0, eta);
-        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
+            a(k, k) += FL(0, eta);
+        GMatrixFunctions<FL>::fill_complex(b, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, GMatrix<FP>(nullptr, m, n), rb);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 af(k, j) = a(j, k);
         MatMul mop(a);
-        complex<double> func = IterativeMatrixFunctions<complex<double>>::idrs(
-            mop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter, 8,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8, 0.0,
-            1E-7, 10000);
-        ComplexMatrixFunctions::copy(xg, b);
-        ComplexMatrixFunctions::linear(af, xg.flip_dims());
-        ComplexMatrixFunctions::extract_complex(xg, rbg,
-                                                MatrixRef(nullptr, m, n));
-        ComplexMatrixFunctions::extract_complex(x, rb,
-                                                MatrixRef(nullptr, m, n));
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
-        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
-                                                rbg);
-        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
-                                                rb);
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        FL func = IterativeMatrixFunctions<FL>::idrs(
+            mop, GDiagonalMatrix<FL>(nullptr, 0), x, b, nmult, niter, 8, false,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, conv2,
+            10000);
+        GMatrixFunctions<FL>::copy(xg, b);
+        GMatrixFunctions<FL>::linear(af, xg.flip_dims());
+        GMatrixFunctions<FL>::extract_complex(xg, rbg,
+                                              GMatrix<FP>(nullptr, m, n));
+        GMatrixFunctions<FL>::extract_complex(x, rb,
+                                              GMatrix<FP>(nullptr, m, n));
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
+        GMatrixFunctions<FL>::extract_complex(xg, GMatrix<FP>(nullptr, m, n),
+                                              rbg);
+        GMatrixFunctions<FL>::extract_complex(x, GMatrix<FP>(nullptr, m, n),
+                                              rb);
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();
@@ -1293,62 +1404,69 @@ TEST_F(TestComplexMatrix, TestIDRS) {
     }
 }
 
-TEST_F(TestComplexMatrix, TestLSQR) {
-    for (int i = 0; i < n_tests; i++) {
-        MKL_INT m = Random::rand_int(1, 200);
+TYPED_TEST(TestComplexMatrix, TestLSQR) {
+    using FL = TypeParam;
+    using MatMul = typename TestComplexMatrix<FL>::MatMul;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 50;
+    const FP conv = is_same<FP, double>::value ? 1E-8 : 1E-6;
+    const FP conv2 = is_same<FP, double>::value ? 1E-7 : 1E-5;
+    const FP thrd = is_same<FP, double>::value ? 1E-3 : 1E0;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = 1;
         int nmult = 0, niter = 0;
-        double eta = 0.05;
-        MatrixRef ra(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rax(dalloc_()->allocate(m * m), m, m);
-        MatrixRef rb(dalloc_()->allocate(n * m), m, n);
-        MatrixRef rbg(dalloc_()->allocate(n * m), m, n);
-        ComplexMatrixRef a(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef af(dalloc_()->complex_allocate(m * m), m, m);
-        ComplexMatrixRef b(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef x(dalloc_()->complex_allocate(n * m), m, n);
-        ComplexMatrixRef xg(dalloc_()->complex_allocate(n * m), m, n);
-        Random::fill<double>(ra.data, ra.size());
-        Random::fill<double>(rax.data, rax.size());
-        Random::fill<double>(rb.data, rb.size());
+        FP eta = 0.05;
+        GMatrix<FP> ra(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rax(dalloc_<FP>()->allocate(m * m), m, m);
+        GMatrix<FP> rb(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FP> rbg(dalloc_<FP>()->allocate(n * m), m, n);
+        GMatrix<FL> a(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> af(dalloc_<FP>()->complex_allocate(m * m), m, m);
+        GMatrix<FL> b(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> x(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        GMatrix<FL> xg(dalloc_<FP>()->complex_allocate(n * m), m, n);
+        Random::fill<FP>(ra.data, ra.size());
+        Random::fill<FP>(rax.data, rax.size());
+        Random::fill<FP>(rb.data, rb.size());
         a.clear();
         b.clear();
-        MatrixFunctions::multiply(rax, false, rax, true, ra, 1.0, 0.0);
-        ComplexMatrixFunctions::fill_complex(a, ra, MatrixRef(nullptr, m, m));
+        GMatrixFunctions<FP>::multiply(rax, false, rax, true, ra, 1.0, 0.0);
+        GMatrixFunctions<FL>::fill_complex(a, ra, GMatrix<FP>(nullptr, m, m));
         for (MKL_INT k = 0; k < m; k++)
-            a(k, k) += complex<double>(0, eta);
-        ComplexMatrixFunctions::fill_complex(b, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, rb, MatrixRef(nullptr, m, n));
-        Random::fill<double>(rb.data, rb.size());
-        ComplexMatrixFunctions::fill_complex(x, MatrixRef(nullptr, m, n), rb);
-        ComplexMatrixFunctions::copy(af, a);
-        ComplexMatrixFunctions::conjugate(af);
+            a(k, k) += FL(0, eta);
+        GMatrixFunctions<FL>::fill_complex(b, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, rb, GMatrix<FP>(nullptr, m, n));
+        Random::fill<FP>(rb.data, rb.size());
+        GMatrixFunctions<FL>::fill_complex(x, GMatrix<FP>(nullptr, m, n), rb);
+        GMatrixFunctions<FL>::copy(af, a);
+        GMatrixFunctions<FL>::conjugate(af);
         MatMul mop(a), rop(af);
         // hrl: Note: The input matrix can be highly illconditioned (cond~10^5)
         //      which causes problems for lsqr.
         //      It is important to have long maxiters and small atol.
         //      It may still fail in extreme situations,
         //      in particular when m ~ 300.
-        complex<double> func = IterativeMatrixFunctions<complex<double>>::lsqr(
-            mop, rop, ComplexDiagonalMatrix(nullptr, 0), x, b, nmult, niter,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, 1E-8,
-            /*rtol*/ 1E-7, /*atol*/ 0., 10000);
-        ComplexMatrixFunctions::copy(xg, b);
+        FL func = IterativeMatrixFunctions<FL>::lsqr(
+            mop, rop, GDiagonalMatrix<FL>(nullptr, 0), x, b, nmult, niter,
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
+            /*rtol*/ conv2, /*atol*/ 0., 10000);
+        GMatrixFunctions<FL>::copy(xg, b);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)
                 af(k, j) = a(j, k);
-        ComplexMatrixFunctions::linear(af, xg.flip_dims());
-        ComplexMatrixFunctions::extract_complex(xg, rbg,
-                                                MatrixRef(nullptr, m, n));
-        ComplexMatrixFunctions::extract_complex(x, rb,
-                                                MatrixRef(nullptr, m, n));
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
-        ComplexMatrixFunctions::extract_complex(xg, MatrixRef(nullptr, m, n),
-                                                rbg);
-        ComplexMatrixFunctions::extract_complex(x, MatrixRef(nullptr, m, n),
-                                                rb);
-        EXPECT_TRUE(MatrixFunctions::all_close(rbg, rb, 1E-3, 1E-3));
+        GMatrixFunctions<FL>::linear(af, xg.flip_dims());
+        GMatrixFunctions<FL>::extract_complex(xg, rbg,
+                                              GMatrix<FP>(nullptr, m, n));
+        GMatrixFunctions<FL>::extract_complex(x, rb,
+                                              GMatrix<FP>(nullptr, m, n));
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
+        GMatrixFunctions<FL>::extract_complex(xg, GMatrix<FP>(nullptr, m, n),
+                                              rbg);
+        GMatrixFunctions<FL>::extract_complex(x, GMatrix<FP>(nullptr, m, n),
+                                              rb);
+        EXPECT_TRUE(GMatrixFunctions<FP>::all_close(rbg, rb, thrd, thrd));
         xg.deallocate();
         x.deallocate();
         b.deallocate();

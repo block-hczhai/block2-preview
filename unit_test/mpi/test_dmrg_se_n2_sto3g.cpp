@@ -39,6 +39,7 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
+    typedef double FP;
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
@@ -48,9 +49,9 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        frame_()->use_main_stack = false;
-        frame_()->minimal_disk_usage = true;
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
+        frame_<FP>()->use_main_stack = false;
+        frame_<FP>()->minimal_disk_usage = true;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
             1);
@@ -58,9 +59,9 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 

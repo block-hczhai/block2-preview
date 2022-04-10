@@ -37,41 +37,46 @@ using namespace std;
 
 namespace block2 {
 
-inline void fd_write_line(ostream &os, double x, uint16_t i = 0, uint16_t j = 0,
+template <typename FL>
+inline void fd_write_line(ostream &os, FL x, uint16_t i = 0, uint16_t j = 0,
                           uint16_t k = 0, uint16_t l = 0) {
     os << fixed << setprecision(16);
     os << setw(20) << x << setw(4) << i << setw(4) << j << setw(4) << k
        << setw(4) << l << endl;
 };
 
-inline void fd_write_line(ostream &os, complex<double> x, uint16_t i = 0,
+template <typename FL>
+inline void fd_write_line(ostream &os, complex<FL> x, uint16_t i = 0,
                           uint16_t j = 0, uint16_t k = 0, uint16_t l = 0) {
     os << fixed << setprecision(16);
     os << setw(20) << real(x) << setw(20) << imag(x) << setw(4) << i << setw(4)
        << j << setw(4) << k << setw(4) << l << endl;
 };
 
-inline void fd_read_line(array<uint16_t, 4> &idx, double &d,
+template <typename FL>
+inline void fd_read_line(array<uint16_t, 4> &idx, FL &d,
                          const vector<string> &x) {
     assert(x.size() == 5);
     idx = array<uint16_t, 4>{
         (uint16_t)Parsing::to_int(x[1]), (uint16_t)Parsing::to_int(x[2]),
         (uint16_t)Parsing::to_int(x[3]), (uint16_t)Parsing::to_int(x[4])};
-    d = Parsing::to_double(x[0]);
+    d = (FL)Parsing::to_double(x[0]);
 }
 
-inline void fd_read_line(array<uint16_t, 4> &idx, complex<double> &d,
+template <typename FL>
+inline void fd_read_line(array<uint16_t, 4> &idx, complex<FL> &d,
                          const vector<string> &x) {
     if (x.size() == 6) {
         idx = array<uint16_t, 4>{
             (uint16_t)Parsing::to_int(x[2]), (uint16_t)Parsing::to_int(x[3]),
             (uint16_t)Parsing::to_int(x[4]), (uint16_t)Parsing::to_int(x[5])};
-        d = complex<double>(Parsing::to_double(x[0]), Parsing::to_double(x[1]));
+        d = complex<FL>((FL)Parsing::to_double(x[0]),
+                        (FL)Parsing::to_double(x[1]));
     } else if (x.size() == 5) {
         idx = array<uint16_t, 4>{
             (uint16_t)Parsing::to_int(x[1]), (uint16_t)Parsing::to_int(x[2]),
             (uint16_t)Parsing::to_int(x[3]), (uint16_t)Parsing::to_int(x[4])};
-        d = (complex<double>)Parsing::to_double(x[0]);
+        d = (complex<FL>)(FL)Parsing::to_double(x[0]);
     } else
         assert(false);
 }
@@ -147,7 +152,7 @@ template <typename FL> struct TInt {
         os << fixed << setprecision(16);
         for (uint16_t i = 0; i < x.n; i++)
             for (uint16_t j = 0; j < (x.general ? x.n : i + 1); j++)
-                if (x(i, j) != 0.0)
+                if (x(i, j) != (FL)0.0)
                     fd_write_line(os, x(i, j), i + 1, j + 1);
         return os;
     }
@@ -264,7 +269,7 @@ template <typename FL> struct V1Int {
             for (uint32_t j = 0; j < x.n; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l < x.n; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FL)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -393,7 +398,7 @@ template <typename FL> struct V4Int {
             for (uint32_t j = 0; j <= i; j++)
                 for (uint32_t k = 0; k < x.n; k++)
                     for (uint32_t l = 0; l <= k; l++)
-                        if (x(i, j, k, l) != 0.0)
+                        if (x(i, j, k, l) != (FL)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -524,7 +529,7 @@ template <typename FL> struct V8Int {
             for (uint32_t j = 0; j <= i; j++, ij++)
                 for (uint32_t k = 0, kl = 0; k <= i; k++)
                     for (uint32_t l = 0; l <= k; l++, kl++)
-                        if (ij >= kl && x(i, j, k, l) != 0.0)
+                        if (ij >= kl && x(i, j, k, l) != (FL)0.0)
                             fd_write_line(os, x(i, j, k, l), i + 1, j + 1,
                                           k + 1, l + 1);
         return os;
@@ -1150,13 +1155,14 @@ template <typename FL> struct FCIDUMP {
                     for (uint16_t j = 0; j < n_block_sites; j++)
                         for (uint8_t sj = 0; sj < 2; sj++)
                             if (spin_occ[j * 2 + sj]) {
-                                energy +=
-                                    0.5 * v(si, sj, i + i_begin, i + i_begin,
-                                            j + i_begin, j + i_begin);
+                                energy += (FP)0.5 * v(si, sj, i + i_begin,
+                                                      i + i_begin, j + i_begin,
+                                                      j + i_begin);
                                 if (si == sj)
-                                    energy -= 0.5 * v(si, sj, i + i_begin,
-                                                      j + i_begin, j + i_begin,
-                                                      i + i_begin);
+                                    energy -=
+                                        (FP)0.5 * v(si, sj, i + i_begin,
+                                                    j + i_begin, j + i_begin,
+                                                    i + i_begin);
                             }
                 }
         return energy;
@@ -1291,6 +1297,20 @@ template <typename FL> struct FCIDUMP {
             set_orb_sym(reorder(orb_sym<int>(), ord));
         if (params.count("ksym"))
             set_k_sym(reorder(k_sym<int>(), ord));
+    }
+    virtual void rescale() {
+        FL x = 0;
+        uint16_t xn = 0;
+        for (size_t i = 0; i < ts.size(); i++) {
+            xn += ts[i].n;
+            for (uint16_t j = 0; j < ts[i].n; j++)
+                x += ts[i](j, j);
+        }
+        x = x / (FP)xn;
+        for (size_t i = 0; i < ts.size(); i++)
+            for (uint16_t j = 0; j < ts[i].n; j++)
+                ts[i](j, j) = ts[i](j, j) - x;
+        const_e = const_e + x * (FP)n_elec();
     }
     // orbital rotation
     // rot_mat: (old, new)

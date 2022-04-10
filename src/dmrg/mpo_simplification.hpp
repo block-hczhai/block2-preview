@@ -39,6 +39,7 @@ namespace block2 {
 
 // Simplify MPO expression according to symmetry rules
 template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
     // Original MPO
     shared_ptr<MPO<S, FL>> prim_mpo;
     shared_ptr<Rule<S, FL>> rule;
@@ -106,14 +107,14 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         MPO<S, FL>::schemer = mpo->schemer;
         size_t left_new_size = 0, right_new_size = 0;
         if (MPO<S, FL>::schemer != nullptr) {
-            if (frame->minimal_memory_usage)
+            if (frame_<FP>()->minimal_memory_usage)
                 cout << "MPO SIM load schemer ... " << endl;
             mpo->load_schemer();
             MPO<S, FL>::schemer =
-                frame->minimal_memory_usage
+                frame_<FP>()->minimal_memory_usage
                     ? make_shared<MPOSchemer<S>>(*mpo->schemer)
                     : mpo->schemer->copy();
-            if (frame->minimal_memory_usage)
+            if (frame_<FP>()->minimal_memory_usage)
                 cout << "MPO SIM unload schemer ... " << endl;
             mpo->unload_schemer();
             int i = MPO<S, FL>::schemer->left_trans_site;
@@ -171,7 +172,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         int ntg = threading->activate_global();
         // left blocking
         for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
-            if (frame->minimal_memory_usage)
+            if (frame_<FP>()->minimal_memory_usage)
                 cout << "MPO SIM LEFT BLK ... " << setw(4) << i << " / "
                      << setw(4) << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_tensor(i, true);
@@ -239,7 +240,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         }
         // right blocking
         for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
-            if (frame->minimal_memory_usage)
+            if (frame_<FP>()->minimal_memory_usage)
                 cout << "MPO SIM RIGHT BLK ... " << setw(4) << i << " / "
                      << setw(4) << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_tensor(i, true);
@@ -318,7 +319,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             // and the expr should be zero
             for (size_t i = 0; i < MPO<S, FL>::middle_operator_names.size();
                  i++) {
-                if (frame->minimal_memory_usage)
+                if (frame_<FP>()->minimal_memory_usage)
                     cout << "MPO SIM MIDDLE DEP ... " << setw(4) << i << " / "
                          << setw(4) << MPO<S, FL>::n_sites << endl;
                 mpo->load_middle_operators(i);
@@ -393,7 +394,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             // figure out the mutual dependence from right to left
             // px[.][j] is 1 if left operator is useful in next blocking
             for (int i = MPO<S, FL>::n_sites - 1; i >= 0; i--) {
-                if (frame->minimal_memory_usage)
+                if (frame_<FP>()->minimal_memory_usage)
                     cout << "MPO SIM LEFT DEP ... " << setw(4) << i << " / "
                          << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::load_left_operators(i);
@@ -617,7 +618,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             }
             // figure out the mutual dependence from left to right
             for (int i = 0; i < MPO<S, FL>::n_sites; i++) {
-                if (frame->minimal_memory_usage)
+                if (frame_<FP>()->minimal_memory_usage)
                     cout << "MPO SIM RIGHT DEP ... " << setw(4) << i << " / "
                          << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::load_right_operators(i);
@@ -840,7 +841,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 make_shared<SymbolicColumnVector<S>>(1);
             (*mpo_op)[0] = mpo->op;
             for (int i = 0; i < MPO<S, FL>::n_sites - 1; i++) {
-                if (frame->minimal_memory_usage)
+                if (frame_<FP>()->minimal_memory_usage)
                     cout << "MPO SIM MID ... " << setw(4) << i << " / "
                          << setw(4) << MPO<S, FL>::n_sites << endl;
                 MPO<S, FL>::middle_operator_names[i] = mpo_op;
@@ -902,8 +903,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             shared_ptr<OpElement<S, FL>> b = opr == nullptr ? op->b : opr->op;
             uint8_t conj = (opl != nullptr && opl->trans) |
                            ((opr != nullptr && opr->trans) << 1);
-            FL factor = (opl != nullptr ? opl->factor : 1.0) *
-                        (opr != nullptr ? opr->factor : 1.0) * op->factor;
+            FL factor = (opl != nullptr ? opl->factor : (FL)1.0) *
+                        (opr != nullptr ? opr->factor : (FL)1.0) * op->factor;
             return make_shared<OpProduct<S, FL>>(a, b, factor, conj);
         } break;
         case OpTypes::Sum: {
@@ -915,7 +916,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 mp;
             mp.reserve(ops->strings.size());
             for (auto &x : ops->strings) {
-                if (x->factor == 0.0)
+                if (x->factor == (FL)0.0)
                     continue;
                 shared_ptr<OpElementRef<S, FL>> opl = rule->operator()(x->a);
                 shared_ptr<OpElementRef<S, FL>> opr =
@@ -926,8 +927,9 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                     opr == nullptr ? x->b : opr->op;
                 uint8_t conj = (opl != nullptr && opl->trans) |
                                ((opr != nullptr && opr->trans) << 1);
-                FL factor = (opl != nullptr ? opl->factor : 1.0) *
-                            (opr != nullptr ? opr->factor : 1.0) * x->factor;
+                FL factor = (opl != nullptr ? opl->factor : (FL)1.0) *
+                            (opr != nullptr ? opr->factor : (FL)1.0) *
+                            x->factor;
                 if (!mp.count(a))
                     mp[a] = vector<shared_ptr<OpProduct<S, FL>>>();
                 vector<shared_ptr<OpProduct<S, FL>>> &px = mp.at(a);
@@ -1142,8 +1144,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             shared_ptr<OpElement<S, FL>> op =
                 dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
             name->data[j] = abs_value(name->data[j]);
-            expr->data[j] =
-                simplify_expr(expr->data[j], op->q_label) * (1.0 / op->factor);
+            expr->data[j] = simplify_expr(expr->data[j], op->q_label) *
+                            ((FL)1.0 / op->factor);
         }
         if (use_intermediate) {
             uint16_t idxi = 0, idxj = 0;
@@ -1211,7 +1213,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ii = 0; ii < MPO<S, FL>::n_sites; ii++) {
             int i = gidx[ii];
-            if (frame->minimal_memory_usage)
+            if (frame_<FP>()->minimal_memory_usage)
                 cout << "MPO SIM ... " << setw(4) << ii << " / " << setw(4)
                      << MPO<S, FL>::n_sites << endl;
             MPO<S, FL>::load_left_operators(i);

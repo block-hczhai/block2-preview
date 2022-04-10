@@ -565,33 +565,33 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     for (uint16_t j = 0; j < m + 1; j++)
                         for (uint16_t k = 0; k < m + 1; k++) {
                             (*pmop)[p] = pdm1_op[j][k];
-                            (*pmexpr)[p] = sqrt(2.0) * (b_op[j][k] * i_op);
+                            (*pmexpr)[p] = (FL)sqrt(2.0) * (b_op[j][k] * i_op);
                             p++;
                         }
                     // 2*(n-m-1) : mj(-jm) / cd dc (j > m)
                     for (uint16_t k = 0; k < m + 1; k++)
                         for (uint16_t j = m + 1; j < n_orbs; j++) {
                             (*pmop)[p] = pdm1_op[k][j];
-                            (*pmexpr)[p] = sqrt(2.0) * (c_op[k] * d_op[j]);
+                            (*pmexpr)[p] = (FL)sqrt(2.0) * (c_op[k] * d_op[j]);
                             p++;
                             (*pmop)[p] = pdm1_op[j][k];
-                            (*pmexpr)[p] = (ds ? -sqrt(2.0) : sqrt(2.0)) *
+                            (*pmexpr)[p] = (FL)(ds ? -sqrt(2.0) : sqrt(2.0)) *
                                            (d_op[k] * c_op[j]);
                             p++;
                         }
                 } else {
                     // 1*1 : mm / cd
                     (*pmop)[p] = pdm1_op[m][m];
-                    (*pmexpr)[p] = sqrt(2.0) * (b_op[m][m] * i_op);
+                    (*pmexpr)[p] = (FL)sqrt(2.0) * (b_op[m][m] * i_op);
                     p++;
                     // 2*(n-m-1) : mj(-jm) / cd dc (j > m)
                     for (uint16_t j = m + 1; j < n_orbs; j++) {
                         (*pmop)[p] = pdm1_op[m][j];
-                        (*pmexpr)[p] = sqrt(2.0) * (c_op[m] * d_op[j]);
+                        (*pmexpr)[p] = (FL)sqrt(2.0) * (c_op[m] * d_op[j]);
                         p++;
                         (*pmop)[p] = pdm1_op[j][m];
                         (*pmexpr)[p] =
-                            (ds ? -sqrt(2.0) : sqrt(2.0)) * (d_op[m] * c_op[j]);
+                            (FL)(ds ? -sqrt(2.0) : sqrt(2.0)) * (d_op[m] * c_op[j]);
                         p++;
                     }
                 }
@@ -600,7 +600,7 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     for (uint16_t j = m + 1; j < n_orbs; j++)
                         for (uint16_t k = m + 1; k < n_orbs; k++) {
                             (*pmop)[p] = pdm1_op[j][k];
-                            (*pmexpr)[p] = sqrt(2.0) * (i_op * b_op[j][k]);
+                            (*pmexpr)[p] = (FL)sqrt(2.0) * (i_op * b_op[j][k]);
                             p++;
                         }
                 assert(p == mshape);
@@ -719,8 +719,8 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         GMatrix<FL> t = get_matrix_spatial(expectations, n_orbs);
         for (uint16_t i = 0; i < n_orbs; i++)
             for (uint16_t j = 0; j < n_orbs; j++) {
-                r(2 * i + 0, 2 * j + 0) = t(i, j) / 2.0;
-                r(2 * i + 1, 2 * j + 1) = t(i, j) / 2.0;
+                r(2 * i + 0, 2 * j + 0) = t(i, j) / (FL)2.0;
+                r(2 * i + 1, 2 * j + 1) = t(i, j) / (FL)2.0;
             }
         t.deallocate();
         return r;

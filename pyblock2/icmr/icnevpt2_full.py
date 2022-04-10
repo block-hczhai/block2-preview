@@ -167,7 +167,11 @@ def _grid_restrict(key, grid, restrict_cas, no_eq):
 def _linear_solve(a, b):
     c = np.zeros_like(b)
     for i in range(len(a)):
-        c[i] = np.linalg.lstsq(a[i], b[i], rcond=None)[0]
+        try:
+            c[i] = np.linalg.lstsq(a[i], b[i], rcond=None)[0]
+        except np.linalg.LinAlgError as err:
+            print('linear solver error = ', err)
+            c[i] = np.linalg.solve(a[i], b[i])
     return c
 
 from pyscf import lib

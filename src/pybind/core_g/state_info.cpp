@@ -23,5 +23,7 @@
 template void bind_state_info<SGF>(py::module &m, const string &name);
 template void bind_state_info<SGB>(py::module &m, const string &name);
 
-template void bind_fl_state_info<SGF, double>(py::module &m);
-template void bind_fl_state_info<SGB, double>(py::module &m);
+template void bind_fl_state_info<SGF, double>(py::module &m,
+                                              const string &name);
+template void bind_fl_state_info<SGB, double>(py::module &m,
+                                              const string &name);

@@ -85,7 +85,7 @@ struct ArchivedSparseMatrix : SparseMatrix<S, FL> {
      */
     shared_ptr<SparseMatrix<S, FL>> load_archive() {
         if (alloc == nullptr)
-            alloc = dalloc;
+            alloc = dalloc_<FP>();
         if (sparse_type == SparseMatrixTypes::Normal) {
             shared_ptr<SparseMatrix<S, FL>> mat =
                 make_shared<SparseMatrix<S, FL>>(alloc);

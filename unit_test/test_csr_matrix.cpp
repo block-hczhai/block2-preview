@@ -6,6 +6,7 @@ using namespace block2;
 
 class TestCSRMatrix : public ::testing::Test {
   protected:
+    typedef double FP;
     static const int n_tests = 200;
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
@@ -20,12 +21,12 @@ class TestCSRMatrix : public ::testing::Test {
     }
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 
@@ -37,16 +38,16 @@ TEST_F(TestCSRMatrix, TestIadd) {
                                         : Random::rand_int(1, 200),
             na = Random::rand_int(0, 2) ? Random::rand_int(1, 7)
                                         : Random::rand_int(1, 200);
-        MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
-        MatrixRef b(dalloc_()->allocate(ma * na), ma, na);
-        MatrixRef stda(dalloc_()->allocate(ma * na), ma, na);
+        MatrixRef a(dalloc_<FP>()->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc_<FP>()->allocate(ma * na), ma, na);
+        MatrixRef stda(dalloc_<FP>()->allocate(ma * na), ma, na);
         fill_sparse_double(a.data, a.size());
         fill_sparse_double(b.data, b.size());
         fill_sparse_double(stda.data, stda.size());
         bool conj = Random::rand_int(0, 2);
         MatrixRef tb = b;
         if (conj) {
-            tb = MatrixRef(dalloc_()->allocate(ma * na), na, ma);
+            tb = MatrixRef(dalloc_<FP>()->allocate(ma * na), na, ma);
             for (int ib = 0; ib < ma; ib++)
                 for (int jb = 0; jb < na; jb++)
                     tb(jb, ib) = b(ib, jb);
@@ -59,7 +60,7 @@ TEST_F(TestCSRMatrix, TestIadd) {
         GCSRMatrix<double> ca, cb;
         ca.from_dense(stda);
         cb.from_dense(tb);
-        memset(dalloc_()->data + dalloc_()->used, 0, a.size() * sizeof(double));
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0, a.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::iadd(ca, cb, alpha, conj);
         spt += t.get_time();
@@ -80,10 +81,10 @@ TEST_F(TestCSRMatrix, TestMultiply) {
     for (int i = 0; i < n_tests; i++) {
         int ma = Random::rand_int(1, 200), na = Random::rand_int(1, 200);
         int mb = na, nb = Random::rand_int(1, 200);
-        MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
-        MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
-        MatrixRef c(dalloc_()->allocate(ma * nb), ma, nb);
-        MatrixRef stdc(dalloc_()->allocate(ma * nb), ma, nb);
+        MatrixRef a(dalloc_<FP>()->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc_<FP>()->allocate(mb * nb), mb, nb);
+        MatrixRef c(dalloc_<FP>()->allocate(ma * nb), ma, nb);
+        MatrixRef stdc(dalloc_<FP>()->allocate(ma * nb), ma, nb);
         fill_sparse_double(a.data, a.size());
         fill_sparse_double(b.data, b.size());
         fill_sparse_double(stdc.data, stdc.size());
@@ -91,13 +92,13 @@ TEST_F(TestCSRMatrix, TestMultiply) {
         bool conjb = Random::rand_int(0, 2);
         MatrixRef ta = a, tb = b;
         if (conja) {
-            ta = MatrixRef(dalloc_()->allocate(ma * na), na, ma);
+            ta = MatrixRef(dalloc_<FP>()->allocate(ma * na), na, ma);
             for (int ia = 0; ia < ma; ia++)
                 for (int ja = 0; ja < na; ja++)
                     ta(ja, ia) = a(ia, ja);
         }
         if (conjb) {
-            tb = MatrixRef(dalloc_()->allocate(mb * nb), nb, mb);
+            tb = MatrixRef(dalloc_<FP>()->allocate(mb * nb), nb, mb);
             for (int ib = 0; ib < mb; ib++)
                 for (int jb = 0; jb < nb; jb++)
                     tb(jb, ib) = b(ib, jb);
@@ -112,7 +113,7 @@ TEST_F(TestCSRMatrix, TestMultiply) {
         ca.from_dense(ta);
         cb.from_dense(tb);
         cc.from_dense(stdc);
-        memset(dalloc_()->data + dalloc_()->used, 0, c.size() * sizeof(double));
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0, c.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::multiply(ca, conja, cb, conjb, cc, alpha,
                                               cfactor);
@@ -137,11 +138,11 @@ TEST_F(TestCSRMatrix, TestRotate) {
     for (int i = 0; i < n_tests; i++) {
         int mk = Random::rand_int(1, 300), nk = Random::rand_int(1, 300);
         int mb = Random::rand_int(1, 300), nb = Random::rand_int(1, 300);
-        MatrixRef k(dalloc_()->allocate(mk * nk), mk, nk);
-        MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
-        MatrixRef a(dalloc_()->allocate(nb * mk), nb, mk);
-        MatrixRef c(dalloc_()->allocate(mb * nk), mb, nk);
-        MatrixRef cc(dalloc_()->allocate(mb * nk), mb, nk);
+        MatrixRef k(dalloc_<FP>()->allocate(mk * nk), mk, nk);
+        MatrixRef b(dalloc_<FP>()->allocate(mb * nb), mb, nb);
+        MatrixRef a(dalloc_<FP>()->allocate(nb * mk), nb, mk);
+        MatrixRef c(dalloc_<FP>()->allocate(mb * nk), mb, nk);
+        MatrixRef cc(dalloc_<FP>()->allocate(mb * nk), mb, nk);
         fill_sparse_double(k.data, k.size());
         fill_sparse_double(b.data, b.size());
         fill_sparse_double(a.data, a.size());
@@ -149,13 +150,13 @@ TEST_F(TestCSRMatrix, TestRotate) {
         bool conjb = Random::rand_int(0, 2);
         MatrixRef tk = k, tb = b;
         if (conjk) {
-            tk = MatrixRef(dalloc_()->allocate(mk * nk), nk, mk);
+            tk = MatrixRef(dalloc_<FP>()->allocate(mk * nk), nk, mk);
             for (int ik = 0; ik < mk; ik++)
                 for (int jk = 0; jk < nk; jk++)
                     tk(jk, ik) = k(ik, jk);
         }
         if (conjb) {
-            tb = MatrixRef(dalloc_()->allocate(mb * nb), nb, mb);
+            tb = MatrixRef(dalloc_<FP>()->allocate(mb * nb), nb, mb);
             for (int ib = 0; ib < mb; ib++)
                 for (int jb = 0; jb < nb; jb++)
                     tb(jb, ib) = b(ib, jb);
@@ -171,7 +172,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         ck.from_dense(tk);
         // spket * a * spbra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::rotate(a, cc, cb, conjb, ck, conjk, alpha);
@@ -179,7 +180,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // spket * a * bra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::rotate(a, cc, tb, conjb, ck, conjk, alpha);
@@ -187,7 +188,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // ket * a * spbra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::rotate(a, cc, cb, conjb, tk, conjk, alpha);
@@ -195,7 +196,7 @@ TEST_F(TestCSRMatrix, TestRotate) {
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-10, 0.0));
         // ket * spa * bra
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::rotate(ca, cc, tb, conjb, tk, conjk,
@@ -221,10 +222,10 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
     for (int i = 0; i < n_tests; i++) {
         int ma = Random::rand_int(1, 200), na = ma;
         int mb = Random::rand_int(1, 200), nb = mb;
-        MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
-        MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
-        MatrixRef c(dalloc_()->allocate(ma * nb), ma, nb);
-        MatrixRef cc(dalloc_()->allocate(ma * nb), ma, nb);
+        MatrixRef a(dalloc_<FP>()->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc_<FP>()->allocate(mb * nb), mb, nb);
+        MatrixRef c(dalloc_<FP>()->allocate(ma * nb), ma, nb);
+        MatrixRef cc(dalloc_<FP>()->allocate(ma * nb), ma, nb);
         fill_sparse_double(a.data, a.size());
         fill_sparse_double(b.data, b.size());
         c.clear();
@@ -236,7 +237,7 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         ca.from_dense(a);
         cb.from_dense(b);
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::tensor_product_diagonal(0, ca, b, cc,
@@ -244,7 +245,7 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::tensor_product_diagonal(0, a, cb, cc,
@@ -252,7 +253,7 @@ TEST_F(TestCSRMatrix, TestTensorProductDiagonal) {
         spt += t.get_time();
         ASSERT_TRUE(MatrixFunctions::all_close(cc, c, 1E-15, 0.0));
         cc.clear();
-        memset(dalloc_()->data + dalloc_()->used, 0,
+        memset(dalloc_<FP>()->data + dalloc_<FP>()->used, 0,
                cc.size() * sizeof(double));
         t.get_time();
         GCSRMatrixFunctions<double>::tensor_product_diagonal(0, ca, cb, cc,
@@ -283,10 +284,10 @@ TEST_F(TestCSRMatrix, TestTensorProduct) {
             mb = Random::rand_int(1, 50), nb = Random::rand_int(1, 50);
         }
         int mc = ma * mb * (jj + 1), nc = na * nb * (jj + 1);
-        MatrixRef a(dalloc_()->allocate(ma * na), ma, na);
-        MatrixRef b(dalloc_()->allocate(mb * nb), mb, nb);
-        MatrixRef c(dalloc_()->allocate(mc * nc), mc, nc);
-        MatrixRef xc(dalloc_()->allocate(mc * nc), mc, nc);
+        MatrixRef a(dalloc_<FP>()->allocate(ma * na), ma, na);
+        MatrixRef b(dalloc_<FP>()->allocate(mb * nb), mb, nb);
+        MatrixRef c(dalloc_<FP>()->allocate(mc * nc), mc, nc);
+        MatrixRef xc(dalloc_<FP>()->allocate(mc * nc), mc, nc);
         fill_sparse_double(a.data, a.size());
         fill_sparse_double(b.data, b.size());
         c.clear();
@@ -294,13 +295,13 @@ TEST_F(TestCSRMatrix, TestTensorProduct) {
         bool conjb = Random::rand_int(0, 2);
         MatrixRef ta = a, tb = b;
         if (conja) {
-            ta = MatrixRef(dalloc_()->allocate(ma * na), na, ma);
+            ta = MatrixRef(dalloc_<FP>()->allocate(ma * na), na, ma);
             for (int ia = 0; ia < ma; ia++)
                 for (int ja = 0; ja < na; ja++)
                     ta(ja, ia) = a(ia, ja);
         }
         if (conjb) {
-            tb = MatrixRef(dalloc_()->allocate(mb * nb), nb, mb);
+            tb = MatrixRef(dalloc_<FP>()->allocate(mb * nb), nb, mb);
             for (int ib = 0; ib < mb; ib++)
                 for (int jb = 0; jb < nb; jb++)
                     tb(jb, ib) = b(ib, jb);

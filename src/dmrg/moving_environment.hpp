@@ -164,7 +164,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     // info for cached opt
     pair<OpCachingTypes, int> cached_info = make_pair(OpCachingTypes::None, -1);
     // whether caching contracted opt (only available when
-    // !frame->use_main_stack)
+    // !frame_<FP>()->use_main_stack)
     bool cached_contraction = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
            tinfo = 0;
@@ -227,7 +227,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
             mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_left;
         if (cached_info.first == OpCachingTypes::Left &&
             cached_info.second == i - 1) {
@@ -258,10 +258,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         bra->load_tensor(i - 1);
         if (bra != ket)
             ket->load_tensor(i - 1);
-        frame->reset(1);
+        frame_<FP>()->reset(1);
         Partition<S, FL>::init_left_op_infos(i - 1, bra->info, ket->info, sl,
                                              envs[i]->left_op_infos);
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         envs[i]->left =
             Partition<S, FL>::build_left(mats, envs[i]->left_op_infos);
         tinfo += _t.get_time();
@@ -278,14 +278,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
         mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
-        if (!frame->use_main_stack)
+        if (!frame_<FP>()->use_main_stack)
             new_left->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
             mpo->unload_schemer();
-            frame->update_peak_used_memory();
+            frame_<FP>()->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
             // also in tdvp (1-dot after 2-dot) we need to keep data
@@ -302,18 +302,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->unload_left_operators(i);
         }
         tint += _t.get_time();
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (bra != ket)
             ket->unload_tensor(i - 1);
         bra->unload_tensor(i - 1);
-        if (frame->use_main_stack)
+        if (frame_<FP>()->use_main_stack)
             new_left->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
-        frame->save_data(1, get_left_partition_filename(i));
+        frame_<FP>()->save_data(1, get_left_partition_filename(i));
         if (save_partition_info) {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i]->save_data(true, get_left_partition_filename(i, true));
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
     }
     // Contract and renormalize right block by one site
@@ -345,7 +345,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
             right_op_infos_notrunc, mpo->tf->opf->cg);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_right;
         if (cached_info.first == OpCachingTypes::Right &&
             cached_info.second == i + dot) {
@@ -377,10 +377,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         bra->load_tensor(i + dot);
         if (bra != ket)
             ket->load_tensor(i + dot);
-        frame->reset(1);
+        frame_<FP>()->reset(1);
         Partition<S, FL>::init_right_op_infos(i + dot, bra->info, ket->info, sl,
                                               envs[i]->right_op_infos);
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         envs[i]->right =
             Partition<S, FL>::build_right(mats, envs[i]->right_op_infos);
         tinfo += _t.get_time();
@@ -397,7 +397,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
         mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
-        if (!frame->use_main_stack)
+        if (!frame_<FP>()->use_main_stack)
             new_right->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr &&
@@ -406,7 +406,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
             mpo->unload_schemer();
-            frame->update_peak_used_memory();
+            frame_<FP>()->update_peak_used_memory();
             // when using conventional mpo transform scheme, dot = 1/2 only
             // compatible if we keep both N/C for dot = 1
             // also in tdvp (1-dot after 2-dot) we need to keep data
@@ -424,18 +424,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->unload_right_operators(i + dot - 1);
         }
         tint += _t.get_time();
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (bra != ket)
             ket->unload_tensor(i + dot);
         bra->unload_tensor(i + dot);
-        if (frame->use_main_stack)
+        if (frame_<FP>()->use_main_stack)
             new_right->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
-        frame->save_data(1, get_right_partition_filename(i));
+        frame_<FP>()->save_data(1, get_right_partition_filename(i));
         if (save_partition_info) {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i]->save_data(false, get_right_partition_filename(i, true));
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
     }
     void left_contract_rotate_unordered(
@@ -445,19 +445,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (rule == nullptr || rule->is_root()) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i - 1]->load_data(true,
                                    get_left_partition_filename(i - 1, true));
             if (envs[i - 1]->left != nullptr)
-                frame->load_data(1, get_left_partition_filename(i - 1));
+                frame_<FP>()->load_data(1, get_left_partition_filename(i - 1));
             left_contract_rotate(i);
         }
         if (rule != nullptr)
             rule->comm->barrier();
         if (rule != nullptr && !rule->is_root()) {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i]->load_data(true, get_left_partition_filename(i, true));
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
     }
     void right_contract_rotate_unordered(
@@ -467,19 +467,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (rule == nullptr || rule->is_root()) {
             envs[i]->right_op_infos.clear();
             envs[i]->right = nullptr;
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i + 1]->load_data(false,
                                    get_right_partition_filename(i + 1, true));
             if (envs[i + 1]->right != nullptr)
-                frame->load_data(1, get_right_partition_filename(i + 1));
+                frame_<FP>()->load_data(1, get_right_partition_filename(i + 1));
             right_contract_rotate(i);
         }
         if (rule != nullptr)
             rule->comm->barrier();
         if (rule != nullptr && !rule->is_root()) {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             envs[i]->load_data(false, get_right_partition_filename(i, true));
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
     }
     // change from standard single-center MPS to multi-center MPS
@@ -593,32 +593,33 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     string get_left_archive_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
-           << ".LEFT." << Parsing::to_string(i);
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".AR." << tag << ".LEFT." << Parsing::to_string(i);
         return ss.str();
     }
     string get_middle_archive_filename() const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
-           << ".MIDDLE." << Parsing::to_string(0);
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".AR." << tag << ".MIDDLE." << Parsing::to_string(0);
         return ss.str();
     }
     string get_right_archive_filename(int i) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".AR." << tag
-           << ".RIGHT." << Parsing::to_string(i);
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".AR." << tag << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
     string get_left_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART."
-           << (info ? "INFO." : "") << tag << ".LEFT." << Parsing::to_string(i);
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".PART." << (info ? "INFO." : "") << tag << ".LEFT."
+           << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame->save_dir << "/" << frame->prefix_distri << ".PART."
-           << (info ? "INFO." : "") << tag << ".RIGHT."
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".PART." << (info ? "INFO." : "") << tag << ".RIGHT."
            << Parsing::to_string(i);
         return ss.str();
     }
@@ -794,13 +795,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)
             para_mps->save_data();
         if (renormalize_ops) {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             for (int i = 0; i < n_sites; i++) {
                 envs[i]->load_data(true, get_left_partition_filename(i, true));
                 envs[i]->load_data(false,
                                    get_right_partition_filename(i, true));
             }
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
         // outside code may have cout
         para_mps->disable_parallel_writing();
@@ -989,14 +990,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 dynamic_pointer_cast<ParallelMPS<S, FLS>>(ket);
             para_mps->enable_parallel_writing();
             if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0) {
-                frame->activate(1);
+                frame_<FP>()->activate(1);
                 for (int i = 0; i < n_sites; i++) {
                     envs[i]->save_data(true,
                                        get_left_partition_filename(i, true));
                     envs[i]->save_data(false,
                                        get_right_partition_filename(i, true));
                 }
-                frame->activate(0);
+                frame_<FP>()->activate(0);
             }
             if (para_mps->rule != nullptr)
                 para_mps->rule->comm->barrier();
@@ -1024,13 +1025,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 para_mps->rule->comm->barrier();
             if (para_mps->rule == nullptr || para_mps->rule->comm->group == 0)
                 para_mps->save_data();
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             for (int i = 0; i < n_sites; i++) {
                 envs[i]->load_data(true, get_left_partition_filename(i, true));
                 envs[i]->load_data(false,
                                    get_right_partition_filename(i, true));
             }
-            frame->activate(0);
+            frame_<FP>()->activate(0);
             // outside code may have cout
             para_mps->disable_parallel_writing();
         } else if (bra->info->get_warm_up_type() == WarmUpTypes::None &&
@@ -1048,21 +1049,21 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 right_contract_rotate(i);
             }
         }
-        frame->reset(1);
+        frame_<FP>()->reset(1);
     }
     void partial_prepare(int a, int b) {
         assert(a >= 0 && b <= n_sites);
         tctr = trot = tmid = tint = tdctr = tdiag = tinfo = 0;
         // in unordered sweep, same-site contraction may not be identical
         cached_info = make_pair(OpCachingTypes::None, -1);
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         // when conn center can change dynamically,
         // partition info in the middle also needs reloading
         for (int i = a; i <= b - dot; i++) {
             envs[i]->load_data(true, get_left_partition_filename(i, true));
             envs[i]->load_data(false, get_right_partition_filename(i, true));
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int i = b - dot; i > center; i--) {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
@@ -1082,7 +1083,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             end_site = n_sites;
         // two-site to one-site transition
         if (dot == 1 && envs[0]->middle.size() == 2) {
-            frame->reset_buffer(1);
+            frame_<FP>()->reset_buffer(1);
             if (center == end_site - 2 &&
                 (ket->canonical_form[end_site - 1] == 'C' ||
                  ket->canonical_form[end_site - 1] == 'M')) {
@@ -1096,16 +1097,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 fuse_center = mpo->schemer == nullptr
                                   ? end_site - 2
                                   : mpo->schemer->right_trans_site;
-                frame->reset(1);
+                frame_<FP>()->reset(1);
                 if (envs[center - 1]->left != nullptr)
-                    frame->load_data(1,
-                                     get_left_partition_filename(center - 1));
+                    frame_<FP>()->load_data(
+                        1, get_left_partition_filename(center - 1));
                 left_contract_rotate(center);
             }
             for (int i = n_sites - 1; i >= center; i--)
                 if (envs[i]->right != nullptr)
-                    frame->rename_data(get_right_partition_filename(i),
-                                       get_right_partition_filename(i + 1));
+                    frame_<FP>()->rename_data(
+                        get_right_partition_filename(i),
+                        get_right_partition_filename(i + 1));
             for (int i = n_sites - 1; i >= 0; i--) {
                 envs[i]->middle.resize(1);
                 if (i > start_site) {
@@ -1122,17 +1124,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         else if (bra->canonical_form[center] == 'M')
                             bra->canonical_form[center] = 'J';
                     }
-                    frame->reset(1);
+                    frame_<FP>()->reset(1);
                     if (envs[center + 1]->right != nullptr)
-                        frame->load_data(
+                        frame_<FP>()->load_data(
                             1, get_right_partition_filename(center + 1));
                     envs[center]->right_op_infos.clear();
                     envs[center]->right = nullptr;
                     right_contract_rotate(center);
                 } else if (center == end_site - 1 && end_site < n_sites) {
-                    frame->reset(1);
+                    frame_<FP>()->reset(1);
                     if (envs[center + 1]->right != nullptr)
-                        frame->load_data(
+                        frame_<FP>()->load_data(
                             1, get_right_partition_filename(center + 1));
                     envs[center]->right_op_infos.clear();
                     envs[center]->right = nullptr;
@@ -1165,12 +1167,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (envs[center]->left != nullptr &&
                 !(cached_info.first == OpCachingTypes::Left &&
                   cached_info.second == center))
-                frame->load_data(1, get_left_partition_filename(center));
+                frame_<FP>()->load_data(1, get_left_partition_filename(center));
             // this will create left partition ++center (new_data_name)
             left_contract_rotate(++center, preserve_data);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
-            if (frame->minimal_disk_usage && !preserve_data &&
+            if (frame_<FP>()->minimal_disk_usage && !preserve_data &&
                 envs[center - 1]->right != nullptr) {
                 string old_data_name = get_right_partition_filename(center - 1);
                 if (Parsing::file_exists(old_data_name))
@@ -1180,12 +1182,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (envs[center]->right != nullptr &&
                 !(cached_info.first == OpCachingTypes::Right &&
                   cached_info.second == center + dot - 1))
-                frame->load_data(1, get_right_partition_filename(center));
+                frame_<FP>()->load_data(1,
+                                        get_right_partition_filename(center));
             // this will create right partition --center (new_data_name)
             right_contract_rotate(--center, preserve_data);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
-            if (frame->minimal_disk_usage && !preserve_data &&
+            if (frame_<FP>()->minimal_disk_usage && !preserve_data &&
                 envs[center + 1]->left != nullptr) {
                 string old_data_name = get_left_partition_filename(center + 1);
                 if (Parsing::file_exists(old_data_name))
@@ -1198,8 +1201,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         // dynamic environment generation for warmup sweep
         if (i != n_sites - dot && envs[i]->right == nullptr &&
             ket->info->get_warm_up_type() != WarmUpTypes::None) {
-            frame->reset(1);
-            frame->activate(0);
+            frame_<FP>()->reset(1);
+            frame_<FP>()->activate(0);
             vector<shared_ptr<MPS<S, FLS>>> mpss =
                 bra == ket ? vector<shared_ptr<MPS<S, FLS>>>{bra}
                            : vector<shared_ptr<MPS<S, FLS>>>{bra, ket};
@@ -1267,14 +1270,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 envs[j]->right_op_infos.clear();
                 envs[j]->right = nullptr;
             }
-            frame->reset(1);
+            frame_<FP>()->reset(1);
             if (new_data_name != "")
-                frame->load_data(1, new_data_name);
+                frame_<FP>()->load_data(1, new_data_name);
         }
         if (i != 0 && envs[i]->left == nullptr &&
             ket->info->get_warm_up_type() != WarmUpTypes::None) {
-            frame->reset(1);
-            frame->activate(0);
+            frame_<FP>()->reset(1);
+            frame_<FP>()->activate(0);
             vector<shared_ptr<MPS<S, FLS>>> mpss =
                 bra == ket ? vector<shared_ptr<MPS<S, FLS>>>{bra}
                            : vector<shared_ptr<MPS<S, FLS>>>{bra, ket};
@@ -1338,9 +1341,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 envs[j]->left_op_infos.clear();
                 envs[j]->left = nullptr;
             }
-            frame->reset(1);
+            frame_<FP>()->reset(1);
             if (new_data_name != "")
-                frame->load_data(1, new_data_name);
+                frame_<FP>()->load_data(1, new_data_name);
         }
     }
     // Contract left block for constructing effective Hamiltonian
@@ -1369,12 +1372,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             Partition<S, FL>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl);
         if (envs[iL]->left != nullptr && iL != 0)
-            frame->load_data(1, get_left_partition_filename(iL));
+            frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         Partition<S, FL>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
             mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
         // left contract
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Left &&
             cached_info.second == iL) {
             new_left = cached_opt;
@@ -1407,8 +1410,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     void delayed_left_contract(int iL,
                                shared_ptr<OperatorTensor<S, FL>> &new_left) {
         if (envs[iL]->left != nullptr && iL != 0)
-            frame->load_data(1, get_left_partition_filename(iL));
-        frame->activate(0);
+            frame_<FP>()->load_data(1, get_left_partition_filename(iL));
+        frame_<FP>()->activate(0);
         mpo->load_left_operators(iL);
         mpo->load_tensor(iL);
         mpo->tf->delayed_left_contract(
@@ -1440,13 +1443,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             Partition<S, FL>::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[iR], rsl);
         if (envs[iR - dot + 1]->right != nullptr)
-            frame->load_data(1, get_right_partition_filename(iR - dot + 1));
+            frame_<FP>()->load_data(1,
+                                    get_right_partition_filename(iR - dot + 1));
         Partition<S, FL>::init_right_op_infos_notrunc(
             iR, bra->info, ket->info, rsl, rsubsl,
             envs[iR - dot + 1]->right_op_infos, mpo->site_op_infos[iR],
             right_op_infos, mpo->tf->opf->cg);
         // right contract
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Right &&
             cached_info.second == iR) {
             new_right = cached_opt;
@@ -1469,8 +1473,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     void delayed_right_contract(int iR,
                                 shared_ptr<OperatorTensor<S, FL>> &new_right) {
         if (envs[iR - dot + 1]->right != nullptr)
-            frame->load_data(1, get_right_partition_filename(iR - dot + 1));
-        frame->activate(0);
+            frame_<FP>()->load_data(1,
+                                    get_right_partition_filename(iR - dot + 1));
+        frame_<FP>()->activate(0);
         mpo->load_right_operators(iR);
         mpo->load_tensor(iR);
         mpo->tf->delayed_right_contract(envs[iR - dot + 1]->right,
@@ -1488,16 +1493,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
               vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
               shared_ptr<OperatorTensor<S, FL>> &new_left) {
         assert(envs[iL]->left != nullptr);
-        frame->load_data(1, get_left_partition_filename(iL));
-        frame->activate(0);
+        frame_<FP>()->load_data(1, get_left_partition_filename(iL));
+        frame_<FP>()->activate(0);
         Partition<S, FL>::copy_op_infos(envs[iL]->left_op_infos, left_op_infos);
         if (cached_info.first == OpCachingTypes::LeftCopy &&
             cached_info.second == iL)
             new_left = cached_opt;
         else
             new_left = envs[iL]->left->deep_copy(
-                frame->use_main_stack ? nullptr
-                                      : make_shared<VectorAllocator<FP>>());
+                frame_<FP>()->use_main_stack
+                    ? nullptr
+                    : make_shared<VectorAllocator<FP>>());
         for (auto &p : new_left->ops)
             p.second->info = Partition<S, FL>::find_op_info(
                 left_op_infos, p.second->info->delta_quantum);
@@ -1509,8 +1515,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
                shared_ptr<OperatorTensor<S, FL>> &new_right) {
         assert(envs[iR - dot + 1]->right != nullptr);
-        frame->load_data(1, get_right_partition_filename(iR - dot + 1));
-        frame->activate(0);
+        frame_<FP>()->load_data(1, get_right_partition_filename(iR - dot + 1));
+        frame_<FP>()->activate(0);
         Partition<S, FL>::copy_op_infos(envs[iR - dot + 1]->right_op_infos,
                                         right_op_infos);
         if (cached_info.first == OpCachingTypes::RightCopy &&
@@ -1518,8 +1524,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_right = cached_opt;
         else
             new_right = envs[iR - dot + 1]->right->deep_copy(
-                frame->use_main_stack ? nullptr
-                                      : make_shared<VectorAllocator<FP>>());
+                frame_<FP>()->use_main_stack
+                    ? nullptr
+                    : make_shared<VectorAllocator<FP>>());
         for (auto &p : new_right->ops)
             p.second->info = Partition<S, FL>::find_op_info(
                 right_op_infos, p.second->info->delta_quantum);
@@ -1570,7 +1577,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             cached_info.second != iR)
             cached_opt->deallocate();
         if (cached_contraction)
-            if (frame->use_main_stack)
+            if (frame_<FP>()->use_main_stack)
                 throw runtime_error("Cached contraction only works when "
                                     "use_main_stack is false.");
         // avoid swapping stack memory in forward/backward sweeps
@@ -1630,7 +1637,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(
@@ -1647,7 +1654,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->tf, compute_diag);
         tdiag += _t2.get_time();
-        frame->update_peak_used_memory();
+        frame_<FP>()->update_peak_used_memory();
         return efh;
     }
     // Generate effective hamiltonian at current center site
@@ -1698,7 +1705,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             cached_info.second != iR)
             cached_opt->deallocate();
         if (cached_contraction)
-            if (frame->use_main_stack)
+            if (frame_<FP>()->use_main_stack)
                 throw runtime_error("Cached contraction only works when "
                                     "use_main_stack is false.");
         // avoid swapping stack memory in forward/backward sweeps
@@ -1758,7 +1765,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
             mpo->middle_operator_exprs.size() != 0
                 ? dynamic_pointer_cast<SymbolicColumnVector<S>>(
@@ -1775,7 +1782,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->tf, compute_diag);
         tdiag += _t2.get_time();
-        frame->update_peak_used_memory();
+        frame_<FP>()->update_peak_used_memory();
         return efh;
     }
     // Absorb wfn matrix into adjacent MPS tensor in one-site algorithm
@@ -1787,9 +1794,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             make_shared<SparseMatrix<S, FLS>>();
         shared_ptr<SparseMatrixInfo<S>> old_wfn_info =
             make_shared<SparseMatrixInfo<S>>();
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->load_tensor(i);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (reduced) {
             if (forward)
                 old_wfn_info->initialize_contract(wfn->info,
@@ -1798,7 +1805,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 old_wfn_info->initialize_contract(mps->tensors[i]->info,
                                                   wfn->info);
         } else {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 1);
             StateInfo<S> l = *mps->info->left_dims[i], m = *mps->info->basis[i],
@@ -1811,26 +1818,26 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                   ? r
                                   : StateInfo<S>::tensor_product(
                                         m, r, *mps->info->right_dims_fci[i]);
-            frame->activate(0);
+            frame_<FP>()->activate(0);
             old_wfn_info->initialize(ll, rr, mps->info->target, false, true);
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             if (forward)
                 rr.deallocate();
             else
                 ll.deallocate();
             r.deallocate();
             l.deallocate();
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         old_wfn->allocate(old_wfn_info);
         if (forward)
             old_wfn->contract(wfn, mps->tensors[i]);
         else
             old_wfn->contract(mps->tensors[i], wfn);
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->unload_tensor(i);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         mps->tensors[i] = old_wfn;
     }
     // Contract two adjcent MPS tensors to one two-site MPS tensor
@@ -1840,15 +1847,15 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             make_shared<SparseMatrix<S, FLS>>();
         shared_ptr<SparseMatrixInfo<S>> old_wfn_info =
             make_shared<SparseMatrixInfo<S>>();
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->load_tensor(i);
         mps->load_tensor(i + 1);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         if (reduced)
             old_wfn_info->initialize_contract(mps->tensors[i]->info,
                                               mps->tensors[i + 1]->info);
         else {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 2);
             StateInfo<S> l = *mps->info->left_dims[i],
@@ -1859,22 +1866,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 l, ml, *mps->info->left_dims_fci[i + 1]);
             StateInfo<S> rr = StateInfo<S>::tensor_product(
                 mr, r, *mps->info->right_dims_fci[i + 1]);
-            frame->activate(0);
+            frame_<FP>()->activate(0);
             old_wfn_info->initialize(ll, rr, mps->info->target, false, true);
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             rr.deallocate();
             ll.deallocate();
             r.deallocate();
             l.deallocate();
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         old_wfn->allocate(old_wfn_info);
         old_wfn->contract(mps->tensors[i], mps->tensors[i + 1]);
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->unload_tensor(i + 1);
         mps->unload_tensor(i);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         mps->tensors[i] = old_wfn;
         mps->tensors[i + 1] = nullptr;
     }
@@ -1885,10 +1892,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         bool reduced = false) {
         vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns;
         vector<shared_ptr<SparseMatrixInfo<S>>> old_wfn_infos;
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->load_tensor(i);
         assert(mps->tensors[i] != nullptr);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         old_wfns.resize(wfns.size());
         old_wfn_infos.resize(wfns[0]->n);
         if (reduced) {
@@ -1902,7 +1909,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                                           wfns[0]->infos[j]);
             }
         } else {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 1);
             StateInfo<S> l = *mps->info->left_dims[i], m = *mps->info->basis[i],
@@ -1915,22 +1922,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                   ? r
                                   : StateInfo<S>::tensor_product(
                                         m, r, *mps->info->right_dims_fci[i]);
-            frame->activate(0);
+            frame_<FP>()->activate(0);
             for (int j = 0; j < wfns[0]->n; j++) {
                 old_wfn_infos[j] = make_shared<SparseMatrixInfo<S>>();
                 old_wfn_infos[j]->initialize(
                     ll, rr, wfns[0]->infos[j]->delta_quantum, false, true);
             }
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             if (forward)
                 rr.deallocate();
             else
                 ll.deallocate();
             r.deallocate();
             l.deallocate();
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int k = 0; k < mps->nroots; k++) {
             old_wfns[k] = make_shared<SparseMatrixGroup<S, FLS>>();
             old_wfns[k]->allocate(old_wfn_infos);
@@ -1941,9 +1948,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 for (int j = 0; j < old_wfns[k]->n; j++)
                     (*old_wfns[k])[j]->contract(mps->tensors[i], (*wfns[k])[j]);
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         mps->unload_tensor(i);
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         mps->tensors[i] = nullptr;
         mps->wfns = old_wfns;
     }
@@ -1953,7 +1960,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                        bool reduced = false) {
         vector<shared_ptr<SparseMatrixGroup<S, FLS>>> old_wfns;
         vector<shared_ptr<SparseMatrixInfo<S>>> old_wfn_infos;
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         assert(mps->tensors[i] == nullptr || mps->tensors[i + 1] == nullptr);
         bool left_wfn = mps->tensors[i] == nullptr;
         if (left_wfn) {
@@ -1963,7 +1970,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mps->load_tensor(i);
             mps->load_wavefunction(i + 1);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         old_wfns.resize(mps->nroots);
         old_wfn_infos.resize(mps->wfns[0]->n);
         if (reduced) {
@@ -1977,7 +1984,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         mps->tensors[i]->info, mps->wfns[0]->infos[j]);
             }
         } else {
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             mps->info->load_left_dims(i);
             mps->info->load_right_dims(i + 2);
             StateInfo<S> l = *mps->info->left_dims[i],
@@ -1988,20 +1995,20 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 l, ml, *mps->info->left_dims_fci[i + 1]);
             StateInfo<S> rr = StateInfo<S>::tensor_product(
                 mr, r, *mps->info->right_dims_fci[i + 1]);
-            frame->activate(0);
+            frame_<FP>()->activate(0);
             for (int j = 0; j < mps->wfns[0]->n; j++) {
                 old_wfn_infos[j] = make_shared<SparseMatrixInfo<S>>();
                 old_wfn_infos[j]->initialize(
                     ll, rr, mps->wfns[0]->infos[j]->delta_quantum, false, true);
             }
-            frame->activate(1);
+            frame_<FP>()->activate(1);
             rr.deallocate();
             ll.deallocate();
             r.deallocate();
             l.deallocate();
-            frame->activate(0);
+            frame_<FP>()->activate(0);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         for (int k = 0; k < mps->nroots; k++) {
             old_wfns[k] = make_shared<SparseMatrixGroup<S, FLS>>();
             old_wfns[k]->allocate(old_wfn_infos);
@@ -2014,7 +2021,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     (*old_wfns[k])[j]->contract(mps->tensors[i],
                                                 (*mps->wfns[k])[j]);
         }
-        frame->activate(1);
+        frame_<FP>()->activate(1);
         if (left_wfn) {
             mps->unload_tensor(i + 1);
             mps->unload_wavefunction(i);
@@ -2022,7 +2029,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mps->unload_wavefunction(i + 1);
             mps->unload_tensor(i);
         }
-        frame->activate(0);
+        frame_<FP>()->activate(0);
         mps->tensors[i] = mps->tensors[i + 1] = nullptr;
         mps->wfns = old_wfns;
     }
@@ -2039,7 +2046,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<SparseMatrix<S, FLS>> dm =
             make_shared<SparseMatrix<S, FLS>>();
         dm->allocate(dm_info);
-        assert(psi->factor == 1.0);
+        assert(psi->factor == (FPS)1.0);
         psi->factor = sqrt(scale);
         OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right,
                                                  sqrt(noise), noise_type);
@@ -2088,7 +2095,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     density_matrix_add_wfn(const shared_ptr<SparseMatrix<S, FLS>> &dm,
                            const shared_ptr<SparseMatrix<S, FLS>> &psi,
                            bool trace_right, FPS scale = 1.0) {
-        assert(psi->factor == 1.0);
+        assert(psi->factor == (FLS)1.0);
         psi->factor = sqrt(scale);
         OperatorFunctions<S, FLS>::trans_product(psi, dm, trace_right, 0.0,
                                                  NoiseTypes::None);
@@ -2110,7 +2117,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         const shared_ptr<SparseMatrix<S, FLS>> &psi, bool trace_right,
         const vector<GMatrix<FLS>> &mats, const vector<FPS> &weights) {
         FLS *ptr = psi->data;
-        assert(psi->factor == 1.0);
+        assert(psi->factor == (FLS)1.0);
         assert(mats.size() == weights.size() - 1);
         for (size_t i = 1; i < weights.size(); i++) {
             psi->data = mats[i - 1].data;
@@ -2142,8 +2149,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     static void
     wavefunction_add_noise(const shared_ptr<SparseMatrix<S, FLS>> &psi,
                            FPS noise) {
-        assert(psi->factor == 1.0);
-        if (abs(noise) < TINY && noise == 0.0)
+        assert(psi->factor == (FPS)1.0);
+        if (abs(noise) < TINY && noise == (FPS)0.0)
             return;
         shared_ptr<SparseMatrix<S, FLS>> tmp =
             make_shared<SparseMatrix<S, FLS>>();
@@ -2160,7 +2167,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     static void scale_perturbative_noise(
         FPS noise, NoiseTypes noise_type,
         const shared_ptr<SparseMatrixGroup<S, FLS>> &mats) {
-        if (abs(noise) < TINY && noise == 0.0)
+        if (abs(noise) < TINY && noise == (FPS)0.0)
             return;
         if (!(noise_type & NoiseTypes::Unscaled)) {
             for (int i = 0; i < mats->n; i++) {

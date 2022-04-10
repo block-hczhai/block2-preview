@@ -66,6 +66,7 @@ inline NoiseTypes operator|(NoiseTypes a, NoiseTypes b) {
 
 // SparseMatrix operations
 template <typename S, typename FL> struct OperatorFunctions {
+    typedef typename GMatrix<FL>::FP FP;
     shared_ptr<CG<S>> cg;
     shared_ptr<BatchGEMMSeq<FL>> seq = nullptr;
     OperatorFunctions(const shared_ptr<CG<S>> &cg) : cg(cg) {
@@ -180,7 +181,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                rot_ket->get_type() == SparseMatrixTypes::Normal);
         scale =
             scale * a->factor * xconj<FL>(rot_bra->factor) * rot_ket->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, cdq = c->info->delta_quantum;
@@ -213,7 +214,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
         scale = scale * a->factor * b->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -232,10 +233,10 @@ template <typename S, typename FL> struct OperatorFunctions {
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None)
                 seq->tensor_product_diagonal(conj, (*a)[ia], (*b)[ib], (*c)[ic],
-                                             scale * factor);
+                                             scale * (FP)factor);
             else
                 GMatrixFunctions<FL>::tensor_product_diagonal(
-                    conj, (*a)[ia], (*b)[ib], (*c)[ic], scale * factor);
+                    conj, (*a)[ia], (*b)[ib], (*c)[ic], scale * (FP)factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -260,7 +261,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                 ((((dconj & 2) >> 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
                      ? xconj<FL>(db->factor)
                      : db->factor);
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         const shared_ptr<SparseMatrix<S, FL>> dc = (dleft ? a : b);
@@ -305,14 +306,14 @@ template <typename S, typename FL> struct OperatorFunctions {
                         seq->three_tensor_product_diagonal(
                             conj, (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida],
                             dconj & 1, (*db)[idb], (dconj & 2) >> 1, dleft,
-                            scale * factor * dfactor, stride);
+                            scale * (FP)(factor * dfactor), stride);
                         if (seq->mode == SeqTypes::Simple)
                             break;
                     } else
                         GMatrixFunctions<FL>::three_tensor_product_diagonal(
                             conj, (*a)[ia], (*b)[ib], (*c)[ic], (*da)[ida],
                             dconj & 1, (*db)[idb], (dconj & 2) >> 1, dleft,
-                            scale * factor * dfactor, stride);
+                            scale * (FP)(factor * dfactor), stride);
                 }
             }
             if (seq->mode == SeqTypes::Simple)
@@ -361,7 +362,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                 xconj<FL>(v->factor) * c->factor;
         if (conj & 2)
             scale = xconj<FL>(scale);
-        assert(b->factor == 1.0);
+        assert(b->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -394,11 +395,11 @@ template <typename S, typename FL> struct OperatorFunctions {
             double factor = abcv[il].second;
             if (seq->mode != SeqTypes::None)
                 seq->rotate((*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1,
-                            (*v)[iv], (*c)[ic], scale * factor);
+                            (*v)[iv], (*c)[ic], scale * (FP)factor);
             else
                 seq->cumulative_nflop += GMatrixFunctions<FL>::rotate(
                     (*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*v)[iv],
-                    (*c)[ic], scale * factor);
+                    (*c)[ic], scale * (FP)factor);
         }
         if (seq->mode == SeqTypes::Simple)
             seq->simple_perform();
@@ -416,7 +417,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                v->get_type() == SparseMatrixTypes::Normal);
         scale = scale * ((conj & 1) ? xconj<FL>(a->factor) : a->factor) *
                 ((conj & 2) ? xconj<FL>(b->factor) : b->factor) * c->factor;
-        assert(v->factor == 1.0);
+        assert(v->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
@@ -442,29 +443,29 @@ template <typename S, typename FL> struct OperatorFunctions {
                 if (seq->mode != SeqTypes::None)
                     seq->rotate((*c)[ic], (*v)[iv], (*a)[ia],
                                 (conj & 1) ? 3 : 0, (*b)[ib],
-                                (conj & 2) ? 2 : 1, scale * factor);
+                                (conj & 2) ? 2 : 1, scale * (FP)factor);
                 else
                     seq->cumulative_nflop += GMatrixFunctions<FL>::rotate(
                         (*c)[ic], (*v)[iv], (*a)[ia], (conj & 1) ? 3 : 0,
-                        (*b)[ib], (conj & 2) ? 2 : 1, scale * factor);
+                        (*b)[ib], (conj & 2) ? 2 : 1, scale * (FP)factor);
                 break;
             case TraceTypes::Left:
                 if (seq->mode != SeqTypes::None)
                     seq->multiply((*c)[ic], false, (*b)[ib], (conj & 2) ? 2 : 1,
-                                  (*v)[iv], scale * factor, 1.0);
+                                  (*v)[iv], scale * (FP)factor, 1.0);
                 else
                     GMatrixFunctions<FL>::multiply((*c)[ic], false, (*b)[ib],
                                                    (conj & 2) ? 2 : 1, (*v)[iv],
-                                                   scale * factor, 1.0);
+                                                   scale * (FP)factor, 1.0);
                 break;
             case TraceTypes::Right:
                 if (seq->mode != SeqTypes::None)
                     seq->multiply((*a)[ia], (conj & 1) ? 3 : 0, (*c)[ic], false,
-                                  (*v)[iv], scale * factor, 1.0);
+                                  (*v)[iv], scale * (FP)factor, 1.0);
                 else
                     GMatrixFunctions<FL>::multiply((*a)[ia], (conj & 1) ? 3 : 0,
                                                    (*c)[ic], false, (*v)[iv],
-                                                   scale * factor, 1.0);
+                                                   scale * (FP)factor, 1.0);
                 break;
             default:
                 assert(false);
@@ -495,7 +496,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                 ((((dconj & 2) >> 1) ^ (dleft ? (conj & 1) : ((conj & 2) >> 1)))
                      ? xconj<FL>(db->factor)
                      : db->factor);
-        assert(v->factor == 1.0);
+        assert(v->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         const shared_ptr<SparseMatrix<S, FL>> dc = (dleft ? a : b);
@@ -543,18 +544,19 @@ template <typename S, typename FL> struct OperatorFunctions {
                     switch (tt) {
                     case TraceTypes::None:
                         if (seq->mode != SeqTypes::None)
-                            seq->three_rotate((*c)[ic], (*v)[iv], (*a)[ia],
-                                              conj & 1, (*b)[ib], !(conj & 2),
-                                              (*da)[ida], dconj & 1, (*db)[idb],
-                                              (dconj & 2) >> 1, dleft,
-                                              scale * factor * dfactor, stride);
+                            seq->three_rotate(
+                                (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
+                                (*b)[ib], !(conj & 2), (*da)[ida], dconj & 1,
+                                (*db)[idb], (dconj & 2) >> 1, dleft,
+                                scale * (FP)(factor * dfactor), stride);
                         else
                             seq->cumulative_nflop +=
                                 GMatrixFunctions<FL>::three_rotate(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
-                                    dleft, scale * factor * dfactor, stride);
+                                    dleft, scale * (FP)(factor * dfactor),
+                                    stride);
                         break;
                     case TraceTypes::Left:
                         if (seq->mode != SeqTypes::None)
@@ -562,14 +564,15 @@ template <typename S, typename FL> struct OperatorFunctions {
                                 (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                 (*b)[ib], !(conj & 2), (*da)[ida], dconj & 1,
                                 (*db)[idb], (dconj & 2) >> 1, dleft,
-                                scale * factor * dfactor, stride);
+                                scale * (FP)(factor * dfactor), stride);
                         else
                             seq->cumulative_nflop +=
                                 GMatrixFunctions<FL>::three_rotate_tr_left(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
-                                    dleft, scale * factor * dfactor, stride);
+                                    dleft, scale * (FP)(factor * dfactor),
+                                    stride);
                         break;
                     case TraceTypes::Right:
                         if (seq->mode != SeqTypes::None)
@@ -577,14 +580,15 @@ template <typename S, typename FL> struct OperatorFunctions {
                                 (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                 (*b)[ib], !(conj & 2), (*da)[ida], dconj & 1,
                                 (*db)[idb], (dconj & 2) >> 1, dleft,
-                                scale * factor * dfactor, stride);
+                                scale * (FP)(factor * dfactor), stride);
                         else
                             seq->cumulative_nflop +=
                                 GMatrixFunctions<FL>::three_rotate_tr_right(
                                     (*c)[ic], (*v)[iv], (*a)[ia], conj & 1,
                                     (*b)[ib], !(conj & 2), (*da)[ida],
                                     dconj & 1, (*db)[idb], (dconj & 2) >> 1,
-                                    dleft, scale * factor * dfactor, stride);
+                                    dleft, scale * (FP)(factor * dfactor),
+                                    stride);
                         break;
                     default:
                         assert(false);
@@ -608,7 +612,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
         scale = scale * a->factor * b->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         S adq = a->info->delta_quantum, bdq = b->info->delta_quantum,
@@ -629,12 +633,12 @@ template <typename S, typename FL> struct OperatorFunctions {
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
                 seq->tensor_product((*a)[ia], conj & 1, (*b)[ib],
-                                    (conj & 2) >> 1, (*c)[ic], scale * factor,
-                                    stride);
+                                    (conj & 2) >> 1, (*c)[ic],
+                                    scale * (FP)factor, stride);
             else
                 GMatrixFunctions<FL>::tensor_product(
                     (*a)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*c)[ic],
-                    scale * factor, stride);
+                    scale * (FP)factor, stride);
         }
         if (seq->mode & SeqTypes::Simple)
             seq->simple_perform();
@@ -648,7 +652,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                b->get_type() == SparseMatrixTypes::Normal &&
                c->get_type() == SparseMatrixTypes::Normal);
         scale = scale * a->factor * b->factor;
-        assert(c->factor == 1.0);
+        assert(c->factor == (FP)1.0);
         if (abs(scale) < TINY)
             return;
         bool cja = conj & 1, cjb = (conj & 2) >> 1;
@@ -688,7 +692,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                                                            cqprime.twos());
                             GMatrixFunctions<FL>::multiply(
                                 (*a)[ia], cja, (*b)[ib], cjb, (*c)[ic],
-                                scale * factor, 1.0);
+                                scale * (FP)factor, 1.0);
                         }
                     }
                 }
@@ -716,18 +720,19 @@ template <typename S, typename FL> struct OperatorFunctions {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
         FL scale = a->factor * a->factor, noise_scale = 0;
-        assert(b->factor == 1.0);
+        assert(b->factor == (FP)1.0);
         if (abs(scale) < TINY &&
-            (noise == 0.0 || (!(noise_type & NoiseTypes::Wavefunction) &&
-                              !(noise_type & NoiseTypes::DensityMatrix))))
+            (noise == (FP)0.0 || (!(noise_type & NoiseTypes::Wavefunction) &&
+                                  !(noise_type & NoiseTypes::DensityMatrix))))
             return;
         SparseMatrix<S, FL> tmp;
-        if (noise != 0.0 && (noise_type & NoiseTypes::Wavefunction)) {
+        if (noise != (FP)0.0 && (noise_type & NoiseTypes::Wavefunction)) {
             tmp.allocate(a->info);
             tmp.randomize(-0.5, 0.5);
             noise_scale = noise / tmp.norm();
             noise_scale *= noise_scale;
-        } else if (noise != 0.0 && (noise_type & NoiseTypes::DensityMatrix)) {
+        } else if (noise != (FP)0.0 &&
+                   (noise_type & NoiseTypes::DensityMatrix)) {
             tmp.allocate(b->info);
             tmp.randomize(0.0, 1.0);
             noise_scale = noise * noise / tmp.norm();
@@ -740,11 +745,11 @@ template <typename S, typename FL> struct OperatorFunctions {
                     continue;
                 GMatrixFunctions<FL>::multiply((*a)[ia], false, (*a)[ia], 3,
                                                (*b)[ib], scale, 1.0);
-                if (noise_scale != 0.0 &&
+                if (noise_scale != (FP)0.0 &&
                     (noise_type & NoiseTypes::Wavefunction))
                     GMatrixFunctions<FL>::multiply(tmp[ia], false, tmp[ia], 3,
                                                    (*b)[ib], noise_scale, 1.0);
-                else if (noise_scale != 0.0 &&
+                else if (noise_scale != (FP)0.0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
                     GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
             }
@@ -756,15 +761,15 @@ template <typename S, typename FL> struct OperatorFunctions {
                     continue;
                 GMatrixFunctions<FL>::multiply((*a)[ia], 3, (*a)[ia], false,
                                                (*b)[ib], scale, 1.0);
-                if (noise_scale != 0.0 &&
+                if (noise_scale != (FP)0.0 &&
                     (noise_type & NoiseTypes::Wavefunction))
                     GMatrixFunctions<FL>::multiply(tmp[ia], 3, tmp[ia], false,
                                                    (*b)[ib], noise_scale, 1.0);
-                else if (noise_scale != 0.0 &&
+                else if (noise_scale != (FP)0.0 &&
                          (noise_type & NoiseTypes::DensityMatrix))
                     GMatrixFunctions<FL>::iadd((*b)[ib], tmp[ib], noise_scale);
             }
-        if (noise != 0.0)
+        if (noise != (FP)0.0)
             tmp.deallocate();
     }
 };

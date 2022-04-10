@@ -20,5 +20,7 @@
 
 #include "../pybind_core.hpp"
 
-template void bind_fl_state_info<SGF, complex<double>>(py::module &m);
-template void bind_fl_state_info<SGB, complex<double>>(py::module &m);
+template void bind_fl_state_info<SGF, complex<double>>(py::module &m,
+                                                       const string &name);
+template void bind_fl_state_info<SGB, complex<double>>(py::module &m,
+                                                       const string &name);

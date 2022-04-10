@@ -7,10 +7,10 @@ Author:
     Zhi-Hao Cui
 """
 
-from block2 import SZ, SU2, SZK, SU2K, SGF
+from block2 import SZ, SU2, SZK, SU2K, SGF, DoubleFPCodec as FPCodec
 from block2 import Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
-from block2 import VectorUInt8, VectorUBond, VectorVectorUBond, VectorDouble, PointGroup, DoubleFPCodec
+from block2 import VectorUInt8, VectorUBond, VectorVectorUBond, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorInt, VectorUInt16
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, FinkFCIDUMP, ConvergenceTypes
 from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, HeisenbergFCIDUMP, ExpectationAlgorithmTypes
@@ -19,6 +19,8 @@ import numpy as np
 import time
 import os
 import sys
+
+VectorFP = VectorDouble
 
 try:
     from pyblock2.driver.parser import parse, orbital_reorder, read_integral, format_schedule
@@ -56,7 +58,131 @@ else:
     """)
 
 dic = parse(fin)
-if "use_complex" not in dic:
+if "single_prec" in dic and "use_complex" not in dic:
+    assert "k_symmetry" not in dic
+    from block2 import FloatFPCodec as FPCodec, init_memory_float
+    from block2 import VectorFloat
+    VectorFP = VectorFloat
+    init_memory = init_memory_float
+    from block2.sp import FCIDUMP, SpinOrbitalFCIDUMP, MRCISFCIDUMP
+    if "nonspinadapted" in dic and "use_general_spin" not in dic:
+        from block2 import VectorSZ as VectorSL
+        from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.sz import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        from block2.sz import trans_state_info_to_su2 as trans_si
+        from block2.su2 import MPSInfo as TrMPSInfo
+        from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZ
+        TrSX = SU2
+    elif "nonspinadapted" not in dic and "use_general_spin" not in dic:
+        from block2 import VectorSU2 as VectorSL
+        from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.su2 import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
+        from block2.sz import MPSInfo as TrMPSInfo
+        from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2
+        TrSX = SZ
+    elif "use_general_spin" in dic:
+        from block2 import VectorSGF as VectorSL
+        from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.sgf import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.sgf import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.sgf import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        SX = SGF
+    else:
+        assert False
+
+    try:
+        if "nonspinadapted" in dic:
+            from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.sz import DMRGBigSite, LinearBigSite
+            from block2.sz import SCIFockBigSite
+        else:
+            from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.su2 import DMRGBigSite, LinearBigSite
+            from block2.su2 import CSFBigSite
+    except ImportError:
+        pass
+elif "single_prec" in dic and "use_complex" in dic:
+    assert "k_symmetry" not in dic
+    from block2 import FloatFPCodec as FPCodec, init_memory_float
+    from block2 import VectorFloat
+    VectorFP = VectorFloat
+    init_memory = init_memory_float
+    from block2.sp.cpx import FCIDUMP, SpinOrbitalFCIDUMP, MRCISFCIDUMP
+    if "nonspinadapted" in dic and "use_general_spin" not in dic:
+        from block2 import VectorSZ as VectorSL
+        from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.sz import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.cpx.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.cpx.sz import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.cpx.sz import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        from block2.sz import trans_state_info_to_su2 as trans_si
+        from block2.su2 import MPSInfo as TrMPSInfo
+        from block2.su2 import trans_mps_info_to_sz as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SZ
+        TrSX = SU2
+    elif "nonspinadapted" not in dic and "use_general_spin" not in dic:
+        from block2 import VectorSU2 as VectorSL
+        from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.su2 import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.cpx.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.cpx.su2 import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.cpx.su2 import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        from block2.su2 import trans_state_info_to_sz as trans_si, trans_unfused_mps_to_sz as trans_mps
+        from block2.sz import MPSInfo as TrMPSInfo
+        from block2.sz import trans_mps_info_to_su2 as trans_mi, VectorStateInfo as TrVectorStateInfo
+        SX = SU2
+        TrSX = SZ
+    elif "use_general_spin" in dic:
+        from block2 import VectorSGF as VectorSL
+        from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
+        from block2.sp.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.sgf import HamiltonianQC, MPS, ParallelRuleQC
+        from block2.sp.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
+        from block2.sp.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
+        from block2.sp.cpx.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
+        from block2.sp.cpx.sgf import ParallelRulePDM1QC, ParallelRulePDM2QC, ParallelRuleIdentity, ParallelRuleOneBodyQC
+        from block2.sp.cpx.sgf import AntiHermitianRuleQC, TimeEvolution, Linear, DeterminantTRIE, UnfusedMPS, Expect as ComplexExpect
+        SX = SGF
+    else:
+        assert False
+
+    try:
+        if "nonspinadapted" in dic:
+            from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.sz import DMRGBigSite, LinearBigSite
+            from block2.sz import SCIFockBigSite
+        else:
+            from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
+            from block2.su2 import DMRGBigSite, LinearBigSite
+            from block2.su2 import CSFBigSite
+    except ImportError:
+        pass
+elif "use_complex" not in dic:
     if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
@@ -268,7 +394,8 @@ if DEBUG:
         _print("GENERAL SPIN - ", end='')
     else:
         _print("SPIN ADAPTED - " if "nonspinadapted" not in dic else "NON SPIN ADAPTED - ", end='')
-    _print("REAL DOMAIN" if "use_complex" not in dic else "COMPLEX DOMAIN")
+    _print("REAL DOMAIN - " if "use_complex" not in dic else "COMPLEX DOMAIN - ", end='')
+    _print("SINGLE PREC" if "single_prec" in dic else "DOUBLE PREC")
 
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
@@ -288,6 +415,7 @@ store_wfn_spectra = "store_wfn_spectra" in dic
 sweep_tol = float(dic.get("sweep_tol", 1e-6))
 cached_contraction = int(dic.get("cached_contraction", 1)) == 1
 singlet_embedding = "singlet_embedding" in dic
+integral_rescale = dic.get("integral_rescale", "auto")
 siv = dic.get("symmetrize_ints", 1E-10)
 init_mps_center = int(dic.get("init_mps_center", 0))
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
@@ -371,6 +499,7 @@ if anti_herm:
 
 if "use_hybrid_complex" in dic:
     assert "use_complex" not in dic
+    assert "single_prec" not in dic # todo
     _print("USE HYBRID COMPLEX MPO")
     cached_contraction = False
     from block2.cpx import FCIDUMP as FCIDUMPCPX
@@ -445,16 +574,17 @@ Global.threading = Threading(
     ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
     n_threads * mkl_threads, n_threads, mkl_threads)
 Global.threading.seq_type = SeqTypes.Tasked if big_site_method is None else SeqTypes.Nothing
-Global.frame.fp_codec = DoubleFPCodec(fp_cps_cutoff, 1024)
-Global.frame.load_buffering = False
-Global.frame.save_buffering = False
-Global.frame.use_main_stack = False
-Global.frame.minimal_disk_usage = True
+gframe = Global.frame if "single_prec" not in dic else Global.frame_float
+gframe.fp_codec = FPCodec(fp_cps_cutoff, 1024)
+gframe.load_buffering = False
+gframe.save_buffering = False
+gframe.use_main_stack = False
+gframe.minimal_disk_usage = True
 if restart_dir is not None:
-    Global.frame.restart_dir = restart_dir
+    gframe.restart_dir = restart_dir
 if restart_dir_per_sweep is not None:
-    Global.frame.restart_dir_per_sweep = restart_dir_per_sweep
-_print(Global.frame)
+    gframe.restart_dir_per_sweep = restart_dir_per_sweep
+_print(gframe)
 _print(Global.threading)
 
 if MPI is not None:
@@ -551,6 +681,14 @@ if pre_run or not no_pre_run:
             integral_tol = float(dic.get("integral_tol", 1E-12))
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0],
                                     tol=integral_tol)
+        if integral_rescale == "auto" and "single_prec" in dic:
+            _print("original integral const = %20.10f" % fcidump.e())
+            fcidump.rescale()
+            _print("rescaled integral const = %20.10f" % fcidump.e())
+        elif integral_rescale == "1":
+            _print("original integral const = %20.10f" % fcidump.e())
+            fcidump.rescale()
+            _print("rescaled integral const = %20.10f" % fcidump.e())
     n_orbs = fcidump.n_sites
     if "trans_integral_to_spin_orbital" in dic:
         n_orbs = n_orbs * 2
@@ -823,11 +961,11 @@ else:
         singlet_embedding_spin = spin[0]
 
 if min_mpo_mem == "auto":
-    Global.frame.minimal_memory_usage = n_orbs >= 120
+    gframe.minimal_memory_usage = n_orbs >= 120
 else:
-    Global.frame.minimal_memory_usage = min_mpo_mem.lower()[0] in ['1', 't']
+    gframe.minimal_memory_usage = min_mpo_mem.lower()[0] in ['1', 't']
 
-_print('MinMPOMemUsage = ', Global.frame.minimal_memory_usage)
+_print('MinMPOMemUsage = ', gframe.minimal_memory_usage)
 
 if no_pre_run:
     impo = MPO(0)
@@ -990,7 +1128,7 @@ elif "fullrestart" in dic:
         mps.weights = mps.weights[:nroots]
     weights = dic.get("weights", None)
     if weights is not None:
-        mps.weights = VectorDouble([float(x) for x in weights.split()])
+        mps.weights = VectorFP([float(x) for x in weights.split()])
     mps.load_mutable()
     forward = mps.center == 0
     if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
@@ -1138,7 +1276,7 @@ elif pre_run or not no_pre_run:
             mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
-            mps.weights = VectorDouble([float(x) for x in weights.split()])
+            mps.weights = VectorFP([float(x) for x in weights.split()])
     else:
         mps = MPS(n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
@@ -1178,7 +1316,7 @@ else:
             mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
-            mps.weights = VectorDouble([float(x) for x in weights.split()])
+            mps.weights = VectorFP([float(x) for x in weights.split()])
     else:
         mps = MPS(mps_info.n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
@@ -1773,12 +1911,12 @@ if not pre_run:
 
             _print("env init finished", time.perf_counter() - tx)
 
-            dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+            dmrg = DMRG(me, VectorUBond(bond_dims), VectorFP(noises))
             dmrg.ext_mpss = VectorMPS(ext_mpss[:iroot])
             dmrg.state_specific = True
             proj_weights = dic.get("proj_weights", None)
             if proj_weights is not None:
-                dmrg.projection_weights = VectorDouble([float(x) for x in proj_weights.split()][:iroot])
+                dmrg.projection_weights = VectorFP([float(x) for x in proj_weights.split()][:iroot])
             dmrg.iprint = max(min(outputlevel, 3), 0)
             for ext_mps in dmrg.ext_mpss:
                 ext_me = MovingEnvironment(
@@ -1797,7 +1935,7 @@ if not pre_run:
             dmrg.cutoff = float(dic.get("cutoff", 1E-14))
             dmrg.decomp_type = decomp_type
             dmrg.trunc_type = trunc_type
-            dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+            dmrg.davidson_conv_thrds = VectorFP(dav_thrds)
             dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
             dmrg.davidson_soft_max_iter = int(
                 dic.get("davidson_soft_max_iter", -1))
@@ -1819,8 +1957,8 @@ if not pre_run:
                 for ext_me in dmrg.ext_mes:
                     ext_me.dot = 1
                 dmrg.bond_dims = VectorUBond(bond_dims[tto:])
-                dmrg.noises = VectorDouble(noises[tto:])
-                dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
+                dmrg.noises = VectorFP(noises[tto:])
+                dmrg.davidson_conv_thrds = VectorFP(dav_thrds[tto:])
                 E_dmrg = dmrg.solve(len(bond_dims) - tto,
                                     ext_mpss[iroot].center == 0, sweep_tol)
                 ext_mpss[iroot].dot = 1
@@ -1882,13 +2020,12 @@ if not pre_run:
         _print("env init finished", time.perf_counter() - tx)
 
         if big_site_method is not None and n_cas != 0:
-            dmrg = DMRGBigSite(me, VectorUBond(
-                bond_dims), VectorDouble(noises))
+            dmrg = DMRGBigSite(me, VectorUBond(bond_dims), VectorFP(noises))
             dmrg.last_site_svd = True
             dmrg.last_site_1site = dot == 2
             dmrg.decomp_last_site = False
         else:
-            dmrg = DMRG(me, VectorUBond(bond_dims), VectorDouble(noises))
+            dmrg = DMRG(me, VectorUBond(bond_dims), VectorFP(noises))
         dmrg.iprint = max(min(outputlevel, 3), 0)
 
         if "skip_inact_ext_sites" in dic:
@@ -1902,7 +2039,7 @@ if not pre_run:
         if len(proj_tags) != 0:
             proj_weights = dic.get("proj_weights", None)
             assert proj_weights is not None
-            proj_weights = VectorDouble([float(x) for x in proj_weights.split()])
+            proj_weights = VectorFP([float(x) for x in proj_weights.split()])
             assert len(proj_weights) == len(proj_tags)
             ext_mpss = []
             for ipj in range(len(proj_weights)):
@@ -1928,7 +2065,7 @@ if not pre_run:
             dic.get("davidson_soft_max_iter", -1))
         dmrg.decomp_type = decomp_type
         dmrg.trunc_type = trunc_type
-        dmrg.davidson_conv_thrds = VectorDouble(dav_thrds)
+        dmrg.davidson_conv_thrds = VectorFP(dav_thrds)
         dmrg.store_wfn_spectra = store_wfn_spectra
         dmrg.site_dependent_bond_dims = site_dependent_bdims
         sweep_energies = []
@@ -1953,8 +2090,8 @@ if not pre_run:
                 dmrg.last_site_1site = False
                 dmrg.me.center = mps.center
             dmrg.bond_dims = VectorUBond(bond_dims[tto:])
-            dmrg.noises = VectorDouble(noises[tto:])
-            dmrg.davidson_conv_thrds = VectorDouble(dav_thrds[tto:])
+            dmrg.noises = VectorFP(noises[tto:])
+            dmrg.davidson_conv_thrds = VectorFP(dav_thrds[tto:])
             dmrg.site_dependent_bond_dims = site_dependent_bdims[tto:]
             dmrg.me.dot = 1
             for ext_me in dmrg.ext_mes:
@@ -2388,7 +2525,7 @@ if not pre_run:
                         # since all MPOs are already constructed
                         _print("rotating integrals to natural orbitals ...")
                         # (old, new)
-                        fcidump.rotate(VectorDouble(rot.flatten()))
+                        fcidump.rotate(VectorFP(rot.flatten()))
                         _print("finished.")
                         rot_sym_error = fcidump.symmetrize(orb_sym)
                         _print("rotated integral sym error = %12.4g" %
@@ -3029,13 +3166,13 @@ if not pre_run:
         right_bdims = VectorUBond([mps_info.bond_dim + 400])
         if big_site_method is not None and n_cas != 0:
             linear = LinearBigSite(lme, rme, None, VectorUBond(
-                bond_dims), right_bdims, VectorDouble(noises))
+                bond_dims), right_bdims, VectorFP(noises))
             linear.last_site_svd = True
             linear.last_site_1site = dot == 2
             linear.decomp_last_site = False
         else:
             linear = Linear(lme, rme, None, VectorUBond(
-                bond_dims), right_bdims, VectorDouble(noises))
+                bond_dims), right_bdims, VectorFP(noises))
         linear.iprint = max(min(outputlevel, 3), 0)
 
         if "skip_inact_ext_sites" in dic:
@@ -3053,7 +3190,7 @@ if not pre_run:
         linear.trunc_type = trunc_type
         linear.linear_soft_max_iter = int(
                 dic.get("linear_soft_max_iter", -1))
-        linear.linear_conv_thrds = VectorDouble([x / 50 for x in dav_thrds])
+        linear.linear_conv_thrds = VectorFP([x / 50 for x in dav_thrds])
 
         e_corr = linear.solve(len(bond_dims),
             mps.center == linear.sweep_start_site, sweep_tol)

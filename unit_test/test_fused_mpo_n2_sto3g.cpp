@@ -9,6 +9,7 @@ class TestFusedMPON2STO3G : public ::testing::Test {
   protected:
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
+    typedef double FP;
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
@@ -17,8 +18,8 @@ class TestFusedMPON2STO3G : public ::testing::Test {
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        frame_()->use_main_stack = false;
+        frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
+        frame_<FP>()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
             1);
@@ -26,9 +27,9 @@ class TestFusedMPON2STO3G : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<FP>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<FP>() = nullptr;
     }
 };
 

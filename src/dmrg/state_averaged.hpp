@@ -258,14 +258,16 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
     }
     string get_filename(int i, const string &dir = "") const override {
         stringstream ss;
-        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
-           << ".MMPS." << info->tag << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
+           << frame_<FP>()->prefix << ".MMPS." << info->tag << "."
+           << Parsing::to_string(i);
         return ss.str();
     }
     string get_wfn_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << (dir == "" ? frame->mps_dir : dir) << "/" << frame->prefix
-           << ".MMPS-WFN." << info->tag << "." << Parsing::to_string(i);
+        ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
+           << frame_<FP>()->prefix << ".MMPS-WFN." << info->tag << "."
+           << Parsing::to_string(i);
         return ss.str();
     }
     shared_ptr<MPS<S, FL>> make_single(const string &xtag) {
@@ -396,7 +398,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         return xmps;
     }
     void shallow_copy_wfn_to(const shared_ptr<MultiMPS<S, FL>> &mps) const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             for (int j = 0; j < nroots; j++)
                 Parsing::link_file(get_wfn_filename(j),
                                    mps->get_wfn_filename(j));
@@ -434,7 +436,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         return xmps;
     }
     void copy_data(const string &dir) const override {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     Parsing::copy_file(get_filename(i), get_filename(i, dir));
@@ -465,7 +467,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         ifs.close();
     }
     void save_data() const override {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             string filename = get_filename(-1);
             if (Parsing::link_exists(filename))
                 Parsing::remove_file(filename);
@@ -495,7 +497,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         }
     }
     void save_mutable() const override {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     tensors[i]->save_data(get_filename(i), true);
@@ -504,7 +506,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
         }
     }
     void save_wavefunction(int i) const {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             assert(tensors[i] == nullptr);
             for (int j = 0; j < nroots; j++)
                 wfns[j]->save_data(get_wfn_filename(j), j == 0);
@@ -527,7 +529,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
             wfns[0]->deallocate_infos();
     }
     void save_tensor(int i) const override {
-        if (frame->prefix_can_write) {
+        if (frame_<FP>()->prefix_can_write) {
             assert(tensors[i] != nullptr || i == center);
             if (tensors[i] != nullptr)
                 tensors[i]->save_data(get_filename(i), true);

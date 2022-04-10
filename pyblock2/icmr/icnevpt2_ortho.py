@@ -206,6 +206,7 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, 
     old_error = error
     xiter = 0
     while xiter < max_iter:
+        t = time.perf_counter()
         xiter += 1
         hp = axop(p)
         alpha = old_error / xdot(p, hp)
@@ -215,7 +216,7 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, 
         error = xdot(z, r)
         func = xdot(x, b)
         if iprint:
-            print("%5d %15.8f %9.2E" % (xiter, func, error))
+            print("%5d %15.8f %9.2E T = %.3f" % (xiter, func, error, time.perf_counter() - t))
         if np.sqrt(np.abs(error)) < conv_thrd:
             break
         else:
@@ -228,13 +229,15 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, 
 
 from pyscf import lib
 
-def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
+def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=None):
     if mc is None:
         mc = ic._mc
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     if root is None and hasattr(ic, 'root'):
         root = ic.root
+    if iprint is None and hasattr(ic, 'iprint'):
+        iprint = ic.iprint
     ic.root = root
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
@@ -368,7 +371,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
                 exec(eqs, globals(), { "x" + xid: x, "ax": ax, **mdict })
                 return trans_forth(ax)
             pb = trans_forth(b)
-        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=False)
+        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=iprint)
         niter += niterx
         if skey not in ic.sub_eners:
             ic.sub_eners[skey] = -func

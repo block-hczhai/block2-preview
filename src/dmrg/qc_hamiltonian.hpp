@@ -397,7 +397,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     (*p.second)[S(2, 0, S::pg_mul(orb_sym[m], orb_sym[m]))](0,
                                                                             0) =
                         t(0, m, m) + t(1, m, m) +
-                        0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
+                        (FL)0.5 * (v(0, 1, m, m, m, m) + v(1, 0, m, m, m, m));
                 }
                 break;
             case OpNames::R:
@@ -413,7 +413,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::D));
-                    p.second->factor *= t(s, i, m) * 0.5;
+                    p.second->factor *= t(s, i, m) * (FL)0.5;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
@@ -440,7 +440,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::C));
-                    p.second->factor *= t(s, m, i) * 0.5;
+                    p.second->factor *= t(s, m, i) * (FL)0.5;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     for (uint8_t sp = 0; sp < 2; sp++) {
@@ -469,7 +469,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[s].at(OpNames::D));
-                    p.second->iscale(-2.0 * t(s, i, m));
+                    p.second->iscale((FL)-2.0 * t(s, i, m));
                     for (uint8_t sp = 0; sp < 2; sp++) {
                         // q_label is not used for comparison
                         opf->product(
@@ -930,7 +930,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     (*p.second)[S(0, 0, 0, 0)](0, 0) = 0.0;
                     (*p.second)[S(1, 1, 1, orb_sym[m])](0, 0) = t(m, m);
                     (*p.second)[S(2, 0, 0, S::pg_mul(orb_sym[m], orb_sym[m]))](
-                        0, 0) = t(m, m) * 2.0 + v(m, m, m, m);
+                        0, 0) = t(m, m) * (FL)2.0 + v(m, m, m, m);
                 }
                 break;
             case OpNames::R:
@@ -943,7 +943,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::D));
-                    p.second->factor *= t(i, m) * sqrt(2) / 4.0;
+                    p.second->factor *= t(i, m) * (FL)(sqrt(2) / 4.0);
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::R));
@@ -964,7 +964,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::C));
-                    p.second->factor *= t(m, i) * sqrt(2) / 4.0;
+                    p.second->factor *= t(m, i) * (FL)(sqrt(2) / 4.0);
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::RD));
@@ -1005,13 +1005,14 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 s = op.site_index.s();
                 switch (s) {
                 case 0U:
-                    if (abs(2.0 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
+                    if (abs((FL)2.0 * v(i, j, m, m) - v(i, m, m, j)) < TINY)
                         p.second = zero;
                     else if (!(delayed & DelayedOpNames::Q)) {
                         p.second = make_shared<SparseMatrix<S, FL>>(nullptr);
                         p.second->allocate(info,
                                            op_prims[0].at(OpNames::B)->data);
-                        p.second->factor *= 2.0 * v(i, j, m, m) - v(i, m, m, j);
+                        p.second->factor *=
+                            (FL)2.0 * v(i, j, m, m) - v(i, m, m, j);
                     }
                     break;
                 case 1U:
@@ -1333,7 +1334,7 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::D));
-                    p.second->factor *= t(i, m) * 0.5;
+                    p.second->factor *= t(i, m) * (FL)0.5;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::R));
@@ -1354,7 +1355,7 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
                     p.second = make_shared<SparseMatrix<S, FL>>(d_alloc);
                     p.second->allocate(info);
                     p.second->copy_data_from(op_prims[0].at(OpNames::C));
-                    p.second->factor *= t(m, i) * 0.5;
+                    p.second->factor *= t(m, i) * (FL)0.5;
                     tmp->alloc = d_alloc;
                     tmp->allocate(info);
                     tmp->copy_data_from(op_prims[0].at(OpNames::RD));

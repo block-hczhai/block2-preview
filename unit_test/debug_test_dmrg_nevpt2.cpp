@@ -14,8 +14,8 @@ class TestDMRG : public ::testing::Test {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         cout << "MKL INTEGER SIZE = " << sizeof(MKL_INT) << endl;
         Random::rand_seed(0);
-        frame_() = make_shared<DataFrame>(isize, dsize, "nodex");
-        frame->use_main_stack = false;
+        frame_<double>() = make_shared<DataFrame<double>>(isize, dsize, "nodex");
+        frame_<double>()->use_main_stack = false;
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
             16, 1);
@@ -23,9 +23,9 @@ class TestDMRG : public ::testing::Test {
         cout << *threading_() << endl;
     }
     void TearDown() override {
-        frame_()->activate(0);
-        assert(ialloc_()->used == 0 && dalloc_()->used == 0);
-        frame_() = nullptr;
+        frame_<double>()->activate(0);
+        assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
+        frame_<double>() = nullptr;
     }
 };
 
