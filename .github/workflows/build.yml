@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
+    name: test ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -112,7 +112,7 @@ jobs:
           mpirun -n 2 ./block2_tests
 
   build:
-    name: ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
+    name: build ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
     runs-on: ${{ matrix.os }}
 
     strategy:
