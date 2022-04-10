@@ -44,6 +44,7 @@ class CMakeBuild(build_ext):
                 '-DLARGE_BOND=ON',
                 '-DUSE_KSYMM=OFF',
                 '-DUSE_COMPLEX=ON',
+                '-DUSE_SINGLE_PREC=ON',
                 '-DUSE_SG=ON'
             ]
 

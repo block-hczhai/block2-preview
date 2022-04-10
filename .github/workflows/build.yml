@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
       - name: build test (serial, macos)
@@ -85,7 +85,7 @@ jobs:
         run: |
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
       - name: run test (serial)
@@ -102,7 +102,7 @@ jobs:
           sed -i "s|unit_test/test_|unit_test/mpi/test_|" CMakeLists.txt
           mkdir build_test
           cd build_test
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON -DUSE_KSYMM=ON -DUSE_COMPLEX=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
       - name: run test (mpi)
