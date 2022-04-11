@@ -86,7 +86,9 @@ and ``BOOSTROOT`` is set. Then ``StackBlock`` can be compiled in the following w
 
 This will generate four executables in the build direcotry.
 
-``block.spin_adapted`` is the main ``StackBlock`` program.
+``block.spin_adapted`` is the main ``StackBlock`` program. One can optionally add the following to ``~/.bashrc``: ::
+
+    export PATH=${STACKBLOCK}/build:$PATH
 
 ``OH`` is the program to compute the expectation value on an MPS (or between two MPSs),
 of Hamiltonian and/or the identity operator.

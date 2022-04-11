@@ -274,6 +274,7 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
 [2021-08-20]
 
 **Assertion:** ::
+
     dmrg/mps.hpp:1547: void block2::MPS<S>::move_left(const std::shared_ptr<block2::CG<S> >&, const std::shared_ptr<block2::ParallelRule<S> >&) [with S = block2::SU2Long]: Assertion `tensors[center - 1]->info->n != 0' failed.
 
 **Reason:** A SZ MPS is loaded for use in a SU2 code.
@@ -281,6 +282,7 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
 [2021-12-14]
 
 **Assertion:** ::
+
     core/matrix_functions.hpp:307: static void block2::GMatrixFunctions<double>::multiply(const MatrixRef&, uint8_t, const MatrixRef&, uint8_t, const MatrixRef&, double, double): Assertion `a.n >= b.m && c.m == a.m && c.n >= b.n' failed.
 
 **Reason:** For transition reduced density matrix, if bra and ket are the MPSs with the same tag,
