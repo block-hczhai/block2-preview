@@ -46,7 +46,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "use_general_spin", "trans_integral_to_spin_orbital", "store_wfn_spectra",
               "tran_bra_range", "tran_ket_range", "tran_triangular", "use_hybrid_complex",
               "mem_ratio", "min_mpo_mem", "qc_mpo_type", "full_integral", "skip_inact_ext_sites",
-              "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale"}
+              "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale", "check_dav_tol"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -160,6 +160,8 @@ def parse(fname):
 
     schedule = [[], [], [], []]
     for nswp, M, tol, noise, SM in zip(nsweeps, *tmp[1:], site_dependent_bdims):
+        if dic.get("check_dav_tol", "auto") in ["auto", "1"] and "single_prec" in dic:
+            tol = max(5E-6, tol)
         schedule[0].extend([M] * nswp)
         schedule[1].extend([tol] * nswp)
         schedule[2].extend([noise] * nswp)
