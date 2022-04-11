@@ -98,6 +98,23 @@ use\_general\_spin
     is required to make it work with general spin.
     Requiring the code to be built with ``-DUSE_SG``. Currently cannot be used together with ``k_symmetry``.
 
+single\_prec
+    Optional. If given, the code will work in single precision (float) rather than double precision (double).
+
+integral\_rescale
+    Optional. ``auto`` (default) or ``none`` or floating point number. If ``auto`` and the calculation is done
+    with single precision, the average diagonal of the one-electron integral will be moved to the energy constant.
+    Ideally, with single precision, we want the energy constant to be close to the final dmrg energy.
+    If ``auto`` and the calculation is done with double precision, nothing will happen.
+    If ``none``, nothing will happen.
+    If the value of ``integral_rescale`` is a number, the energy constant will be adjust to the given number by shifting
+    the average diagonal of the one-electron integral. This should only be used when the particle number of the calculation
+    is a constant (namely, ``nelec`` contains only one number).
+
+check\_dav\_tol
+    Optional. ``auto`` (default) or 1 or 0. If ``auto`` or ``1`` and the calculation is done with single precision,
+    the davidson tolerance will be set to be no lower than 5E-6.
+
 trans\_integral\_to\_spin\_orbital
     Optional. If given, the FCIDUMP (in spatial orbitals) will be reinterpretted to work with general spin.
     Only makes sense together with ``use_general_spin``.

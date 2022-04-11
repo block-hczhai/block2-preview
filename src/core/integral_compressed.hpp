@@ -851,7 +851,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                 FCIDUMP<FL>::template orb_sym<int>(), ord));
         freeze();
     }
-    void rescale() override {
+    void rescale(FL shift = 0) override {
         vector<CompressedTInt<FL>> rts(cps_ts);
         FL x = 0;
         uint16_t xn = 0;
@@ -863,7 +863,10 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
             for (uint16_t j = 0; j < cps_ts[i].n; j++)
                 x += ((const CompressedTInt<FL> &)cps_ts[i])(j, j);
         }
-        x = x / (FP)xn;
+        if (shift == (FL)0.0)
+            x = x / (FP)xn;
+        else
+            x = (shift - const_e) / (FP)n_elec();
         for (size_t i = 0; i < cps_ts.size(); i++)
             for (uint16_t j = 0; j < cps_ts[i].n; j++)
                 for (uint16_t k = 0;

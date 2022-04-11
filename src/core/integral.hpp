@@ -1298,7 +1298,7 @@ template <typename FL> struct FCIDUMP {
         if (params.count("ksym"))
             set_k_sym(reorder(k_sym<int>(), ord));
     }
-    virtual void rescale() {
+    virtual void rescale(FL shift = 0) {
         FL x = 0;
         uint16_t xn = 0;
         for (size_t i = 0; i < ts.size(); i++) {
@@ -1306,7 +1306,10 @@ template <typename FL> struct FCIDUMP {
             for (uint16_t j = 0; j < ts[i].n; j++)
                 x += ts[i](j, j);
         }
-        x = x / (FP)xn;
+        if (shift == (FL)0.0)
+            x = x / (FP)xn;
+        else
+            x = (shift - const_e) / (FP)n_elec();
         for (size_t i = 0; i < ts.size(); i++)
             for (uint16_t j = 0; j < ts[i].n; j++)
                 ts[i](j, j) = ts[i](j, j) - x;

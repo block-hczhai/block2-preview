@@ -683,11 +683,11 @@ if pre_run or not no_pre_run:
                                     tol=integral_tol)
         if integral_rescale == "auto" and "single_prec" in dic:
             _print("original integral const = %20.10f" % fcidump.e())
-            fcidump.rescale()
+            fcidump.rescale(0)
             _print("rescaled integral const = %20.10f" % fcidump.e())
-        elif integral_rescale == "1":
+        elif integral_rescale != "none" and integral_rescale != "auto":
             _print("original integral const = %20.10f" % fcidump.e())
-            fcidump.rescale()
+            fcidump.rescale(float(integral_rescale))
             _print("rescaled integral const = %20.10f" % fcidump.e())
     n_orbs = fcidump.n_sites
     if "trans_integral_to_spin_orbital" in dic:

@@ -2313,7 +2313,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("abs_h1e_matrix", &FCIDUMP<FL>::abs_h1e_matrix)
         .def("reorder", (void(FCIDUMP<FL>::*)(const vector<uint16_t> &)) &
                             FCIDUMP<FL>::reorder)
-        .def("rescale", &FCIDUMP<FL>::rescale)
+        .def("rescale", &FCIDUMP<FL>::rescale, py::arg("shift") = (FL)0.0)
         .def("rotate", &FCIDUMP<FL>::rotate)
         .def("deep_copy", &FCIDUMP<FL>::deep_copy)
         .def_static("array_reorder", &FCIDUMP<FL>::template reorder<double>)
