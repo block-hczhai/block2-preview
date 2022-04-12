@@ -585,6 +585,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        assert(ref.size() == n_sites || ref.size() == 0);
         if (max_rank < 0) max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
@@ -594,7 +595,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
+                     vector<uint8_t>, int, int>>
             ptrs;
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
         pinfos[0].resize(1);
@@ -641,9 +642,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         vector<uint8_t> zdet(n_sites);
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
-                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet));
+                ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0, 0));
         vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
+                     vector<uint8_t>, int, int>>
             pptrs;
         int ntg = threading->activate_global();
         int ngroup = ntg * 2;
@@ -658,7 +659,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
                     make_shared<VectorAllocator<FP>>();
                 auto &p = ptrs[ip];
-                int j = get<1>(p), d = get<2>(p);
+                int j = get<1>(p), d = get<2>(p), nh = get<5>(p), np = get<6>(p);
                 shared_ptr<SparseMatrix<S, FL>> pmp = get<3>(p);
                 shared_ptr<SparseMatrix<S, FL>> cmp =
                     make_shared<SparseMatrix<S, FL>>(pd_alloc);
@@ -673,6 +674,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 }
                 if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
                     ccmp[ip - pstart] = nullptr;
+                else if (ref.size() != 0 && (nh > max_rank || np > max_rank) )
+                    ccmp[ip - pstart] = nullptr;
                 else
                     ccmp[ip - pstart] = cmp;
             }
@@ -683,6 +686,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                         continue;
                     auto &p = ptrs[ip];
                     int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    int nh = get<5>(p), np = get<6>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
@@ -714,9 +718,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                              jj++)
-                            if (data[cur][jj] != 0)
+                            if (data[cur][jj] != 0) {
+                                int nh_n = nh;
+                                int np_n = np;
+                                if (ref.size() != 0) { 
+                                    if (!j &&  ref[d] ) nh_n += 1;
+                                    if ( j && !ref[d] ) np_n += 1;
+                                }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
-                                                           d + 1, cmp, det));
+                                                           d + 1, cmp, det, nh_n, np_n));
+                            }
                     }
                     ccmp[ip - pstart] = nullptr;
                 }
@@ -729,7 +740,41 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         sort_dets();
         threading->activate_normal();
     }
-    void convert_phase(const vector<int> &reorder) {} 
+    uint8_t permutation_parity(const vector<int> &perm) {
+        uint8_t n = 0;
+        vector<uint8_t> tag(perm.size(), 0);
+        for (int i = 0, j; i < perm.size(); i++) {
+            j = i, n ^= !tag[j];
+            while (!tag[j])
+                n ^= 1, tag[j] = 1, j = perm[j];
+        }
+        return n;
+    }
+    int phase_change_orb_order(const vector<uint8_t> &det,
+                               const vector<int> &reorder) {
+        vector<int> orb, rev_det, rev;
+        orb.reserve(det.size());
+        rev_det.reserve(det.size());
+        rev.reserve(det.size());
+        for (int i = 0; i < det.size(); i++)
+            rev_det[reorder[i]] = det[i];
+        for (int i = 0, j = 0; i < det.size(); i++)
+            rev[i] = j, j += rev_det[i];
+        for (int i = 0; i < det.size(); i++)
+            if (det[i])
+                orb.push_back(rev[reorder[i]]);
+        uint8_t n = permutation_parity(orb);
+        return 1 - (n << 1);
+    }
+    void convert_phase(const vector<int> &reorder) {
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static) num_threads(ntg)
+            for (int i = 0; i < vals.size(); i++) {
+                vector<uint8_t> det = (*this)[i];
+                vals[i] *= phase_change_orb_order(det, reorder);
+            }
+        threading->activate_normal();
+    }
 };
 
 template <typename S, typename FL> struct DeterminantQC {
