@@ -400,8 +400,6 @@ if DEBUG:
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
 stackblock_compat = dic.get("hf_occ", None) == "integral"
-#lsh test
-stackblock_compat = False 
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 if stackblock_compat:
     n_threads = int(dic.get("num_thrds", 1))
