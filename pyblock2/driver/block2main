@@ -400,6 +400,8 @@ if DEBUG:
 scratch = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
 stackblock_compat = dic.get("hf_occ", None) == "integral"
+#lsh test
+stackblock_compat = False 
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 if stackblock_compat:
     n_threads = int(dic.get("num_thrds", 1))
@@ -2551,8 +2553,11 @@ if not pre_run:
                     smps, smps_info, forward = split_mps(iroot, mps, mps_info)
                 dm = do_onepdm(smps, smps)
                 if MPI is None or MPI.rank == 0:
-                    _print("DMRG OCC (state %4d) = " % iroot, "".join(
-                        ["%6.3f" % x for x in np.diag(dm[0]) + np.diag(dm[1])]))
+                    dmocc = np.diag(np.sum(dm, axis=0))
+                    if dmocc.dtype == np.complex128:
+                        _print("DMRG OCC = ", "".join(["(%6.3f,%6.3f)" % (np.real(x), np.imag(x)) for x in dmocc]))
+                    else:
+                        _print("DMRG OCC = ", "".join(["%6.3f" % x for x in dmocc]))
                     np.save(scratch + "/1pdm-%d-%d.npy" % (iroot, iroot), dm)
                     smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
@@ -3466,8 +3471,9 @@ if not pre_run:
                 dets[i] = np.array(dtrie[i])
             np.save(scratch + "/sample-dets.npy", dets)
 
+            nq = 4 if "use_general_spin" not in dic else 2
             state_occ = np.array(
-                dtrie.get_state_occupation()).reshape(n_sites, 4)
+                dtrie.get_state_occupation()).reshape(n_sites, nq)
             # state_occ += ((1 - state_occ.sum(axis=1)) / 4)[:, None]
             state_occ *= (1 / state_occ.sum(axis=1))[:, None]
             _print("STATE OCC = ", "".join(
