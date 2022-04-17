@@ -1380,8 +1380,8 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             shared_ptr<CSRSparseMatrix<S, FL>> mat =
                 make_shared<CSRSparseMatrix<S, FL>>();
             mat->initialize(BigSite<S, FL>::find_site_op_info(op.q_label));
-            for (int i = 0; i < mat->info->n; i++)
-                mat->csr_data[i]->alloc = d_alloc;
+            for (int l = 0; l < mat->info->n; l++)
+                mat->csr_data[l]->alloc = d_alloc;
             p.second = mat;
             switch (op.name) {
             case OpNames::I:

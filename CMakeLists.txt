@@ -322,6 +322,13 @@ ELSEIF("${OMP_LIB}" STREQUAL "SEQ")
     SET(MKL_OMP_VALUE 0)
 ELSEIF ("${OMP_LIB}" STREQUAL "INTEL")
     FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64)
+    IF (NOT OMP_LIB_NAME)
+        EXECUTE_PROCESS(
+            COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
+            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"
+            OUTPUT_VARIABLE OMP_LIB_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
+        FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS ${OMP_LIB_HINT})
+    ENDIF()
     SET(MKL_OMP_LIB_NAME mkl_intel_thread)
     SET(MKL_OMP_VALUE 2)
 ELSEIF ("${OMP_LIB}" STREQUAL "TBB")
@@ -334,10 +341,24 @@ ELSEIF ("${OMP_LIB}" STREQUAL "TBB")
     SET(MKL_OMP_VALUE 3)
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
     FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64 ${PYTHON_LIB_PATH})
+    IF (NOT OMP_LIB_NAME)
+        EXECUTE_PROCESS(
+            COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
+            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"
+            OUTPUT_VARIABLE OMP_LIB_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
+        FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS ${OMP_LIB_HINT})
+    ENDIF()
     SET(MKL_OMP_LIB_NAME mkl_intel_thread)
     SET(MKL_OMP_VALUE 2)
 ELSEIF (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS /usr/local/lib /usr/lib64 ${PYTHON_LIB_PATH})
+    IF (NOT OMP_LIB_NAME)
+        EXECUTE_PROCESS(
+            COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
+            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"
+            OUTPUT_VARIABLE OMP_LIB_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
+        FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5 PATHS ${OMP_LIB_HINT})
+    ENDIF()
     SET(MKL_OMP_LIB_NAME mkl_intel_thread)
     SET(MKL_OMP_VALUE 2)
 ELSE()
@@ -346,7 +367,7 @@ ELSE()
     IF (NOT OMP_LIB_NAME)
         EXECUTE_PROCESS(
             COMMAND ${CMAKE_CXX_COMPILER} -print-search-dirs
-            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"    
+            COMMAND grep "^lib" COMMAND awk -F "=" "{print $2}" COMMAND tr ":" ";"
             OUTPUT_VARIABLE OMP_LIB_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
         FIND_LIBRARY(OMP_LIB_NAME NAMES gomp PATHS ${OMP_LIB_HINT})
     ENDIF()
@@ -363,7 +384,7 @@ ELSE()
     SET(OPT_FLAG -O3 -funroll-loops ${XPREP} ${OMP_FLAG} -Werror -Werror=return-type)
 ENDIF()
 
-IF ((NOT APPLE) AND (NOT WIN32))
+IF ((NOT APPLE) AND (NOT WIN32) AND (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")))
     SET(OPT_FLAG ${OPT_FLAG} -Wno-psabi)
 ENDIF()
 
@@ -390,7 +411,7 @@ ENDIF()
 
 IF (${USE_MKL_ANY})
     SET(CMAKE_FIND_LIBRARY_SUFFIXES_BKP ${CMAKE_FIND_LIBRARY_SUFFIXES})
-    SET(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES_BKP};.so.1;.1.dylib;.so.2;.2.dylib")
+    SET(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES_BKP};.so.1;.1.dylib;.so.2;.2.dylib;.so.3;.3.dylib;.so.4;.4.dylib")
     FIND_PATH(MKL_INCLUDE_DIR NAMES mkl.h HINTS $ENV{MKLROOT}/include /usr/local/include ${PYTHON_INCLUDE_PATH})
     IF (${USE_MKL})
         FIND_LIBRARY(MKL_LIB_LP NAMES mkl_intel_lp64
