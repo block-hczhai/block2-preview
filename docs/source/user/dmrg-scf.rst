@@ -62,13 +62,6 @@ The following is an example python script for DMRGSCF using ``block2`` running i
 
 .. note ::
 
-    For the ``block2`` solver, a large local stack may be required if the active space is large.
-    Before running this script, run the bash command ``ulimit -s unlimited`` to
-    allow a large local stack (you may also include this command in your job submission script).
-    Not using this command may result in a segmentation fault.
-
-.. note ::
-
     It is important to set a suitable ``mc.fcisolver.threads`` if you have multiple CPU cores in the node,
     to get high efficiency.
 

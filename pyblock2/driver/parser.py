@@ -151,6 +151,10 @@ def parse(fname):
     elif "memory" in dic:
         dic["mem"] = dic["memory"].replace(",", "")
         del dic["memory"]
+    
+    if "nonspinAdapted" in dic:
+        dic["nonspinadapted"] = ""
+        del dic["nonspinAdapted"]
 
     tmp = list(zip(*schedule))
     nsweeps = np.diff(tmp[0]).tolist()

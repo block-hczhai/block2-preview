@@ -474,11 +474,6 @@ The following input file computes the energy and 2-particle density matrix for t
     maxiter 30
 
     twopdm
-
-.. note ::
-
-    A large local stack may be required for this calculation. Use the command ``ulimit -s unlimited`` to
-    allow a large local stack.
     
 .. highlight:: python3
 
@@ -515,11 +510,6 @@ state-averaged A\ :sub:`1g` states: ::
     maxiter 30
 
     twopdm
-
-.. note ::
-
-    A large local stack may be required for this calculation. Use the command ``ulimit -s unlimited`` to
-    allow a large local stack.
     
 .. highlight:: python3
 

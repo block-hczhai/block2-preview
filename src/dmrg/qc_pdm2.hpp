@@ -45,6 +45,16 @@ using namespace std;
 
 namespace block2 {
 
+template <typename T> struct PDM2OPArray {
+    size_t n, sn;
+    vector<T> arr;
+    PDM2OPArray(size_t n, size_t sn) : n(n), sn(sn), arr(n * n * n * n * sn) {}
+    inline T &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l,
+                         uint8_t s) {
+        return arr[(((i * n + j) * n + k) * n + l) * sn + s];
+    }
+};
+
 template <typename, typename, typename = void> struct PDM2MPOQC;
 
 // "MPO" for two particle density matrix (non-spin-adapted)
@@ -102,13 +112,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         vector<vector<vector<shared_ptr<OpExpr<S>>>>> ddc_op(
             n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
                          n_sites, vector<shared_ptr<OpExpr<S>>>(8)));
-        vector<vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>> pdm2_op(
-            n_sites,
-            vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>(
-                n_sites,
-                vector<vector<vector<shared_ptr<OpExpr<S>>>>>(
-                    n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
-                                 n_sites, vector<shared_ptr<OpExpr<S>>>(16)))));
+        PDM2OPArray<shared_ptr<OpExpr<S>>> pdm2_op(n_sites, 16);
 #else
         shared_ptr<OpExpr<S>> c_op[n_sites][2], d_op[n_sites][2];
         shared_ptr<OpExpr<S>> ccdd_op[n_sites][16];
@@ -124,7 +128,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> dcc_op[n_sites][n_sites][8];
         shared_ptr<OpExpr<S>> dcd_op[n_sites][n_sites][8];
         shared_ptr<OpExpr<S>> ddc_op[n_sites][n_sites][8];
-        shared_ptr<OpExpr<S>> pdm2_op[n_sites][n_sites][n_sites][n_sites][16];
+        PDM2OPArray<shared_ptr<OpExpr<S>>> pdm2_op(n_sites, 16);
 #endif
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
@@ -234,7 +238,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 for (uint16_t k = 0; k < n_sites; k++)
                     for (uint16_t l = 0; l < n_sites; l++)
                         for (uint8_t s = 0; s < 16; s++) {
-                            pdm2_op[i][j][k][l][s] =
+                            pdm2_op(i, j, k, l, s) =
                                 make_shared<OpElement<S, FL>>(
                                     OpNames::PDM2,
                                     SiteIndex({i, j, k, l},
@@ -444,26 +448,26 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     if (!(mask & (1U << s)))
                         continue;
                     // 1*16*1 : mmmm / ccdd
-                    (*pmop)[p] = pdm2_op[m][m][m][m][s];
+                    (*pmop)[p] = pdm2_op(m, m, m, m, s);
                     (*pmexpr)[p] = ccdd_op[m][s] * i_op;
                     p++;
                     // 4*16*(n-m-1) : mmmj(-mmjm:+mjmm:-jmmm) / ccdd cddc (j >
                     // m)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][m][m][j][s];
+                        (*pmop)[p] = pdm2_op(m, m, m, j, s);
                         (*pmexpr)[p] = ccd_op[m][m][PIJK(SI(s), SJ(s), SK(s))] *
                                        d_op[j][SL(s)];
                         p++;
-                        (*pmop)[p] = pdm2_op[m][m][j][m][s];
+                        (*pmop)[p] = pdm2_op(m, m, j, m, s);
                         (*pmexpr)[p] =
                             -1.0 * (ccd_op[m][m][PIJK(SI(s), SJ(s), SL(s))] *
                                     d_op[j][SK(s)]);
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][m][m][s];
+                        (*pmop)[p] = pdm2_op(m, j, m, m, s);
                         (*pmexpr)[p] = cdd_op[m][m][PIJK(SI(s), SK(s), SL(s))] *
                                        c_op[j][SJ(s)];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][m][m][s];
+                        (*pmop)[p] = pdm2_op(j, m, m, m, s);
                         (*pmexpr)[p] =
                             -1.0 * (cdd_op[m][m][PIJK(SJ(s), SK(s), SL(s))] *
                                     c_op[j][PI(SI(s))]);
@@ -474,68 +478,68 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     //      / ccdd cdcd cddc dccd dcdc ddcc (all) (i < m, j > m)
                     for (uint16_t i = 0; i < m; i++)
                         for (uint16_t j = m + 1; j < n_sites; j++) {
-                            (*pmop)[p] = pdm2_op[i][m][m][j][s];
+                            (*pmop)[p] = pdm2_op(i, m, m, j, s);
                             (*pmexpr)[p] =
                                 ccd_op[i][m][PIJK(SI(s), SJ(s), SK(s))] *
                                 d_op[j][SL(s)];
                             p++;
-                            (*pmop)[p] = pdm2_op[i][m][j][m][s];
+                            (*pmop)[p] = pdm2_op(i, m, j, m, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (ccd_op[i][m][PIJK(SI(s), SJ(s), SL(s))] *
                                  d_op[j][SK(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][m][m][s];
+                            (*pmop)[p] = pdm2_op(i, j, m, m, s);
                             (*pmexpr)[p] =
                                 cdd_op[i][m][PIJK(SI(s), SK(s), SL(s))] *
                                 c_op[j][SJ(s)];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][m][i][s];
+                            (*pmop)[p] = pdm2_op(j, m, m, i, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (dcd_op[i][m][PIJK(SL(s), SJ(s), SK(s))] *
                                  c_op[j][SI(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][i][m][s];
+                            (*pmop)[p] = pdm2_op(j, m, i, m, s);
                             (*pmexpr)[p] =
                                 dcd_op[i][m][PIJK(SK(s), SJ(s), SL(s))] *
                                 c_op[j][SI(s)];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][m][m][s];
+                            (*pmop)[p] = pdm2_op(j, i, m, m, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (cdd_op[i][m][PIJK(SJ(s), SK(s), SL(s))] *
                                  c_op[j][SI(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][i][j][s];
+                            (*pmop)[p] = pdm2_op(m, m, i, j, s);
                             (*pmexpr)[p] =
                                 dcc_op[i][m][PIJK(SK(s), SI(s), SJ(s))] *
                                 d_op[j][SL(s)];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][j][i][s];
+                            (*pmop)[p] = pdm2_op(m, m, j, i, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (dcc_op[i][m][PIJK(SL(s), SI(s), SJ(s))] *
                                  d_op[j][SK(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][j][m][s];
+                            (*pmop)[p] = pdm2_op(m, i, j, m, s);
                             (*pmexpr)[p] =
                                 ccd_op[i][m][PIJK(SJ(s), SI(s), SL(s))] *
                                 d_op[j][SK(s)];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][i][m][s];
+                            (*pmop)[p] = pdm2_op(m, j, i, m, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (dcd_op[i][m][PIJK(SK(s), SI(s), SL(s))] *
                                  c_op[j][SJ(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][m][j][s];
+                            (*pmop)[p] = pdm2_op(m, i, m, j, s);
                             (*pmexpr)[p] =
                                 -1.0 *
                                 (ccd_op[i][m][PIJK(SJ(s), SI(s), SK(s))] *
                                  d_op[j][SL(s)]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][m][i][s];
+                            (*pmop)[p] = pdm2_op(m, j, m, i, s);
                             (*pmexpr)[p] =
                                 dcd_op[i][m][PIJK(SL(s), SI(s), SK(s))] *
                                 c_op[j][SJ(s)];
@@ -544,27 +548,27 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     //   6*16*(n-m-1) : mmjj(-mjmj:+mjjm:+jjmm:-jmjm:+jmmj)
                     //      / ccdd cdcd cddc dccd dcdc ddcc (all) (j > m)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][m][j][j][s];
+                        (*pmop)[p] = pdm2_op(m, m, j, j, s);
                         (*pmexpr)[p] = a_op[m][m][PIJ(SI(s), SJ(s))] *
                                        ad_op[j][j][PIJ(SK(s), SL(s))];
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][m][j][s];
+                        (*pmop)[p] = pdm2_op(m, j, m, j, s);
                         (*pmexpr)[p] = -1.0 * (b_op[m][m][PIJ(SI(s), SK(s))] *
                                                b_op[j][j][PIJ(SJ(s), SL(s))]);
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][j][m][s];
+                        (*pmop)[p] = pdm2_op(m, j, j, m, s);
                         (*pmexpr)[p] = b_op[m][m][PIJ(SI(s), SL(s))] *
                                        b_op[j][j][PIJ(SJ(s), SK(s))];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][m][m][s];
+                        (*pmop)[p] = pdm2_op(j, j, m, m, s);
                         (*pmexpr)[p] = ad_op[m][m][PIJ(SK(s), SL(s))] *
                                        a_op[j][j][PIJ(SI(s), SJ(s))];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][j][m][s];
+                        (*pmop)[p] = pdm2_op(j, m, j, m, s);
                         (*pmexpr)[p] = -1.0 * (b_op[m][m][PIJ(SJ(s), SL(s))] *
                                                b_op[j][j][PIJ(SI(s), SK(s))]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][m][j][s];
+                        (*pmop)[p] = pdm2_op(j, m, m, j, s);
                         (*pmexpr)[p] = b_op[m][m][PIJ(SJ(s), SK(s))] *
                                        b_op[j][j][PIJ(SI(s), SL(s))];
                         p++;
@@ -574,56 +578,56 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     //      / ccdd cdcd cddc dccd dcdc ddcc (all) (i < m, j > m)
                     for (uint16_t i = 0; i < m; i++)
                         for (uint16_t j = m + 1; j < n_sites; j++) {
-                            (*pmop)[p] = pdm2_op[i][m][j][j][s];
+                            (*pmop)[p] = pdm2_op(i, m, j, j, s);
                             (*pmexpr)[p] = a_op[i][m][PIJ(SI(s), SJ(s))] *
                                            ad_op[j][j][PIJ(SK(s), SL(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][m][j][s];
+                            (*pmop)[p] = pdm2_op(i, j, m, j, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[i][m][PIJ(SI(s), SK(s))] *
                                         b_op[j][j][PIJ(SJ(s), SL(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][j][m][s];
+                            (*pmop)[p] = pdm2_op(i, j, j, m, s);
                             (*pmexpr)[p] = b_op[i][m][PIJ(SI(s), SL(s))] *
                                            b_op[j][j][PIJ(SJ(s), SK(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][j][i][m][s];
+                            (*pmop)[p] = pdm2_op(j, j, i, m, s);
                             (*pmexpr)[p] = ad_op[i][m][PIJ(SK(s), SL(s))] *
                                            a_op[j][j][PIJ(SI(s), SJ(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][j][m][s];
+                            (*pmop)[p] = pdm2_op(j, i, j, m, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[i][m][PIJ(SJ(s), SL(s))] *
                                         b_op[j][j][PIJ(SI(s), SK(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][m][j][s];
+                            (*pmop)[p] = pdm2_op(j, i, m, j, s);
                             (*pmexpr)[p] = b_op[i][m][PIJ(SJ(s), SK(s))] *
                                            b_op[j][j][PIJ(SI(s), SL(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][j][j][s];
+                            (*pmop)[p] = pdm2_op(m, i, j, j, s);
                             (*pmexpr)[p] =
                                 -1.0 * (a_op[i][m][PIJ(SJ(s), SI(s))] *
                                         ad_op[j][j][PIJ(SK(s), SL(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][i][j][s];
+                            (*pmop)[p] = pdm2_op(m, j, i, j, s);
                             (*pmexpr)[p] = bd_op[i][m][PIJ(SK(s), SI(s))] *
                                            b_op[j][j][PIJ(SJ(s), SL(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][j][i][s];
+                            (*pmop)[p] = pdm2_op(m, j, j, i, s);
                             (*pmexpr)[p] =
                                 -1.0 * (bd_op[i][m][PIJ(SL(s), SI(s))] *
                                         b_op[j][j][PIJ(SJ(s), SK(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][j][m][i][s];
+                            (*pmop)[p] = pdm2_op(j, j, m, i, s);
                             (*pmexpr)[p] =
                                 -1.0 * (ad_op[i][m][PIJ(SL(s), SK(s))] *
                                         a_op[j][j][PIJ(SI(s), SJ(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][j][i][s];
+                            (*pmop)[p] = pdm2_op(j, m, j, i, s);
                             (*pmexpr)[p] = bd_op[i][m][PIJ(SL(s), SJ(s))] *
                                            b_op[j][j][PIJ(SI(s), SK(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][i][j][s];
+                            (*pmop)[p] = pdm2_op(j, m, i, j, s);
                             (*pmexpr)[p] =
                                 -1.0 * (bd_op[i][m][PIJ(SK(s), SJ(s))] *
                                         b_op[j][j][PIJ(SI(s), SL(s))]);
@@ -634,56 +638,56 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     //      / ccdd cdcd cddc dccd dcdc ddcc (all) (j > m, k > j)
                     for (uint16_t j = m + 1; j < n_sites; j++)
                         for (uint16_t k = j + 1; k < n_sites; k++) {
-                            (*pmop)[p] = pdm2_op[m][m][j][k][s];
+                            (*pmop)[p] = pdm2_op(m, m, j, k, s);
                             (*pmexpr)[p] = a_op[m][m][PIJ(SI(s), SJ(s))] *
                                            ad_op[j][k][PIJ(SK(s), SL(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][k][j][s];
+                            (*pmop)[p] = pdm2_op(m, m, k, j, s);
                             (*pmexpr)[p] =
                                 -1.0 * (a_op[m][m][PIJ(SI(s), SJ(s))] *
                                         ad_op[j][k][PIJ(SL(s), SK(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][m][k][s];
+                            (*pmop)[p] = pdm2_op(m, j, m, k, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[m][m][PIJ(SI(s), SK(s))] *
                                         b_op[j][k][PIJ(SJ(s), SL(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][k][m][j][s];
+                            (*pmop)[p] = pdm2_op(m, k, m, j, s);
                             (*pmexpr)[p] = b_op[m][m][PIJ(SI(s), SK(s))] *
                                            bd_op[j][k][PIJ(SL(s), SJ(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][k][m][s];
+                            (*pmop)[p] = pdm2_op(m, j, k, m, s);
                             (*pmexpr)[p] = b_op[m][m][PIJ(SI(s), SL(s))] *
                                            b_op[j][k][PIJ(SJ(s), SK(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][k][j][m][s];
+                            (*pmop)[p] = pdm2_op(m, k, j, m, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[m][m][PIJ(SI(s), SL(s))] *
                                         bd_op[j][k][PIJ(SK(s), SJ(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][m][k][s];
+                            (*pmop)[p] = pdm2_op(j, m, m, k, s);
                             (*pmexpr)[p] = b_op[m][m][PIJ(SJ(s), SK(s))] *
                                            b_op[j][k][PIJ(SI(s), SL(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][k][m][s];
+                            (*pmop)[p] = pdm2_op(j, m, k, m, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[m][m][PIJ(SJ(s), SL(s))] *
                                         b_op[j][k][PIJ(SI(s), SK(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][k][m][m][s];
+                            (*pmop)[p] = pdm2_op(j, k, m, m, s);
                             (*pmexpr)[p] = ad_op[m][m][PIJ(SK(s), SL(s))] *
                                            a_op[j][k][PIJ(SI(s), SJ(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[k][m][m][j][s];
+                            (*pmop)[p] = pdm2_op(k, m, m, j, s);
                             (*pmexpr)[p] =
                                 -1.0 * (b_op[m][m][PIJ(SJ(s), SK(s))] *
                                         bd_op[j][k][PIJ(SL(s), SI(s))]);
                             p++;
-                            (*pmop)[p] = pdm2_op[k][m][j][m][s];
+                            (*pmop)[p] = pdm2_op(k, m, j, m, s);
                             (*pmexpr)[p] = b_op[m][m][PIJ(SJ(s), SL(s))] *
                                            bd_op[j][k][PIJ(SK(s), SI(s))];
                             p++;
-                            (*pmop)[p] = pdm2_op[k][j][m][m][s];
+                            (*pmop)[p] = pdm2_op(k, j, m, m, s);
                             (*pmexpr)[p] =
                                 -1.0 * (ad_op[m][m][PIJ(SK(s), SL(s))] *
                                         a_op[j][k][PIJ(SJ(s), SI(s))]);
@@ -700,114 +704,114 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                         for (uint16_t j = m + 1; j < n_sites; j++)
                             for (uint16_t k = j + 1; k < n_sites; k++) {
                                 // (+imjk:-imkj:-ijmk:+ijkm:+ikmj:-ikjm)
-                                (*pmop)[p] = pdm2_op[i][m][j][k][s];
+                                (*pmop)[p] = pdm2_op(i, m, j, k, s);
                                 (*pmexpr)[p] = a_op[i][m][PIJ(SI(s), SJ(s))] *
                                                ad_op[j][k][PIJ(SK(s), SL(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][m][k][j][s];
+                                (*pmop)[p] = pdm2_op(i, m, k, j, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (a_op[i][m][PIJ(SI(s), SJ(s))] *
                                             ad_op[j][k][PIJ(SL(s), SK(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][j][m][k][s];
+                                (*pmop)[p] = pdm2_op(i, j, m, k, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (b_op[i][m][PIJ(SI(s), SK(s))] *
                                             b_op[j][k][PIJ(SJ(s), SL(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][j][k][m][s];
+                                (*pmop)[p] = pdm2_op(i, j, k, m, s);
                                 (*pmexpr)[p] = b_op[i][m][PIJ(SI(s), SL(s))] *
                                                b_op[j][k][PIJ(SJ(s), SK(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][k][m][j][s];
+                                (*pmop)[p] = pdm2_op(i, k, m, j, s);
                                 (*pmexpr)[p] = b_op[i][m][PIJ(SI(s), SK(s))] *
                                                bd_op[j][k][PIJ(SL(s), SJ(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][k][j][m][s];
+                                (*pmop)[p] = pdm2_op(i, k, j, m, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (b_op[i][m][PIJ(SI(s), SL(s))] *
                                             bd_op[j][k][PIJ(SK(s), SJ(s))]);
                                 p++;
                                 // (-mijk:+mikj:+mjik:-mjki:-mkij:+mkji)
-                                (*pmop)[p] = pdm2_op[m][i][j][k][s];
+                                (*pmop)[p] = pdm2_op(m, i, j, k, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (a_op[i][m][PIJ(SJ(s), SI(s))] *
                                             ad_op[j][k][PIJ(SK(s), SL(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][i][k][j][s];
+                                (*pmop)[p] = pdm2_op(m, i, k, j, s);
                                 (*pmexpr)[p] = a_op[i][m][PIJ(SJ(s), SI(s))] *
                                                ad_op[j][k][PIJ(SL(s), SK(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][j][i][k][s];
+                                (*pmop)[p] = pdm2_op(m, j, i, k, s);
                                 (*pmexpr)[p] = bd_op[i][m][PIJ(SK(s), SI(s))] *
                                                b_op[j][k][PIJ(SJ(s), SL(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][j][k][i][s];
+                                (*pmop)[p] = pdm2_op(m, j, k, i, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (bd_op[i][m][PIJ(SL(s), SI(s))] *
                                             b_op[j][k][PIJ(SJ(s), SK(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][k][i][j][s];
+                                (*pmop)[p] = pdm2_op(m, k, i, j, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (bd_op[i][m][PIJ(SK(s), SI(s))] *
                                             bd_op[j][k][PIJ(SL(s), SJ(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][k][j][i][s];
+                                (*pmop)[p] = pdm2_op(m, k, j, i, s);
                                 (*pmexpr)[p] = bd_op[i][m][PIJ(SL(s), SI(s))] *
                                                bd_op[j][k][PIJ(SK(s), SJ(s))];
                                 p++;
                                 // (+jimk:-jikm:-jmik:+jmki:+jkim:-jkmi)
-                                (*pmop)[p] = pdm2_op[j][i][m][k][s];
+                                (*pmop)[p] = pdm2_op(j, i, m, k, s);
                                 (*pmexpr)[p] = b_op[i][m][PIJ(SJ(s), SK(s))] *
                                                b_op[j][k][PIJ(SI(s), SL(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][i][k][m][s];
+                                (*pmop)[p] = pdm2_op(j, i, k, m, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (b_op[i][m][PIJ(SJ(s), SL(s))] *
                                             b_op[j][k][PIJ(SI(s), SK(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][m][i][k][s];
+                                (*pmop)[p] = pdm2_op(j, m, i, k, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (bd_op[i][m][PIJ(SK(s), SJ(s))] *
                                             b_op[j][k][PIJ(SI(s), SL(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][m][k][i][s];
+                                (*pmop)[p] = pdm2_op(j, m, k, i, s);
                                 (*pmexpr)[p] = bd_op[i][m][PIJ(SL(s), SJ(s))] *
                                                b_op[j][k][PIJ(SI(s), SK(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][k][i][m][s];
+                                (*pmop)[p] = pdm2_op(j, k, i, m, s);
                                 (*pmexpr)[p] = ad_op[i][m][PIJ(SK(s), SL(s))] *
                                                a_op[j][k][PIJ(SI(s), SJ(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][k][m][i][s];
+                                (*pmop)[p] = pdm2_op(j, k, m, i, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (ad_op[i][m][PIJ(SL(s), SK(s))] *
                                             a_op[j][k][PIJ(SI(s), SJ(s))]);
                                 p++;
                                 // (-kimj:+kijm:+kmij:-kmji:-kjim:+kjmi)
-                                (*pmop)[p] = pdm2_op[k][i][m][j][s];
+                                (*pmop)[p] = pdm2_op(k, i, m, j, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (b_op[i][m][PIJ(SJ(s), SK(s))] *
                                             bd_op[j][k][PIJ(SL(s), SI(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][i][j][m][s];
+                                (*pmop)[p] = pdm2_op(k, i, j, m, s);
                                 (*pmexpr)[p] = b_op[i][m][PIJ(SJ(s), SL(s))] *
                                                bd_op[j][k][PIJ(SK(s), SI(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][m][i][j][s];
+                                (*pmop)[p] = pdm2_op(k, m, i, j, s);
                                 (*pmexpr)[p] = bd_op[i][m][PIJ(SK(s), SJ(s))] *
                                                bd_op[j][k][PIJ(SL(s), SI(s))];
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][m][j][i][s];
+                                (*pmop)[p] = pdm2_op(k, m, j, i, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (bd_op[i][m][PIJ(SL(s), SJ(s))] *
                                             bd_op[j][k][PIJ(SK(s), SI(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][j][i][m][s];
+                                (*pmop)[p] = pdm2_op(k, j, i, m, s);
                                 (*pmexpr)[p] =
                                     -1.0 * (ad_op[i][m][PIJ(SK(s), SL(s))] *
                                             a_op[j][k][PIJ(SJ(s), SI(s))]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][j][m][i][s];
+                                (*pmop)[p] = pdm2_op(k, j, m, i, s);
                                 (*pmexpr)[p] = ad_op[i][m][PIJ(SL(s), SK(s))] *
                                                a_op[j][k][PIJ(SJ(s), SI(s))];
                                 p++;
@@ -815,20 +819,20 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     // 4*16*(n-m-1) : mjjj(-jmjj:+jjmj:-jjjm) / ccdd dccd (j >
                     // m)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][j][j][j][s];
+                        (*pmop)[p] = pdm2_op(m, j, j, j, s);
                         (*pmexpr)[p] = c_op[m][SI(s)] *
                                        cdd_op[j][j][PIJK(SJ(s), SK(s), SL(s))];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][j][j][s];
+                        (*pmop)[p] = pdm2_op(j, m, j, j, s);
                         (*pmexpr)[p] =
                             -1.0 * (c_op[m][SJ(s)] *
                                     cdd_op[j][j][PIJK(SI(s), SK(s), SL(s))]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][m][j][s];
+                        (*pmop)[p] = pdm2_op(j, j, m, j, s);
                         (*pmexpr)[p] = d_op[m][SK(s)] *
                                        ccd_op[j][j][PIJK(SI(s), SJ(s), SL(s))];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][j][m][s];
+                        (*pmop)[p] = pdm2_op(j, j, j, m, s);
                         (*pmexpr)[p] =
                             -1.0 * (d_op[m][SL(s)] *
                                     ccd_op[j][j][PIJK(SI(s), SJ(s), SK(s))]);
@@ -840,7 +844,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                     for (uint8_t s = 0; s < 16; s++) {
                         if (!(mask & (1U << s)))
                             continue;
-                        (*pmop)[p] = pdm2_op[m + 1][m + 1][m + 1][m + 1][s];
+                        (*pmop)[p] = pdm2_op(m + 1, m + 1, m + 1, m + 1, s);
                         (*pmexpr)[p] = i_op * ccdd_op[m + 1][s];
                         p++;
                     }
@@ -1271,13 +1275,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         vector<vector<vector<shared_ptr<OpExpr<S>>>>> ddc_op(
             n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
                          n_sites, vector<shared_ptr<OpExpr<S>>>(2)));
-        vector<vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>> pdm2_op(
-            n_sites,
-            vector<vector<vector<vector<shared_ptr<OpExpr<S>>>>>>(
-                n_sites,
-                vector<vector<vector<shared_ptr<OpExpr<S>>>>>(
-                    n_sites, vector<vector<shared_ptr<OpExpr<S>>>>(
-                                 n_sites, vector<shared_ptr<OpExpr<S>>>(2)))));
+        PDM2OPArray<shared_ptr<OpExpr<S>>> pdm2_op(n_sites, 2);
 #else
         shared_ptr<OpExpr<S>> c_op[n_sites], d_op[n_sites];
         shared_ptr<OpExpr<S>> ccdd_op[n_sites][2];
@@ -1292,7 +1290,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> dcc_op[n_sites][n_sites][2];
         shared_ptr<OpExpr<S>> dcd_op[n_sites][n_sites][2];
         shared_ptr<OpExpr<S>> ddc_op[n_sites][n_sites][2];
-        shared_ptr<OpExpr<S>> pdm2_op[n_sites][n_sites][n_sites][n_sites][2];
+        PDM2OPArray<shared_ptr<OpExpr<S>>> pdm2_op(n_sites, 2);
 #endif
         for (uint16_t m = 0; m < n_sites; m++) {
             c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
@@ -1382,7 +1380,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 for (uint16_t k = 0; k < n_sites; k++)
                     for (uint16_t l = 0; l < n_sites; l++)
                         for (uint8_t s = 0; s < 2; s++) {
-                            pdm2_op[i][j][k][l][s] =
+                            pdm2_op(i, j, k, l, s) =
                                 make_shared<OpElement<S, FL>>(
                                     OpNames::PDM2, SiteIndex({i, j, k, l}, {s}),
                                     S(0, 0,
@@ -1600,26 +1598,26 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 p = 0;
                 for (uint8_t s = 0; s < 2; s++) {
                     //   1*2*1 : mmmm / ccdd
-                    (*pmop)[p] = pdm2_op[m][m][m][m][s];
+                    (*pmop)[p] = pdm2_op(m, m, m, m, s);
                     (*pmexpr)[p] = ccdd_op[m][s] * i_op;
                     p++;
                     //   4*2*(n-m-1) : ccdd cddc (j > m)
                     //      [0] -2mmmj(+mmjm:+mjmm:+jmmm)
                     //      [1] +0mmmj(-mmjm:-mjmm:+jmmm)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][m][m][j][s];
+                        (*pmop)[p] = pdm2_op(m, m, m, j, s);
                         (*pmexpr)[p] =
                             (FL)(s ? 0 : -2) * (ccd_op[m][m][s] * d_op[j]);
                         p++;
-                        (*pmop)[p] = pdm2_op[m][m][j][m][s];
+                        (*pmop)[p] = pdm2_op(m, m, j, m, s);
                         (*pmexpr)[p] =
                             (FL)(s ? -1 : 1) * (ccd_op[m][m][s] * d_op[j]);
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][m][m][s];
+                        (*pmop)[p] = pdm2_op(m, j, m, m, s);
                         (*pmexpr)[p] =
                             (FL)(s ? -1 : 1) * (cdd_op[m][m][s] * c_op[j]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][m][m][s];
+                        (*pmop)[p] = pdm2_op(j, m, m, m, s);
                         (*pmexpr)[p] = cdd_op[m][m][s] * c_op[j];
                         p++;
                     }
@@ -1631,48 +1629,48 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     // +0immj(-imjm:-ijmm:+0jmmi:+jmim:+jimm:-mmij:+mmji:+0mijm:+0mjim:-mimj:+mjmi)
                     for (uint16_t i = 0; i < m; i++)
                         for (uint16_t j = m + 1; j < n_sites; j++) {
-                            (*pmop)[p] = pdm2_op[i][m][m][j][s];
+                            (*pmop)[p] = pdm2_op(i, m, m, j, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[i][m][j][m][s];
+                            (*pmop)[p] = pdm2_op(i, m, j, m, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][m][m][s];
+                            (*pmop)[p] = pdm2_op(i, j, m, m, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? -1 : 1) * (cdd_op[i][m][s] * c_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][m][i][s];
+                            (*pmop)[p] = pdm2_op(j, m, m, i, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][i][m][s];
+                            (*pmop)[p] = pdm2_op(j, m, i, m, s);
                             (*pmexpr)[p] = dcd_op[i][m][s] * c_op[j];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][m][m][s];
+                            (*pmop)[p] = pdm2_op(j, i, m, m, s);
                             (*pmexpr)[p] = cdd_op[i][m][s] * c_op[j];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][i][j][s];
+                            (*pmop)[p] = pdm2_op(m, m, i, j, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? -1 : 1) * (dcc_op[i][m][s] * d_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][j][i][s];
+                            (*pmop)[p] = pdm2_op(m, m, j, i, s);
                             (*pmexpr)[p] = dcc_op[i][m][s] * d_op[j];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][j][m][s];
+                            (*pmop)[p] = pdm2_op(m, i, j, m, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? 0 : -2) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][i][m][s];
+                            (*pmop)[p] = pdm2_op(m, j, i, m, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? 0 : -2) * (dcd_op[i][m][s] * c_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][m][j][s];
+                            (*pmop)[p] = pdm2_op(m, i, m, j, s);
                             (*pmexpr)[p] =
                                 (FL)(s ? -1 : 1) * (ccd_op[i][m][s] * d_op[j]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][m][i][s];
+                            (*pmop)[p] = pdm2_op(m, j, m, i, s);
                             (*pmexpr)[p] = dcd_op[i][m][s] * c_op[j];
                             p++;
                         }
@@ -1681,23 +1679,23 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     //    [0] mmjj(+mjmj:-2mjjm:+jjmm:+jmjm:-2jmmj)
                     //    [1] mmjj(+mjmj:+0mjjm:+jjmm:+jmjm:+0jmmj)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][m][j][j][s];
+                        (*pmop)[p] = pdm2_op(m, m, j, j, s);
                         (*pmexpr)[p] = a_op[m][m][s] * ad_op[j][j][s];
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][m][j][s];
+                        (*pmop)[p] = pdm2_op(m, j, m, j, s);
                         (*pmexpr)[p] = b_op[m][m][s] * b_op[j][j][s];
                         p++;
-                        (*pmop)[p] = pdm2_op[m][j][j][m][s];
+                        (*pmop)[p] = pdm2_op(m, j, j, m, s);
                         (*pmexpr)[p] =
                             (FL)(s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][m][m][s];
+                        (*pmop)[p] = pdm2_op(j, j, m, m, s);
                         (*pmexpr)[p] = ad_op[m][m][s] * a_op[j][j][s];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][j][m][s];
+                        (*pmop)[p] = pdm2_op(j, m, j, m, s);
                         (*pmexpr)[p] = b_op[m][m][s] * b_op[j][j][s];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][m][j][s];
+                        (*pmop)[p] = pdm2_op(j, m, m, j, s);
                         (*pmexpr)[p] =
                             (FL)(s ? 0 : -2) * (b_op[m][m][s] * b_op[j][j][s]);
                         p++;
@@ -1710,47 +1708,47 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     //    imjj(+ijmj:+0ijjm:+jjim:+jijm:+0jimj:-mijj:-mjij:+0mjji:-jjmi:-jmji:+0jmij)
                     for (uint16_t i = 0; i < m; i++)
                         for (uint16_t j = m + 1; j < n_sites; j++) {
-                            (*pmop)[p] = pdm2_op[i][m][j][j][s];
+                            (*pmop)[p] = pdm2_op(i, m, j, j, s);
                             (*pmexpr)[p] = a_op[i][m][s] * ad_op[j][j][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][m][j][s];
+                            (*pmop)[p] = pdm2_op(i, j, m, j, s);
                             (*pmexpr)[p] = b_op[i][m][s] * b_op[j][j][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[i][j][j][m][s];
+                            (*pmop)[p] = pdm2_op(i, j, j, m, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[i][m][s] * b_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][j][i][m][s];
+                            (*pmop)[p] = pdm2_op(j, j, i, m, s);
                             (*pmexpr)[p] = ad_op[i][m][s] * a_op[j][j][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][j][m][s];
+                            (*pmop)[p] = pdm2_op(j, i, j, m, s);
                             (*pmexpr)[p] = b_op[i][m][s] * b_op[j][j][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][i][m][j][s];
+                            (*pmop)[p] = pdm2_op(j, i, m, j, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[i][m][s] * b_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][i][j][j][s];
+                            (*pmop)[p] = pdm2_op(m, i, j, j, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (a_op[i][m][s] * ad_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][i][j][s];
+                            (*pmop)[p] = pdm2_op(m, j, i, j, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][j][i][s];
+                            (*pmop)[p] = pdm2_op(m, j, j, i, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][j][m][i][s];
+                            (*pmop)[p] = pdm2_op(j, j, m, i, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (ad_op[i][m][s] * a_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][j][i][s];
+                            (*pmop)[p] = pdm2_op(j, m, j, i, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][i][j][s];
+                            (*pmop)[p] = pdm2_op(j, m, i, j, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (bd_op[i][m][s] * b_op[j][j][s]);
                             p++;
@@ -1764,47 +1762,47 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     //      mmjk(-mmkj:+mjmk:-mkmj:+0mjkm:+0mkjm:+0jmmk:+jmkm:+jkmm:+0kmmj:-kmjm:-kjmm)
                     for (uint16_t j = m + 1; j < n_sites; j++)
                         for (uint16_t k = j + 1; k < n_sites; k++) {
-                            (*pmop)[p] = pdm2_op[m][m][j][k][s];
+                            (*pmop)[p] = pdm2_op(m, m, j, k, s);
                             (*pmexpr)[p] = a_op[m][m][s] * ad_op[j][k][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][m][k][j][s];
+                            (*pmop)[p] = pdm2_op(m, m, k, j, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (a_op[m][m][s] * ad_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][m][k][s];
+                            (*pmop)[p] = pdm2_op(m, j, m, k, s);
                             (*pmexpr)[p] = b_op[m][m][s] * b_op[j][k][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[m][k][m][j][s];
+                            (*pmop)[p] = pdm2_op(m, k, m, j, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][j][k][m][s];
+                            (*pmop)[p] = pdm2_op(m, j, k, m, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[m][m][s] * b_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[m][k][j][m][s];
+                            (*pmop)[p] = pdm2_op(m, k, j, m, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][m][k][s];
+                            (*pmop)[p] = pdm2_op(j, m, m, k, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[m][m][s] * b_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[j][m][k][m][s];
+                            (*pmop)[p] = pdm2_op(j, m, k, m, s);
                             (*pmexpr)[p] = b_op[m][m][s] * b_op[j][k][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[j][k][m][m][s];
+                            (*pmop)[p] = pdm2_op(j, k, m, m, s);
                             (*pmexpr)[p] = ad_op[m][m][s] * a_op[j][k][s];
                             p++;
-                            (*pmop)[p] = pdm2_op[k][m][m][j][s];
+                            (*pmop)[p] = pdm2_op(k, m, m, j, s);
                             (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                            (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[k][m][j][m][s];
+                            (*pmop)[p] = pdm2_op(k, m, j, m, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (b_op[m][m][s] * bd_op[j][k][s]);
                             p++;
-                            (*pmop)[p] = pdm2_op[k][j][m][m][s];
+                            (*pmop)[p] = pdm2_op(k, j, m, m, s);
                             (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                            (ad_op[m][m][s] * a_op[j][k][s]);
                             p++;
@@ -1825,100 +1823,100 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                             for (uint16_t k = j + 1; k < n_sites; k++) {
                                 // [0] (+imjk:+imkj:+ijmk:-2ijkm:+ikmj:-2ikjm)
                                 // [1] (+imjk:-imkj:+ijmk:+0ijkm:-ikmj:+0ikjm)
-                                (*pmop)[p] = pdm2_op[i][m][j][k][s];
+                                (*pmop)[p] = pdm2_op(i, m, j, k, s);
                                 (*pmexpr)[p] = a_op[i][m][s] * ad_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][m][k][j][s];
+                                (*pmop)[p] = pdm2_op(i, m, k, j, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (a_op[i][m][s] * ad_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][j][m][k][s];
+                                (*pmop)[p] = pdm2_op(i, j, m, k, s);
                                 (*pmexpr)[p] = b_op[i][m][s] * b_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][j][k][m][s];
+                                (*pmop)[p] = pdm2_op(i, j, k, m, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][k][m][j][s];
+                                (*pmop)[p] = pdm2_op(i, k, m, j, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[i][k][j][m][s];
+                                (*pmop)[p] = pdm2_op(i, k, j, m, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 // [0] (+mijk:+mikj:+mjik:-2mjki:+mkij:-2mkji)
                                 // [1] (-mijk:+mikj:-mjik:+0mjki:+mkij:+0mkji)
-                                (*pmop)[p] = pdm2_op[m][i][j][k][s];
+                                (*pmop)[p] = pdm2_op(m, i, j, k, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (a_op[i][m][s] * ad_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][i][k][j][s];
+                                (*pmop)[p] = pdm2_op(m, i, k, j, s);
                                 (*pmexpr)[p] = a_op[i][m][s] * ad_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][j][i][k][s];
+                                (*pmop)[p] = pdm2_op(m, j, i, k, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][j][k][i][s];
+                                (*pmop)[p] = pdm2_op(m, j, k, i, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][k][i][j][s];
+                                (*pmop)[p] = pdm2_op(m, k, i, j, s);
                                 (*pmexpr)[p] = bd_op[i][m][s] * bd_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[m][k][j][i][s];
+                                (*pmop)[p] = pdm2_op(m, k, j, i, s);
                                 (*pmexpr)[p] =
                                     (FL)(s ? 0 : -2) *
                                     (bd_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
                                 // [0] (-2jimk:+jikm:-2jmik:+jmki:+jkim:+jkmi)
                                 // [1] (+0jimk:+jikm:+0jmik:-jmki:+jkim:-jkmi)
-                                (*pmop)[p] = pdm2_op[j][i][m][k][s];
+                                (*pmop)[p] = pdm2_op(j, i, m, k, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][i][k][m][s];
+                                (*pmop)[p] = pdm2_op(j, i, k, m, s);
                                 (*pmexpr)[p] = b_op[i][m][s] * b_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][m][i][k][s];
+                                (*pmop)[p] = pdm2_op(j, m, i, k, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][m][k][i][s];
+                                (*pmop)[p] = pdm2_op(j, m, k, i, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (bd_op[i][m][s] * b_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][k][i][m][s];
+                                (*pmop)[p] = pdm2_op(j, k, i, m, s);
                                 (*pmexpr)[p] = ad_op[i][m][s] * a_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[j][k][m][i][s];
+                                (*pmop)[p] = pdm2_op(j, k, m, i, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (ad_op[i][m][s] * a_op[j][k][s]);
                                 p++;
                                 // [0] (-2kimj:+kijm:-2kmij:+kmji:+kjim:+kjmi)
                                 // [1] (+0kimj:-kijm:+0kmij:+kmji:-kjim:+kjmi)
-                                (*pmop)[p] = pdm2_op[k][i][m][j][s];
+                                (*pmop)[p] = pdm2_op(k, i, m, j, s);
                                 (*pmexpr)[p] = (FL)(s ? 0 : -2) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][i][j][m][s];
+                                (*pmop)[p] = pdm2_op(k, i, j, m, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (b_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][m][i][j][s];
+                                (*pmop)[p] = pdm2_op(k, m, i, j, s);
                                 (*pmexpr)[p] =
                                     (FL)(s ? 0 : -2) *
                                     (bd_op[i][m][s] * bd_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][m][j][i][s];
+                                (*pmop)[p] = pdm2_op(k, m, j, i, s);
                                 (*pmexpr)[p] = bd_op[i][m][s] * bd_op[j][k][s];
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][j][i][m][s];
+                                (*pmop)[p] = pdm2_op(k, j, i, m, s);
                                 (*pmexpr)[p] = (FL)(s ? -1 : 1) *
                                                (ad_op[i][m][s] * a_op[j][k][s]);
                                 p++;
-                                (*pmop)[p] = pdm2_op[k][j][m][i][s];
+                                (*pmop)[p] = pdm2_op(k, j, m, i, s);
                                 (*pmexpr)[p] = ad_op[i][m][s] * a_op[j][k][s];
                                 p++;
                             }
@@ -1926,18 +1924,18 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                     //      [0] mjjj(+jmjj:+jjmj:-2jjjm)
                     //      [1] mjjj(-jmjj:-jjmj:+0jjjm)
                     for (uint16_t j = m + 1; j < n_sites; j++) {
-                        (*pmop)[p] = pdm2_op[m][j][j][j][s];
+                        (*pmop)[p] = pdm2_op(m, j, j, j, s);
                         (*pmexpr)[p] = c_op[m] * cdd_op[j][j][s];
                         p++;
-                        (*pmop)[p] = pdm2_op[j][m][j][j][s];
+                        (*pmop)[p] = pdm2_op(j, m, j, j, s);
                         (*pmexpr)[p] =
                             (FL)(s ? -1 : 1) * (c_op[m] * cdd_op[j][j][s]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][m][j][s];
+                        (*pmop)[p] = pdm2_op(j, j, m, j, s);
                         (*pmexpr)[p] =
                             (FL)(s ? -1 : 1) * (d_op[m] * ccd_op[j][j][s]);
                         p++;
-                        (*pmop)[p] = pdm2_op[j][j][j][m][s];
+                        (*pmop)[p] = pdm2_op(j, j, j, m, s);
                         (*pmexpr)[p] =
                             (FL)(s ? 0 : -2) * (d_op[m] * ccd_op[j][j][s]);
                         p++;
@@ -1946,7 +1944,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 // 1*2*1 : jjjj / ccdd (j > m) (last site only)
                 if (m == n_sites - 2)
                     for (uint8_t s = 0; s < 2; s++) {
-                        (*pmop)[p] = pdm2_op[m + 1][m + 1][m + 1][m + 1][s];
+                        (*pmop)[p] = pdm2_op(m + 1, m + 1, m + 1, m + 1, s);
                         (*pmexpr)[p] = i_op * ccdd_op[m + 1][s];
                         p++;
                     }
