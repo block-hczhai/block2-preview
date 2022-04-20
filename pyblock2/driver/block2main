@@ -680,7 +680,7 @@ if pre_run or not no_pre_run:
         else:
             integral_tol = float(dic.get("integral_tol", 1E-12))
             fcidump = read_integral(fints, nelec[0], spin[0], isym=isym[0],
-                                    tol=integral_tol)
+                                    tol=integral_tol, is_sp="single_prec" in dic)
         if integral_rescale == "auto" and "single_prec" in dic:
             _print("original integral const = %20.10f" % fcidump.e())
             fcidump.rescale(0)

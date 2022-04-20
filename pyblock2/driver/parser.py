@@ -8,7 +8,6 @@ Author:
     Zhi-Hao Cui
 """
 
-from block2 import FCIDUMP
 from block2 import VectorUInt8
 import numpy as np
 
@@ -371,7 +370,7 @@ def orbital_reorder(fcidump, method='gaopt'):
     return midx
 
 
-def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
+def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None, is_sp=False):
     """
     Read libDMET integral h5py file to block2 FCIDUMP object.
 
@@ -393,6 +392,10 @@ def read_integral(fints, n_elec, twos, tol=1e-12, isym=1, orb_sym=None):
     g2e = Ham.H2["ccdd"]
     e_core = float(Ham.H0)
     n_sites = Ham.norb
+    if is_sp:
+        from block2.sp import FCIDUMP
+    else:
+        from block2 import FCIDUMP
     fcidump = FCIDUMP()
 
     if len(h1e) == 2:  # UHF
