@@ -224,7 +224,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     } else {
         // MPO construction
         cout << "MPO start" << endl;
-        mpo = make_shared<MPOQC<S, FL>>(hamil, qc_type, trans_center);
+        mpo = make_shared<MPOQC<S, FL>>(hamil, qc_type, "HQC", trans_center);
         cout << "MPO end .. T = " << t.get_time() << endl;
 
         if (params.count("fused") != 0 || params.count("mrci-fused") != 0) {
@@ -562,7 +562,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     fcidump->deallocate();
 
     frame_<FP>()->activate(0);
-    assert(ialloc_<FP>()->used == 0 &&
+    assert(ialloc_()->used == 0 &&
            dalloc_<typename GMatrix<FL>::FP>()->used == 0);
     frame_<FP>() = nullptr;
 }

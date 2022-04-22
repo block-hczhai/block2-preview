@@ -667,7 +667,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         const MKL_INT am = conja ? a.n : a.m, an = conja ? a.m : a.n;
         const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         assert(am == c.m && bn == c.n && an == bm);
-        if (cfactor != 1)
+        if (cfactor != (FL)1.0)
             GMatrixFunctions<FL>::iscale(c, cfactor);
         if (!conja && !conjb) {
             for (MKL_INT ib = 0; ib < b.m; ib++) {
@@ -756,7 +756,7 @@ template <typename FL> struct GCSRMatrixFunctions {
         const MKL_INT bm = conjb ? b.n : b.m, bn = conjb ? b.m : b.n;
         const MKL_INT inc = 1;
         assert(am == c.m && bn == c.n && an == bm);
-        if (cfactor != 1)
+        if (cfactor != (FL)1.0)
             GMatrixFunctions<FL>::iscale(c, cfactor);
         if (!conja && !conjb) {
             for (MKL_INT ia = 0; ia < a.m; ia++) {
