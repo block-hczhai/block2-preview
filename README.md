@@ -24,7 +24,14 @@ Main contributors:
 
 If you find this package useful for your scientific research, please cite the work as:
 
-Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+ - Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116, doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
+
+For the large site code, please cite
+
+ - Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762,  doi: [10.1021/acs.jctc.1c00957](https://doi.org/10.1021/acs.jctc.1c00957).
+
+You can find a bibtex file in `CITATIONS.bib`.
+
 
 One can install ``block2`` using ``pip``:
 
