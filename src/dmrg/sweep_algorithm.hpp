@@ -1872,7 +1872,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         para_mps->sync_canonical_form();
         if (para_mps->rule != nullptr) {
             para_mps->rule->comm->allreduce_min(sweep_energies);
-            para_mps->rule->comm->allreduce_min(sweep_discarded_weights);
+            para_mps->rule->comm->allreduce_max(sweep_discarded_weights);
         }
         para_mps->disable_parallel_writing();
         size_t idx =
