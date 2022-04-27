@@ -8,6 +8,12 @@ A detailed description of the parallel DMRG algorithm implemented in **block2** 
         matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
 Please cite this paper if you find **block2** useful in your research.
+For the large site code, please cite ::
+  
+    Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762.
+
+You can find a bibtex file in `CITATIONS.bib`.
+
 The other algorithms implemented in **block2** are based on the following papers.
 
 Qauntum Chemisty DMRG
