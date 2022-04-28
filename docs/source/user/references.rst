@@ -11,7 +11,7 @@ For the large site code, please cite
   
 * Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762.
 
-You can find a bibtex file in `CITATIONS.bib <https://github.com/block-hczhai/block2/blob/master/CITATIONS.bib>`_.
+You can find a bibtex file in `CITATIONS.bib <https://github.com/block-hczhai/block2-preview/blob/master/CITATIONS.bib>`_.
 
 The other algorithms implemented in **block2** are based on the following papers.
 
