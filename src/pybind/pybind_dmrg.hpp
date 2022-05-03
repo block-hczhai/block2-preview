@@ -334,6 +334,9 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
     py::class_<MPS<S, FL>, shared_ptr<MPS<S, FL>>>(m, "MPS")
         .def(py::init<const shared_ptr<MPSInfo<S>> &>())
         .def(py::init<int, int, int>())
+        .def(py::init([](const shared_ptr<MPS<S, FL>> &mps) {
+            return make_shared<MPS<S, FL>>(*mps);
+        }))
         .def_readwrite("n_sites", &MPS<S, FL>::n_sites)
         .def_readwrite("center", &MPS<S, FL>::center)
         .def_readwrite("dot", &MPS<S, FL>::dot)

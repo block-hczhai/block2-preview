@@ -1004,6 +1004,8 @@ if no_pre_run:
 #          or  conn_centers 10 20 30 40 (list of connection site indices)
 if "conn_centers" in dic:
     assert MPI is not None
+    if "twodot_to_onedot" in dic:
+        raise RuntimeError("twodot_to_onedot with conn_centers is not supported!")
     cc = dic["conn_centers"].split()
     if cc[0] == "auto":
         ncc = int(cc[1])
@@ -2105,6 +2107,9 @@ if not pre_run:
 
         if conn_centers is not None:
             me.finalize_environments()
+            mps = MPS(mps)
+            if prule.comm.group != 0:
+                quit()
 
         _print("Final canonical form = ", mps.canonical_form, mps.center)
         for x in dmrg.energies:
