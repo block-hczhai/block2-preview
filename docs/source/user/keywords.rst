@@ -290,6 +290,14 @@ expt\_algo\_type
     This keyword can only be used with density matrix or transition density matrix calculations.
     The default is ``auto``. ``lowmem`` uses less memory, but the complexity can be higher.
 
+simple\_parallel
+    Optional. Followed by an empty string (same as ``ij``) or ``ij`` or ``kl``. When this keyword is not given,
+    the conventional parallel rule for QC-DMRG will be used. Otherwise, the simple parallel scheme based on
+    distributing integral according to ``ij`` or ``kl`` indices is used.
+    When ``qc_mpo_type`` is auto, this simple scheme will also change the center for middle transformation
+    to reduce the MPO bond dimension. The simple parallel scheme may be good for saving per-processor MPO memory cost
+    for large scale parallelized DMRG.
+
 one\_body\_parallel\_rule
     Optional keyword with no associated value. If given, the more efficient parallelization rule will be
     used to distribute the MPO. This rule only works when the two-body term is zero or purely local.

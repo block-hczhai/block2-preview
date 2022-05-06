@@ -428,13 +428,16 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             a->rmat = names;
         else
             a->lmat = names;
+        int comm_size = rule->get_parallel_type() & ParallelTypes::Simple
+                            ? 1
+                            : rule->comm->size;
         vector<vector<
             pair<shared_ptr<SparseMatrix<S, FL>>, shared_ptr<OpSum<S, FL>>>>>
-            trs(rule->comm->size);
+            trs(comm_size);
         const shared_ptr<OpSum<S, FL>> zero =
             make_shared<OpSum<S, FL>>(vector<shared_ptr<OpProduct<S, FL>>>());
-        for (int ip = 0; ip < rule->comm->size; ip++)
-            trs[ip].reserve(names->data.size() / rule->comm->size);
+        for (int ip = 0; ip < comm_size; ip++)
+            trs[ip].reserve(names->data.size() / comm_size);
         int maxi = 0;
         for (size_t k = 0; k < names->data.size(); k++) {
             if (exprs->data[k]->get_type() == OpTypes::Zero)
@@ -451,6 +454,8 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 lexpr = rule->localize_expr(expr, ip);
             else
                 lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
+            if (rule->get_parallel_type() & ParallelTypes::Simple)
+                ip = 0;
             expr = lexpr->op;
             assert(a->ops.count(nop) != 0);
             // can be normal operator or zero complementary operator
@@ -483,10 +488,11 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             make_shared<VectorAllocator<FP>>();
         shared_ptr<VectorAllocator<FP>> d_alloc_local =
             make_shared<VectorAllocator<FP>>();
-        for (int ip = 0; ip < rule->comm->size; ip++) {
+        for (int ip = 0; ip < comm_size; ip++) {
             for (size_t k = 0; k < trs[ip].size(); k++) {
                 assert(trs[ip][k].first->data == nullptr);
-                if (ip != rule->comm->rank)
+                if (ip != rule->comm->rank &&
+                    !(rule->get_parallel_type() & ParallelTypes::Simple))
                     trs[ip][k].first->alloc = d_alloc;
                 else
                     trs[ip][k].first->alloc = d_alloc_local;
@@ -510,27 +516,29 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
-            for (size_t k = 0; k < names->data.size(); k++) {
-                shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
-                if (exprs->data[k]->get_type() == OpTypes::Zero)
-                    continue;
-                if (rule->owner(nop) != ip)
-                    continue;
-                shared_ptr<OpExpr<S>> expr = exprs->data[k];
-                if (rule->get_parallel_type() == ParallelTypes::NewScheme)
-                    assert(expr->get_type() == OpTypes::ExprRef);
-                shared_ptr<OpExprRef<S>> lexpr;
-                if (expr->get_type() != OpTypes::ExprRef)
-                    lexpr = rule->localize_expr(expr, rule->owner(nop));
-                else
-                    lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
-                if (lexpr->orig->get_type() == OpTypes::Zero)
-                    continue;
-                rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
-            }
-            if (ip != rule->comm->rank) {
-                for (int k = (int)trs[ip].size() - 1; k >= 0; k--)
-                    trs[ip][k].first->deallocate();
+            if (!(rule->get_parallel_type() & ParallelTypes::Simple)) {
+                for (size_t k = 0; k < names->data.size(); k++) {
+                    shared_ptr<OpExpr<S>> nop = abs_value(names->data[k]);
+                    if (exprs->data[k]->get_type() == OpTypes::Zero)
+                        continue;
+                    if (rule->owner(nop) != ip)
+                        continue;
+                    shared_ptr<OpExpr<S>> expr = exprs->data[k];
+                    if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                        assert(expr->get_type() == OpTypes::ExprRef);
+                    shared_ptr<OpExprRef<S>> lexpr;
+                    if (expr->get_type() != OpTypes::ExprRef)
+                        lexpr = rule->localize_expr(expr, rule->owner(nop));
+                    else
+                        lexpr = dynamic_pointer_cast<OpExprRef<S>>(expr);
+                    if (lexpr->orig->get_type() == OpTypes::Zero)
+                        continue;
+                    rule->comm->reduce_sum(a->ops.at(nop), rule->owner(nop));
+                }
+                if (ip != rule->comm->rank) {
+                    for (int k = (int)trs[ip].size() - 1; k >= 0; k--)
+                        trs[ip][k].first->deallocate();
+                }
             }
         }
     }

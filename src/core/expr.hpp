@@ -40,7 +40,8 @@ namespace block2 {
 enum struct ParallelTypes : uint8_t {
     Serial = 0,
     Distributed = 1,
-    NewScheme = 2
+    NewScheme = 2,
+    Simple = 4
 };
 
 inline bool operator&(ParallelTypes a, ParallelTypes b) {

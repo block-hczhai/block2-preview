@@ -20,10 +20,10 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::ParallelRuleSumMPO<block2::SGF, complex<double>>;
+template struct block2::ParallelRuleSimple<block2::SGF, complex<double>>;
 template struct block2::SumMPORule<block2::SGF, complex<double>>;
 template struct block2::ParallelFCIDUMP<block2::SGF, complex<double>>;
 
-template struct block2::ParallelRuleSumMPO<block2::SGB, complex<double>>;
+template struct block2::ParallelRuleSimple<block2::SGB, complex<double>>;
 template struct block2::SumMPORule<block2::SGB, complex<double>>;
 template struct block2::ParallelFCIDUMP<block2::SGB, complex<double>>;

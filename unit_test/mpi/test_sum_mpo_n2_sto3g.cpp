@@ -72,20 +72,12 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
                                   const string &name, DecompositionTypes dt,
                                   NoiseTypes nt) {
 
-#ifdef _HAS_MPI
-    shared_ptr<ParallelCommunicator<S>> para_comm =
-        make_shared<MPICommunicator<S>>();
-#else
-    shared_ptr<ParallelCommunicator<S>> para_comm =
-        make_shared<ParallelCommunicator<S>>(1, 0, 0);
-#endif
-    shared_ptr<ParallelRuleSumMPO<S, FL>> para_rule =
-        make_shared<ParallelRuleSumMPO<S, FL>>(para_comm);
+    shared_ptr<ParallelRuleSimple<S, FL>> para_rule =
+        dynamic_pointer_cast<ParallelFCIDUMP<S, FL>>(hamil->fcidump)->rule;
 
     vector<uint16_t> ts;
-    para_rule->n_sites = hamil->n_sites;
     for (int i = 0; i < hamil->n_sites; i++)
-        if (para_rule->index_available(i))
+        if (para_rule->index_prefactor(i, i) != 0)
             ts.push_back(i);
 
     Timer t;
@@ -154,8 +146,9 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             // deallocate persistent stack memory
             mps_info->deallocate();
 
-            para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
-            para_comm->tcomm /= para_comm->size;
+            para_rule->comm->reduce_sum(&para_rule->comm->tcomm, 1,
+                                        para_rule->comm->root);
+            para_rule->comm->tcomm /= para_rule->comm->size;
             double tt = t.get_time();
 
             cout << "== " << name << " ==" << setw(20) << target
@@ -163,11 +156,11 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
                  << " error = " << scientific << setprecision(3) << setw(10)
                  << (energy - energies[i][j]) << " T = " << fixed << setw(10)
                  << setprecision(3) << tt << " Tcomm = " << fixed << setw(10)
-                 << setprecision(3) << para_comm->tcomm << " (" << setw(3)
-                 << fixed << setprecision(0) << (para_comm->tcomm * 100 / tt)
-                 << "%)" << endl;
+                 << setprecision(3) << para_rule->comm->tcomm << " (" << setw(3)
+                 << fixed << setprecision(0)
+                 << (para_rule->comm->tcomm * 100 / tt) << "%)" << endl;
 
-            para_comm->tcomm = 0.0;
+            para_rule->comm->tcomm = 0.0;
 
             if (abs(energy - energies[i][j]) >= 1E-7 && k < 3) {
                 k++, j--;
@@ -192,11 +185,11 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
     shared_ptr<ParallelCommunicator<SZ>> para_comm =
         make_shared<ParallelCommunicator<SZ>>(1, 0, 0);
 #endif
-    shared_ptr<ParallelRuleSumMPO<SZ, double>> para_rule =
-        make_shared<ParallelRuleSumMPO<SZ, double>>(para_comm);
+    shared_ptr<ParallelRuleSimple<SZ, double>> para_rule =
+        make_shared<ParallelRuleSimple<SZ, double>>(ParallelSimpleTypes::I,
+                                                    para_comm);
 
-    shared_ptr<FCIDUMP<double>> fcidump =
-        make_shared<ParallelFCIDUMP<SZ, double>>(para_rule);
+    shared_ptr<FCIDUMP<double>> fcidump = make_shared<FCIDUMP<double>>();
     PGTypes pg = PGTypes::D2H;
     string filename = "data/N2.STO3G.FCIDUMP";
     fcidump->read(filename);
@@ -233,7 +226,9 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
 
     int norb = fcidump->n_sites();
     shared_ptr<HamiltonianQC<SZ, double>> hamil =
-        make_shared<HamiltonianQC<SZ, double>>(vacuum, norb, orbsym, fcidump);
+        make_shared<HamiltonianQC<SZ, double>>(
+            vacuum, norb, orbsym,
+            make_shared<ParallelFCIDUMP<SZ, double>>(fcidump, para_rule));
 
     test_dmrg<SZ, double>(targets, energies, hamil, "SZ",
                           DecompositionTypes::DensityMatrix,

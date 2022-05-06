@@ -33,7 +33,7 @@
 #include "dmrg/orbital_ordering.hpp"
 #include "dmrg/parallel_mpo.hpp"
 #include "dmrg/parallel_mps.hpp"
-#include "dmrg/parallel_rule_sum_mpo.hpp"
+#include "dmrg/parallel_simple.hpp"
 #include "dmrg/partition.hpp"
 #include "dmrg/qc_hamiltonian.hpp"
 #include "dmrg/qc_mpo.hpp"

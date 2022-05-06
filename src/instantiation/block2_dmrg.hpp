@@ -33,7 +33,7 @@
 #include "../dmrg/mps_unfused.hpp"
 #include "../dmrg/parallel_mpo.hpp"
 #include "../dmrg/parallel_mps.hpp"
-#include "../dmrg/parallel_rule_sum_mpo.hpp"
+#include "../dmrg/parallel_simple.hpp"
 #include "../dmrg/partition.hpp"
 #include "../dmrg/qc_hamiltonian.hpp"
 #include "../dmrg/qc_mpo.hpp"
@@ -141,12 +141,12 @@ extern template struct block2::ParallelMPO<block2::SU2, double>;
 extern template struct block2::ParallelMPS<block2::SZ, double>;
 extern template struct block2::ParallelMPS<block2::SU2, double>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZ, double>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZ, double>;
 extern template struct block2::SumMPORule<block2::SZ, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SZ, double>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2, double>;
+extern template struct block2::ParallelRuleSimple<block2::SU2, double>;
 extern template struct block2::SumMPORule<block2::SU2, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2, double>;
 
@@ -328,12 +328,12 @@ extern template struct block2::ParallelMPO<block2::SU2K, double>;
 extern template struct block2::ParallelMPS<block2::SZK, double>;
 extern template struct block2::ParallelMPS<block2::SU2K, double>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZK, double>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZK, double>;
 extern template struct block2::SumMPORule<block2::SZK, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SZK, double>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2K, double>;
+extern template struct block2::ParallelRuleSimple<block2::SU2K, double>;
 extern template struct block2::SumMPORule<block2::SU2K, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2K, double>;
 
@@ -509,12 +509,12 @@ extern template struct block2::ParallelMPO<block2::SGB, double>;
 extern template struct block2::ParallelMPS<block2::SGF, double>;
 extern template struct block2::ParallelMPS<block2::SGB, double>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SGF, double>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SGF, double>;
 extern template struct block2::SumMPORule<block2::SGF, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SGF, double>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SGB, double>;
+extern template struct block2::ParallelRuleSimple<block2::SGB, double>;
 extern template struct block2::SumMPORule<block2::SGB, double>;
 extern template struct block2::ParallelFCIDUMP<block2::SGB, double>;
 
@@ -686,12 +686,12 @@ extern template struct block2::ParallelMPO<block2::SU2, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SZ, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SU2, complex<double>>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZ, complex<double>>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZ, complex<double>>;
 extern template struct block2::SumMPORule<block2::SZ, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SZ, complex<double>>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2, complex<double>>;
+extern template struct block2::ParallelRuleSimple<block2::SU2, complex<double>>;
 extern template struct block2::SumMPORule<block2::SU2, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2, complex<double>>;
 
@@ -876,12 +876,12 @@ extern template struct block2::ParallelMPO<block2::SU2K, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SZK, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SU2K, complex<double>>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZK, complex<double>>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZK, complex<double>>;
 extern template struct block2::SumMPORule<block2::SZK, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SZK, complex<double>>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2K,
+extern template struct block2::ParallelRuleSimple<block2::SU2K,
                                                   complex<double>>;
 extern template struct block2::SumMPORule<block2::SU2K, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2K, complex<double>>;
@@ -1066,12 +1066,12 @@ extern template struct block2::ParallelMPO<block2::SGB, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SGF, complex<double>>;
 extern template struct block2::ParallelMPS<block2::SGB, complex<double>>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SGF, complex<double>>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SGF, complex<double>>;
 extern template struct block2::SumMPORule<block2::SGF, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SGF, complex<double>>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SGB, complex<double>>;
+extern template struct block2::ParallelRuleSimple<block2::SGB, complex<double>>;
 extern template struct block2::SumMPORule<block2::SGB, complex<double>>;
 extern template struct block2::ParallelFCIDUMP<block2::SGB, complex<double>>;
 
@@ -1245,12 +1245,12 @@ extern template struct block2::ParallelMPO<block2::SU2, float>;
 extern template struct block2::ParallelMPS<block2::SZ, float>;
 extern template struct block2::ParallelMPS<block2::SU2, float>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZ, float>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZ, float>;
 extern template struct block2::SumMPORule<block2::SZ, float>;
 extern template struct block2::ParallelFCIDUMP<block2::SZ, float>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2, float>;
+extern template struct block2::ParallelRuleSimple<block2::SU2, float>;
 extern template struct block2::SumMPORule<block2::SU2, float>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2, float>;
 
@@ -1405,12 +1405,12 @@ extern template struct block2::ParallelMPO<block2::SGB, float>;
 extern template struct block2::ParallelMPS<block2::SGF, float>;
 extern template struct block2::ParallelMPS<block2::SGB, float>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SGF, float>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SGF, float>;
 extern template struct block2::SumMPORule<block2::SGF, float>;
 extern template struct block2::ParallelFCIDUMP<block2::SGF, float>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SGB, float>;
+extern template struct block2::ParallelRuleSimple<block2::SGB, float>;
 extern template struct block2::SumMPORule<block2::SGB, float>;
 extern template struct block2::ParallelFCIDUMP<block2::SGB, float>;
 
@@ -1578,12 +1578,12 @@ extern template struct block2::ParallelMPO<block2::SU2, complex<float>>;
 extern template struct block2::ParallelMPS<block2::SZ, complex<float>>;
 extern template struct block2::ParallelMPS<block2::SU2, complex<float>>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SZ, complex<float>>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SZ, complex<float>>;
 extern template struct block2::SumMPORule<block2::SZ, complex<float>>;
 extern template struct block2::ParallelFCIDUMP<block2::SZ, complex<float>>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SU2, complex<float>>;
+extern template struct block2::ParallelRuleSimple<block2::SU2, complex<float>>;
 extern template struct block2::SumMPORule<block2::SU2, complex<float>>;
 extern template struct block2::ParallelFCIDUMP<block2::SU2, complex<float>>;
 
@@ -1755,12 +1755,12 @@ extern template struct block2::ParallelMPO<block2::SGB, complex<float>>;
 extern template struct block2::ParallelMPS<block2::SGF, complex<float>>;
 extern template struct block2::ParallelMPS<block2::SGB, complex<float>>;
 
-// parallel_rule_sum_mpo.hpp
-extern template struct block2::ParallelRuleSumMPO<block2::SGF, complex<float>>;
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SGF, complex<float>>;
 extern template struct block2::SumMPORule<block2::SGF, complex<float>>;
 extern template struct block2::ParallelFCIDUMP<block2::SGF, complex<float>>;
 
-extern template struct block2::ParallelRuleSumMPO<block2::SGB, complex<float>>;
+extern template struct block2::ParallelRuleSimple<block2::SGB, complex<float>>;
 extern template struct block2::SumMPORule<block2::SGB, complex<float>>;
 extern template struct block2::ParallelFCIDUMP<block2::SGB, complex<float>>;
 

@@ -1365,24 +1365,22 @@ void bind_fl_linear(py::module &m) {
 
 template <typename S, typename FL> void bind_fl_parallel_dmrg(py::module &m) {
 
-    py::class_<ParallelRuleSumMPO<S, FL>, shared_ptr<ParallelRuleSumMPO<S, FL>>,
-               ParallelRule<S, FL>>(m, "ParallelRuleSumMPO")
-        .def_readwrite("n_sites", &ParallelRuleSumMPO<S, FL>::n_sites)
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &>())
-        .def(py::init<const shared_ptr<ParallelCommunicator<S>> &,
+    py::class_<ParallelRuleSimple<S, FL>, shared_ptr<ParallelRuleSimple<S, FL>>,
+               ParallelRule<S, FL>>(m, "ParallelRuleSimple")
+        .def_readwrite("mode", &ParallelRuleSimple<S, FL>::mode)
+        .def(py::init<ParallelSimpleTypes,
+                      const shared_ptr<ParallelCommunicator<S>> &>())
+        .def(py::init<ParallelSimpleTypes,
+                      const shared_ptr<ParallelCommunicator<S>> &,
                       ParallelCommTypes>())
         .def(
-            "index_available",
-            [](ParallelRuleSumMPO<S, FL> *self, py::args &args) -> bool {
-                if (args.size() == 0)
-                    return self->index_available();
-                else if (args.size() == 1)
-                    return self->index_available((uint16_t)args[0].cast<int>());
-                else if (args.size() == 2)
-                    return self->index_available((uint16_t)args[0].cast<int>(),
+            "index_prefactor",
+            [](ParallelRuleSimple<S, FL> *self, py::args &args) -> FL {
+                if (args.size() == 2)
+                    return self->index_prefactor((uint16_t)args[0].cast<int>(),
                                                  (uint16_t)args[1].cast<int>());
                 else if (args.size() == 4)
-                    return self->index_available((uint16_t)args[0].cast<int>(),
+                    return self->index_prefactor((uint16_t)args[0].cast<int>(),
                                                  (uint16_t)args[1].cast<int>(),
                                                  (uint16_t)args[2].cast<int>(),
                                                  (uint16_t)args[3].cast<int>());
@@ -1397,12 +1395,14 @@ template <typename S, typename FL> void bind_fl_parallel_dmrg(py::module &m) {
         .def_readwrite("prim_rule", &SumMPORule<S, FL>::prim_rule)
         .def_readwrite("para_rule", &SumMPORule<S, FL>::para_rule)
         .def(py::init<const shared_ptr<Rule<S, FL>> &,
-                      const shared_ptr<ParallelRuleSumMPO<S, FL>> &>());
+                      const shared_ptr<ParallelRuleSimple<S, FL>> &>());
 
     py::class_<ParallelFCIDUMP<S, FL>, shared_ptr<ParallelFCIDUMP<S, FL>>,
                FCIDUMP<FL>>(m, "ParallelFCIDUMP")
         .def_readwrite("rule", &ParallelFCIDUMP<S, FL>::rule)
-        .def(py::init<const shared_ptr<ParallelRuleSumMPO<S, FL>> &>());
+        .def_readwrite("fcidump", &ParallelFCIDUMP<S, FL>::fcidump)
+        .def(py::init<const shared_ptr<FCIDUMP<FL>> &,
+                      const shared_ptr<ParallelRuleSimple<S, FL>> &>());
 
     py::class_<ParallelRuleQC<S, FL>, shared_ptr<ParallelRuleQC<S, FL>>,
                ParallelRule<S, FL>>(m, "ParallelRuleQC")
@@ -1859,6 +1859,12 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Right", OpCachingTypes::Right)
         .value("LeftCopy", OpCachingTypes::LeftCopy)
         .value("RightCopy", OpCachingTypes::RightCopy);
+
+    py::enum_<ParallelSimpleTypes>(m, "ParallelSimpleTypes", py::arithmetic())
+        .value("I", ParallelSimpleTypes::I)
+        .value("J", ParallelSimpleTypes::J)
+        .value("IJ", ParallelSimpleTypes::IJ)
+        .value("KL", ParallelSimpleTypes::KL);
 }
 
 template <typename S = void> void bind_dmrg_io(py::module &m) {

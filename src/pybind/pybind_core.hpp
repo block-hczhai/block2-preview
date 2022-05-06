@@ -1506,6 +1506,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Serial", ParallelTypes::Serial)
         .value("Distributed", ParallelTypes::Distributed)
         .value("NewScheme", ParallelTypes::NewScheme)
+        .value("Simple", ParallelTypes::Simple)
         .def(py::self & py::self)
         .def(py::self | py::self)
         .def(py::self ^ py::self);
