@@ -20,5 +20,8 @@
 
 #include "../block2_dmrg.hpp"
 
+template struct block2::CondensedMPO<block2::SZ, complex<float>>;
 template struct block2::FusedMPO<block2::SZ, complex<float>>;
+
+template struct block2::CondensedMPO<block2::SU2, complex<float>>;
 template struct block2::FusedMPO<block2::SU2, complex<float>>;

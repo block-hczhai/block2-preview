@@ -160,6 +160,7 @@ struct ParallelRulePDM1QC : ParallelRule<S, FL> {
             case OpNames::AD:
             case OpNames::B:
             case OpNames::BD:
+            case OpNames::X:
                 return ParallelProperty(find_index(si[0], si[1]) % comm->size,
                                         ParallelOpTypes::None);
             default:
@@ -228,6 +229,7 @@ struct ParallelRulePDM2QC : ParallelRule<S, FL> {
             case OpNames::AD:
             case OpNames::B:
             case OpNames::BD:
+            case OpNames::X:
                 return ParallelProperty(find_index(si[0], si[1]) % comm->size,
                                         ParallelOpTypes::None);
             case OpNames::CCD:

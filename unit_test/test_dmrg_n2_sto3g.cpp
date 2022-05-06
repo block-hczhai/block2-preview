@@ -15,7 +15,8 @@ template <typename FL> class TestDMRGN2STO3G : public ::testing::Test {
     void test_dmrg(const vector<vector<S>> &targets,
                    const vector<vector<FL>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
-                   const string &name, DecompositionTypes dt, NoiseTypes nt);
+                   const string &name, DecompositionTypes dt, NoiseTypes nt,
+                   bool condense = false);
     void SetUp() override {
         cout << "BOND INTEGER SIZE = " << sizeof(ubond_t) << endl;
         Random::rand_seed(0);
@@ -42,14 +43,19 @@ template <typename S>
 void TestDMRGN2STO3G<FL>::test_dmrg(
     const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
-    DecompositionTypes dt, NoiseTypes nt) {
+    DecompositionTypes dt, NoiseTypes nt, bool condense) {
     Timer t;
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo =
-        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
+        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional, "HQC",
+                                  hamil->n_sites / 2 / 2 * 2, condense ? 2 : 1);
+    mpo->basis = hamil->basis;
     cout << "MPO end .. T = " << t.get_time() << endl;
+
+    if (condense)
+        mpo = make_shared<CondensedMPO<S, FL>>(mpo, mpo->basis);
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
@@ -74,12 +80,12 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
             S target = targets[i][j];
 
             shared_ptr<MPSInfo<S>> mps_info = make_shared<MPSInfo<S>>(
-                hamil->n_sites, hamil->vacuum, target, hamil->basis);
+                mpo->n_sites, hamil->vacuum, target, mpo->basis);
             mps_info->set_bond_dimension(bond_dim);
 
             // MPS
             shared_ptr<MPS<S, FL>> mps =
-                make_shared<MPS<S, FL>>(hamil->n_sites, 0, 2);
+                make_shared<MPS<S, FL>>(mpo->n_sites, 0, 2);
             mps->initialize(mps_info);
             mps->random_canonicalize();
 
@@ -94,7 +100,8 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
                 make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
                                                           "DMRG");
             me->init_environments(false);
-            me->delayed_contraction = OpNamesSet::normal_ops();
+            if (!condense)
+                me->delayed_contraction = OpNamesSet::normal_ops();
             me->cached_contraction = true;
 
             // DMRG
@@ -298,6 +305,9 @@ TYPED_TEST(TestDMRGN2STO3G, TestSZ) {
     this->template test_dmrg<SZ>(targets, energies, hamil, "SZ SVD RED PERT LM",
                                  DecompositionTypes::SVD,
                                  NoiseTypes::ReducedPerturbativeLowMem);
+    this->template test_dmrg<SZ>(targets, energies, hamil, "SZ RED PERT CDS",
+                                 DecompositionTypes::DensityMatrix,
+                                 NoiseTypes::ReducedPerturbative, true);
 
     hamil->deallocate();
     fcidump->deallocate();
@@ -376,6 +386,9 @@ TYPED_TEST(TestDMRGN2STO3G, TestSGF) {
     this->template test_dmrg<SGF>(
         targets, energies, hamil, "SGF SVD RED PERT LM",
         DecompositionTypes::SVD, NoiseTypes::ReducedPerturbativeLowMem);
+    this->template test_dmrg<SGF>(targets, energies, hamil, "SGF RED PERT CDS",
+                                  DecompositionTypes::DensityMatrix,
+                                  NoiseTypes::ReducedPerturbative, true);
 
     hamil->deallocate();
     fcidump->deallocate();

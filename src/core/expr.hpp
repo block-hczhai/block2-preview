@@ -943,6 +943,11 @@ template <typename S> struct OpExprRef : OpExpr<S> {
             (has_orig & 1) ? load_expr<S, FL>(ifs) : nullptr;
         return make_shared<OpExprRef>(op, is_local, orig);
     }
+    string to_str() const override {
+        stringstream ss;
+        ss << "[" << (is_local ? "T" : "F") << "]" << op->to_str();
+        return ss.str();
+    }
 };
 
 template <typename S>

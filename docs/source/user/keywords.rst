@@ -301,6 +301,14 @@ simple\_parallel
     to reduce the MPO bond dimension. The simple parallel scheme may be good for saving per-processor MPO memory cost
     for large scale parallelized DMRG.
 
+condense\_mpo
+    Optional. Followed by an integer (must be a power of 2, default is 1).
+    When ``condense_mpo`` is not 1, ``block2`` will merge every two adjacent MPO sites into a larger site (after the MPO is created),
+    repeating ``log(condense_mpo)`` times, until the total number of sites is ``n_sites / condense_mpo``.
+    Not working with SU2 symmetry. When ``condense_mpo 2`` is used with general spin, the calculation will be done with
+    two spin orbitals as a site rather than one spin orbital. Not working with ``twopdm`` related keywords.
+    Require the keyword ``simple_parallel`` for the parallelization of the condensed MPO.
+
 one\_body\_parallel\_rule
     Optional keyword with no associated value. If given, the more efficient parallelization rule will be
     used to distribute the MPO. This rule only works when the two-body term is zero or purely local.

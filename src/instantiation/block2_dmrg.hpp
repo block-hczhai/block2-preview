@@ -96,7 +96,10 @@ extern template struct block2::AncillaMPO<block2::SU2, double>;
 extern template struct block2::IdentityAddedMPO<block2::SU2, double>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZ, double>;
 extern template struct block2::FusedMPO<block2::SZ, double>;
+
+extern template struct block2::CondensedMPO<block2::SU2, double>;
 extern template struct block2::FusedMPO<block2::SU2, double>;
 
 // mpo_simplification.hpp
@@ -283,7 +286,10 @@ extern template struct block2::AncillaMPO<block2::SU2K, double>;
 extern template struct block2::IdentityAddedMPO<block2::SU2K, double>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZK, double>;
 extern template struct block2::FusedMPO<block2::SZK, double>;
+
+extern template struct block2::CondensedMPO<block2::SU2K, double>;
 extern template struct block2::FusedMPO<block2::SU2K, double>;
 
 // mpo_simplification.hpp
@@ -467,7 +473,10 @@ extern template struct block2::AncillaMPO<block2::SGB, double>;
 extern template struct block2::IdentityAddedMPO<block2::SGB, double>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SGF, double>;
 extern template struct block2::FusedMPO<block2::SGF, double>;
+
+extern template struct block2::CondensedMPO<block2::SGB, double>;
 extern template struct block2::FusedMPO<block2::SGB, double>;
 
 // mpo_simplification.hpp
@@ -657,7 +666,10 @@ extern template struct block2::AncillaMPO<block2::SU2, complex<double>>;
 extern template struct block2::IdentityAddedMPO<block2::SU2, complex<double>>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZ, complex<double>>;
 extern template struct block2::FusedMPO<block2::SZ, complex<double>>;
+
+extern template struct block2::CondensedMPO<block2::SU2, complex<double>>;
 extern template struct block2::FusedMPO<block2::SU2, complex<double>>;
 
 // mpo_simplification.hpp
@@ -846,7 +858,10 @@ extern template struct block2::AncillaMPO<block2::SU2K, complex<double>>;
 extern template struct block2::IdentityAddedMPO<block2::SU2K, complex<double>>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZK, complex<double>>;
 extern template struct block2::FusedMPO<block2::SZK, complex<double>>;
+
+extern template struct block2::CondensedMPO<block2::SU2K, complex<double>>;
 extern template struct block2::FusedMPO<block2::SU2K, complex<double>>;
 
 // mpo_simplification.hpp
@@ -1037,7 +1052,10 @@ extern template struct block2::AncillaMPO<block2::SGB, complex<double>>;
 extern template struct block2::IdentityAddedMPO<block2::SGB, complex<double>>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SGF, complex<double>>;
 extern template struct block2::FusedMPO<block2::SGF, complex<double>>;
+
+extern template struct block2::CondensedMPO<block2::SGB, complex<double>>;
 extern template struct block2::FusedMPO<block2::SGB, complex<double>>;
 
 // mpo_simplification.hpp
@@ -1216,7 +1234,10 @@ extern template struct block2::AncillaMPO<block2::SU2, float>;
 extern template struct block2::IdentityAddedMPO<block2::SU2, float>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZ, float>;
 extern template struct block2::FusedMPO<block2::SZ, float>;
+
+extern template struct block2::CondensedMPO<block2::SU2, float>;
 extern template struct block2::FusedMPO<block2::SU2, float>;
 
 // mpo_simplification.hpp
@@ -1376,7 +1397,10 @@ extern template struct block2::AncillaMPO<block2::SGB, float>;
 extern template struct block2::IdentityAddedMPO<block2::SGB, float>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SGF, float>;
 extern template struct block2::FusedMPO<block2::SGF, float>;
+
+extern template struct block2::CondensedMPO<block2::SGB, float>;
 extern template struct block2::FusedMPO<block2::SGB, float>;
 
 // mpo_simplification.hpp
@@ -1549,7 +1573,10 @@ extern template struct block2::AncillaMPO<block2::SU2, complex<float>>;
 extern template struct block2::IdentityAddedMPO<block2::SU2, complex<float>>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SZ, complex<float>>;
 extern template struct block2::FusedMPO<block2::SZ, complex<float>>;
+
+extern template struct block2::CondensedMPO<block2::SU2, complex<float>>;
 extern template struct block2::FusedMPO<block2::SU2, complex<float>>;
 
 // mpo_simplification.hpp
@@ -1726,7 +1753,10 @@ extern template struct block2::AncillaMPO<block2::SGB, complex<float>>;
 extern template struct block2::IdentityAddedMPO<block2::SGB, complex<float>>;
 
 // mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SGF, complex<float>>;
 extern template struct block2::FusedMPO<block2::SGF, complex<float>>;
+
+extern template struct block2::CondensedMPO<block2::SGB, complex<float>>;
 extern template struct block2::FusedMPO<block2::SGB, complex<float>>;
 
 // mpo_simplification.hpp

@@ -633,6 +633,7 @@ enum QCTypes : uint8_t { NC = 1, CN = 2, Conventional = 4 };
 template <typename, typename, typename = void> struct MPOQC;
 
 // Quantum chemistry MPO (non-spin-adapted)
+// trans_delta: the number of sites in trans center
 template <typename S, typename FL>
 struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
     typedef typename GMatrix<FL>::FP FP;
@@ -640,7 +641,7 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
     const bool symmetrized_p = true;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
           QCTypes mode = QCTypes::NC, const string &tag = "HQC",
-          int trans_center = -1, bool symmetrized_p = true)
+          int trans_center = -1, int trans_delta = 1, bool symmetrized_p = true)
         : MPO<S, FL>(hamil->n_sites, tag), mode(mode),
           symmetrized_p(symmetrized_p) {
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
@@ -716,7 +717,7 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
             trans_l = trans_center - 1, trans_r = trans_center;
         else if (mode == QCTypes::Conventional)
-            trans_l = trans_center - 1, trans_r = trans_center + 1;
+            trans_l = trans_center - 1, trans_r = trans_center + trans_delta;
         const int sz[2] = {1, -1};
         const int sz_plus[4] = {2, 0, 0, -2}, sz_minus[4] = {0, -2, 2, 0};
         for (uint16_t m = 0; m < n_orbs; m++)
@@ -780,9 +781,11 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                           S::pg_inv(S::pg_mul(hamil->orb_sym[i],
                                               S::pg_inv(hamil->orb_sym[j])))));
                 }
-        bool need_repeat_m = mode == QCTypes::Conventional &&
-                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
-                             trans_l + 1 < n_sites;
+        uint16_t n_repeat_m =
+            mode == QCTypes::Conventional && trans_l + 1 >= 0 &&
+                    trans_r - 1 < n_sites && trans_l + 1 <= trans_r - 1
+                ? 1 + (trans_r - 1) - (trans_l + 1)
+                : 0;
         this->left_operator_names.resize(n_sites, nullptr);
         this->right_operator_names.resize(n_sites, nullptr);
         this->tensors.resize(n_sites, nullptr);
@@ -791,18 +794,18 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         int ntg = threading->activate_global();
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (int xxm = 0; xxm < (int)(n_sites + need_repeat_m); xxm++) {
+        for (int xxm = 0; xxm < (int)(n_sites + n_repeat_m); xxm++) {
             uint16_t xm = (uint16_t)xxm;
 #else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (uint16_t xm = 0; xm < n_sites + need_repeat_m; xm++) {
+        for (uint16_t xm = 0; xm < n_sites + n_repeat_m; xm++) {
 #endif
             uint16_t pm = xm;
             int p;
             bool repeat_m = false;
-            if (need_repeat_m && xm > trans_l + 1) {
-                pm = xm - 1;
-                if (pm == trans_l + 1)
+            if (n_repeat_m && xm > trans_r - 1) {
+                pm = xm - n_repeat_m;
+                if (pm <= trans_r - 1)
                     repeat_m = true;
             }
             uint16_t m = pm + n_orbs_big_left - 1;
@@ -811,12 +814,12 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
             QCTypes effective_mode;
             if (mode == QCTypes::NC ||
                 ((mode & QCTypes::NC) && pm <= trans_l) ||
-                (mode == QCTypes::Conventional && pm <= trans_l + 1 &&
+                (mode == QCTypes::Conventional && pm <= trans_r - 1 &&
                  !repeat_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
                      ((mode & QCTypes::CN) && pm >= trans_r) ||
-                     (mode == QCTypes::Conventional && pm >= trans_r - 1))
+                     (mode == QCTypes::Conventional && pm >= trans_l + 1))
                 effective_mode = QCTypes::CN;
             else
                 assert(false);
@@ -1438,8 +1441,8 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 break;
             }
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1))
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1)
                 opt->lmat = opt->rmat = pmat;
             else if (!repeat_m)
                 opt->rmat = pmat;
@@ -1610,8 +1613,8 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1) {
                 this->save_tensor(pm);
                 this->save_left_operators(pm);
                 this->save_right_operators(pm);
@@ -1620,15 +1623,15 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                 this->unload_right_operators(pm);
             }
         }
-        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
-            uint16_t pm = trans_l + 1;
-            this->save_tensor(pm);
-            this->save_left_operators(pm);
-            this->unload_tensor(pm);
-            this->save_right_operators(pm);
-            this->unload_left_operators(pm);
-            this->unload_right_operators(pm);
-        }
+        if (mode == QCTypes::Conventional)
+            for (uint16_t pm = trans_l + 1; pm <= trans_r - 1; pm++) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->unload_tensor(pm);
+                this->save_right_operators(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
@@ -1840,7 +1843,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     QCTypes mode;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
           QCTypes mode = QCTypes::NC, const string &tag = "HQC",
-          int trans_center = -1)
+          int trans_center = -1, int trans_delta = 1)
         : MPO<S, FL>(hamil->n_sites, tag), mode(mode) {
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
             OpNames::H, SiteIndex(), hamil->vacuum);
@@ -1905,7 +1908,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
             trans_l = trans_center - 1, trans_r = trans_center;
         else if (mode == QCTypes::Conventional)
-            trans_l = trans_center - 1, trans_r = trans_center + 1;
+            trans_l = trans_center - 1, trans_r = trans_center + trans_delta;
         for (uint16_t m = 0; m < n_orbs; m++) {
             c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
                                                     S(1, 1, hamil->orb_sym[m]));
@@ -1955,9 +1958,11 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                           S::pg_inv(S::pg_mul(hamil->orb_sym[i],
                                               S::pg_inv(hamil->orb_sym[j])))));
                 }
-        bool need_repeat_m = mode == QCTypes::Conventional &&
-                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
-                             trans_l + 1 < n_sites;
+        uint16_t n_repeat_m =
+            mode == QCTypes::Conventional && trans_l + 1 >= 0 &&
+                    trans_r - 1 < n_sites && trans_l + 1 <= trans_r - 1
+                ? 1 + (trans_r - 1) - (trans_l + 1)
+                : 0;
         this->left_operator_names.resize(n_sites, nullptr);
         this->right_operator_names.resize(n_sites, nullptr);
         this->tensors.resize(n_sites, nullptr);
@@ -1966,18 +1971,18 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         int ntg = threading->activate_global();
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (int xxm = 0; xxm < (int)(n_sites + need_repeat_m); xxm++) {
+        for (int xxm = 0; xxm < (int)(n_sites + n_repeat_m); xxm++) {
             uint16_t xm = (uint16_t)xxm;
 #else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (uint16_t xm = 0; xm < n_sites + need_repeat_m; xm++) {
+        for (uint16_t xm = 0; xm < n_sites + n_repeat_m; xm++) {
 #endif
             uint16_t pm = xm;
             int p;
             bool repeat_m = false;
-            if (need_repeat_m && xm > trans_l + 1) {
-                pm = xm - 1;
-                if (pm == trans_l + 1)
+            if (n_repeat_m && xm > trans_r - 1) {
+                pm = xm - n_repeat_m;
+                if (pm <= trans_r - 1)
                     repeat_m = true;
             }
             uint16_t m = pm + n_orbs_big_left - 1;
@@ -1986,12 +1991,12 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
             QCTypes effective_mode;
             if (mode == QCTypes::NC ||
                 ((mode & QCTypes::NC) && pm <= trans_l) ||
-                (mode == QCTypes::Conventional && pm <= trans_l + 1 &&
+                (mode == QCTypes::Conventional && pm <= trans_r - 1 &&
                  !repeat_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
                      ((mode & QCTypes::CN) && pm >= trans_r) ||
-                     (mode == QCTypes::Conventional && pm >= trans_r - 1))
+                     (mode == QCTypes::Conventional && pm >= trans_l + 1))
                 effective_mode = QCTypes::CN;
             else
                 assert(false);
@@ -2482,8 +2487,8 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 break;
             }
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1))
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1)
                 opt->lmat = opt->rmat = pmat;
             else if (!repeat_m)
                 opt->rmat = pmat;
@@ -2645,8 +2650,8 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1) {
                 this->save_tensor(pm);
                 this->save_left_operators(pm);
                 this->save_right_operators(pm);
@@ -2655,15 +2660,15 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                 this->unload_right_operators(pm);
             }
         }
-        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
-            uint16_t pm = trans_l + 1;
-            this->save_tensor(pm);
-            this->save_left_operators(pm);
-            this->unload_tensor(pm);
-            this->save_right_operators(pm);
-            this->unload_left_operators(pm);
-            this->unload_right_operators(pm);
-        }
+        if (mode == QCTypes::Conventional)
+            for (uint16_t pm = trans_l + 1; pm <= trans_r - 1; pm++) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->unload_tensor(pm);
+                this->save_right_operators(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;
@@ -2886,7 +2891,7 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     const bool symmetrized_p = true;
     MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
           QCTypes mode = QCTypes::NC, const string &tag = "HQC",
-          int trans_center = -1, bool symmetrized_p = true)
+          int trans_center = -1, int trans_delta = 1, bool symmetrized_p = true)
         : MPO<S, FL>(hamil->n_sites, tag), mode(mode),
           symmetrized_p(symmetrized_p) {
         // fermionic exchange factor
@@ -2948,7 +2953,7 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         if (mode == QCTypes(QCTypes::NC | QCTypes::CN))
             trans_l = trans_center - 1, trans_r = trans_center;
         else if (mode == QCTypes::Conventional)
-            trans_l = trans_center - 1, trans_r = trans_center + 1;
+            trans_l = trans_center - 1, trans_r = trans_center + trans_delta;
         for (uint16_t m = 0; m < n_orbs; m++) {
             c_op[m] = make_shared<OpElement<S, FL>>(OpNames::C, SiteIndex(m),
                                                     S(1, hamil->orb_sym[m]));
@@ -2986,9 +2991,11 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                     S(0, S::pg_inv(S::pg_mul(hamil->orb_sym[i],
                                              S::pg_inv(hamil->orb_sym[j])))));
             }
-        bool need_repeat_m = mode == QCTypes::Conventional &&
-                             trans_l + 1 == trans_r - 1 && trans_l + 1 >= 0 &&
-                             trans_l + 1 < n_sites;
+        uint16_t n_repeat_m =
+            mode == QCTypes::Conventional && trans_l + 1 >= 0 &&
+                    trans_r - 1 < n_sites && trans_l + 1 <= trans_r - 1
+                ? 1 + (trans_r - 1) - (trans_l + 1)
+                : 0;
         this->left_operator_names.resize(n_sites, nullptr);
         this->right_operator_names.resize(n_sites, nullptr);
         this->tensors.resize(n_sites, nullptr);
@@ -2997,18 +3004,18 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         int ntg = threading->activate_global();
 #ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (int xxm = 0; xxm < (int)(n_sites + need_repeat_m); xxm++) {
+        for (int xxm = 0; xxm < (int)(n_sites + n_repeat_m); xxm++) {
             uint16_t xm = (uint16_t)xxm;
 #else
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (uint16_t xm = 0; xm < n_sites + need_repeat_m; xm++) {
+        for (uint16_t xm = 0; xm < n_sites + n_repeat_m; xm++) {
 #endif
             uint16_t pm = xm;
             int p;
             bool repeat_m = false;
-            if (need_repeat_m && xm > trans_l + 1) {
-                pm = xm - 1;
-                if (pm == trans_l + 1)
+            if (n_repeat_m && xm > trans_r - 1) {
+                pm = xm - n_repeat_m;
+                if (pm <= trans_r - 1)
                     repeat_m = true;
             }
             uint16_t m = pm + n_orbs_big_left - 1;
@@ -3017,12 +3024,12 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
             QCTypes effective_mode;
             if (mode == QCTypes::NC ||
                 ((mode & QCTypes::NC) && pm <= trans_l) ||
-                (mode == QCTypes::Conventional && pm <= trans_l + 1 &&
+                (mode == QCTypes::Conventional && pm <= trans_r - 1 &&
                  !repeat_m))
                 effective_mode = QCTypes::NC;
             else if (mode == QCTypes::CN ||
                      ((mode & QCTypes::CN) && pm >= trans_r) ||
-                     (mode == QCTypes::Conventional && pm >= trans_r - 1))
+                     (mode == QCTypes::Conventional && pm >= trans_l + 1))
                 effective_mode = QCTypes::CN;
             else
                 assert(false);
@@ -3421,8 +3428,8 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 break;
             }
             shared_ptr<OperatorTensor<S, FL>> opt = this->tensors[pm];
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1))
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1)
                 opt->lmat = opt->rmat = pmat;
             else if (!repeat_m)
                 opt->rmat = pmat;
@@ -3563,8 +3570,8 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 }
                 this->right_operator_names[pm] = prop;
             }
-            if (mode != QCTypes::Conventional ||
-                !(pm == trans_l + 1 && pm == trans_r - 1)) {
+            if (mode != QCTypes::Conventional || pm < trans_l + 1 ||
+                pm > trans_r - 1) {
                 this->save_tensor(pm);
                 this->save_left_operators(pm);
                 this->save_right_operators(pm);
@@ -3573,15 +3580,15 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
                 this->unload_right_operators(pm);
             }
         }
-        if (mode == QCTypes::Conventional && trans_l + 1 == trans_r - 1) {
-            uint16_t pm = trans_l + 1;
-            this->save_tensor(pm);
-            this->save_left_operators(pm);
-            this->save_right_operators(pm);
-            this->unload_tensor(pm);
-            this->unload_left_operators(pm);
-            this->unload_right_operators(pm);
-        }
+        if (mode == QCTypes::Conventional)
+            for (uint16_t pm = trans_l + 1; pm <= trans_r - 1; pm++) {
+                this->save_tensor(pm);
+                this->save_left_operators(pm);
+                this->save_right_operators(pm);
+                this->unload_tensor(pm);
+                this->unload_left_operators(pm);
+                this->unload_right_operators(pm);
+            }
         SeqTypes seqt = hamil->opf->seq->mode;
         hamil->opf->seq->mode = SeqTypes::None;
         const uint16_t m_start = hamil->get_n_orbs_left() > 0 ? 1 : 0;

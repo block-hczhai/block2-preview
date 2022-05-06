@@ -68,7 +68,7 @@ if "single_prec" in dic and "use_complex" not in dic:
     if "nonspinadapted" in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -83,7 +83,7 @@ if "single_prec" in dic and "use_complex" not in dic:
     elif "nonspinadapted" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -98,7 +98,7 @@ if "single_prec" in dic and "use_complex" not in dic:
     elif "use_general_spin" in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -130,7 +130,7 @@ elif "single_prec" in dic and "use_complex" in dic:
     if "nonspinadapted" in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.cpx.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -145,7 +145,7 @@ elif "single_prec" in dic and "use_complex" in dic:
     elif "nonspinadapted" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.cpx.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -160,7 +160,7 @@ elif "single_prec" in dic and "use_complex" in dic:
     elif "use_general_spin" in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.sp.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.sp.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.sp.cpx.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -187,7 +187,7 @@ elif "use_complex" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
-        from block2.sz import ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sz import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
         from block2.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -202,7 +202,7 @@ elif "use_complex" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
-        from block2.su2 import ParallelRuleSimple, ParallelFCIDUMP
+        from block2.su2 import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
         from block2.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -217,7 +217,7 @@ elif "use_complex" not in dic:
         from block2 import VectorSZK as VectorSL
         from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
-        from block2.szk import ParallelRuleSimple, ParallelFCIDUMP
+        from block2.szk import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
         from block2.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -232,7 +232,7 @@ elif "use_complex" not in dic:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
-        from block2.su2k import ParallelRuleSimple, ParallelFCIDUMP
+        from block2.su2k import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
         from block2.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -247,7 +247,7 @@ elif "use_complex" not in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
         from block2.sgf import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
-        from block2.sgf import ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sgf import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
         from block2.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -273,7 +273,7 @@ else:
     if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.cpx.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -288,7 +288,7 @@ else:
     elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.cpx.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -303,7 +303,7 @@ else:
     elif "nonspinadapted" in dic and "k_symmetry" in dic:
         from block2 import VectorSZK as VectorSL
         from block2.szk import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.cpx.szk import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.szk import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.cpx.szk import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -318,7 +318,7 @@ else:
     elif "nonspinadapted" not in dic and "k_symmetry" in dic:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.cpx.su2k import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.su2k import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.cpx.su2k import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -333,7 +333,7 @@ else:
     elif "use_general_spin" in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
-        from block2.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
+        from block2.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
         from block2.cpx.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
@@ -425,6 +425,7 @@ siv = dic.get("symmetrize_ints", 1E-10)
 init_mps_center = int(dic.get("init_mps_center", 0))
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
 dynamic_corr_method = None
+condense_mpo = int(dic.get("condense_mpo", "1"))
 sub_spaces =['ijrs', 'ij', 'rs', 'ijr', 'rsi', 'ir', 'i', 'r']
 for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
                 "casci", "nevpt2", "nevpt2s", "nevpt2sd",
@@ -1255,6 +1256,13 @@ elif pre_run or not no_pre_run:
                 bond_dims[0], occs, bias=bias)
         mps_info = trans_mi(tr_mps_info, target)
     else:
+        basis = hamil.basis
+        assert n_sites % condense_mpo == 0
+        mps_n_sites = n_sites // condense_mpo
+        icd = 1
+        while icd < condense_mpo:
+            basis = CondensedMPO.condense_basis(basis)
+            icd *= 2
         if nroots == 1 and len(targets) == 1 and "use_hybrid_complex" not in dic:
             if dynamic_corr_method is not None:
                 if dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij",
@@ -1262,27 +1270,27 @@ elif pre_run or not no_pre_run:
                         "mrrept2s", "mrrept2sd", "mrrept2-ijrs", "mrrept2-ij",
                         "mrrept2-rs", "mrrept2-ijr", "mrrept2-rsi", "mrrept2-ir", "mrrept2-i", "mrrept2-r"]:
                     if big_site_method is not None:
-                        mps_info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
+                        mps_info = CASCIMPSInfo(mps_n_sites, vacuum, target, basis,
                                                 1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
                     else:
                         mps_info = CASCIMPSInfo(
-                            n_sites, vacuum, target, hamil.basis, n_inactive, n_cas, n_external)
+                            mps_n_sites, vacuum, target, basis, n_inactive, n_cas, n_external)
                 elif dynamic_corr_method[0] in ["mrcis", "mrcisd", "mrcisdt"]:
                     if big_site_method is not None:
                         mps_info = MPSInfo(
-                            n_sites, vacuum, target, hamil.basis)
+                            mps_n_sites, vacuum, target, basis)
                     else:
                         ci_order = len(dynamic_corr_method[0]) - 4
                         mps_info = MRCIMPSInfo(
-                            n_sites, n_inactive, n_external, ci_order, vacuum, target, hamil.basis)
+                            mps_n_sites, n_inactive, n_external, ci_order, vacuum, target, basis)
                 else:
-                    mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+                    mps_info = MPSInfo(mps_n_sites, vacuum, target, basis)
             else:
-                mps_info = MPSInfo(n_sites, vacuum, target, hamil.basis)
+                mps_info = MPSInfo(mps_n_sites, vacuum, target, basis)
         else:
             assert dynamic_corr_method is None
             _print('TARGETS = ', list(targets))
-            mps_info = MultiMPSInfo(n_sites, vacuum, targets, hamil.basis)
+            mps_info = MultiMPSInfo(mps_n_sites, vacuum, targets, basis)
         if singlet_embedding and SX == SU2:
             left_vacuum = SX(singlet_embedding_spin, singlet_embedding_spin, 0)
             right_vacuum = vacuum
@@ -1311,14 +1319,14 @@ elif pre_run or not no_pre_run:
         mps = ParallelMPS(mps_info.n_sites, init_mps_center, dot, mps_prule)
     elif nroots != 1 or len(targets) != 1 or "use_hybrid_complex" in dic:
         if "use_hybrid_complex" in dic:
-            mps = MultiMPS(n_sites, init_mps_center, dot, nroots * 2)
+            mps = MultiMPS(mps_info.n_sites, init_mps_center, dot, nroots * 2)
         else:
-            mps = MultiMPS(n_sites, init_mps_center, dot, nroots)
+            mps = MultiMPS(mps_info.n_sites, init_mps_center, dot, nroots)
         weights = dic.get("weights", None)
         if weights is not None:
             mps.weights = VectorFP([float(x) for x in weights.split()])
     else:
-        mps = MPS(n_sites, init_mps_center, dot)
+        mps = MPS(mps_info.n_sites, init_mps_center, dot)
     mps.initialize(mps_info)
     mps.random_canonicalize()
     if nroots == 1 and "use_hybrid_complex" not in dic:
@@ -1399,11 +1407,21 @@ if pre_run or not no_pre_run:
     if big_site_method == "folding":
         mpo = mpo_fold
     else:
-        mpo = MPOQC(hamil, qc_type, "HQC", qc_mpo_trans_center)
+        if qc_mpo_trans_center == -1:
+            qc_mpo_trans_center = hamil.n_sites // 2
+        if condense_mpo == 1:
+            mpo = MPOQC(hamil, qc_type, "HQC", qc_mpo_trans_center)
+        else:
+            mpo = MPOQC(hamil, qc_type, "HQC", qc_mpo_trans_center // condense_mpo * condense_mpo, condense_mpo)
+            mpo.basis = hamil.basis
+            icd = 1
+            while icd < condense_mpo:
+                mpo = CondensedMPO(mpo, mpo.basis)
+                icd *= 2
     _print("build mpo finished ... Tread = %.3f Twrite = %.3f T = %.3f" % (mpo.tread, mpo.twrite, time.perf_counter() - txx))
     _print("simpl mpo start ...")
     txx = time.perf_counter()
-    mpo = SimplifiedMPO(mpo, simpl_rule, True, True,
+    mpo = SimplifiedMPO(mpo, simpl_rule, True, condense_mpo == 1,
                         OpNamesSet((OpNames.R, OpNames.RD)))
     _print("simpl mpo finished ... Tread = %.3f Twrite = %.3f T = %.3f" % (mpo.tread, mpo.twrite, time.perf_counter() - txx))
 
@@ -1432,9 +1450,14 @@ if pre_run or not no_pre_run:
     # mpo for 1pdm
     _print("build 1pdm mpo", time.perf_counter() - tx)
     pmpo = PDM1MPOQC(hamil_np or hamil, 1 if soc else 0)
+    pmpo.basis = hamil.basis
+    icd = 1
+    while icd < condense_mpo:
+        pmpo = CondensedMPO(pmpo, pmpo.basis, True)
+        icd *= 2
     pmpo = SimplifiedMPO(pmpo,
                          NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
-                         True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+                         True, condense_mpo == 1, OpNamesSet((OpNames.R, OpNames.RD)))
 
     if MPI is None or MPI.rank == 0:
         pmpo.save_data(scratch + '/mpo-1pdm.bin')
@@ -1464,9 +1487,14 @@ if pre_run or not no_pre_run:
     # mpo for identity operator
     _print("build identity mpo", time.perf_counter() - tx)
     impo = IdentityMPO(hamil_np or hamil)
+    impo.basis = hamil.basis
+    icd = 1
+    while icd < condense_mpo:
+        impo = CondensedMPO(impo, impo.basis)
+        icd *= 2
     impo = SimplifiedMPO(impo,
                          NoTransposeRule(RuleQC()) if has_tran else RuleQC(),
-                         True, True, OpNamesSet((OpNames.R, OpNames.RD)))
+                         True, condense_mpo == 1, OpNamesSet((OpNames.R, OpNames.RD)))
 
     if MPI is None or MPI.rank == 0:
         impo.save_data(scratch + '/mpo-ident.bin')
@@ -2054,7 +2082,8 @@ if not pre_run:
 
         me = MovingEnvironment(mpo, mps, mps, "DMRG")
         if "use_hybrid_complex" not in dic:
-            me.delayed_contraction = OpNamesSet.normal_ops()
+            if condense_mpo == 1:
+                me.delayed_contraction = OpNamesSet.normal_ops()
             me.cached_contraction = cached_contraction
         me.save_partition_info = True
         me.init_environments(outputlevel >= 2)

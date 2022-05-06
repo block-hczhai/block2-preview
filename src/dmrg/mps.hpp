@@ -402,6 +402,10 @@ template <typename S> struct MPSInfo {
                     else if (basis[i]->quanta[j].n() == 1 &&
                              basis[i]->quanta[j].twos() == -1)
                         site_probs[i]->probs[j] = beta_occ * (1 - alpha_occ);
+                    else if (basis[i]->quanta[j].n() == 1 &&
+                             basis[i]->quanta[j].twos() == 0)
+                        site_probs[i]->probs[j] = alpha_occ * (1 - beta_occ) +
+                                                  beta_occ * (1 - alpha_occ);
                     else
                         assert(false);
                 }
