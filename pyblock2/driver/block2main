@@ -1594,6 +1594,16 @@ try:
 except ImportError:
     pass
 
+if "release_integral" in dic and fcidump is not None:
+    fcidump.deallocate()
+    fcidump = None
+
+    try:
+        import psutil
+        mem = psutil.Process(os.getpid()).memory_info().rss
+        _print("integral deallocated memory usage = ", fmt_size(mem))
+    except ImportError:
+        pass
 
 def split_mps(iroot, mps, mps_info, mpi=MPI):
     mps.load_data()  # this will avoid memory sharing

@@ -136,6 +136,9 @@ restart\_dir\_per\_sweep
 fp\_cps\_cutoff
     Optional. Followed by a small fractional number. Sets the float-point number cutoff for saving disk storage. Default is ``1E-16``.
 
+release\_integral
+    Optional. If given, memory used by stroring the full integral will be release after building MPO (but before DMRG).
+
 Calculation Types
 -----------------
 
