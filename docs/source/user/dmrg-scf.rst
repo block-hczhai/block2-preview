@@ -323,7 +323,8 @@ The following is an example: ::
 .. note ::
 
     Due to limitations in ``pyscf/UCASCI``, currently the point group symmetry is not supported
-    in UCASSCF/UCASCI. ``pyscf/avas`` does not support creating active space with unrestricted orbtials
+    in UCASSCF/UCASCI with DMRG solver.
+    ``pyscf/avas`` does not support creating active space with unrestricted orbtials
     so here we did not use ``avas``. The above example will not work with ``StackBlock``
     (the compatibility with ``StackBlock`` will be considered in future).
 
