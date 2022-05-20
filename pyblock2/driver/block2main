@@ -714,6 +714,11 @@ if pre_run or not no_pre_run:
             fcidump.rescale(float(integral_rescale))
             _print("rescaled integral const = %20.10f" % fcidump.e())
     n_orbs = fcidump.n_sites
+    if fcidump.uhf and not "nonspinadapted" in dic and not "use_general_spin" in dic:
+        _print("WARN: A non-spin-adapted FCIDUMP is given but there is no keyword 'nonspinadapted'!")
+    if n_orbs == 2 and qc_type == QCTypes.Conventional:
+        qc_type = QCTypes.NC
+        _print("WARN: changed qc_mpo_type to NC because there are only 2 sites!")
     if "trans_integral_to_spin_orbital" in dic:
         n_orbs = n_orbs * 2
     if dynamic_corr_method is not None:
@@ -990,6 +995,9 @@ if pre_run or not no_pre_run:
 else:
     orb_idx = np.load(scratch + '/orbital_reorder.npy')
     n_orbs = len(orb_idx)
+    if n_orbs == 2 and qc_type == QCTypes.Conventional:
+        qc_type = QCTypes.NC
+        _print("WARN: changed qc_mpo_type to NC because there are only 2 sites!")
     if "nofiedler" in dic or "noreorder" in dic:
         orb_idx = None
     orb_sym = None
