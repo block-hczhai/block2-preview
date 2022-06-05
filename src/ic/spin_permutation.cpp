@@ -18,7 +18,7 @@
  *
  */
 
-/** Spin permutation for NPDM. */
+/** Spin permutation for NPDM and AutoMPO. */
 
 #pragma once
 
@@ -155,14 +155,21 @@ struct SpinPermTensor {
     }
     SpinPermTensor auto_sort() const {
         SpinPermTensor r = *this;
-        vector<uint16_t> perm;
+        vector<uint16_t> perm, pcnt;
         for (auto &jx : r.data)
             for (auto &tx : jx) {
                 vector<pair<SpinOperator, uint16_t>> new_ops = tx.ops;
                 perm.resize(tx.ops.size());
+                pcnt.resize(tx.ops.size() + 1);
+                for (uint16_t i = 0; i < tx.ops.size() + 1; i++)
+                    pcnt[i] = 0;
                 for (uint16_t i = 0; i < tx.ops.size(); i++)
-                    perm[i] = tx.ops[i].second,
-                    new_ops[tx.ops[i].second] = tx.ops[i];
+                    pcnt[tx.ops[i].second + 1]++;
+                for (uint16_t i = 0; i < tx.ops.size(); i++)
+                    pcnt[i + 1] += pcnt[i];
+                for (uint16_t i = 0; i < tx.ops.size(); i++)
+                    new_ops[pcnt[tx.ops[i].second]] = tx.ops[i],
+                    perm[i] = pcnt[tx.ops[i].second]++;
                 tx.factor *= permutation_parity(perm) ? -1 : 1;
                 tx.ops = new_ops;
             }
@@ -269,6 +276,16 @@ struct SpinPermRecoupling {
             r.push_back(c == 'C');
         return r;
     }
+    static string make_with_cds(const string &x, const vector<uint8_t> &cds) {
+        int icd = 0;
+        stringstream ss;
+        for (auto &c : x)
+            if (c == '.')
+                ss << (cds[icd++] ? "C" : "D");
+            else
+                ss << c;
+        return ss.str();
+    }
     static SpinPermTensor make_tensor(const string &x,
                                       const vector<uint16_t> &indices,
                                       const vector<uint8_t> &cds,
@@ -321,6 +338,27 @@ struct SpinPermRecoupling {
             else if (c == '+' && depth == 1)
                 break;
         return dot_cnt;
+    }
+    // (.+(.+(.+.)0)0)0 -> 1 2 3
+    // ((.+.)0+(.+.)0) -> 2 3
+    static vector<uint16_t> find_split_indices_from_left(const string &x,
+                                                         int start_depth = 1) {
+        int dot_cnt = 0, depth = 0;
+        vector<uint16_t> r;
+        for (size_t ic = 0; ic < x.length(); ic++) {
+            auto &c = x[ic];
+            if (c == '(')
+                depth++;
+            else if (c == ')')
+                depth--;
+            else if (c == '.')
+                dot_cnt++;
+            else if (c == '+' && depth == start_depth) {
+                r.push_back(dot_cnt);
+                start_depth++;
+            }
+        }
+        return r;
     }
     static vector<string> initialize(uint16_t n, uint16_t twos) {
         map<pair<uint16_t, uint16_t>, vector<string>> mp;
@@ -435,6 +473,11 @@ struct SpinPermPattern {
         }
         return r;
     }
+    size_t count() const { return data.size() / (n + 2); }
+    vector<uint16_t> operator[](size_t i) {
+        return vector<uint16_t>(data.begin() + i * (n + 2) + 1,
+                                data.begin() + i * (n + 2) + n + 1);
+    }
     string to_str() const {
         stringstream ss;
         size_t cnt = data.size() / (n + 2);
@@ -446,41 +489,55 @@ struct SpinPermPattern {
         }
         return ss.str();
     }
-    static vector<SpinPermTensor> get_unique(const vector<uint8_t> &cds,
-                                             int split_idx = -1) {
+    static vector<string> get_unique(const vector<uint8_t> &cds,
+                                     const vector<uint16_t> &ref_indices,
+                                     int split_idx = -1,
+                                     bool ref_split = false) {
         SU2CG cg(100);
         cg.initialize();
-        vector<uint16_t> indices;
         int nn = cds.size();
-        for (int i = 0; i < nn; i++)
-            indices.push_back(i);
+        vector<uint16_t> indices = ref_indices;
+        if (indices.size() == 0)
+            for (int i = 0; i < nn; i++)
+                indices.push_back(i);
+        vector<uint16_t> ref_split_idx;
+        for (int i = 1; i < nn; i++)
+            if (indices[i] != indices[i - 1])
+                ref_split_idx.push_back(i);
         vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
         vector<SpinPermTensor> ts(pp.size());
-        for (int i = 0; i < (int)pp.size(); i++)
-            if (split_idx == -1 ||
-                SpinPermRecoupling::find_split_index(pp[i]) == split_idx)
-                ts[i] =
-                    SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
-        vector<int> selected_pp_idx;
         for (int i = 0; i < (int)pp.size(); i++) {
             if (split_idx != -1 &&
                 SpinPermRecoupling::find_split_index(pp[i]) != split_idx)
                 continue;
-            // cout << i << " / " << pp.size() << " " << ts[i].to_str() << endl;
+            if (ref_split) {
+                vector<uint16_t> act_split_idx =
+                    SpinPermRecoupling::find_split_indices_from_left(pp[i]);
+                if (act_split_idx.size() < ref_split_idx.size() ||
+                    !equal(ref_split_idx.begin(), ref_split_idx.end(),
+                           act_split_idx.begin()))
+                    continue;
+            }
+            ts[i] =
+                SpinPermRecoupling::make_tensor(pp[i], ref_indices, cds, cg);
+            assert(ts[i].data.size() != 0);
+        }
+        vector<int> selected_pp_idx;
+        for (int i = 0; i < (int)pp.size(); i++) {
+            if (ts[i].data.size() == 1 && ts[i].data[0].size() == 0)
+                continue;
             bool found = false;
             for (auto j : selected_pp_idx) {
                 double x = ts[i].equal_to_scaled(ts[j]);
                 if (x != 0)
                     found = true;
-                // cout << "[" << i << "] = " << x << " * [" << j << "]" <<
-                // endl;
             }
             if (!found)
                 selected_pp_idx.push_back(i);
         }
-        vector<SpinPermTensor> r;
+        vector<string> r;
         for (auto &ip : selected_pp_idx)
-            r.push_back(ts[ip]);
+            r.push_back(pp[ip]);
         return r;
     }
     static vector<vector<double>> make_matrix(const vector<SpinPermTensor> &x,
@@ -501,6 +558,228 @@ struct SpinPermPattern {
     }
 };
 
+// generate appropriate spin recoupling formulae after reordering
+struct SpinPermScheme {
+    vector<vector<uint16_t>> index_patterns;
+    vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
+    SpinPermScheme() {}
+    SpinPermScheme(int nn, string spin_str = "",
+                   vector<uint8_t> cds = vector<uint8_t>()) {
+        SpinPermScheme r = SpinPermScheme::initialize(nn, spin_str, cds);
+        index_patterns = r.index_patterns;
+        data = r.data;
+    }
+    static SpinPermScheme initialize(int nn, string spin_str = "",
+                                     vector<uint8_t> cds = vector<uint8_t>()) {
+        using T = SpinPermTensor;
+        using R = SpinPermRecoupling;
+        SU2CG cg(100);
+        cg.initialize();
+        if (spin_str == "") {
+            spin_str = "(.+.)0";
+            for (int inn = 4; inn <= nn; inn += 2)
+                spin_str = "((.+" + spin_str + ")1+.)0";
+        }
+        if (cds.size() == 0) {
+            for (int i = 0; i < nn; i++)
+                cds.push_back(i < nn / 2);
+        }
+        SpinPermPattern spat(nn);
+        vector<double> mptr;
+        SpinPermScheme r;
+        r.index_patterns.resize(spat.count());
+        r.data.resize(spat.count());
+        for (size_t i = 0; i < spat.count(); i++) {
+            vector<uint16_t> irr = spat[i];
+            r.index_patterns[i] = irr;
+            vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
+            for (int j = 0; j < rr.size(); j += irr.size()) {
+                vector<uint16_t> indices(rr.begin() + j,
+                                         rr.begin() + j + irr.size());
+                r.data[i][indices] = vector<pair<double, string>>();
+                vector<pair<double, string>> &rec_formula =
+                    r.data[i].at(indices);
+                T x = R::make_tensor(spin_str, indices, cds, cg) * 2;
+                T xs = x.auto_sort();
+                vector<uint8_t> target_cds = cds;
+                for (int j = 0; j < irr.size(); j++)
+                    target_cds[j] =
+                        xs.data[0][0].ops[j].first & SpinOperator::C;
+                vector<string> ttp =
+                    SpinPermPattern::get_unique(target_cds, irr, -1, true);
+                vector<T> tts(ttp.size());
+                bool found = false;
+                for (int j = 0; j < tts.size() && !found; j++) {
+                    tts[j] = R::make_tensor(ttp[j], irr, target_cds, cg) * 2;
+                    double x = xs.equal_to_scaled(tts[j]);
+                    if (x != 0) {
+                        found = true;
+                        rec_formula.push_back(
+                            make_pair(x, R::make_with_cds(ttp[j], target_cds)));
+                    }
+                }
+                if (found)
+                    continue;
+                SpinPermTensor std = SpinPermTensor();
+                int cxx = 117;
+                for (int j = 0; j < tts.size(); j++)
+                    std = std + tts[j] * (cxx++);
+                std = std + xs * (cxx++);
+                vector<double> pgv(std.data[0].size(), 0);
+                for (auto &t : xs.data[0])
+                    for (int i = 0; i < pgv.size(); i++)
+                        if (std.data[0][i].ops_equal_to(t)) {
+                            pgv[i] += t.factor;
+                            break;
+                        }
+                auto pgg = SpinPermPattern::make_matrix(tts, std);
+                mptr.resize(pgg[0].size() * tts.size());
+                for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+                    for (int jb = ja + 1; jb < (int)pgg.size() && !found;
+                         jb++) {
+                        MatrixRef a(mptr.data(), pgg[0].size(), 2);
+                        MatrixRef x(mptr.data() + a.size(), 2, 1);
+                        MatrixRef b(mptr.data() + a.size() + x.size(),
+                                    pgg[0].size(), 1);
+                        for (int k = 0; k < (int)pgg[0].size(); k++)
+                            b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+                                 a(k, 1) = pgg[jb][k];
+                        double c = MatrixFunctions::least_squares(a, b, x);
+                        if (abs(c) > 1E-12)
+                            continue;
+                        found = true;
+                        rec_formula.push_back(make_pair(
+                            x.data[0], R::make_with_cds(ttp[ja], target_cds)));
+                        rec_formula.push_back(make_pair(
+                            x.data[1], R::make_with_cds(ttp[jb], target_cds)));
+                    }
+                for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+                    for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
+                        for (int jc = jb + 1; jc < (int)pgg.size() && !found;
+                             jc++) {
+                            MatrixRef a(mptr.data(), pgg[0].size(), 3);
+                            MatrixRef x(mptr.data() + a.size(), 3, 1);
+                            MatrixRef b(mptr.data() + a.size() + x.size(),
+                                        pgg[0].size(), 1);
+                            for (int k = 0; k < (int)pgg[0].size(); k++)
+                                b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+                                     a(k, 1) = pgg[jb][k], a(k, 2) = pgg[jc][k];
+                            double c = MatrixFunctions::least_squares(a, b, x);
+                            if (abs(c) > 1E-12)
+                                continue;
+                            found = true;
+                            rec_formula.push_back(make_pair(
+                                x.data[0],
+                                R::make_with_cds(ttp[ja], target_cds)));
+                            rec_formula.push_back(make_pair(
+                                x.data[1],
+                                R::make_with_cds(ttp[jb], target_cds)));
+                            rec_formula.push_back(make_pair(
+                                x.data[2],
+                                R::make_with_cds(ttp[jc], target_cds)));
+                        }
+                for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+                    for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
+                        for (int jc = jb + 1; jc < (int)pgg.size() && !found;
+                             jc++)
+                            for (int jd = jc + 1;
+                                 jd < (int)pgg.size() && !found; jd++) {
+                                MatrixRef a(mptr.data(), pgg[0].size(), 4);
+                                MatrixRef x(mptr.data() + a.size(), 4, 1);
+                                MatrixRef b(mptr.data() + a.size() + x.size(),
+                                            pgg[0].size(), 1);
+                                for (int k = 0; k < (int)pgg[0].size(); k++)
+                                    b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+                                         a(k, 1) = pgg[jb][k],
+                                         a(k, 2) = pgg[jc][k],
+                                         a(k, 3) = pgg[jd][k];
+                                double c =
+                                    MatrixFunctions::least_squares(a, b, x);
+                                if (abs(c) > 1E-12)
+                                    continue;
+                                found = true;
+                                rec_formula.push_back(make_pair(
+                                    x.data[0],
+                                    R::make_with_cds(ttp[ja], target_cds)));
+                                rec_formula.push_back(make_pair(
+                                    x.data[1],
+                                    R::make_with_cds(ttp[jb], target_cds)));
+                                rec_formula.push_back(make_pair(
+                                    x.data[2],
+                                    R::make_with_cds(ttp[jc], target_cds)));
+                                rec_formula.push_back(make_pair(
+                                    x.data[3],
+                                    R::make_with_cds(ttp[jd], target_cds)));
+                            }
+                for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+                    for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
+                        for (int jc = jb + 1; jc < (int)pgg.size() && !found;
+                             jc++)
+                            for (int jd = jc + 1;
+                                 jd < (int)pgg.size() && !found; jd++)
+                                for (int je = jd + 1;
+                                     je < (int)pgg.size() && !found; je++) {
+                                    MatrixRef a(mptr.data(), pgg[0].size(), 5);
+                                    MatrixRef x(mptr.data() + a.size(), 5, 1);
+                                    MatrixRef b(mptr.data() + a.size() +
+                                                    x.size(),
+                                                pgg[0].size(), 1);
+                                    for (int k = 0; k < (int)pgg[0].size(); k++)
+                                        b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+                                             a(k, 1) = pgg[jb][k],
+                                             a(k, 2) = pgg[jc][k],
+                                             a(k, 3) = pgg[jd][k],
+                                             a(k, 4) = pgg[je][k];
+                                    double c =
+                                        MatrixFunctions::least_squares(a, b, x);
+                                    if (abs(c) > 1E-12)
+                                        continue;
+                                    found = true;
+                                    rec_formula.push_back(make_pair(
+                                        x.data[0],
+                                        R::make_with_cds(ttp[ja], target_cds)));
+                                    rec_formula.push_back(make_pair(
+                                        x.data[1],
+                                        R::make_with_cds(ttp[jb], target_cds)));
+                                    rec_formula.push_back(make_pair(
+                                        x.data[2],
+                                        R::make_with_cds(ttp[jc], target_cds)));
+                                    rec_formula.push_back(make_pair(
+                                        x.data[3],
+                                        R::make_with_cds(ttp[jd], target_cds)));
+                                    rec_formula.push_back(make_pair(
+                                        x.data[4],
+                                        R::make_with_cds(ttp[je], target_cds)));
+                                }
+                assert(found);
+            }
+        }
+        return r;
+    }
+    string to_str() const {
+        stringstream ss;
+        int cnt = index_patterns.size();
+        int nn = cnt == 0 ? 0 : index_patterns[0].size();
+        ss << "N = " << nn << " COUNT = " << cnt << endl;
+        for (size_t ic = 0; ic < cnt; ic++) {
+            for (uint16_t j = 0; j < nn; j++)
+                ss << index_patterns[ic][j] << " ";
+            ss << " :: " << endl;
+            for (auto &r : data[ic]) {
+                for (uint16_t j = 0; j < nn; j++)
+                    ss << r.first[j] << " ";
+                ss << " = ";
+                for (auto &g : r.second) {
+                    ss << setw(10) << setprecision(6) << fixed << g.first
+                       << " * [ " << g.second << " ] ";
+                }
+                ss << endl;
+            }
+        }
+        return ss.str();
+    }
+};
+
 } // namespace block2
 
 using namespace block2;
@@ -508,8 +787,21 @@ using namespace block2;
 int main() {
     using T = SpinPermTensor;
     using R = SpinPermRecoupling;
+    SpinPermScheme x(6);
+    cout << x.to_str() << endl;
+    abort();
     SpinPermPattern spat(4);
     cout << spat.to_str() << endl;
+    for (size_t i = 0; i < spat.count(); i++) {
+        vector<uint16_t> irr = spat[i];
+        vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
+        for (int j = 0; j < rr.size(); j += irr.size()) {
+            for (int k = 0; k < irr.size(); k++)
+                cout << setw(4) << rr[j + k];
+            cout << endl;
+        }
+    }
+    abort();
     SU2CG cg(100);
     cg.initialize();
     uint16_t p = 0, q = 1, r = 2, s = 3;
@@ -522,11 +814,11 @@ int main() {
     cout << a.to_str() << endl;
     cout << b.to_str() << endl;
     cout << (a == b) << endl;
-    int nn = 8;
-    // vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
-    // cout << pp.size() << endl;
-    // for (auto &xp : pp)
-    //     cout << xp << " | " << SpinPermRecoupling::find_split_index(xp) << endl;
+    int nn = 4;
+    vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
+    cout << pp.size() << endl;
+    for (auto &xp : pp)
+        cout << xp << " | " << SpinPermRecoupling::find_split_index(xp) << endl;
     vector<uint8_t> cds;
     vector<uint16_t> indices;
     for (int i = 0; i < nn; i++)
@@ -581,17 +873,19 @@ int main() {
     //                 continue;
     //             MatrixRef a(ppp.data(), pgg[0].size(), 2);
     //             MatrixRef x(ppp.data() + a.size(), 2, 1);
-    //             MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(), 1);
-    //             for (int k = 0; k < (int)pgg[0].size(); k++)
+    //             MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(),
+    //             1); for (int k = 0; k < (int)pgg[0].size(); k++)
     //                 b(k, 0) = pgg[i][k], a(k, 0) = pgg[ja][k],
     //                      a(k, 1) = pgg[jb][k];
     //             double c = MatrixFunctions::least_squares(a, b, x);
     //             if (abs(c) > 1E-12)
     //                 continue;
     //             cout << "[" << i << "] = ";
-    //             cout << setw(10) << setprecision(6) << x.data[0] << " * [" << ja
+    //             cout << setw(10) << setprecision(6) << x.data[0] << " * [" <<
+    //             ja
     //                  << "] ";
-    //             cout << setw(10) << setprecision(6) << x.data[1] << " * [" << jb
+    //             cout << setw(10) << setprecision(6) << x.data[1] << " * [" <<
+    //             jb
     //                  << "] ";
     //             cout << endl;
     //         }
@@ -618,9 +912,12 @@ int main() {
         // for (int j = 0; j < gg.size(); j++)
         //     cout << (target_cds[j] ? "C" : "D");
         // cout << endl;
-        vector<T> tts = SpinPermPattern::get_unique(target_cds, nn / 2);
+        vector<string> ttp =
+            SpinPermPattern::get_unique(target_cds, vector<uint16_t>(), nn / 2);
+        vector<T> tts(ttp.size());
         bool found = false;
         for (int j = 0; j < tts.size(); j++) {
+            tts[j] = R::make_tensor(ttp[j], gg, target_cds, cg) * 2;
             double x = xs.equal_to_scaled(tts[j]);
             if (x != 0)
                 found = true, cout << " = " << setw(10) << setprecision(6)
@@ -686,6 +983,7 @@ int main() {
                 }
         assert(found);
     }
+    abort();
     // cout << "---------" << endl;
     // SpinPermTensor zstd =
     //     R::make_tensor("((.+(.+.)0)1+.)0", indices, cds, cg) * 2;
