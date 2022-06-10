@@ -19,6 +19,8 @@
  */
 
 #include "block2.hpp"
+#include <chrono>
+#include <ctime>
 
 using namespace std;
 using namespace block2;
@@ -37,6 +39,9 @@ map<string, string> read_input(const string &filename) {
     ifs.close();
     map<string, string> params;
     for (auto x : lines) {
+        if (Parsing::trim(x).length() != 0 &&
+            (Parsing::trim(x)[0] == '!' || Parsing::trim(x)[0] == '#'))
+            continue;
         vector<string> line = Parsing::split(x, "=", true);
         if (line.size() == 1)
             params[Parsing::trim(line[0])] = "";
@@ -63,24 +68,41 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("scratch") != 0)
         scratch = params.at("scratch");
 
-    frame_<FP>() = make_shared<DataFrame<FP>>((size_t)(0.1 * memory),
-                                              (size_t)(0.9 * memory), scratch);
-    frame_<FP>()->use_main_stack = false;
-
     // random scratch file prefix to avoid conflicts
     if (params.count("prefix") != 0 && params.at("prefix") != "auto")
-        frame_<FP>()->prefix = params.at("prefix");
+        scratch = params.at("prefix");
     else {
         Random::rand_seed(0);
         stringstream ss;
         ss << hex << Random::rand_int(0, 0xFFFFFF);
-        frame_<FP>()->prefix = ss.str();
+        scratch = ss.str();
     }
+
+    double dmain_ratio = 0.4;
+    frame_<FP>() = make_shared<DataFrame<FP>>(
+        (size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch, dmain_ratio);
+    frame_<FP>()->use_main_stack = false;
+
+    double fp_cps_cutoff = 1E-16;
+    if (params.count("fp_cps_cutoff") != 0)
+        fp_cps_cutoff = Parsing::to_double(params.at("fp_cps_cutoff"));
+
+    frame_<FP>()->fp_codec = make_shared<FPCodec<FP>>(fp_cps_cutoff, 1024);
 
     if (params.count("rand_seed") != 0)
         Random::rand_seed(Parsing::to_int(params.at("rand_seed")));
     else
         Random::rand_seed(0);
+
+#ifdef _HAS_MPI
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<MPICommunicator<S>>();
+#else
+    shared_ptr<ParallelCommunicator<S>> para_comm =
+        make_shared<ParallelCommunicator<S>>(1, 0, 0);
+#endif
+    shared_ptr<ParallelRule<S, FL>> para_rule =
+        make_shared<ParallelRuleQC<S, FL>>(para_comm);
 
     cout << "integer stack memory = " << fixed << setprecision(4)
          << ((frame_<FP>()->isize << 2) / 1E9) << " GB" << endl;
@@ -89,6 +111,21 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
 
     cout << "bond integer size = " << sizeof(ubond_t) << endl;
     cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
+
+    if (params.count("simple_parallel") != 0) {
+        cout << "using simple parallel ..." << endl;
+        para_rule = make_shared<ParallelRuleSimple<S, FL>>(
+            ParallelSimpleTypes::IJ, para_comm);
+    }
+
+    if (params.count("restart_dir") != 0) {
+        para_comm->barrier();
+        if (!Parsing::path_exists(params.at("restart_dir")) &&
+            para_comm->rank == 0)
+            Parsing::mkdir(params.at("restart_dir"));
+        para_comm->barrier();
+        frame_<FP>()->restart_dir = params.at("restart_dir");
+    }
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
@@ -128,6 +165,21 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         abort();
     }
 
+    if (params.count("noreorder") == 0) {
+        cout << "filder reorder" << endl;
+        auto hmat = fcidump->abs_h1e_matrix();
+        auto kmat = fcidump->abs_exchange_matrix();
+        for (size_t i = 0; i < kmat.size(); i++)
+            kmat[i] = hmat[i] * 1E-7 + kmat[i];
+        vector<uint16_t> x = OrbitalOrdering::fiedler(fcidump->n_sites(), kmat);
+        cout << "BEST = ";
+        for (int i = 0; i < fcidump->n_sites(); i++)
+            cout << setw(4) << x[i];
+        cout << endl;
+        fcidump->reorder(x);
+        occs = fcidump->reorder(occs, x);
+    }
+
     if (params.count("n_elec") != 0)
         fcidump->params["nelec"] = params.at("n_elec");
 
@@ -142,7 +194,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global,
             n_threads, n_threads, 1);
-        threading_()->seq_type = SeqTypes::None;
+        threading_()->seq_type = SeqTypes::Tasked;
         cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;
     }
@@ -159,9 +211,20 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     S vacuum(0);
     S target(fcidump->n_elec(), fcidump->twos(),
              PointGroup::swap_pg(pg)(fcidump->isym()));
+    if (params.count("singlet_embedding") != 0 && is_same<SU2, S>::value)
+        target = S(fcidump->n_elec() + fcidump->twos(), 0,
+                   PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
-    shared_ptr<HamiltonianQC<S, FL>> hamil =
-        make_shared<HamiltonianQC<S, FL>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<S, FL>> hamil = nullptr;
+    if (params.count("simple_parallel") != 0)
+        hamil = make_shared<HamiltonianQC<S, FL>>(
+            vacuum, norb, orbsym,
+            make_shared<ParallelFCIDUMP<S, FL>>(
+                fcidump,
+                dynamic_pointer_cast<ParallelRuleSimple<S, FL>>(para_rule)));
+    else
+        hamil =
+            make_shared<HamiltonianQC<S, FL>>(vacuum, norb, orbsym, fcidump);
 
     hamil->opf->seq->mode = SeqTypes::Simple;
 
@@ -195,6 +258,13 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
 
     // middle transformation site for conventional mpo
     int trans_center = -1;
+    if (params.count("simple_parallel") != 0) {
+        trans_center = (int)(norb / (1 + 1.0 / sqrt(para_comm->size)));
+        if (trans_center >= norb - 2)
+            qc_type = QCTypes::NC;
+        cout << "using simple parallel ... trans center = " << trans_center
+             << endl;
+    }
     if (params.count("trans_center") != 0)
         trans_center = Parsing::to_int(params.at("trans_center"));
 
@@ -326,6 +396,8 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         cout << "MPO simplification end .. T = " << t.get_time() << endl;
     }
 
+    mpo = make_shared<ParallelMPO<S, FL>>(mpo, para_rule);
+
     if (params.count("save_mpo") != 0) {
         string fn = params.at("save_mpo");
         cout << "MPO saving start" << endl;
@@ -413,18 +485,32 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     } else
         mps_info = make_shared<MPSInfo<S>>(norb, vacuum, target, hamil->basis);
     double bias = 1.0;
+    double cbias = 0.0;
 
     if (params.count("occ_bias") != 0)
         bias = Parsing::to_double(params.at("occ_bias"));
 
+    if (params.count("occ_cbias") != 0)
+        cbias = Parsing::to_double(params.at("occ_cbias"));
+
+    for (auto &c : occs)
+        c = c >= 1 ? c - cbias : c + cbias;
+
     if (params.count("load_mps") != 0) {
         mps_info->tag = params.at("load_mps");
         mps_info->load_mutable();
-    } else if (occs.size() == 0)
-        mps_info->set_bond_dimension(bdims[0]);
-    else {
-        assert(occs.size() == norb);
-        mps_info->set_bond_dimension_using_occ(bdims[0], occs, bias);
+    } else {
+        if (params.count("singlet_embedding") != 0 && is_same<SU2, S>::value) {
+            S left_vacuum(fcidump->twos(), fcidump->twos(), 0);
+            S right_vacuum = vacuum;
+            mps_info->set_bond_dimension_fci(left_vacuum, right_vacuum);
+        }
+        if (occs.size() == 0)
+            mps_info->set_bond_dimension(bdims[0]);
+        else {
+            assert(occs.size() == norb);
+            mps_info->set_bond_dimension_using_occ(bdims[0], occs, bias);
+        }
     }
 
     if (params.count("print_fci_dims") != 0) {
@@ -501,8 +587,11 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
 
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
+    dmrg->me->delayed_contraction = OpNamesSet::normal_ops();
+    dmrg->me->cached_contraction = true;
     dmrg->davidson_conv_thrds = davidson_conv_thrds;
     dmrg->iprint = iprint;
+    dmrg->noise_type = NoiseTypes::ReducedPerturbative;
 
     if (params.count("noise_type") != 0) {
         if (params.at("noise_type") == "density_matrix")
@@ -552,7 +641,31 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("cutoff") != 0)
         dmrg->cutoff = (FP)Parsing::to_double(params.at("cutoff"));
 
-    dmrg->solve(n_sweeps, forward, tol);
+    double ener = 0;
+    if (params.count("twodot_to_onedot") == 0)
+        ener = dmrg->solve(n_sweeps, forward, tol);
+    else {
+        int tto = Parsing::to_int(params.at("twodot_to_onedot"));
+        dmrg->solve(tto, forward, 0);
+        dmrg->me->dot = 1;
+        dmrg->bond_dims = dmrg->bond_dims.size() > tto
+                              ? vector<ubond_t>(dmrg->bond_dims.begin() + tto,
+                                                dmrg->bond_dims.end())
+                              : vector<ubond_t>{dmrg->bond_dims.back()};
+        dmrg->noises =
+            dmrg->noises.size() > tto
+                ? vector<FP>(dmrg->noises.begin() + tto, dmrg->noises.end())
+                : vector<FP>{dmrg->noises.back()};
+        dmrg->davidson_conv_thrds =
+            dmrg->davidson_conv_thrds.size() > tto
+                ? vector<FP>(dmrg->davidson_conv_thrds.begin() + tto,
+                             dmrg->davidson_conv_thrds.end())
+                : vector<FP>{dmrg->davidson_conv_thrds.back()};
+        ener = dmrg->solve(n_sweeps - tto, forward ^ (tto % 2), tol);
+    }
+
+    cout << "DMRG energy = " << setw(20) << setprecision(15) << fixed << ener
+         << endl;
 
     mps->save_data();
 
@@ -578,6 +691,10 @@ int main(int argc, char *argv[]) {
 
     auto params = read_input(input);
 
+    auto start = chrono::system_clock::now();
+    auto startt = chrono::system_clock::to_time_t(start);
+    cout << "START AT " << ctime(&startt) << endl;
+
     if (params.count("su2") == 0 || !!Parsing::to_int(params.at("su2"))) {
         cout << "SPIN-ADAPTED" << endl;
         run<SU2, double>(params);
@@ -585,6 +702,14 @@ int main(int argc, char *argv[]) {
         cout << "NON-SPIN-ADAPTED" << endl;
         run<SZ, double>(params);
     }
+
+    auto finish = chrono::system_clock::now();
+    auto finisht = chrono::system_clock::to_time_t(finish);
+
+    cout << "FINISH AT " << ctime(&finisht) << endl;
+    cout << "ELAPSED " << fixed << setprecision(3)
+         << ((chrono::duration<double>)(finish - start)).count() << " SECONDS"
+         << endl;
 
     return 0;
 }
