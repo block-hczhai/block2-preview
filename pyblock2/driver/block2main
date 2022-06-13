@@ -402,8 +402,9 @@ if DEBUG:
     _print("REAL DOMAIN - " if "use_complex" not in dic else "COMPLEX DOMAIN - ", end='')
     _print("SINGLE PREC" if "single_prec" in dic else "DOUBLE PREC")
 
-scratch = dic.get("prefix", "./nodex/")
+prefix = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
+mps_dir = dic.get("mps_dir", None)
 stackblock_compat = dic.get("hf_occ", None) == "integral"
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 if stackblock_compat:
@@ -556,19 +557,32 @@ if "use_hybrid_complex" in dic:
         simpl_rule_cpx_h1e = AntiHermitianRuleQCCPX(simpl_rule_cpx_h1e)
 
 if MPI is None or MPI.rank == 0:
-    if not os.path.isdir(scratch):
-        os.mkdir(scratch)
+    if not os.path.isdir(prefix):
+        os.makedirs(prefix)
+    if restart_dir is not None and not os.path.isdir(restart_dir):
+        os.makedirs(restart_dir)
+    if mps_dir is not None and not os.path.isdir(mps_dir):
+        os.makedirs(mps_dir)
+    scratch = prefix if mps_dir is None else mps_dir
     if stackblock_compat:
         scratch = scratch + "/node0"
     if not os.path.isdir(scratch):
-        os.mkdir(scratch)
-    if restart_dir is not None and not os.path.isdir(restart_dir):
-        os.mkdir(restart_dir)
+        os.makedirs(scratch)
     os.environ['TMPDIR'] = scratch
 else:
+    scratch = prefix if mps_dir is None else mps_dir
     if stackblock_compat:
         scratch = scratch + "/node0"
     os.environ['TMPDIR'] = scratch
+if MPI is not None:
+    MPI.barrier()
+
+if MPI is not None and MPI.rank != 0:
+    if not os.path.isdir(prefix):
+        os.makedirs(prefix)
+    if not os.path.isdir(scratch):
+        os.makedirs(scratch)
+
 if MPI is not None:
     MPI.barrier()
 
@@ -580,10 +594,10 @@ fp_cps_cutoff = float(dic.get("fp_cps_cutoff", 1E-16))
 if "intmem" in dic:
     intmemory = int(int(dic["intmem"].split()[0]) * 1e9)
     init_memory(isize=int(intmemory), dsize=int(memory),
-                save_dir=scratch, dmain_ratio=mem_ratio)
+                save_dir=prefix, dmain_ratio=mem_ratio)
 else:
     init_memory(isize=int(memory * 0.1),
-                dsize=int(memory * 0.9), save_dir=scratch,
+                dsize=int(memory * 0.9), save_dir=prefix,
                 dmain_ratio=mem_ratio)
 # ZHC NOTE nglobal_threads, nop_threads, MKL_NUM_THREADS
 Global.threading = Threading(
@@ -596,6 +610,8 @@ gframe.load_buffering = False
 gframe.save_buffering = False
 gframe.use_main_stack = False
 gframe.minimal_disk_usage = True
+if mps_dir is not None:
+    gframe.mps_dir = mps_dir
 if restart_dir is not None:
     gframe.restart_dir = restart_dir
 if restart_dir_per_sweep is not None:
