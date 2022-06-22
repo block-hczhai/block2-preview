@@ -286,6 +286,27 @@ struct SpinPermRecoupling {
                 ss << c;
         return ss.str();
     }
+    static string split_cds(const string &x, vector<uint8_t> &cds) {
+        int icd = 0;
+        stringstream ss;
+        cds.clear();
+        for (auto &c : x)
+            if (c == 'C' || c == 'c')
+                ss << '.', cds.push_back(1);
+            else if (c == 'D' || c == 'd')
+                ss << '.', cds.push_back(0);
+            else
+                ss << c;
+        return ss.str();
+    }
+    static int count_cds(const string &x) {
+        int ncd = 0;
+        for (auto &c : x)
+            if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
+                  (c >= '0' && c <= '9')))
+                ncd++;
+        return ncd;
+    }
     static SpinPermTensor make_tensor(const string &x,
                                       const vector<uint16_t> &indices,
                                       const vector<uint8_t> &cds,
@@ -782,254 +803,262 @@ struct SpinPermScheme {
 
 } // namespace block2
 
-using namespace block2;
+// using namespace block2;
 
-int main() {
-    using T = SpinPermTensor;
-    using R = SpinPermRecoupling;
-    SpinPermScheme x(6);
-    cout << x.to_str() << endl;
-    abort();
-    SpinPermPattern spat(4);
-    cout << spat.to_str() << endl;
-    for (size_t i = 0; i < spat.count(); i++) {
-        vector<uint16_t> irr = spat[i];
-        vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
-        for (int j = 0; j < rr.size(); j += irr.size()) {
-            for (int k = 0; k < irr.size(); k++)
-                cout << setw(4) << rr[j + k];
-            cout << endl;
-        }
-    }
-    abort();
-    SU2CG cg(100);
-    cg.initialize();
-    uint16_t p = 0, q = 1, r = 2, s = 3;
-    // a = mul(mul('Cp', 'Cq', 2), mul('Dr', 'Ds', 2), 0)
-    // b = mul(mul(mul('Cp', 'Cq', 2), 'Dr', 1), 'Ds', 0)
-    auto a = T::mul(T::mul(T::C(p), T::C(q), 2, cg),
-                    T::mul(T::D(r), T::D(s), 2, cg), 0, cg);
-    auto b = T::mul(T::mul(T::mul(T::C(p), T::C(q), 2, cg), T::D(r), 1, cg),
-                    T::D(s), 0, cg);
-    cout << a.to_str() << endl;
-    cout << b.to_str() << endl;
-    cout << (a == b) << endl;
-    int nn = 4;
-    vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
-    cout << pp.size() << endl;
-    for (auto &xp : pp)
-        cout << xp << " | " << SpinPermRecoupling::find_split_index(xp) << endl;
-    vector<uint8_t> cds;
-    vector<uint16_t> indices;
-    for (int i = 0; i < nn; i++)
-        indices.push_back(i), cds.push_back(i < nn / 2);
-    // vector<T> ts(pp.size());
-    // for (int i = 0; i < (int)pp.size(); i++)
-    //     ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
-    // vector<int> selected_pp_idx;
-    // for (int i = 0; i < (int)pp.size(); i++) {
-    //     cout << i << " / " << pp.size() << " " << ts[i].to_str() << endl;
-    //     bool found = false;
-    //     for (auto j : selected_pp_idx) {
-    //         double x = ts[i].equal_to_scaled(ts[j]);
-    //         if (x != 0)
-    //             found = true;
-    //         // cout << "[" << i << "] = " << x << " * [" << j << "]" << endl;
-    //     }
-    //     if (!found)
-    //         selected_pp_idx.push_back(i);
-    // }
-    // cout << " selected count = " << selected_pp_idx.size() << endl;
-    // cout << " selected = ";
-    // for (auto &ix : selected_pp_idx)
-    //     cout << ix << " ";
-    // cout << endl;
-    // SpinPermTensor std;
-    // int cxx = 117;
-    // for (auto &ix : selected_pp_idx) {
-    //     std = std + ts[ix] * (cxx++);
-    // }
-    // cout << std.data[0].size() << endl;
-    // vector<vector<double>> pgg(selected_pp_idx.size());
-    // int ixx = 0;
-    // for (auto &ix : selected_pp_idx) {
-    //     auto &pg = pgg[ixx++];
-    //     pg = vector<double>(std.data[0].size(), 0);
-    //     for (auto &t : ts[ix].data[0])
-    //         for (int i = 0; i < pg.size(); i++)
-    //             if (std.data[0][i].ops_equal_to(t)) {
-    //                 pg[i] += t.factor;
-    //                 break;
-    //             }
-    //     // for (auto &px : pg)
-    //     //     cout << setw(10) << setprecision(6) << fixed << px;
-    //     // cout << endl;
-    // }
-    vector<double> ppp(100000000);
-    // for (int i = 0; i < (int)pgg.size(); i++)
-    //     for (int ja = 0; ja < (int)pgg.size(); ja++)
-    //         for (int jb = ja + 1; jb < (int)pgg.size(); jb++) {
-    //             if (ja == i || jb == i)
-    //                 continue;
-    //             MatrixRef a(ppp.data(), pgg[0].size(), 2);
-    //             MatrixRef x(ppp.data() + a.size(), 2, 1);
-    //             MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(),
-    //             1); for (int k = 0; k < (int)pgg[0].size(); k++)
-    //                 b(k, 0) = pgg[i][k], a(k, 0) = pgg[ja][k],
-    //                      a(k, 1) = pgg[jb][k];
-    //             double c = MatrixFunctions::least_squares(a, b, x);
-    //             if (abs(c) > 1E-12)
-    //                 continue;
-    //             cout << "[" << i << "] = ";
-    //             cout << setw(10) << setprecision(6) << x.data[0] << " * [" <<
-    //             ja
-    //                  << "] ";
-    //             cout << setw(10) << setprecision(6) << x.data[1] << " * [" <<
-    //             jb
-    //                  << "] ";
-    //             cout << endl;
-    //         }
-    vector<uint16_t> gg = indices;
-    vector<uint16_t> rr = SpinPermPattern::all_reordering(gg);
-    cout << "reorder count = " << rr.size() / gg.size() << endl;
-    for (int i = 0; i < rr.size(); i += gg.size()) {
-        for (int k = 0; k < gg.size(); k++)
-            cout << setw(4) << rr[i + k];
-        // cout << endl;
-        vector<uint16_t> indices(rr.begin() + i, rr.begin() + i + gg.size());
-        string xpre = "(.+.)0";
-        for (int inn = 4; inn <= nn; inn += 2)
-            xpre = "((.+" + xpre + ")1+.)0";
-        SpinPermTensor x =
-            SpinPermRecoupling::make_tensor(xpre, indices, cds, cg) * 2;
-        // cout << x.to_str() << endl;
-        SpinPermTensor xs = x.auto_sort();
-        // cout << xs.to_str() << endl;
-        vector<uint8_t> target_cds = cds;
-        for (int j = 0; j < gg.size(); j++)
-            target_cds[j] = xs.data[0][0].ops[j].first & SpinOperator::C;
-        // cout << "target - cds = ";
-        // for (int j = 0; j < gg.size(); j++)
-        //     cout << (target_cds[j] ? "C" : "D");
-        // cout << endl;
-        vector<string> ttp =
-            SpinPermPattern::get_unique(target_cds, vector<uint16_t>(), nn / 2);
-        vector<T> tts(ttp.size());
-        bool found = false;
-        for (int j = 0; j < tts.size(); j++) {
-            tts[j] = R::make_tensor(ttp[j], gg, target_cds, cg) * 2;
-            double x = xs.equal_to_scaled(tts[j]);
-            if (x != 0)
-                found = true, cout << " = " << setw(10) << setprecision(6)
-                                   << fixed << x << " * [" << j << "]" << endl;
-        }
-        if (found)
-            continue;
-        SpinPermTensor std = SpinPermTensor();
-        int cxx = 117;
-        for (int j = 0; j < tts.size(); j++)
-            std = std + tts[j] * (cxx++);
-        std = std + xs * (cxx++);
-        // cout << std.data[0].size() << endl;
-        vector<double> pgv(std.data[0].size(), 0);
-        for (auto &t : xs.data[0])
-            for (int i = 0; i < pgv.size(); i++)
-                if (std.data[0][i].ops_equal_to(t)) {
-                    pgv[i] += t.factor;
-                    break;
-                }
-        auto pgg = SpinPermPattern::make_matrix(tts, std);
-        for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
-            for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++) {
-                MatrixRef a(ppp.data(), pgg[0].size(), 2);
-                MatrixRef x(ppp.data() + a.size(), 2, 1);
-                MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(), 1);
-                for (int k = 0; k < (int)pgg[0].size(); k++)
-                    b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
-                         a(k, 1) = pgg[jb][k];
-                double c = MatrixFunctions::least_squares(a, b, x);
-                if (abs(c) > 1E-12)
-                    continue;
-                cout << " = ";
-                cout << setw(10) << setprecision(6) << fixed << x.data[0]
-                     << " * [" << ja << "] ";
-                cout << setw(10) << setprecision(6) << fixed << x.data[1]
-                     << " * [" << jb << "] ";
-                cout << endl;
-                found = true;
-            }
-        for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
-            for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
-                for (int jc = jb + 1; jc < (int)pgg.size() && !found; jc++) {
-                    MatrixRef a(ppp.data(), pgg[0].size(), 3);
-                    MatrixRef x(ppp.data() + a.size(), 3, 1);
-                    MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(),
-                                1);
-                    for (int k = 0; k < (int)pgg[0].size(); k++)
-                        b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
-                             a(k, 1) = pgg[jb][k], a(k, 2) = pgg[jc][k];
-                    double c = MatrixFunctions::least_squares(a, b, x);
-                    if (abs(c) > 1E-12)
-                        continue;
-                    cout << " = ";
-                    cout << setw(10) << setprecision(6) << fixed << x.data[0]
-                         << " * [" << ja << "] ";
-                    cout << setw(10) << setprecision(6) << fixed << x.data[1]
-                         << " * [" << jb << "] ";
-                    cout << setw(10) << setprecision(6) << fixed << x.data[2]
-                         << " * [" << jc << "] ";
-                    cout << endl;
-                    found = true;
-                }
-        assert(found);
-    }
-    abort();
-    // cout << "---------" << endl;
-    // SpinPermTensor zstd =
-    //     R::make_tensor("((.+(.+.)0)1+.)0", indices, cds, cg) * 2;
-    // cout << zstd.to_str() << endl;
-    // vector<SpinPermTensor> A = {
-    //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, r, s},
-    //                    R::make_cds("CCDD"), cg),
-    //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, s, r},
-    //                    R::make_cds("CCDD"), cg),
-    //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, q, s},
-    //                    R::make_cds("CDCD"), cg),
-    //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, s, q},
-    //                    R::make_cds("CDDC"), cg),
-    // };
-    // vector<SpinPermTensor> B = {
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, r, s},
-    //                    R::make_cds("CCDD"), cg),
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, s, r},
-    //                    R::make_cds("CCDD"), cg) *
-    //         -1,
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, q, s},
-    //                    R::make_cds("CDCD"), cg),
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, s, q},
-    //                    R::make_cds("CDDC"), cg) *
-    //         -1,
-    // };
-    // for (int i = 0; i < A.size(); i++) {
-    //     SpinPermTensor zz = A[i] * (-1) + B[i] * sqrt(3);
-    //     zz = zz.auto_sort();
-    //     cout << (zz == zstd) << " === " << zz.to_str() << endl;
-    // }
-    // SpinPermTensor ZA =
-    //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{0, 1, 2, 3},
-    //                    R::make_cds("CDDC"), cg);
-    // SpinPermTensor ZB =
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
-    //                    R::make_cds("CDDC"), cg) *
-    //     -1;
-    // SpinPermTensor ZC =
-    //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
-    //                    R::make_cds("CCDD"), cg) *
-    //     -1;
-    // cout << "ZA = " << ZA.to_str() << endl;
-    // cout << "ZB = " << ZB.to_str() << endl;
-    // cout << "ZC = " << ZC.to_str() << endl;
-    // SpinPermTensor ZAB = ZA * (-1) + ZB * sqrt(3);
-    // cout << "ZAB = " << ZAB.to_str() << endl;
-    return 0;
-}
+// int main() {
+//     using T = SpinPermTensor;
+//     using R = SpinPermRecoupling;
+//     SpinPermScheme x(6);
+//     cout << x.to_str() << endl;
+//     abort();
+//     SpinPermPattern spat(4);
+//     cout << spat.to_str() << endl;
+//     for (size_t i = 0; i < spat.count(); i++) {
+//         vector<uint16_t> irr = spat[i];
+//         vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
+//         for (int j = 0; j < rr.size(); j += irr.size()) {
+//             for (int k = 0; k < irr.size(); k++)
+//                 cout << setw(4) << rr[j + k];
+//             cout << endl;
+//         }
+//     }
+//     abort();
+//     SU2CG cg(100);
+//     cg.initialize();
+//     uint16_t p = 0, q = 1, r = 2, s = 3;
+//     // a = mul(mul('Cp', 'Cq', 2), mul('Dr', 'Ds', 2), 0)
+//     // b = mul(mul(mul('Cp', 'Cq', 2), 'Dr', 1), 'Ds', 0)
+//     auto a = T::mul(T::mul(T::C(p), T::C(q), 2, cg),
+//                     T::mul(T::D(r), T::D(s), 2, cg), 0, cg);
+//     auto b = T::mul(T::mul(T::mul(T::C(p), T::C(q), 2, cg), T::D(r), 1, cg),
+//                     T::D(s), 0, cg);
+//     cout << a.to_str() << endl;
+//     cout << b.to_str() << endl;
+//     cout << (a == b) << endl;
+//     int nn = 4;
+//     vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
+//     cout << pp.size() << endl;
+//     for (auto &xp : pp)
+//         cout << xp << " | " << SpinPermRecoupling::find_split_index(xp) <<
+//         endl;
+//     vector<uint8_t> cds;
+//     vector<uint16_t> indices;
+//     for (int i = 0; i < nn; i++)
+//         indices.push_back(i), cds.push_back(i < nn / 2);
+//     // vector<T> ts(pp.size());
+//     // for (int i = 0; i < (int)pp.size(); i++)
+//     //     ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
+//     // vector<int> selected_pp_idx;
+//     // for (int i = 0; i < (int)pp.size(); i++) {
+//     //     cout << i << " / " << pp.size() << " " << ts[i].to_str() << endl;
+//     //     bool found = false;
+//     //     for (auto j : selected_pp_idx) {
+//     //         double x = ts[i].equal_to_scaled(ts[j]);
+//     //         if (x != 0)
+//     //             found = true;
+//     //         // cout << "[" << i << "] = " << x << " * [" << j << "]" <<
+//     endl;
+//     //     }
+//     //     if (!found)
+//     //         selected_pp_idx.push_back(i);
+//     // }
+//     // cout << " selected count = " << selected_pp_idx.size() << endl;
+//     // cout << " selected = ";
+//     // for (auto &ix : selected_pp_idx)
+//     //     cout << ix << " ";
+//     // cout << endl;
+//     // SpinPermTensor std;
+//     // int cxx = 117;
+//     // for (auto &ix : selected_pp_idx) {
+//     //     std = std + ts[ix] * (cxx++);
+//     // }
+//     // cout << std.data[0].size() << endl;
+//     // vector<vector<double>> pgg(selected_pp_idx.size());
+//     // int ixx = 0;
+//     // for (auto &ix : selected_pp_idx) {
+//     //     auto &pg = pgg[ixx++];
+//     //     pg = vector<double>(std.data[0].size(), 0);
+//     //     for (auto &t : ts[ix].data[0])
+//     //         for (int i = 0; i < pg.size(); i++)
+//     //             if (std.data[0][i].ops_equal_to(t)) {
+//     //                 pg[i] += t.factor;
+//     //                 break;
+//     //             }
+//     //     // for (auto &px : pg)
+//     //     //     cout << setw(10) << setprecision(6) << fixed << px;
+//     //     // cout << endl;
+//     // }
+//     vector<double> ppp(100000000);
+//     // for (int i = 0; i < (int)pgg.size(); i++)
+//     //     for (int ja = 0; ja < (int)pgg.size(); ja++)
+//     //         for (int jb = ja + 1; jb < (int)pgg.size(); jb++) {
+//     //             if (ja == i || jb == i)
+//     //                 continue;
+//     //             MatrixRef a(ppp.data(), pgg[0].size(), 2);
+//     //             MatrixRef x(ppp.data() + a.size(), 2, 1);
+//     //             MatrixRef b(ppp.data() + a.size() + x.size(),
+//     pgg[0].size(),
+//     //             1); for (int k = 0; k < (int)pgg[0].size(); k++)
+//     //                 b(k, 0) = pgg[i][k], a(k, 0) = pgg[ja][k],
+//     //                      a(k, 1) = pgg[jb][k];
+//     //             double c = MatrixFunctions::least_squares(a, b, x);
+//     //             if (abs(c) > 1E-12)
+//     //                 continue;
+//     //             cout << "[" << i << "] = ";
+//     //             cout << setw(10) << setprecision(6) << x.data[0] << " * ["
+//     <<
+//     //             ja
+//     //                  << "] ";
+//     //             cout << setw(10) << setprecision(6) << x.data[1] << " * ["
+//     <<
+//     //             jb
+//     //                  << "] ";
+//     //             cout << endl;
+//     //         }
+//     vector<uint16_t> gg = indices;
+//     vector<uint16_t> rr = SpinPermPattern::all_reordering(gg);
+//     cout << "reorder count = " << rr.size() / gg.size() << endl;
+//     for (int i = 0; i < rr.size(); i += gg.size()) {
+//         for (int k = 0; k < gg.size(); k++)
+//             cout << setw(4) << rr[i + k];
+//         // cout << endl;
+//         vector<uint16_t> indices(rr.begin() + i, rr.begin() + i + gg.size());
+//         string xpre = "(.+.)0";
+//         for (int inn = 4; inn <= nn; inn += 2)
+//             xpre = "((.+" + xpre + ")1+.)0";
+//         SpinPermTensor x =
+//             SpinPermRecoupling::make_tensor(xpre, indices, cds, cg) * 2;
+//         // cout << x.to_str() << endl;
+//         SpinPermTensor xs = x.auto_sort();
+//         // cout << xs.to_str() << endl;
+//         vector<uint8_t> target_cds = cds;
+//         for (int j = 0; j < gg.size(); j++)
+//             target_cds[j] = xs.data[0][0].ops[j].first & SpinOperator::C;
+//         // cout << "target - cds = ";
+//         // for (int j = 0; j < gg.size(); j++)
+//         //     cout << (target_cds[j] ? "C" : "D");
+//         // cout << endl;
+//         vector<string> ttp =
+//             SpinPermPattern::get_unique(target_cds, vector<uint16_t>(), nn /
+//             2);
+//         vector<T> tts(ttp.size());
+//         bool found = false;
+//         for (int j = 0; j < tts.size(); j++) {
+//             tts[j] = R::make_tensor(ttp[j], gg, target_cds, cg) * 2;
+//             double x = xs.equal_to_scaled(tts[j]);
+//             if (x != 0)
+//                 found = true, cout << " = " << setw(10) << setprecision(6)
+//                                    << fixed << x << " * [" << j << "]" <<
+//                                    endl;
+//         }
+//         if (found)
+//             continue;
+//         SpinPermTensor std = SpinPermTensor();
+//         int cxx = 117;
+//         for (int j = 0; j < tts.size(); j++)
+//             std = std + tts[j] * (cxx++);
+//         std = std + xs * (cxx++);
+//         // cout << std.data[0].size() << endl;
+//         vector<double> pgv(std.data[0].size(), 0);
+//         for (auto &t : xs.data[0])
+//             for (int i = 0; i < pgv.size(); i++)
+//                 if (std.data[0][i].ops_equal_to(t)) {
+//                     pgv[i] += t.factor;
+//                     break;
+//                 }
+//         auto pgg = SpinPermPattern::make_matrix(tts, std);
+//         for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+//             for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++) {
+//                 MatrixRef a(ppp.data(), pgg[0].size(), 2);
+//                 MatrixRef x(ppp.data() + a.size(), 2, 1);
+//                 MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(),
+//                 1); for (int k = 0; k < (int)pgg[0].size(); k++)
+//                     b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+//                          a(k, 1) = pgg[jb][k];
+//                 double c = MatrixFunctions::least_squares(a, b, x);
+//                 if (abs(c) > 1E-12)
+//                     continue;
+//                 cout << " = ";
+//                 cout << setw(10) << setprecision(6) << fixed << x.data[0]
+//                      << " * [" << ja << "] ";
+//                 cout << setw(10) << setprecision(6) << fixed << x.data[1]
+//                      << " * [" << jb << "] ";
+//                 cout << endl;
+//                 found = true;
+//             }
+//         for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
+//             for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
+//                 for (int jc = jb + 1; jc < (int)pgg.size() && !found; jc++) {
+//                     MatrixRef a(ppp.data(), pgg[0].size(), 3);
+//                     MatrixRef x(ppp.data() + a.size(), 3, 1);
+//                     MatrixRef b(ppp.data() + a.size() + x.size(),
+//                     pgg[0].size(),
+//                                 1);
+//                     for (int k = 0; k < (int)pgg[0].size(); k++)
+//                         b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
+//                              a(k, 1) = pgg[jb][k], a(k, 2) = pgg[jc][k];
+//                     double c = MatrixFunctions::least_squares(a, b, x);
+//                     if (abs(c) > 1E-12)
+//                         continue;
+//                     cout << " = ";
+//                     cout << setw(10) << setprecision(6) << fixed << x.data[0]
+//                          << " * [" << ja << "] ";
+//                     cout << setw(10) << setprecision(6) << fixed << x.data[1]
+//                          << " * [" << jb << "] ";
+//                     cout << setw(10) << setprecision(6) << fixed << x.data[2]
+//                          << " * [" << jc << "] ";
+//                     cout << endl;
+//                     found = true;
+//                 }
+//         assert(found);
+//     }
+//     abort();
+//     // cout << "---------" << endl;
+//     // SpinPermTensor zstd =
+//     //     R::make_tensor("((.+(.+.)0)1+.)0", indices, cds, cg) * 2;
+//     // cout << zstd.to_str() << endl;
+//     // vector<SpinPermTensor> A = {
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, r, s},
+//     //                    R::make_cds("CCDD"), cg),
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, s, r},
+//     //                    R::make_cds("CCDD"), cg),
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, q, s},
+//     //                    R::make_cds("CDCD"), cg),
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, s, q},
+//     //                    R::make_cds("CDDC"), cg),
+//     // };
+//     // vector<SpinPermTensor> B = {
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, r, s},
+//     //                    R::make_cds("CCDD"), cg),
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, s, r},
+//     //                    R::make_cds("CCDD"), cg) *
+//     //         -1,
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, q, s},
+//     //                    R::make_cds("CDCD"), cg),
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, s, q},
+//     //                    R::make_cds("CDDC"), cg) *
+//     //         -1,
+//     // };
+//     // for (int i = 0; i < A.size(); i++) {
+//     //     SpinPermTensor zz = A[i] * (-1) + B[i] * sqrt(3);
+//     //     zz = zz.auto_sort();
+//     //     cout << (zz == zstd) << " === " << zz.to_str() << endl;
+//     // }
+//     // SpinPermTensor ZA =
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{0, 1, 2, 3},
+//     //                    R::make_cds("CDDC"), cg);
+//     // SpinPermTensor ZB =
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
+//     //                    R::make_cds("CDDC"), cg) *
+//     //     -1;
+//     // SpinPermTensor ZC =
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
+//     //                    R::make_cds("CCDD"), cg) *
+//     //     -1;
+//     // cout << "ZA = " << ZA.to_str() << endl;
+//     // cout << "ZB = " << ZB.to_str() << endl;
+//     // cout << "ZC = " << ZC.to_str() << endl;
+//     // SpinPermTensor ZAB = ZA * (-1) + ZB * sqrt(3);
+//     // cout << "ZAB = " << ZAB.to_str() << endl;
+//     return 0;
+// }
