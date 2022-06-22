@@ -47,7 +47,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "tran_bra_range", "tran_ket_range", "tran_triangular", "use_hybrid_complex",
               "mem_ratio", "min_mpo_mem", "qc_mpo_type", "full_integral", "skip_inact_ext_sites",
               "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale", "check_dav_tol",
-              "simple_parallel", "release_integral", "condense_mpo"}
+              "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

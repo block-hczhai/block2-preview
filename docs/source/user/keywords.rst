@@ -459,6 +459,14 @@ cutoff
     Optional. Followed by a small float number. States with eigenvalue below this number will be discarded,
     even when the bond dimension is large enough to keep this state. Default is 1E-14.
 
+svd\_cutoff
+    Optional. Followed by a small float number. Cutoff of singular values used in parallel over sites.
+    Default is 1E-12.
+
+svd\_eps
+    Optional. Followed by a small float number. Accuracy of SVD for connection sites used in parallel over sites.
+    Default is 1E-4.
+
 trunc\_type
     Optional. Can be ``physical`` (default) or ``reduced``, where ``reduced`` re-weight eigenvalues by their multiplicities (only useful in the ``SU2`` mode).
 
