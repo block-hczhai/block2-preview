@@ -100,9 +100,12 @@ struct ParallelRuleSimple : ParallelRule<S, FL> {
 template <typename S, typename FL> struct ParallelFCIDUMP : FCIDUMP<FL> {
     shared_ptr<FCIDUMP<FL>> fcidump;
     shared_ptr<ParallelRuleSimple<S, FL>> rule;
+    using FCIDUMP<FL>::params;
     ParallelFCIDUMP(const shared_ptr<FCIDUMP<FL>> &fcidump,
                     const shared_ptr<ParallelRuleSimple<S, FL>> &rule)
-        : fcidump(fcidump), rule(rule) {}
+        : fcidump(fcidump), rule(rule) {
+            params = fcidump->params;
+        }
     virtual ~ParallelFCIDUMP() = default;
     // One-electron integral element (SU(2))
     FL t(uint16_t i, uint16_t j) const override {

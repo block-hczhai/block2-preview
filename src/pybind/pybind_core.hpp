@@ -2304,6 +2304,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
             "    Args:\n"
             "        i, j, k, l : spatial indices\n"
             "        sij, skl : spin indices (0=alpha, 1=beta)")
+        .def("count_non_zero", &FCIDUMP<FL>::count_non_zero)
         .def("det_energy", &FCIDUMP<FL>::det_energy)
         .def("exchange_matrix", &FCIDUMP<FL>::exchange_matrix)
         .def("abs_exchange_matrix", &FCIDUMP<FL>::abs_exchange_matrix)

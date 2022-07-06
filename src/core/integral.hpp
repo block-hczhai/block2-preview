@@ -1132,6 +1132,20 @@ template <typename FL> struct FCIDUMP {
     int k_isym() const {
         return params.count("kisym") ? Parsing::to_int(params.at("kisym")) : 0;
     }
+    // return number of non-zero terms
+    virtual size_t count_non_zero() const {
+        uint16_t nn = n_sites();
+        size_t cnt = 0;
+        for (uint16_t i = 0; i < nn; i++)
+            for (uint16_t j = 0; j < nn; j++)
+                for (uint16_t k = 0; k < nn; k++)
+                    for (uint16_t l = 0; l < nn; l++)
+                        cnt += (v(i, j, k, l) != 0.0);
+        for (uint16_t i = 0; i < nn; i++)
+            for (uint16_t j = 0; j < nn; j++)
+                cnt += (t(i, j) != 0.0);
+        return cnt;
+    }
     // energy of a determinant
     FL det_energy(const vector<uint8_t> iocc, uint16_t i_begin,
                   uint16_t i_end) const {
