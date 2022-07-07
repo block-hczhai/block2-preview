@@ -1140,10 +1140,10 @@ template <typename FL> struct FCIDUMP {
             for (uint16_t j = 0; j < nn; j++)
                 for (uint16_t k = 0; k < nn; k++)
                     for (uint16_t l = 0; l < nn; l++)
-                        cnt += (v(i, j, k, l) != 0.0);
+                        cnt += (v(i, j, k, l) != (FL)0.0);
         for (uint16_t i = 0; i < nn; i++)
             for (uint16_t j = 0; j < nn; j++)
-                cnt += (t(i, j) != 0.0);
+                cnt += (t(i, j) != (FL)0.0);
         return cnt;
     }
     // energy of a determinant
