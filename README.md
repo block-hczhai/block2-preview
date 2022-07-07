@@ -107,7 +107,11 @@ Features
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
 * DMRG-CASSCF (pyscf interface)
+    * Nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
 * Stochastic perturbative DMRG
+* DMRG with Spin-Orbit Coupling (SOC)
+    * 1-step approach (full complex one-MPO and hybrid real/complex two-MPO schemes)
+    * 2-step approach
 * Uncontracted dynamic correlation
     * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
     * DMRG Multi-Reference Averaged Quadratic Coupled Cluster (AQCC)/ Coupled Pair Functional (ACPF)
@@ -140,6 +144,7 @@ References
 
 * Sayfutyarova, E. R., Chan, G. K. L. A state interaction spin-orbit coupling density matrix renormalization group method. *The Journal of Chemical Physics* 2016, **144**, 234301. https://doi.org/10.1063/1.4953445.
 * Sayfutyarova, E. R., Chan, G. K. L. Electron paramagnetic resonance g-tensors from state interaction spin-orbit coupling density matrix renormalization group. *The Journal of Chemical Physics* 2018, **148**, 184103. https://doi.org/10.1063/1.5020079.
+* Zhai, H., Chan, G. K. A comparison between the one- and two-step spin-orbit coupling approaches based on the ab initio Density Matrix Renormalization Group. 2022. https://doi.org/10.48550/arXiv.2207.02435
 
 ### Green's Function
 
@@ -173,6 +178,7 @@ References
 * Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. https://doi.org/10.1063/1.452291.
 
 * Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. https://doi.org/10.1063/1.1361246.
+* Angeli, C., Cimiraglia, R., Malrieu J.-P. N-electron valence state perturbation theory: A spinless formulation and an efficient implementation of the strongly contracted and of the partially contracted variants. *The Journal of chemical physics* 2002, **117**, 9138-9153. https://doi.org/10.1063/1.1515317.
 * Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. https://doi.org/10.1007/s00214-006-0207-0.
 
 * Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. https://doi.org/10.1016/j.chemphys.2008.10.004.

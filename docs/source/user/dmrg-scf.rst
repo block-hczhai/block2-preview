@@ -354,3 +354,62 @@ This will generate the following output: ::
 
     $ grep 'UCASSCF energy' cas6.out
     UCASSCF energy = -75.6231442706386
+
+DMRGSCF Nuclear Gradients and Geometry Optimization
+---------------------------------------------------
+
+.. highlight:: python3
+
+The following is an example python script for computing DMRGSCF nuclear gradients and geometry optimization using ``block2``: ::
+
+    from pyscf import gto, scf, lib, dmrgscf
+    import os
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='C 0 0 0; C 0 0 1.2425', basis='ccpvdz',
+        symmetry='d2h', verbose=4, max_memory=10000) # mem in MB
+    mf = scf.RHF(mol)
+    mf.kernel()
+
+    from pyscf.mcscf import avas
+    nactorb, nactelec, coeff = avas.avas(mf, ["C 2p", "C 3p", "C 2s", "C 3s"])
+    print('CAS = ', nactorb, nactelec)
+
+    mc = mcscf.CASSCF(mf, nactorb, nactelec)
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=1000, tol=1E-10)
+    mc.fcisolver.runtimeDir = lib.param.TMPDIR
+    mc.fcisolver.scratchDirectory = lib.param.TMPDIR
+    mc.fcisolver.threads = int(os.environ.get("OMP_NUM_THREADS", 4))
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+
+    mc.canonicalization = True
+    mc.natorb = True
+    mc.kernel(coeff)
+
+    grad = mc.nuc_grad_method().kernel()
+
+    mol_eq = mc.nuc_grad_method().optimizer(solver='geomeTRIC').kernel()
+    print(mol_eq.atom_coords())
+
+.. highlight:: text
+
+This will generate the following output (the nuclear gradient at the initial geometry and the optimized geometry): ::
+
+    $ grep -A 4 'SymAdaptedCASSCF gradients' cas7.out
+    --------------- SymAdaptedCASSCF gradients ---------------
+            x                y                z
+    0 C     0.0000000000     0.0000000000     0.0388202961
+    1 C     0.0000000000     0.0000000000    -0.0388202961
+    ----------------------------------------------
+    $ tail -n 3 cas7.out
+    cycle 3: E = -75.6240204052  dE = -5.51573e-07  norm(grad) = 9.37108e-05
+    [[ 0.          0.         -1.19709701]
+    [ 0.          0.          1.19709701]]
+
+.. note ::
+
+    Currently, gradients for UCASSCF is not supported in ``pyscf``.
+    The geometry optimization part requires an additional module called ``geomeTRIC``,
+    which can be installed via ``pip install geometric``.

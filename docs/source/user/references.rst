@@ -35,6 +35,7 @@ Spin-Orbit Coupling
 
 * Sayfutyarova, E. R., Chan, G. K. L. A state interaction spin-orbit coupling density matrix renormalization group method. *The Journal of Chemical Physics* 2016, **144**, 234301. doi: `10.1063/1.4953445 <https://doi.org/10.1063/1.4953445>`_
 * Sayfutyarova, E. R., Chan, G. K. L. Electron paramagnetic resonance g-tensors from state interaction spin-orbit coupling density matrix renormalization group. *The Journal of Chemical Physics* 2018, **148**, 184103. doi: `10.1063/1.5020079 <https://doi.org/10.1063/1.5020079>`_
+* Zhai, H., Chan, G. K. A comparison between the one- and two-step spin-orbit coupling approaches based on the ab initio Density Matrix Renormalization Group. 2022. doi: `10.48550/arXiv.2207.02435 <https://doi.org/10.48550/arXiv.2207.02435>`_
 
 Green's Function
 ----------------
@@ -74,6 +75,7 @@ Multi-Reference Correlation Theories
 * Laidig, W. D., Saxe, P., Bartlett, R. J. The Description of N 2 and F 2 Potential Energy Surfaces Using Multireference Coupled Cluster Theory. *The Journal of Chemical Physics* 1987, **86**, 887-907. doi: `10.1063/1.452291 <https://doi.org/10.1063/1.452291>`_
 
 * Angeli, C., Cimiraglia, R., Evangelisti, S., Leininger, T., Malrieu, J.-P. Introduction of N-Electron Valence States for Multireference Perturbation Theory. *J. Chem. Phys.* 2001, **114**, 10252–10264. doi: `10.1063/1.1361246 <https://doi.org/10.1063/1.1361246>`_
+* Angeli, C., Cimiraglia, R., Malrieu J.-P. N-electron valence state perturbation theory: A spinless formulation and an efficient implementation of the strongly contracted and of the partially contracted variants. *The Journal of chemical physics* 2002, **117**, 9138-9153. doi: `10.1063/1.1515317 <https://doi.org/10.1063/1.1515317>`_
 * Angeli, C., Pastore, M., Cimiraglia, R. New Perspectives in Multireference Perturbation Theory: The n-Electron Valence State Approach. *Theor Chem Account* 2007, **117**,  743–754. doi: `10.1007/s00214-006-0207-0 <https://doi.org/10.1007/s00214-006-0207-0>`_
 
 * Fink, R. F. The Multi-Reference Retaining the Excitation Degree Perturbation Theory: A Size-Consistent, Unitary Invariant, and Rapidly Convergent Wavefunction Based Ab Initio Approach. *Chemical Physics* 2009, **356**, 39-46. doi: `10.1016/j.chemphys.2008.10.004 <https://doi.org/10.1016/j.chemphys.2008.10.004>`_

@@ -76,6 +76,10 @@ Features
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
 * DMRG-CASSCF (pyscf interface)
+    * Nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
+* DMRG with Spin-Orbit Coupling (SOC)
+    * 1-step approach (full complex one-MPO and hybrid real/complex two-MPO schemes)
+    * 2-step approach
 * Stochastic perturbative DMRG
 * Uncontracted dynamic correlation
     * DMRG Multi-Reference Configuration Interaction (MRCI) of arbitrary order
