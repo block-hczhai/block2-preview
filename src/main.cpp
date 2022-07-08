@@ -497,8 +497,15 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         c = c >= 1 ? c - cbias : c + cbias;
 
     if (params.count("load_mps") != 0) {
+        mps_info = make_shared<MPSInfo<S>>(0);
+        string mps_info_name = frame_<FP>()->mps_dir + "/" +
+                               params.at("load_mps") + "-mps_info.bin";
+        if (!Parsing::file_exists(mps_info_name))
+            mps_info_name = frame_<FP>()->mps_dir + "/mps_info.bin";
+        mps_info->load_data(mps_info_name);
         mps_info->tag = params.at("load_mps");
         mps_info->load_mutable();
+        mps_info->bond_dim = mps_info->get_max_bond_dimension();
     } else {
         if (params.count("singlet_embedding") != 0 && is_same<SU2, S>::value) {
             S left_vacuum(fcidump->twos(), fcidump->twos(), 0);
