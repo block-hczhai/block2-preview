@@ -558,6 +558,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         mps->load_data();
         mps->load_mutable();
         mps_info->tag = "KET";
+        para_comm->barrier();
     } else {
         mps = make_shared<MPS<S, FL>>(norb, center, dot);
         mps->initialize(mps_info);
