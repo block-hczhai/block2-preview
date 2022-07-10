@@ -506,6 +506,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         mps_info->tag = params.at("load_mps");
         mps_info->load_mutable();
         mps_info->bond_dim = mps_info->get_max_bond_dimension();
+        para_comm->barrier();
     } else {
         if (params.count("singlet_embedding") != 0 && is_same<SU2, S>::value) {
             S left_vacuum(fcidump->twos(), fcidump->twos(), 0);
