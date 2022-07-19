@@ -153,6 +153,20 @@ struct SpinPermTensor {
         }
         return n;
     }
+    static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
+                                              const string &xops) {
+        vector<uint16_t> perm, pcnt;
+        string z(xops.length(), '.');
+        perm.resize(x.size());
+        pcnt.resize(x.size() + 1, 0);
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[x[i] + 1]++;
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[i + 1] += pcnt[i];
+        for (uint16_t i = 0; i < x.size(); i++)
+            z[pcnt[x[i]]] = xops[i], perm[i] = pcnt[x[i]]++;
+        return make_pair(z, permutation_parity(perm) ? -1 : 1);
+    }
     SpinPermTensor auto_sort() const {
         SpinPermTensor r = *this;
         vector<uint16_t> perm, pcnt;
@@ -584,27 +598,43 @@ struct SpinPermScheme {
     vector<vector<uint16_t>> index_patterns;
     vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
     SpinPermScheme() {}
-    SpinPermScheme(int nn, string spin_str = "",
-                   vector<uint8_t> cds = vector<uint8_t>()) {
-        SpinPermScheme r = SpinPermScheme::initialize(nn, spin_str, cds);
+    SpinPermScheme(int nn, string spin_str, bool su2 = true) {
+        SpinPermScheme r = su2 ? SpinPermScheme::initialize_su2(nn, spin_str)
+                               : SpinPermScheme::initialize_sz(nn, spin_str);
         index_patterns = r.index_patterns;
         data = r.data;
     }
-    static SpinPermScheme initialize(int nn, string spin_str = "",
-                                     vector<uint8_t> cds = vector<uint8_t>()) {
+    static SpinPermScheme initialize_sz(int nn, string spin_str) {
+        using T = SpinPermTensor;
+        using R = SpinPermRecoupling;
+        SpinPermPattern spat(nn);
+        vector<double> mptr;
+        SpinPermScheme r;
+        r.index_patterns.resize(spat.count());
+        r.data.resize(spat.count());
+        for (size_t i = 0; i < spat.count(); i++) {
+            vector<uint16_t> irr = spat[i];
+            r.index_patterns[i] = irr;
+            vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
+            for (int j = 0; j < rr.size(); j += irr.size()) {
+                vector<uint16_t> indices(rr.begin() + j,
+                                         rr.begin() + j + irr.size());
+                r.data[i][indices] = vector<pair<double, string>>();
+                vector<pair<double, string>> &rec_formula =
+                    r.data[i].at(indices);
+                auto pis = SpinPermTensor::auto_sort_string(indices, spin_str);
+                rec_formula.push_back(make_pair((double)pis.second, pis.first));
+            }
+        }
+        return r;
+    }
+    static SpinPermScheme initialize_su2(int nn, string spin_str) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg(100);
         cg.initialize();
-        if (spin_str == "") {
-            spin_str = "(.+.)0";
-            for (int inn = 4; inn <= nn; inn += 2)
-                spin_str = "((.+" + spin_str + ")1+.)0";
-        }
-        if (cds.size() == 0) {
-            for (int i = 0; i < nn; i++)
-                cds.push_back(i < nn / 2);
-        }
+        vector<uint8_t> cds;
+        spin_str = SpinPermRecoupling::split_cds(spin_str, cds);
         SpinPermPattern spat(nn);
         vector<double> mptr;
         SpinPermScheme r;
