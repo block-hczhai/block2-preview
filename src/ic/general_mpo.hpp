@@ -43,6 +43,20 @@ namespace block2 {
 
 enum struct ElemOpTypes : uint8_t { SU2, SZ };
 
+enum struct MPOAlgorithmTypes : uint16_t {
+    None = 0,
+    Bipartite = 1,
+    SVD = 2,
+    Rescaled = 4,
+    Fast = 8,
+    NC = 16,
+    CN = 32,
+    RescaledSVD = 4 | 2,
+    FastSVD = 8 | 2,
+    FastRescaledSVD = 8 | 4 | 2,
+    FastBipartite = 8 | 1,
+};
+
 template <typename FL> struct GeneralFCIDUMP {
     typedef decltype(abs((FL)0.0)) FP;
     map<string, string> params;
@@ -521,14 +535,14 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     }
 };
 
-// max_bond_dim >= -1: SVD
-// max_bond_dim = -2: NC
-// max_bond_dim = -3: CN
-// max_bond_dim = -4: bipartite O(K^5)
-// max_bond_dim = -5: fast bipartite O(K^4)
-// max_bond_dim = -6: SVD (rescale)
-// max_bond_dim = -7: SVD (rescale, fast)
-// max_bond_dim = -8: SVD (fast)
+inline bool operator&(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
+    return ((uint16_t)a & (uint16_t)b) != 0;
+}
+
+inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
+    return MPOAlgorithmTypes((uint16_t)a | (uint16_t)b);
+}
+
 template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     typedef typename GMatrix<FL>::FP FP;
     typedef long long int LL;
@@ -537,6 +551,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     using MPO<S, FL>::left_operator_names;
     using MPO<S, FL>::right_operator_names;
     using MPO<S, FL>::basis;
+    MPOAlgorithmTypes algo_type;
+    vector<FP> discarded_weights;
     static inline size_t expr_index_hash(const char *strs,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
@@ -547,19 +563,27 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         return h;
     }
     GeneralMPO(const shared_ptr<GeneralHamiltonian<S, FL>> &hamil,
-               const shared_ptr<GeneralFCIDUMP<FL>> &afd, FP cutoff = (FL)0.0,
+               const shared_ptr<GeneralFCIDUMP<FL>> &afd,
+               MPOAlgorithmTypes algo_type, FP cutoff = (FL)0.0,
                int max_bond_dim = -1, bool iprint = true,
                const string &tag = "HQC")
-        : MPO<S, FL>(hamil->n_sites, tag) {
-        bool rescale = false, fast_k4 = false;
-        if (max_bond_dim == -6)
-            rescale = true, fast_k4 = false, max_bond_dim = -1;
-        else if (max_bond_dim == -7)
-            rescale = true, fast_k4 = true, max_bond_dim = -1;
-        else if (max_bond_dim == -8)
-            rescale = false, fast_k4 = true, max_bond_dim = -1;
-        else if (max_bond_dim == -5)
-            fast_k4 = true, max_bond_dim = -4;
+        : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
+        bool rescale = algo_type & MPOAlgorithmTypes::Rescaled;
+        bool fast = algo_type & MPOAlgorithmTypes::Fast;
+        if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
+            throw runtime_error(
+                "Max bond dimension can only be used together with SVD!");
+        else if (!(algo_type & MPOAlgorithmTypes::SVD) && rescale)
+            throw runtime_error(
+                "Rescaling can only be used together with SVD!");
+        else if ((algo_type & MPOAlgorithmTypes::NC) &&
+                 algo_type != MPOAlgorithmTypes::NC)
+            throw runtime_error("Invalid MPO algorithm type with NC!");
+        else if ((algo_type & MPOAlgorithmTypes::CN) &&
+                 algo_type != MPOAlgorithmTypes::CN)
+            throw runtime_error("Invalid MPO algorithm type with CN!");
+        else if (algo_type == MPOAlgorithmTypes::None)
+            throw runtime_error("Invalid MPO algorithm None!");
         vector<typename S::pg_t> orb_sym = hamil->orb_sym;
         shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
             OpNames::H, SiteIndex(), hamil->vacuum);
@@ -573,6 +597,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         left_operator_names.resize(n_sites, nullptr);
         right_operator_names.resize(n_sites, nullptr);
         tensors.resize(n_sites, nullptr);
+        discarded_weights.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++)
             tensors[m] = make_shared<OperatorTensor<S, FL>>();
         S vacuum = hamil->vacuum;
@@ -614,7 +639,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         vector<LL> part_indices;
         // to save time, divide O(K^4) terms into K groups
         // for each iteration on site k, only O(K^3) terms are processed
-        if (fast_k4) {
+        if (fast) {
             vector<pair<int, LL>> ext_cur_terms;
             vector<FL> ext_cur_values;
             vector<LL> part_count(n_sites, 0);
@@ -672,8 +697,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         vector<pair<LL, LL>> nms;
         FL rsc_factor = 1;
         for (int ii = 0; ii < n_sites; ii++) {
-            if (iprint)
-                cout << "MPO site" << setw(4) << ii << " / " << n_sites << endl;
+            if (iprint) {
+                cout << "MPO Site = " << setw(5) << ii << " / " << setw(5)
+                     << n_sites << " .. ";
+                cout.flush();
+            }
             q_map.clear();
             map_ls.clear();
             map_rs.clear();
@@ -846,7 +874,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             // Part 2: svd or mvc
             vector<pair<array<vector<FL>, 2>, vector<FP>>> svds;
             vector<array<vector<int>, 2>> mvcs;
-            if (max_bond_dim == -4)
+            if (algo_type & MPOAlgorithmTypes::Bipartite)
                 mvcs.resize(q_map.size());
             else
                 svds.resize(q_map.size());
@@ -863,13 +891,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 // cout << "iq = " << iq << " q = " << qs[iq] << " szl = " <<
                 // szl
                 //      << " szr = " << szr << endl;
-                if (max_bond_dim == -2) // NC
+                if (algo_type & MPOAlgorithmTypes::NC)
                     szm = ii == n_sites - 1 ? szr : szl;
-                else if (max_bond_dim == -3) // CN
+                else if (algo_type & MPOAlgorithmTypes::CN)
                     szm = ii == 0 ? szl : szr;
-                else // bipartitie (-4/-5) / SVD (>= -1)
+                else // bipartitie / SVD
                     szm = min(szl, szr);
-                if (max_bond_dim != -4) {
+                if (!(algo_type & MPOAlgorithmTypes::Bipartite)) {
                     if (delayed_term != -1 && iq == 0)
                         szm = min(szl - 1, szr) + 1;
                     svds[iq].first[0].resize((size_t)szm * szl);
@@ -877,7 +905,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     svds[iq].first[1].resize((size_t)szm * szr);
                 }
                 int s_kept = 0;
-                if (max_bond_dim == -4) { // bipartite
+                if (algo_type & MPOAlgorithmTypes::Bipartite) { // bipartite
                     Flow flow(szl + szr);
                     for (auto &lrv : matvs)
                         flow.resi[lrv.first.first][lrv.first.second + szl] = 1;
@@ -895,13 +923,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                                       mvcs[iq][1].end());
                     }
                     s_kept = (int)mvcs[iq][0].size() + (int)mvcs[iq][1].size();
-                } else if ((max_bond_dim == -2 && ii != n_sites - 1) ||
-                           (max_bond_dim == -3 && ii == 0)) { // NC
+                } else if (((algo_type & MPOAlgorithmTypes::NC) &&
+                            ii != n_sites - 1) ||
+                           ((algo_type & MPOAlgorithmTypes::CN) &&
+                            ii == 0)) { // NC
                     memset(svds[iq].first[0].data(), 0,
                            sizeof(FL) * svds[iq].first[0].size());
                     memset(svds[iq].first[1].data(), 0,
                            sizeof(FL) * svds[iq].first[1].size());
-                    assert(!fast_k4);
                     for (auto &lrv : matvs)
                         svds[iq].first[1][(size_t)lrv.first.first * szr +
                                           lrv.first.second] += lrv.second;
@@ -909,13 +938,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].first[0][(size_t)i * szm + i] =
                             svds[iq].second[i] = 1;
                     s_kept = szm;
-                } else if ((max_bond_dim == -3 && ii != 0) ||
-                           (max_bond_dim == -2 && ii == n_sites - 1)) { // CN
+                } else if (((algo_type & MPOAlgorithmTypes::CN) && ii != 0) ||
+                           ((algo_type & MPOAlgorithmTypes::NC) &&
+                            ii == n_sites - 1)) { // CN
                     memset(svds[iq].first[0].data(), 0,
                            sizeof(FL) * svds[iq].first[0].size());
                     memset(svds[iq].first[1].data(), 0,
                            sizeof(FL) * svds[iq].first[1].size());
-                    assert(!fast_k4);
                     for (auto &lrv : matvs)
                         svds[iq].first[0][(size_t)lrv.first.first * szr +
                                           lrv.first.second] += lrv.second;
@@ -976,8 +1005,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             if (svds[iq].second[i] > cutoff)
                                 s_kept++;
                             else
-                                break;
-                        if (max_bond_dim > 1)
+                                discarded_weights[ii] +=
+                                    svds[iq].second[i] * svds[iq].second[i];
+                        if (max_bond_dim >= 1)
                             s_kept = min(s_kept, max_bond_dim);
                         svds[iq].second.resize(s_kept);
                     } else
@@ -993,10 +1023,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     "Hamiltonian may contain multiple total symmetry blocks "
                     "(small integral elements violating point group "
                     "symmetry)!");
-            cout << "s_kept_total = " << s_kept_total << endl;
             if (rescale) {
                 s_kept_total = 0;
-                assert(max_bond_dim == -1);
                 res_factor = res_s_sum / res_s_count;
                 // keep only 1 significant digit
                 typename FPtraits<FP>::U rrepr =
@@ -1019,13 +1047,51 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         if (svds[iq].second[i] > cutoff)
                             s_kept++;
                         else
-                            break;
+                            discarded_weights[ii] +=
+                                svds[iq].second[i] * svds[iq].second[i];
                     svds[iq].second.resize(s_kept);
                     if (s_kept != 0)
                         info_r[mq.first] = s_kept;
                     s_kept_total += s_kept;
                 }
             }
+            if (max_bond_dim >= 1) {
+                vector<pair<int, int>> idxs;
+                for (auto &mq : q_map) {
+                    int iq = mq.second;
+                    for (size_t i = 0; i < svds[iq].second.size(); i++)
+                        idxs.push_back(make_pair(iq, i));
+                }
+                if (idxs.size() > max_bond_dim) {
+                    s_kept_total = 0;
+                    sort(idxs.begin(), idxs.end(),
+                         [&svds](const pair<int, int> &a,
+                                 const pair<int, int> &b) {
+                             return svds[a.first].second[a.second] >
+                                    svds[b.first].second[b.second];
+                         });
+                    for (size_t i = max_bond_dim; i < idxs.size(); i++) {
+                        FP val = svds[idxs[i].first].second[idxs[i].second];
+                        discarded_weights[ii] += val * val;
+                        svds[idxs[i].first].second[idxs[i].second] = 0;
+                    }
+                    for (auto &mq : q_map) {
+                        int s_kept = 0;
+                        int iq = mq.second;
+                        for (size_t i = 0; i < svds[iq].second.size(); i++)
+                            svds[iq].second[s_kept] = svds[iq].second[i],
+                            s_kept += svds[iq].second[i] != 0;
+                        svds[iq].second.resize(s_kept);
+                        if (s_kept != 0)
+                            info_r[mq.first] = s_kept;
+                        s_kept_total += s_kept;
+                    }
+                }
+            }
+            if (iprint)
+                cout << "Mmpo = " << setw(5) << s_kept_total
+                     << " Error = " << scientific << setw(8) << setprecision(2)
+                     << discarded_weights[ii] << endl;
             // Part 3: construct mpo tensor
             shared_ptr<OperatorTensor<S, FL>> opt = tensors[ii];
             shared_ptr<Symbolic<S>> pmat;
@@ -1050,7 +1116,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         if (ic >= (LL)cur_terms[ip].size()) {
                             ix = part_terms[ic + part_off].first;
                             it = part_terms[ic + part_off].second;
-                        } else  if (ic != -1) {
+                        } else if (ic != -1) {
                             ix = cur_terms[ip][ic].first;
                             it = cur_terms[ip][ic].second;
                         } else {
@@ -1089,13 +1155,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 auto &mpl = map_ls[iq];
                 auto &nm = nms[iq];
                 int szl = nm.first, szr = nm.second, szm;
-                if (max_bond_dim == -2) // NC
+                if (algo_type & MPOAlgorithmTypes::NC)
                     szm = ii == n_sites - 1 ? szr : szl;
-                else if (max_bond_dim == -3) // CN
+                else if (algo_type & MPOAlgorithmTypes::CN)
                     szm = ii == 0 ? szl : szr;
-                else if (max_bond_dim == -4) // bipartitie (-4/-5)
+                else if (algo_type & MPOAlgorithmTypes::Bipartite)
                     szm = (int)mvcs[iq][0].size() + (int)mvcs[iq][1].size();
-                else { // SVD (>= -1)
+                else { // SVD
                     szm = min(szl, szr);
                     if (delayed_term != -1 && iq == 0)
                         szm = min(szl - 1, szr) + 1;
@@ -1120,7 +1186,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         site_mp[il] =
                             site_op_names.at(afd->exprs[ix].substr(ik, k - ik));
                     }
-                if (max_bond_dim == -4) { // bipartite
+                if (algo_type & MPOAlgorithmTypes::Bipartite) {
                     vector<int> lip(szl), lix(szl, -1), rix(szr, -1);
                     int ixln = (int)mvcs[iq][0].size(),
                         ixrn = (int)mvcs[iq][1].size();
@@ -1306,7 +1372,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             vix = cur_terms[vip][vic].first;
                             vit = cur_terms[vip][vic].second;
                             vct[vr.second] = cur_terms[vip][vic];
-                        } else  {
+                        } else {
                             vix = part_terms[delayed_term].first;
                             vit = part_terms[delayed_term].second;
                             vct[vr.second] = part_terms[delayed_term];
@@ -1314,7 +1380,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         term_i[vix][vit] = term_k[vix][vit];
                     }
                 int rszm;
-                if (max_bond_dim == -4) { // bipartite
+                if (algo_type & MPOAlgorithmTypes::Bipartite) {
                     auto &matvs = mats[iq];
                     vector<int> lix(szl, -1), rix(szr, -1);
                     int ixln = (int)mvcs[iq][0].size(),
