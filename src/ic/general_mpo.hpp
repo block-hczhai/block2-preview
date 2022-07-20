@@ -57,6 +57,16 @@ enum struct MPOAlgorithmTypes : uint16_t {
     FastBipartite = 8 | 1,
 };
 
+inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
+    const static string repr[] = {
+        "None", "BIP",     "SVD",     "", "Res", "", "ResSVD",     "", //
+        "Fast", "FastBIP", "FastSVD", "", "",    "", "FastResSVD", "", //
+        "NC",   "",        "",        "", "",    "", "",           "", //
+        "",     "",        "",        "", "",    "", "",           "", "CN"};
+    os << repr[(uint16_t)c];
+    return os;
+}
+
 template <typename FL> struct GeneralFCIDUMP {
     typedef decltype(abs((FL)0.0)) FP;
     map<string, string> params;
@@ -518,6 +528,47 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             }
         }
     }
+    static vector<vector<S>>
+    init_string_quanta(const vector<string> &exprs,
+                       const vector<uint16_t> &term_l) {
+        vector<vector<S>> r(exprs.size());
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            r[ix].resize(term_l[ix] + 1);
+            r[ix][0] = S(0, 0, 0);
+            for (int i = 0; i < term_l[ix]; i++)
+                switch (exprs[ix][i]) {
+                case 'c':
+                    r[ix][i + 1] = r[ix][i] + S(1, 1, 0);
+                    break;
+                case 'C':
+                    r[ix][i + 1] = r[ix][i] + S(1, -1, 0);
+                    break;
+                case 'd':
+                    r[ix][i + 1] = r[ix][i] + S(-1, -1, 0);
+                    break;
+                case 'D':
+                    r[ix][i + 1] = r[ix][i] + S(-1, 1, 0);
+                    break;
+                default:
+                    assert(false);
+                }
+        }
+        return r;
+    }
+    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
+                                 const uint16_t *idxs, uint16_t k) const {
+        S l = ref[k], r = ref.back() - l;
+        for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
+            typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (expr[j] == 'd' || expr[j] == 'D')
+                ipg = S::pg_inv(ipg);
+            if (j < k)
+                l.set_pg(S::pg_mul(l.pg(), ipg));
+            else
+                r.set_pg(S::pg_mul(r.pg(), ipg));
+        }
+        return make_pair(l, r);
+    }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
             for (auto &p : op_prims.second)
@@ -585,10 +636,6 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         else if (algo_type == MPOAlgorithmTypes::None)
             throw runtime_error("Invalid MPO algorithm None!");
         vector<typename S::pg_t> orb_sym = hamil->orb_sym;
-        shared_ptr<OpExpr<S>> h_op = make_shared<OpElement<S, FL>>(
-            OpNames::H, SiteIndex(), hamil->vacuum);
-        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
-        S qh = hamil->vacuum;
         MPO<S, FL>::const_e = afd->e();
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         n_sites = (int)orb_sym.size();
@@ -601,14 +648,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         for (uint16_t m = 0; m < n_sites; m++)
             tensors[m] = make_shared<OperatorTensor<S, FL>>();
         S vacuum = hamil->vacuum;
-        vector<S> left_q = vector<S>{vacuum};
-        unordered_map<S, uint32_t> info_l, info_r;
-        info_l[vacuum] = 1;
         // length of each term; starting index of each term
         // at the beginning, term_i is all zero
-        vector<int> term_l(afd->exprs.size());         // this can be int16
-        vector<vector<int>> term_i(afd->exprs.size()); // this can be int16
-        vector<vector<int>> term_k(afd->exprs.size());
+        vector<uint16_t> term_l(afd->exprs.size());
+        vector<vector<uint16_t>> term_i(afd->exprs.size());
+        vector<vector<uint16_t>> term_k(afd->exprs.size());
         LL n_terms = 0;
         for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
             const int nn = SpinPermRecoupling::count_cds(afd->exprs[ix]);
@@ -618,7 +662,32 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             assert(afd->indices[ix].size() == nn * term_i[ix].size());
             n_terms += (LL)afd->data[ix].size();
         }
-        cout << "n_terms = " << n_terms << endl;
+        vector<vector<S>> quanta_ref =
+            GeneralHamiltonian<S, FL>::init_string_quanta(afd->exprs, term_l);
+        S qh = hamil->vacuum;
+        for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
+            if (afd->data[ix].size() != 0) {
+                qh = hamil
+                         ->get_string_quanta(quanta_ref[ix], afd->exprs[ix],
+                                             &afd->indices[ix][0], term_l[ix])
+                         .first;
+                break;
+            }
+        }
+        vector<S> left_q = vector<S>{qh.combine(vacuum, -qh)};
+        shared_ptr<OpExpr<S>> h_op =
+            make_shared<OpElement<S, FL>>(OpNames::H, SiteIndex(), qh);
+        MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        if (iprint) {
+            cout << "Build MPO | Nsites = " << setw(5) << n_sites
+                 << " | Nterms = " << setw(10) << n_terms
+                 << " | Algorithm = " << algo_type
+                 << " | Cutoff = " << scientific << setw(8) << setprecision(2)
+                 << cutoff;
+            if (algo_type & MPOAlgorithmTypes::SVD)
+                cout << " | Max bond dimension = " << setw(5) << max_bond_dim;
+            cout << endl;
+        }
         // index of current terms
         // in future, cur_terms should have an extra level
         // indicating the term length
@@ -696,22 +765,24 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         // for each block, the nrow and ncol of the block
         vector<pair<LL, LL>> nms;
         FL rsc_factor = 1;
+        Timer _t, _t2;
+        double tsite, tsvd;
         for (int ii = 0; ii < n_sites; ii++) {
             if (iprint) {
-                cout << "MPO Site = " << setw(5) << ii << " / " << setw(5)
+                cout << " Site = " << setw(5) << ii << " / " << setw(5)
                      << n_sites << " .. ";
                 cout.flush();
             }
+            _t.get_time();
+            tsite = tsvd = 0;
             q_map.clear();
             map_ls.clear();
             map_rs.clear();
             mats.clear();
             nms.clear();
-            info_r.clear();
             LL delayed_term = -1, part_off = 0;
             // Part 1: iter over all mpos
             for (int ip = 0; ip < (int)cur_values.size(); ip++) {
-                S qll = left_q[ip];
                 LL cn = (LL)cur_terms[ip].size(), cnr = cn;
                 // for part terms, we have two things:
                 // (1) terms starting with the current index should be handled
@@ -724,7 +795,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     if (part_indices[ii + 1] != part_indices[n_sites]) {
                         // this represents all terms with starting index > ii
                         delayed_term = part_indices[ii + 1];
-                        q_map[qll] = 0;
+                        int ix = part_terms[delayed_term].first;
+                        LL it = part_terms[delayed_term].second;
+                        LL itt = it * term_l[ix];
+                        term_k[ix][it] = 0;
+                        pair<S, S> pq = hamil->get_string_quanta(
+                            quanta_ref[ix], afd->exprs[ix],
+                            &afd->indices[ix][itt], 0);
+                        q_map[qh.combine(pq.first, -pq.second)] = 0;
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
@@ -734,9 +812,6 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         mats[0].push_back(
                             make_pair(make_pair(0, 0),
                                       part_values[delayed_term] * rsc_factor));
-                        int ix = part_terms[delayed_term].first;
-                        LL it = part_terms[delayed_term].second;
-                        term_k[ix][it] = 0;
                     }
                 }
                 for (LL ic = 0; ic < cn; ic++) {
@@ -773,25 +848,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     size_t hr = expr_index_hash(
                         afd->exprs[ix].data() + k,
                         afd->indices[ix].data() + itt + k, kmax - k, 1);
-                    S ql = qll;
-                    for (int i = ik; i < k; i++)
-                        ql = ql + S(afd->exprs[ix][i] == 'c' ||
-                                            afd->exprs[ix][i] == 'C'
-                                        ? 1
-                                        : -1,
-                                    afd->exprs[ix][i] == 'c' ||
-                                            afd->exprs[ix][i] == 'D'
-                                        ? 1
-                                        : -1,
-                                    orb_sym[afd->indices[ix][itt + i]]);
-                    if (q_map.count(ql) == 0) {
-                        q_map[ql] = (int)q_map.size();
+                    pair<S, S> pq =
+                        hamil->get_string_quanta(quanta_ref[ix], afd->exprs[ix],
+                                                 &afd->indices[ix][itt], k);
+                    S qq = qh.combine(pq.first, -pq.second);
+                    if (q_map.count(qq) == 0) {
+                        q_map[qq] = (int)q_map.size();
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
                         nms.push_back(make_pair(0, 0));
                     }
-                    int iq = q_map.at(ql), il = -1, ir = -1;
+                    int iq = q_map.at(qq), il = -1, ir = -1;
                     LL &nml = nms[iq].first, &nmr = nms[iq].second;
                     auto &mpl = map_ls[iq];
                     auto &mpr = map_rs[iq];
@@ -879,12 +947,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             else
                 svds.resize(q_map.size());
             vector<S> qs(q_map.size());
+            for (auto &mq : q_map)
+                qs[mq.second] = mq.first;
             int s_kept_total = 0, nr_total = 0;
             FP res_s_sum = 0, res_factor = 1;
             size_t res_s_count = 0;
             for (auto &mq : q_map) {
                 int iq = mq.second;
-                qs[iq] = mq.first;
                 auto &matvs = mats[iq];
                 auto &nm = nms[iq];
                 int szl = nm.first, szr = nm.second, szm;
@@ -906,6 +975,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 }
                 int s_kept = 0;
                 if (algo_type & MPOAlgorithmTypes::Bipartite) { // bipartite
+                    _t2.get_time();
                     Flow flow(szl + szr);
                     for (auto &lrv : matvs)
                         flow.resi[lrv.first.first][lrv.first.second + szl] = 1;
@@ -914,6 +984,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     for (int i = 0; i < szr; i++)
                         flow.resi[szl + i][szl + szr + 1] = 1;
                     flow.mvc(0, szl, szl, szr, mvcs[iq][0], mvcs[iq][1]);
+                    tsvd += _t2.get_time();
                     // delayed I * O(K^4) term must be of NC type
                     if (delayed_term != -1 && iq == 0) {
                         if ((mvcs[iq][0].size() == 0 || mvcs[iq][0][0] != 0))
@@ -953,6 +1024,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             svds[iq].second[i] = 1;
                     s_kept = szm;
                 } else { // SVD
+                    _t2.get_time();
                     vector<FL> mat((size_t)szl * szr, 0);
                     if (delayed_term != -1 && iq == 0) {
                         for (auto &lrv : matvs)
@@ -1012,9 +1084,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].second.resize(s_kept);
                     } else
                         s_kept = szm;
+                    tsvd += _t2.get_time();
                 }
-                if (s_kept != 0)
-                    info_r[mq.first] = s_kept;
                 s_kept_total += s_kept;
                 nr_total += szr;
             }
@@ -1050,8 +1121,6 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             discarded_weights[ii] +=
                                 svds[iq].second[i] * svds[iq].second[i];
                     svds[iq].second.resize(s_kept);
-                    if (s_kept != 0)
-                        info_r[mq.first] = s_kept;
                     s_kept_total += s_kept;
                 }
             }
@@ -1082,16 +1151,16 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             svds[iq].second[s_kept] = svds[iq].second[i],
                             s_kept += svds[iq].second[i] != 0;
                         svds[iq].second.resize(s_kept);
-                        if (s_kept != 0)
-                            info_r[mq.first] = s_kept;
                         s_kept_total += s_kept;
                     }
                 }
             }
-            if (iprint)
+            if (iprint) {
                 cout << "Mmpo = " << setw(5) << s_kept_total
                      << " Error = " << scientific << setw(8) << setprecision(2)
-                     << discarded_weights[ii] << endl;
+                     << discarded_weights[ii];
+                cout.flush();
+            }
             // Part 3: construct mpo tensor
             shared_ptr<OperatorTensor<S, FL>> opt = tensors[ii];
             shared_ptr<Symbolic<S>> pmat;
@@ -1146,11 +1215,15 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         xm.second->info->delta_quantum);
                     ixx++;
                 }
-                opt->ops[site_op_names.at(xm.first)] = xm.second;
+                if (xm.second->factor == (FL)0.0 || xm.second->info->n == 0 ||
+                    xm.second->norm() < TINY)
+                    site_op_names[xm.first] = nullptr;
+                else
+                    opt->ops[site_op_names.at(xm.first)] = xm.second;
             }
             int ppir = 0;
             for (int iq = 0; iq < (int)qs.size(); iq++) {
-                S q = qs[iq];
+                S qq = qs[iq];
                 auto &matvs = mats[iq];
                 auto &mpl = map_ls[iq];
                 auto &nm = nms[iq];
@@ -1212,7 +1285,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         else
                             irx = rix[ir], factor = lrv.second;
                         int ip = lip[il];
-                        if (abs(factor) > cutoff)
+                        if (abs(factor) > cutoff && site_mp[il] != nullptr)
                             tterms[ip * szm + irx].push_back(
                                 site_mp[il]->scalar_multiply(factor));
                     }
@@ -1228,7 +1301,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         for (auto &vls : mpl)
                             for (auto &vl : vls.second) {
                                 int il = vl.second, ip = vl.first.first;
-                                assert(left_q[ip] + site_mp[il]->q_label == q);
+                                assert(
+                                    site_mp[il] == nullptr ||
+                                    left_q[ip].get_bra(qh).combine(
+                                        qq.get_bra(qh), site_mp[il]->q_label) !=
+                                        S(S::invalid));
                                 FL factor =
                                     svds[iq].first[0][(size_t)il * szm + ir] *
                                     res_factor;
@@ -1239,7 +1316,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                 //      left_q[ip]
                                 //      << " m = " << site_mp[il]->q_label << "
                                 //      factor = " << factor << endl;
-                                if (abs(factor) > cutoff)
+                                if (abs(factor) > cutoff &&
+                                    site_mp[il] != nullptr)
                                     tterms[ip].push_back(
                                         site_mp[il]->scalar_multiply(factor));
                             }
@@ -1260,7 +1338,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             shared_ptr<VectorAllocator<FP>> d_alloc =
                 make_shared<VectorAllocator<FP>>();
             for (size_t i = 0; i < mat.data.size(); i++) {
-                assert(mat.data[i]->get_type() != OpTypes::Zero);
+                // only happens for non-sparse boundary tensors
+                if (mat.data[i]->get_type() == OpTypes::Zero)
+                    continue;
                 shared_ptr<OpSum<S, FL>> opx =
                     dynamic_pointer_cast<OpSum<S, FL>>(mat.data[i]);
                 assert(opx->strings.size() != 0);
@@ -1292,6 +1372,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             opx->strings[0]->get_op()->scalar_multiply(
                                 (FL)opx->strings[0]->factor);
                 } else {
+                    // TODO :: modify this part for SU2
                     shared_ptr<SparseMatrix<S, FL>> gmat =
                         make_shared<SparseMatrix<S, FL>>(d_alloc);
                     gmat->allocate(xmat->info);
@@ -1347,15 +1428,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     OpNames::XR,
                     SiteIndex({(uint16_t)(iop / 1000), (uint16_t)(iop % 1000)},
                               {}),
-                    qh - left_q[iop]);
+                    -left_q[iop].get_ket());
             // Part 6: prepare for next
-            info_l = info_r;
             vector<vector<FL>> new_cur_values(s_kept_total);
             vector<vector<pair<int, LL>>> new_cur_terms(s_kept_total);
             int isk = 0;
             left_q.resize(s_kept_total);
             for (int iq = 0; iq < (int)qs.size(); iq++) {
-                S q = qs[iq];
+                S qq = qs[iq];
                 auto &mpr = map_rs[iq];
                 auto &nm = nms[iq];
                 int szr = nm.second, szl = nm.first;
@@ -1396,7 +1476,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         new_cur_values[rix[ir] + isk].push_back((FL)1.0);
                     }
                     for (int ir = 0; ir < rszm; ir++)
-                        left_q[ir + isk] = q;
+                        left_q[ir + isk] = qq;
                     // add edges with right vertex not in MVC
                     // and edges with both left and right vertices in MVC
                     for (auto &lrv : matvs) {
@@ -1417,7 +1497,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     bool has_pf = false;
                     FL pf_factor = 0;
                     for (int j = 0; j < rszm; j++) {
-                        left_q[j + isk] = q;
+                        left_q[j + isk] = qq;
                         for (int ir = 0; ir < szr; ir++) {
                             // singular values multiplies to right
                             FL val =
@@ -1448,7 +1528,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     OpNames::XL,
                     SiteIndex({(uint16_t)(iop / 1000), (uint16_t)(iop % 1000)},
                               {}),
-                    left_q[iop]);
+                    left_q[iop].get_bra(qh));
             assert(isk == s_kept_total);
             cur_terms = new_cur_terms;
             cur_values = new_cur_values;
@@ -1456,25 +1536,26 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 cur_terms.emplace_back();
                 cur_values.emplace_back();
             }
-            // Part 7: check sanity
+            // Part 7: sanity check
             for (auto &op : opt->ops)
                 assert((dynamic_pointer_cast<OpElement<S, FL>>(op.first)
                             ->q_label) == op.second->info->delta_quantum);
             if (ii == 0) {
                 for (int iop = 0; iop < lop.n; iop++)
-                    assert(
-                        (dynamic_pointer_cast<OpElement<S, FL>>(lop[iop])
-                             ->q_label ==
-                         dynamic_pointer_cast<OpElement<S, FL>>(mat.data[iop])
-                             ->q_label));
+                    if (mat.data[iop]->get_type() != OpTypes::Zero)
+                        assert((dynamic_pointer_cast<OpElement<S, FL>>(lop[iop])
+                                    ->q_label ==
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    mat.data[iop])
+                                    ->q_label));
             } else if (ii == n_sites - 1) {
-                for (int iop = 0; iop < rop.m; iop++) {
-                    assert(
-                        (dynamic_pointer_cast<OpElement<S, FL>>(rop[iop])
-                             ->q_label ==
-                         dynamic_pointer_cast<OpElement<S, FL>>(mat.data[iop])
-                             ->q_label));
-                }
+                for (int iop = 0; iop < rop.m; iop++)
+                    if (mat.data[iop]->get_type() != OpTypes::Zero)
+                        assert((dynamic_pointer_cast<OpElement<S, FL>>(rop[iop])
+                                    ->q_label ==
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    mat.data[iop])
+                                    ->q_label));
             } else {
                 SymbolicRowVector<S> &llop =
                     *dynamic_pointer_cast<SymbolicRowVector<S>>(
@@ -1487,16 +1568,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     S sr = dynamic_pointer_cast<OpElement<S, FL>>(
                                lop[gmat->indices[ig].second])
                                ->q_label;
-                    // cout << "ig = " << ig << "il = " <<
-                    // gmat->indices[ig].first << " ir = " <<
-                    // gmat->indices[ig].second  << " l = " << sl << " r = " <<
-                    // sr << " m = " << (dynamic_pointer_cast<OpElement<S,
-                    // FL>>(mat.data[ig])->q_label) << endl;
-                    assert(sl + (dynamic_pointer_cast<OpElement<S, FL>>(
-                                     mat.data[ig])
-                                     ->q_label) ==
-                           sr);
+                    S sm = dynamic_pointer_cast<OpElement<S, FL>>(mat.data[ig])
+                               ->q_label;
+                    assert(sl.combine(sr, sm) != S(S::invalid));
                 }
+            }
+            if (iprint) {
+                tsite = _t.get_time();
+                if (algo_type & MPOAlgorithmTypes::SVD)
+                    cout << fixed << setprecision(3) << " Tsvd = " << tsvd;
+                else if (algo_type & MPOAlgorithmTypes::Bipartite)
+                    cout << fixed << setprecision(3) << " Tmvc = " << tsvd;
+                cout << " T = " << tsite << endl;
             }
         }
         if (n_terms != 0) {
