@@ -99,7 +99,8 @@ template <typename FL> struct GeneralFCIDUMP {
             r->exprs.push_back("((C+(C+D)0)1+D)0");
             r->indices.push_back(vector<uint16_t>());
             r->data.push_back(vector<FL>());
-            auto *idx = &r->indices.back(), *dt = &r->data.back();
+            auto *idx = &r->indices.back();
+            auto *dt = &r->data.back();
             array<uint16_t, 4> arr;
             for (arr[0] = 0; arr[0] < n; arr[0]++)
                 for (arr[1] = 0; arr[1] < n; arr[1]++)
@@ -130,7 +131,8 @@ template <typename FL> struct GeneralFCIDUMP {
                 for (uint8_t sj = 0; sj < 2; sj++) {
                     r->indices.push_back(vector<uint16_t>());
                     r->data.push_back(vector<FL>());
-                    auto *idx = &r->indices.back(), *dt = &r->data.back();
+                    auto *idx = &r->indices.back();
+                    auto *dt = &r->data.back();
                     array<uint16_t, 4> arr;
                     for (arr[0] = 0; arr[0] < n; arr[0]++)
                         for (arr[1] = 0; arr[1] < n; arr[1]++)
@@ -152,7 +154,8 @@ template <typename FL> struct GeneralFCIDUMP {
             for (uint8_t si = 0; si < 2; si++) {
                 r->indices.push_back(vector<uint16_t>());
                 r->data.push_back(vector<FL>());
-                auto *idx = &r->indices.back(), *dt = &r->data.back();
+                auto *idx = &r->indices.back();
+                auto *dt = &r->data.back();
                 array<uint16_t, 2> arr;
                 for (arr[0] = 0; arr[0] < n; arr[0]++)
                     for (arr[1] = 0; arr[1] < n; arr[1]++)
@@ -166,7 +169,8 @@ template <typename FL> struct GeneralFCIDUMP {
             r->exprs.push_back("CCDD");
             r->indices.push_back(vector<uint16_t>());
             r->data.push_back(vector<FL>());
-            auto *idx = &r->indices.back(), *dt = &r->data.back();
+            auto *idx = &r->indices.back();
+            auto *dt = &r->data.back();
             array<uint16_t, 4> arr;
             for (arr[0] = 0; arr[0] < n; arr[0]++)
                 for (arr[1] = 0; arr[1] < n; arr[1]++)
