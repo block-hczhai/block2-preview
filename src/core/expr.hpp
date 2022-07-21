@@ -519,6 +519,7 @@ template <typename S, typename FL> struct OpProduct : OpExpr<S> {
         return make_shared<OpProduct>(abs());
     }
     OpProduct abs() const { return OpProduct(a, b, 1.0, conj); }
+    // return abs value
     shared_ptr<OpElement<S, FL>> get_op() const {
         assert(b == nullptr);
         return a;
