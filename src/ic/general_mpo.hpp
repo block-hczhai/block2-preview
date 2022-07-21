@@ -30,6 +30,7 @@
 #include "spin_permutation.hpp"
 #include <array>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -56,6 +57,14 @@ enum struct MPOAlgorithmTypes : uint16_t {
     FastRescaledSVD = 8 | 4 | 2,
     FastBipartite = 8 | 1,
 };
+
+inline bool operator&(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
+    return ((uint16_t)a & (uint16_t)b) != 0;
+}
+
+inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
+    return MPOAlgorithmTypes((uint16_t)a | (uint16_t)b);
+}
 
 inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
     const static string repr[] = {
@@ -100,7 +109,6 @@ template <typename FL> struct GeneralFCIDUMP {
                                                arr[2])) > cutoff) {
                                 idx->insert(idx->end(), arr.begin(), arr.end());
                                 dt->push_back(
-                                    (FL)0.5 *
                                     fcidump->v(arr[0], arr[3], arr[1], arr[2]));
                             }
             r->exprs.push_back("(C+D)0");
@@ -111,7 +119,7 @@ template <typename FL> struct GeneralFCIDUMP {
                 for (arr[1] = 0; arr[1] < n; arr[1]++)
                     if (abs(fcidump->t(arr[0], arr[1])) > cutoff) {
                         idx->insert(idx->end(), arr.begin(), arr.begin() + 2);
-                        dt->push_back(fcidump->t(arr[0], arr[1]));
+                        dt->push_back((FL)sqrt(2) * fcidump->t(arr[0], arr[1]));
                     }
         } else {
             r->exprs.push_back("ccdd");
@@ -172,12 +180,9 @@ template <typename FL> struct GeneralFCIDUMP {
         vector<shared_ptr<SpinPermScheme>> psch = schemes;
         if (psch.size() < exprs.size()) {
             psch.resize(exprs.size(), nullptr);
-            for (size_t ix = 0; ix < exprs.size(); ix++) {
-                vector<uint8_t> cds;
-                SpinPermRecoupling::split_cds(exprs[ix], cds);
+            for (size_t ix = 0; ix < exprs.size(); ix++)
                 psch[ix] = make_shared<SpinPermScheme>(
-                    (int)cds.size(), exprs[ix], elem_type == ElemOpTypes::SU2);
-            }
+                    exprs[ix], elem_type == ElemOpTypes::SU2);
         }
         unordered_map<string, int> r_str_mp;
         vector<vector<uint16_t>> r_indices;
@@ -382,15 +387,11 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     // Sparse matrix representation for normal site operators
     vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
         site_norm_ops;
-    vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
-        site_long_ops;
     // Primitives for sparse matrix representation for normal site operators
     unordered_map<typename S::pg_t,
                   unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
         op_prims;
     const static int max_n = 10, max_s = 10;
-    // Chemical potenital parameter in Hamiltonian
-    FL mu = 0;
     GeneralHamiltonian()
         : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
     GeneralHamiltonian(S vacuum, int n_sites,
@@ -401,14 +402,12 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         opf->cg->initialize();
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
-        site_long_ops.resize(n_sites);
         site_norm_ops.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++)
             basis[m] = get_site_basis(m);
         init_site_ops();
     }
     virtual ~GeneralHamiltonian() = default;
-    virtual void set_mu(FL mu) { this->mu = mu; }
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
         return SiteBasis<S>::get(orb_sym[m]);
     }
@@ -422,7 +421,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         // site operator infos
         for (uint16_t m = 0; m < n_sites; m++) {
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
-            info[this->vacuum] = nullptr;
+            info[vacuum] = nullptr;
             for (int n = -max_n_odd; n <= max_n_odd; n += 2)
                 for (int s = -max_s_odd; s <= max_s_odd; s += 2) {
                     info[S(n, s, orb_sym[m])] = nullptr;
@@ -498,9 +497,9 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     op_prims.at(orb_sym[m])[t]->data);
             }
     }
-    void
-    get_site_ops(uint16_t m,
-                 unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
+    void get_site_string_ops(
+        uint16_t m,
+        unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         shared_ptr<SparseMatrix<S, FL>> tmp =
@@ -508,8 +507,6 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         for (auto &p : ops) {
             if (site_norm_ops[m].count(p.first))
                 p.second = site_norm_ops[m].at(p.first);
-            else if (site_long_ops[m].count(p.first))
-                p.second = site_long_ops[m].at(p.first);
             else {
                 p.second = site_norm_ops[m].at(string(1, p.first[0]));
                 for (size_t i = 1; i < p.first.length(); i++) {
@@ -524,7 +521,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                                  tmp);
                     p.second = tmp;
                 }
-                site_long_ops[m][p.first] = p.second;
+                site_norm_ops[m][p.first] = p.second;
             }
         }
     }
@@ -569,12 +566,15 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         }
         return make_pair(l, r);
     }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        return expr.substr(i, j - i);
+    }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
             for (auto &p : op_prims.second)
                 p.second->deallocate();
-        for (auto &site_long_ops : this->site_long_ops)
-            for (auto &p : site_long_ops)
+        for (auto &site_norm_ops : this->site_norm_ops)
+            for (auto &p : site_norm_ops)
                 p.second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
@@ -586,13 +586,277 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     }
 };
 
-inline bool operator&(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
-    return ((uint16_t)a & (uint16_t)b) != 0;
-}
+// Quantum chemistry Hamiltonian (spin-adapted)
+template <typename S, typename FL>
+struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using Hamiltonian<S, FL>::vacuum;
+    using Hamiltonian<S, FL>::n_sites;
+    using Hamiltonian<S, FL>::basis;
+    using Hamiltonian<S, FL>::site_op_infos;
+    using Hamiltonian<S, FL>::orb_sym;
+    using Hamiltonian<S, FL>::find_site_op_info;
+    using Hamiltonian<S, FL>::opf;
+    using Hamiltonian<S, FL>::delayed;
+    // Sparse matrix representation for normal site operators
+    vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        site_norm_ops;
+    // Primitives for sparse matrix representation for normal site operators
+    unordered_map<typename S::pg_t,
+                  unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        op_prims;
+    const static int max_n = 10, max_s = 10;
+    GeneralHamiltonian()
+        : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
+    GeneralHamiltonian(S vacuum, int n_sites,
+                       const vector<typename S::pg_t> &orb_sym)
+        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
+        // SZ does not need CG factors
+        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>(100));
+        opf->cg->initialize();
+        basis.resize(n_sites);
+        site_op_infos.resize(n_sites);
+        site_norm_ops.resize(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = get_site_basis(m);
+        init_site_ops();
+    }
+    virtual ~GeneralHamiltonian() = default;
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        return SiteBasis<S>::get(orb_sym[m]);
+    }
+    void init_site_ops() {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
+        const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
+        // site operator infos
+        for (uint16_t m = 0; m < n_sites; m++) {
+            map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+            info[vacuum] = nullptr;
+            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                for (int s = 1; s <= max_s_odd; s += 2) {
+                    info[S(n, s, orb_sym[m])] = nullptr;
+                    info[S(n, s, S::pg_inv(orb_sym[m]))] = nullptr;
+                }
+            for (int n = -max_n_even; n <= max_n_even; n += 2)
+                for (int s = 0; s <= max_s_even; s += 2) {
+                    info[S(n, s, S::pg_mul(orb_sym[m], orb_sym[m]))] = nullptr;
+                    info[S(n, s,
+                           S::pg_mul(orb_sym[m], S::pg_inv(orb_sym[m])))] =
+                        nullptr;
+                    info[S(n, s,
+                           S::pg_mul(S::pg_inv(orb_sym[m]), orb_sym[m]))] =
+                        nullptr;
+                    info[S(n, s,
+                           S::pg_mul(S::pg_inv(orb_sym[m]),
+                                     S::pg_inv(orb_sym[m])))] = nullptr;
+                }
+            for (auto &p : info) {
+                p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                p.second->initialize(*basis[m], *basis[m], p.first,
+                                     p.first.is_fermion());
+            }
+            site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                info.begin(), info.end());
+        }
+        for (uint16_t m = 0; m < n_sites; m++) {
+            const typename S::pg_t ipg = orb_sym[m];
+            if (this->op_prims.count(ipg) == 0)
+                this->op_prims[ipg] =
+                    unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
+            else
+                continue;
+            unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &op_prims =
+                this->op_prims.at(ipg);
+            op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims[""]->allocate(find_site_op_info(m, S(0, 0, 0)));
+            (*op_prims[""])[S(0, 0, 0, 0)](0, 0) = 1.0;
+            (*op_prims[""])[S(1, 1, 1, ipg)](0, 0) = 1.0;
+            (*op_prims[""])[S(2, 0, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
 
-inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
-    return MPOAlgorithmTypes((uint16_t)a | (uint16_t)b);
-}
+            op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims["C"]->allocate(find_site_op_info(m, S(1, 1, ipg)));
+            (*op_prims["C"])[S(0, 1, 0, 0)](0, 0) = 1.0;
+            (*op_prims["C"])[S(1, 0, 1, ipg)](0, 0) = -sqrt(2);
+
+            op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims["D"]->allocate(
+                find_site_op_info(m, S(-1, 1, S::pg_inv(ipg))));
+            (*op_prims["D"])[S(1, 0, 1, ipg)](0, 0) = sqrt(2);
+            (*op_prims["D"])[S(2, 1, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+        }
+        // site norm operators
+        const string stx[3] = {"", "C", "D"};
+        for (uint16_t m = 0; m < n_sites; m++) {
+            for (auto t : stx) {
+                site_norm_ops[m][t] = make_shared<SparseMatrix<S, FL>>(nullptr);
+                site_norm_ops[m][t]->allocate(
+                    find_site_op_info(
+                        m, op_prims.at(orb_sym[m])[t]->info->delta_quantum),
+                    op_prims.at(orb_sym[m])[t]->data);
+            }
+        }
+    }
+    shared_ptr<SparseMatrix<S, FL>> get_site_string_op(uint16_t m,
+                                                       const string &expr) {
+        if (site_norm_ops[m].count(expr))
+            return site_norm_ops[m].at(expr);
+        else {
+            int ix = 0, depth = 0;
+            for (auto &c : expr) {
+                if (c == '(')
+                    depth++;
+                else if (c == ')')
+                    depth--;
+                else if (c == '+' && depth == 1)
+                    break;
+                ix++;
+            }
+            int twos = 0, iy = 0;
+            for (int i = (int)expr.length() - 1, k = 1; i >= 0; i--, k *= 10)
+                if (expr[i] >= '0' && expr[i] <= '9')
+                    twos += (expr[i] - '0') * k;
+                else {
+                    iy = i;
+                    break;
+                }
+            shared_ptr<SparseMatrix<S, FL>> a =
+                get_site_string_op(m, expr.substr(1, ix - 1));
+            shared_ptr<SparseMatrix<S, FL>> b =
+                get_site_string_op(m, expr.substr(ix + 1, iy - ix - 1));
+            S dq = a->info->delta_quantum + b->info->delta_quantum;
+            dq.set_twos(twos);
+            dq.set_twos_low(twos);
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<SparseMatrix<S, FL>> r =
+                make_shared<SparseMatrix<S, FL>>(d_alloc);
+            r->allocate(find_site_op_info(m, dq));
+            opf->product(0, a, b, r);
+            site_norm_ops[m][expr] = r;
+            return r;
+        }
+    }
+    void get_site_string_ops(
+        uint16_t m,
+        unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
+        for (auto &p : ops)
+            p.second = get_site_string_op(m, p.first);
+    }
+    static vector<vector<S>>
+    init_string_quanta(const vector<string> &exprs,
+                       const vector<uint16_t> &term_l) {
+        vector<vector<S>> r(exprs.size());
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            r[ix].resize(term_l[ix] + 1, S(0, 0, 0));
+            vector<pair<int, char>> pex;
+            pex.reserve(exprs[ix].length());
+            for (char x : exprs[ix])
+                if (x >= '0' && x <= '9') {
+                    if (pex.back().first != -1)
+                        pex.back().first =
+                            pex.back().first * 10 + (int)(x - '0');
+                    else
+                        pex.push_back(make_pair((int)(x - '0'), ' '));
+                } else {
+                    if (x == '+' && pex.back().second == ' ')
+                        pex.back().second = '*';
+                    pex.push_back(make_pair(-1, x));
+                }
+            assert(pex.back().first != -1);
+            int cnt = 0;
+            // singlet embedding (twos will be set later)
+            r[ix][0].set_n(pex.back().first);
+            vector<uint16_t> stk;
+            for (auto &p : pex) {
+                if (p.second == '(')
+                    stk.push_back(cnt);
+                // numbers in exprs like (()0+.) will not be used
+                else if (p.second == '*')
+                    stk.pop_back();
+                // use the right part to define the twos for the left part
+                // because the right part is not affected by the singlet
+                // embedding
+                else if (p.second == ' ') {
+                    r[ix][stk.back()].set_twos(p.first);
+                    r[ix][stk.back()].set_twos_low(p.first);
+                    stk.pop_back();
+                } else if (p.second == 'C')
+                    r[ix][cnt + 1].set_n(r[ix][cnt].n() + 1), cnt++;
+                else if (p.second == 'D')
+                    r[ix][cnt + 1].set_n(r[ix][cnt].n() - 1), cnt++;
+            }
+            if (r[ix].size() >= 2) {
+                r[ix][r[ix].size() - 2].set_twos(1);
+                r[ix][r[ix].size() - 2].set_twos_low(1);
+            }
+        }
+        return r;
+    }
+    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
+                                 const uint16_t *idxs, uint16_t k) const {
+        S l = ref[k], r = ref.back() - l;
+        for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
+            if (expr[j] != 'C' && expr[j] != 'D')
+                continue;
+            typename S::pg_t ipg = orb_sym[idxs[i]];
+            if (expr[j] == 'D')
+                ipg = S::pg_inv(ipg);
+            if (i < k)
+                l.set_pg(S::pg_mul(l.pg(), ipg));
+            else
+                r.set_pg(S::pg_mul(r.pg(), ipg));
+            i++;
+        }
+        return make_pair(l, r);
+    }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        int cnt = 0, depth = 0, start = -1, extra = 0;
+        stringstream ss;
+        for (auto &c : expr) {
+            if (c == '(') {
+                depth++;
+                if (cnt == i && start == -1 && j > i + 1)
+                    start = depth;
+                if (cnt >= i && cnt < j && start != -1 && depth >= start)
+                    ss << c, extra++;
+            } else if (c == ')') {
+                depth--;
+                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
+                    ss << c, extra--;
+            } else if (c >= '0' && c <= '9') {
+                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
+                    ss << c;
+            } else if (c == '+') {
+                if (cnt >= i && cnt < j && start != -1 && depth >= start)
+                    ss << c;
+            } else if (c == 'C' || c == 'D') {
+                if (cnt >= i && cnt < j)
+                    ss << c;
+                cnt++;
+            }
+        }
+        return ss.str().substr(extra);
+    }
+    void deallocate() override {
+        for (auto &op_prims : this->op_prims)
+            for (auto &p : op_prims.second)
+                p.second->deallocate();
+        for (auto &site_norm_ops : this->site_norm_ops)
+            for (auto &p : site_norm_ops)
+                p.second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
+                site_op_infos[m][j].second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            basis[m]->deallocate();
+        opf->cg->deallocate();
+        Hamiltonian<S, FL>::deallocate();
+    }
+};
 
 template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     typedef typename GMatrix<FL>::FP FP;
@@ -604,18 +868,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     using MPO<S, FL>::basis;
     MPOAlgorithmTypes algo_type;
     vector<FP> discarded_weights;
-    static inline size_t expr_index_hash(const char *strs,
+    static inline size_t expr_index_hash(const string &expr,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
         size_t h = (size_t)init;
+        h ^= hash<string>{}(expr) + 0x9E3779B9 + (h << 6) + (h >> 2);
         for (int i = 0; i < n; i++)
-            h ^= (((size_t)terms[i] << 8) | (size_t)strs[i]) + 0x9E3779B9 +
-                 (h << 6) + (h >> 2);
+            h ^= terms[i] + 0x9E3779B9 + (h << 6) + (h >> 2);
         return h;
     }
     GeneralMPO(const shared_ptr<GeneralHamiltonian<S, FL>> &hamil,
                const shared_ptr<GeneralFCIDUMP<FL>> &afd,
-               MPOAlgorithmTypes algo_type, FP cutoff = (FL)0.0,
+               MPOAlgorithmTypes algo_type, FP cutoff = (FP)0.0,
                int max_bond_dim = -1, bool iprint = true,
                const string &tag = "HQC")
         : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
@@ -664,17 +928,23 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         }
         vector<vector<S>> quanta_ref =
             GeneralHamiltonian<S, FL>::init_string_quanta(afd->exprs, term_l);
-        S qh = hamil->vacuum;
+        S qh = hamil->vacuum, left_vacuum = hamil->vacuum, actual_qh = qh;
         for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
             if (afd->data[ix].size() != 0) {
                 qh = hamil
                          ->get_string_quanta(quanta_ref[ix], afd->exprs[ix],
                                              &afd->indices[ix][0], term_l[ix])
                          .first;
+                auto pl = hamil->get_string_quanta(
+                    quanta_ref[ix], afd->exprs[ix], &afd->indices[ix][0], 0);
+                left_vacuum = pl.first, actual_qh = pl.second;
                 break;
             }
         }
-        vector<S> left_q = vector<S>{qh.combine(vacuum, -qh)};
+        // cout << "qh = " << qh << " left_vac = " << left_vacuum
+        //      << " actual_qh = " << actual_qh << endl;
+        assert(qh.combine(left_vacuum, -actual_qh) != S(S::invalid));
+        vector<S> left_q = vector<S>{qh.combine(left_vacuum, -actual_qh)};
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S, FL>>(OpNames::H, SiteIndex(), qh);
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
@@ -764,6 +1034,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         vector<vector<pair<pair<int, int>, FL>>> mats;
         // for each block, the nrow and ncol of the block
         vector<pair<LL, LL>> nms;
+        // cache of operator strings
+        vector<map<pair<uint16_t, uint16_t>, string>> sub_exprs(
+            afd->exprs.size());
         FL rsc_factor = 1;
         Timer _t, _t2;
         double tsite, tsvd;
@@ -799,6 +1072,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         LL it = part_terms[delayed_term].second;
                         LL itt = it * term_l[ix];
                         term_k[ix][it] = 0;
+                        if (!sub_exprs[ix].count(make_pair(0, 0)))
+                            sub_exprs[ix][make_pair(0, 0)] =
+                                GeneralHamiltonian<S, FL>::get_sub_expr(
+                                    afd->exprs[ix], 0, 0);
+                        if (!sub_exprs[ix].count(make_pair(0, term_l[ix])))
+                            sub_exprs[ix][make_pair(0, term_l[ix])] =
+                                GeneralHamiltonian<S, FL>::get_sub_expr(
+                                    afd->exprs[ix], 0, term_l[ix]);
                         pair<S, S> pq = hamil->get_string_quanta(
                             quanta_ref[ix], afd->exprs[ix],
                             &afd->indices[ix][itt], 0);
@@ -832,26 +1113,35 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     // (left block part and right block part)
                     for (; k < kmax && afd->indices[ix][itt + k] <= ii; k++)
                         ;
+                    if (!sub_exprs[ix].count(make_pair(ik, k)))
+                        sub_exprs[ix][make_pair(ik, k)] =
+                            GeneralHamiltonian<S, FL>::get_sub_expr(
+                                afd->exprs[ix], ik, k);
+                    if (!sub_exprs[ix].count(make_pair(k, kmax)))
+                        sub_exprs[ix][make_pair(k, kmax)] =
+                            GeneralHamiltonian<S, FL>::get_sub_expr(
+                                afd->exprs[ix], k, kmax);
                     // cout << "ip = " << ip << " ic = " << ic << " ix = " << ix
-                    //      << " it = " << it << "ik = " << ik
+                    //      << " it = " << it << " ik = " << ik
                     //      << " kmax = " << kmax << " k = " << k
                     //      << " term = " << afd->exprs[ix];
                     // for (int gk = 0; gk < kmax; gk++)
                     //     cout << " " << afd->indices[ix][itt + gk];
-                    // cout << endl;
-
+                    // cout << " L = " << sub_exprs[ix].at(make_pair(ik, k))
+                    //      << " R = " << sub_exprs[ix].at(make_pair(k, kmax));
                     // first right site position
                     term_k[ix][it] = k;
+                    const string &lstr = sub_exprs[ix].at(make_pair(ik, k));
+                    const string &rstr = sub_exprs[ix].at(make_pair(k, kmax));
                     size_t hl = expr_index_hash(
-                        afd->exprs[ix].data() + ik,
-                        afd->indices[ix].data() + itt + ik, k - ik, ip);
+                        lstr, afd->indices[ix].data() + itt + ik, k - ik, ip);
                     size_t hr = expr_index_hash(
-                        afd->exprs[ix].data() + k,
-                        afd->indices[ix].data() + itt + k, kmax - k, 1);
+                        rstr, afd->indices[ix].data() + itt + k, kmax - k, 1);
                     pair<S, S> pq =
                         hamil->get_string_quanta(quanta_ref[ix], afd->exprs[ix],
                                                  &afd->indices[ix][itt], k);
                     S qq = qh.combine(pq.first, -pq.second);
+                    assert(qq != S(S::invalid));
                     if (q_map.count(qq) == 0) {
                         q_map[qq] = (int)q_map.size();
                         map_ls.emplace_back();
@@ -886,9 +1176,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                       afd->indices[vix].data() + vitt + vk,
                                       afd->indices[ix].data() + itt + ik) &&
                                 ((vix == ix && vik == ik) ||
-                                 equal(afd->exprs[vix].data() + vik,
-                                       afd->exprs[vix].data() + vk,
-                                       afd->exprs[ix].data() + ik)))
+                                 lstr == sub_exprs[vix].at(make_pair(vik, vk))))
                                 break;
                         }
                         if (iq == (int)vq.size())
@@ -922,9 +1210,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                       afd->indices[vix].data() + vitt + vkmax,
                                       afd->indices[ix].data() + itt + k) &&
                                 ((vix == ix && vk == k) ||
-                                 equal(afd->exprs[vix].data() + vk,
-                                       afd->exprs[vix].data() + vkmax,
-                                       afd->exprs[ix].data() + k)))
+                                 rstr ==
+                                     sub_exprs[vix].at(make_pair(vk, vkmax))))
                                 break;
                         }
                         if (iq == (int)vq.size())
@@ -935,6 +1222,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     } else
                         mpr[hr].push_back(
                             make_pair(make_pair(ip, ic), ir = nmr++));
+                    // cout << "il = " << il << " ir = " << ir
+                    //      << " ql = " << qq.get_bra(qh)
+                    //      << " qr = " << -qq.get_ket() << endl;
                     mats[iq].push_back(make_pair(make_pair(il, ir), itv));
                 }
             }
@@ -1074,7 +1364,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     res_s_count += svds[iq].second.size();
                     if (!rescale) {
                         for (int i = 0; i < szm; i++)
-                            if (svds[iq].second[i] > cutoff)
+                            if (svds[iq].second[i] > sqrt(cutoff))
                                 s_kept++;
                             else
                                 discarded_weights[ii] +=
@@ -1115,7 +1405,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     for (int i = 0; i < szm; i++)
                         svds[iq].second[i] /= res_factor;
                     for (int i = 0; i < szm; i++)
-                        if (svds[iq].second[i] > cutoff)
+                        if (svds[iq].second[i] > sqrt(cutoff))
                             s_kept++;
                         else
                             discarded_weights[ii] +=
@@ -1193,11 +1483,16 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             it = part_terms[delayed_term].second;
                         }
                         int ik = term_i[ix][it], k = term_k[ix][it];
-                        site_ops[afd->exprs[ix].substr(ik, k - ik)] = nullptr;
+                        // cout << "ix = " << ix << " expr = " << afd->exprs[ix]
+                        //      << " ik = " << ik << " k = " << k
+                        //      << " sub = " << sub_exprs[ix].at(make_pair(ik,
+                        //      k))
+                        //      << endl;
+                        site_ops[sub_exprs[ix].at(make_pair(ik, k))] = nullptr;
                     }
             }
             site_ops[""] = nullptr;
-            hamil->get_site_ops(ii, site_ops);
+            hamil->get_site_string_ops(ii, site_ops);
             site_op_names.reserve(site_ops.size());
             LL ixx = 0;
             for (auto &xm : site_ops) {
@@ -1256,8 +1551,21 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         }
                         int il = vl.second;
                         int ik = term_i[ix][it], k = term_k[ix][it];
-                        site_mp[il] =
-                            site_op_names.at(afd->exprs[ix].substr(ik, k - ik));
+                        // if (site_op_names.at(
+                        //         sub_exprs[ix].at(make_pair(ik, k))) !=
+                        //         nullptr)
+                        // cout << "iq = " << iq << " il = " << il
+                        //      << " ix = " << ix << " it = " << it
+                        //      << " ik = " << ik << " k = " << k
+                        //      << " ql = " << qq.get_bra(qh)
+                        //      << " qr = " << -qq.get_ket() << " sub = "
+                        //      << sub_exprs[ix].at(make_pair(ik, k)) << " "
+                        //      << site_op_names
+                        //             .at(sub_exprs[ix].at(make_pair(ik, k)))
+                        //             ->q_label
+                        //      << endl;
+                        site_mp[il] = site_op_names.at(
+                            sub_exprs[ix].at(make_pair(ik, k)));
                     }
                 if (algo_type & MPOAlgorithmTypes::Bipartite) {
                     vector<int> lip(szl), lix(szl, -1), rix(szr, -1);
@@ -1372,39 +1680,74 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             opx->strings[0]->get_op()->scalar_multiply(
                                 (FL)opx->strings[0]->factor);
                 } else {
-                    // TODO :: modify this part for SU2
-                    shared_ptr<SparseMatrix<S, FL>> gmat =
-                        make_shared<SparseMatrix<S, FL>>(d_alloc);
-                    gmat->allocate(xmat->info);
+                    // for SU2 there will be multiple possible gmats
+                    // with different dq
+                    map<S, shared_ptr<SparseMatrix<S, FL>>> gmats;
+                    bool all_same_dq = true;
                     for (auto &x : opx->strings) {
-                        assert(gmat->info->delta_quantum ==
-                               opt->ops.at(x->get_op())->info->delta_quantum);
-                        hamil->opf->iadd(gmat, opt->ops.at(x->get_op()),
-                                         x->factor);
+                        shared_ptr<SparseMatrixInfo<S>> info =
+                            opt->ops.at(x->get_op())->info;
+                        if (!gmats.count(info->delta_quantum)) {
+                            shared_ptr<SparseMatrix<S, FL>> gmat =
+                                make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            gmat->allocate(info);
+                            gmats[info->delta_quantum] = gmat;
+                        }
+                    }
+                    for (auto &x : opx->strings) {
+                        shared_ptr<SparseMatrix<S, FL>> mmat =
+                            opt->ops.at(x->get_op());
+                        shared_ptr<SparseMatrix<S, FL>> gmat =
+                            gmats.at(mmat->info->delta_quantum);
+                        hamil->opf->iadd(gmat, mmat, x->factor);
                         if (hamil->opf->seq->mode != SeqTypes::None)
                             hamil->opf->seq->simple_perform();
                     }
-                    shared_ptr<OpElement<S, FL>> opel;
-                    if (ii == 0 || ii == n_sites - 1)
-                        opel = make_shared<OpElement<S, FL>>(
-                            ii == 0 ? OpNames::XL : OpNames::XR,
-                            SiteIndex(
-                                {(uint16_t)(i / 1000), (uint16_t)(i % 1000)},
-                                {}),
-                            gmat->info->delta_quantum);
-                    else {
-                        opel = make_shared<OpElement<S, FL>>(
-                            OpNames::X,
-                            SiteIndex({(uint16_t)(ixx / 1000 / 1000),
-                                       (uint16_t)(ixx / 1000 % 1000),
-                                       (uint16_t)(ixx % 1000)},
-                                      {}),
-                            gmat->info->delta_quantum);
-                        ixx++;
+                    if (gmats.size() == 1) {
+                        shared_ptr<SparseMatrix<S, FL>> gmat =
+                            gmats.begin()->second;
+                        shared_ptr<OpElement<S, FL>> opel;
+                        if (ii == 0 || ii == n_sites - 1)
+                            opel = make_shared<OpElement<S, FL>>(
+                                ii == 0 ? OpNames::XL : OpNames::XR,
+                                SiteIndex({(uint16_t)(i / 1000),
+                                           (uint16_t)(i % 1000)},
+                                          {}),
+                                gmat->info->delta_quantum);
+                        else {
+                            opel = make_shared<OpElement<S, FL>>(
+                                OpNames::X,
+                                SiteIndex({(uint16_t)(ixx / 1000 / 1000),
+                                           (uint16_t)(ixx / 1000 % 1000),
+                                           (uint16_t)(ixx % 1000)},
+                                          {}),
+                                gmat->info->delta_quantum);
+                            ixx++;
+                        }
+                        mat.data[i] = opel;
+                        opt->ops[opel] = gmat;
+                        assert(opx->strings[0]->get_op()->q_label ==
+                               opel->q_label);
+                    } else {
+                        // for non-singlet Hamiltonian this may not be satisfied
+                        assert(ii != 0 && ii != n_sites - 1);
+                        vector<shared_ptr<OpExpr<S>>> opels;
+                        opels.reserve(gmats.size());
+                        for (auto &gmat : gmats) {
+                            shared_ptr<OpElement<S, FL>> opel =
+                                make_shared<OpElement<S, FL>>(
+                                    OpNames::X,
+                                    SiteIndex({(uint16_t)(ixx / 1000 / 1000),
+                                               (uint16_t)(ixx / 1000 % 1000),
+                                               (uint16_t)(ixx % 1000)},
+                                              {}),
+                                    gmat.second->info->delta_quantum);
+                            ixx++;
+                            opels.push_back(opel);
+                            opt->ops[opel] = gmat.second;
+                        }
+                        mat.data[i] = sum(opels);
                     }
-                    mat.data[i] = opel;
-                    opt->ops[opel] = gmat;
-                    assert(opx->strings[0]->get_op()->q_label == opel->q_label);
                 }
             }
             assert(ixx < 1000 * 1000 * 1000);
@@ -1568,9 +1911,19 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     S sr = dynamic_pointer_cast<OpElement<S, FL>>(
                                lop[gmat->indices[ig].second])
                                ->q_label;
-                    S sm = dynamic_pointer_cast<OpElement<S, FL>>(mat.data[ig])
-                               ->q_label;
-                    assert(sl.combine(sr, sm) != S(S::invalid));
+                    if (mat.data[ig]->get_type() == OpTypes::Elem) {
+                        S sm =
+                            dynamic_pointer_cast<OpElement<S, FL>>(mat.data[ig])
+                                ->q_label;
+                        assert(sl.combine(sr, sm) != S(S::invalid));
+                    } else if (mat.data[ig]->get_type() == OpTypes::Sum) {
+                        for (auto &x :
+                             dynamic_pointer_cast<OpSum<S, FL>>(mat.data[ig])
+                                 ->strings)
+                            assert(sl.combine(sr, x->get_op()->q_label) !=
+                                   S(S::invalid));
+                    } else
+                        assert(false);
                 }
             }
             if (iprint) {

@@ -343,7 +343,7 @@ struct SpinPermRecoupling {
                 ix++;
             }
             int twos = 0, iy = 0;
-            for (int i = (int)x.size() - 1, k = 1; i >= 0; i--, k *= 10)
+            for (int i = (int)x.length() - 1, k = 1; i >= 0; i--, k *= 10)
                 if (x[i] >= '0' && x[i] <= '9')
                     twos += (x[i] - '0') * k;
                 else {
@@ -598,7 +598,8 @@ struct SpinPermScheme {
     vector<vector<uint16_t>> index_patterns;
     vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
     SpinPermScheme() {}
-    SpinPermScheme(int nn, string spin_str, bool su2 = true) {
+    SpinPermScheme(string spin_str, bool su2 = true) {
+        int nn = SpinPermRecoupling::count_cds(spin_str);
         SpinPermScheme r = su2 ? SpinPermScheme::initialize_su2(nn, spin_str)
                                : SpinPermScheme::initialize_sz(nn, spin_str);
         index_patterns = r.index_patterns;
