@@ -1437,6 +1437,7 @@ template <typename FL> struct MRCISFCIDUMP : FCIDUMP<FL> {
 
 template <typename FL> struct SpinOrbitalFCIDUMP : FCIDUMP<FL> {
     using FCIDUMP<FL>::params;
+    typedef typename FCIDUMP<FL>::FP FP;
     shared_ptr<FCIDUMP<FL>> prim_fcidump;
     SpinOrbitalFCIDUMP(const shared_ptr<FCIDUMP<FL>> &fcidump)
         : FCIDUMP<FL>(), prim_fcidump(fcidump) {
@@ -1454,6 +1455,14 @@ template <typename FL> struct SpinOrbitalFCIDUMP : FCIDUMP<FL> {
         params["orbsym"] = ss.str();
     }
     virtual ~SpinOrbitalFCIDUMP() = default;
+    // Remove integral elements that violate point group symmetry
+    // orbsym: in XOR convention
+    FP symmetrize(const vector<uint8_t> &orbsym) override {
+        vector<uint8_t> prim_orbsym(orbsym.size() / 2);
+        for (size_t i = 0; i < orbsym.size() / 2; i++)
+            prim_orbsym[i] = orbsym[i * 2];
+        return prim_fcidump->symmetrize(prim_orbsym);
+    }
     // One-electron integral element (SGF)
     FL t(uint16_t i, uint16_t j) const override {
         if ((i ^ j) & 1)

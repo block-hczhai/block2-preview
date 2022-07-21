@@ -51,8 +51,7 @@ TYPED_TEST(TestDMRG, Test) {
     using FP = typename TestFixture::FP;
     using S = SGF;
 
-    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<CompressedFCIDUMP<FL>>(1E-13);
-    // shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
+    shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
 
@@ -76,8 +75,6 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "INT start" << endl;
     fcidump->read(filename);
     fcidump = make_shared<SpinOrbitalFCIDUMP<FL>>(fcidump);
-    // fcidump = make_shared<HubbardKSpaceFCIDUMP>(4, 1, 2);
-    // fcidump = make_shared<HubbardFCIDUMP>(4, 1, 2, true);
     cout << "INT end .. T = " << t.get_time() << endl;
 
     Random::rand_seed(1234);
@@ -108,18 +105,29 @@ TYPED_TEST(TestDMRG, Test) {
     shared_ptr<HamiltonianQC<S, FL>> hamil =
         make_shared<HamiltonianQC<S, FL>>(vacuum, norb, pg_sym, fcidump);
 
+    fcidump->symmetrize(orbsym);
+    shared_ptr<GeneralFCIDUMP<FL>> gfd =
+        GeneralFCIDUMP<FL>::initialize_from_qc(fcidump, ElemOpTypes::SGF);
+
+    gfd = gfd->adjust_order();
+
+    shared_ptr<GeneralHamiltonian<S, FL>> gham =
+        make_shared<GeneralHamiltonian<S, FL>>(vacuum, norb, orbsym);
+
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
-    shared_ptr<MPO<S, FL>> mpo =
-        make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
-    // mpo = make_shared<ArchivedMPO<S>>(mpo);
+    shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
+        gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-14, -1);
+    // shared_ptr<MPO<S, FL>> mpo =
+    //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
+    // mpo->basis = hamil->basis;
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
     cout << "MPO simplification start" << endl;
     mpo = make_shared<SimplifiedMPO<S, FL>>(
-        mpo, make_shared<RuleQC<S, FL>>(true, true, true, true, true, true),
+        mpo, make_shared<RuleQC<S, FL>>(),
         // make_shared<Rule<S, FL>>(),
         true, true, OpNamesSet({OpNames::R, OpNames::RD}), "HQC", true);
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
@@ -140,7 +148,7 @@ TYPED_TEST(TestDMRG, Test) {
 
     // CCSD init
     shared_ptr<MPSInfo<S>> mps_info =
-        make_shared<MPSInfo<S>>(norb, vacuum, target, hamil->basis);
+        make_shared<MPSInfo<S>>(norb, vacuum, target, mpo->basis);
     // mps_info->set_bond_dimension_full_fci();
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);
@@ -165,6 +173,14 @@ TYPED_TEST(TestDMRG, Test) {
     //     hamil->basis,
     //                                      hamil->orb_sym, ioccs, fcidump);
     // mps_info->set_bond_dimension(bond_dim);
+    cout << "left mpo dims = ";
+    for (int i = 0; i < norb; i++)
+        cout << mpo->left_operator_names[i]->data.size() << " ";
+    cout << endl;
+    cout << "right mpo dims = ";
+    for (int i = 0; i < norb; i++)
+        cout << mpo->right_operator_names[i]->data.size() << " ";
+    cout << endl;
 
     cout << "left dims = ";
     for (int i = 0; i <= norb; i++)

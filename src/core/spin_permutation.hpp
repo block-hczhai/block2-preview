@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2022 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,12 +18,12 @@
  *
  */
 
-/** Spin permutation for NPDM and AutoMPO. */
+/** Spin permutation for NPDM and GeneralMPO. */
 
 #pragma once
 
-#include "../core/cg.hpp"
-#include "../core/matrix_functions.hpp"
+#include "cg.hpp"
+#include "matrix_functions.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>

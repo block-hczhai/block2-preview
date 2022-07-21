@@ -1,7 +1,6 @@
 
 #include "block2_core.hpp"
 #include "block2_dmrg.hpp"
-#include "ic/general_mpo.hpp"
 #include <gtest/gtest.h>
 
 using namespace block2;

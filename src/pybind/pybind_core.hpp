@@ -54,6 +54,19 @@ PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<long long int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<long long int, long long int>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<int, int>);
+PYBIND11_MAKE_OPAQUE(vector<unordered_map<int, int>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<int, pair<int, int>>);
+PYBIND11_MAKE_OPAQUE(vector<unordered_map<int, pair<int, int>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<SpinOperator, uint16_t>>);
+PYBIND11_MAKE_OPAQUE(vector<SpinPermTerm>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SpinPermTerm>>);
+PYBIND11_MAKE_OPAQUE(vector<SpinPermTensor>);
+PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SpinPermScheme>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<double, string>>);
+PYBIND11_MAKE_OPAQUE(map<vector<uint16_t>, vector<pair<double, string>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<map<vector<uint16_t>, vector<pair<double, string>>>>);
 // double
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<double>>>>);
@@ -1222,6 +1235,17 @@ template <typename S = void> void bind_data(py::module &m) {
                                                     "VectorVectorVectorDouble");
     py::bind_vector<vector<vector<vector<complex<double>>>>>(
         m, "VectorVectorVectorComplexDouble");
+    py::bind_map<unordered_map<int, int>>(m, "MapIntInt");
+    py::bind_vector<vector<unordered_map<int, int>>>(m, "VectorMapIntInt");
+    py::bind_map<unordered_map<int, pair<int, int>>>(m, "MapIntPIntInt");
+    py::bind_vector<vector<unordered_map<int, pair<int, int>>>>(
+        m, "VectorMapIntPIntInt");
+    py::bind_vector<vector<pair<double, string>>>(m, "VectorPDoubleStr");
+    py::bind_map<map<vector<uint16_t>, vector<pair<double, string>>>>(
+        m, "MapVectorUInt16VectorPDoubleStr");
+    py::bind_vector<
+        vector<map<vector<uint16_t>, vector<pair<double, string>>>>>(
+        m, "VectorMapVectorUInt16VectorPDoubleStr");
 
 #ifdef _USE_SINGLE_PREC
 
@@ -1510,6 +1534,19 @@ template <typename S = void> void bind_types(py::module &m) {
         .def(py::self & py::self)
         .def(py::self | py::self)
         .def(py::self ^ py::self);
+
+    py::enum_<SpinOperator>(m, "SpinOperator", py::arithmetic())
+        .value("C", SpinOperator::C)
+        .value("D", SpinOperator::D)
+        .value("CA", SpinOperator::CA)
+        .value("CB", SpinOperator::CB)
+        .value("DA", SpinOperator::DA)
+        .value("DB", SpinOperator::DB)
+        .def(py::self & py::self)
+        .def(py::self ^ py::self);
+
+    py::bind_vector<vector<pair<SpinOperator, uint16_t>>>(
+        m, "VectorPSpinOpUInt16");
 }
 
 template <typename S = void> void bind_io(py::module &m) {
@@ -1572,6 +1609,30 @@ template <typename S = void> void bind_io(py::module &m) {
                    r.second.size() * sizeof(int));
             return make_pair(r.first, idx);
         });
+
+    py::class_<Flow, shared_ptr<Flow>>(m, "Flow")
+        .def(py::init<int>())
+        .def_readwrite("n", &Flow::n)
+        .def_readwrite("nfs", &Flow::nfs)
+        .def_readwrite("inf", &Flow::inf)
+        .def_readwrite("resi", &Flow::resi)
+        .def_readwrite("dist", &Flow::dist)
+        .def("mvc", &Flow::mvc)
+        .def("dinic", &Flow::dinic)
+        .def("ddfs", &Flow::ddfs)
+        .def("dbfs", &Flow::dbfs);
+
+    py::class_<CostFlow, shared_ptr<CostFlow>>(m, "CostFlow")
+        .def(py::init<int>())
+        .def_readwrite("n", &CostFlow::n)
+        .def_readwrite("nfs", &CostFlow::nfs)
+        .def_readwrite("inf", &CostFlow::inf)
+        .def_readwrite("resi", &CostFlow::resi)
+        .def_readwrite("dist", &CostFlow::dist)
+        .def_readwrite("pre", &CostFlow::pre)
+        .def("mvc", &CostFlow::mvc)
+        .def("sap", &CostFlow::sap)
+        .def("spfa", &CostFlow::spfa);
 
     py::class_<Prime, shared_ptr<Prime>>(m, "Prime")
         .def(py::init<>())
@@ -1772,6 +1833,83 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("rank", &block2::MPI::rank)
         .def_static("size", &block2::MPI::size);
 #endif
+
+    py::class_<SpinPermTerm, shared_ptr<SpinPermTerm>>(m, "SpinPermTerm")
+        .def(py::init<>())
+        .def(py::init<SpinOperator, uint16_t>())
+        .def(py::init<SpinOperator, uint16_t, double>())
+        .def(py::init<const vector<pair<SpinOperator, uint16_t>> &>())
+        .def(py::init<const vector<pair<SpinOperator, uint16_t>> &, double>())
+        .def_readwrite("factor", &SpinPermTerm::factor)
+        .def_readwrite("ops", &SpinPermTerm::ops)
+        .def(-py::self)
+        .def(py::self < py::self)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def("ops_equal_to", &SpinPermTerm::ops_equal_to)
+        .def("to_str", &SpinPermTerm::to_str);
+
+    py::bind_vector<vector<SpinPermTerm>>(m, "VectorSpinPermTerm");
+    py::bind_vector<vector<vector<SpinPermTerm>>>(m,
+                                                  "VectorVectorSpinPermTerm");
+
+    py::class_<SpinPermTensor, shared_ptr<SpinPermTensor>>(m, "SpinPermTensor")
+        .def(py::init<>())
+        .def(py::init<const vector<vector<SpinPermTerm>> &>())
+        .def_readwrite("data", &SpinPermTensor::data)
+        .def_static("C", &SpinPermTensor::C)
+        .def_static("D", &SpinPermTensor::D)
+        .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
+        .def_static("auto_sort_string", &SpinPermTensor::auto_sort_string)
+        .def_static("mul", &SpinPermTensor::mul)
+        .def("simplify", &SpinPermTensor::simplify)
+        .def("auto_sort", &SpinPermTensor::auto_sort)
+        .def("equal_to_scaled", &SpinPermTensor::equal_to_scaled)
+        .def("to_str", &SpinPermTensor::to_str)
+        .def(py::self * double())
+        .def(py::self + py::self)
+        .def(py::self == py::self);
+
+    py::bind_vector<vector<SpinPermTensor>>(m, "VectorSpinPermTensor");
+
+    py::class_<SpinPermRecoupling, shared_ptr<SpinPermRecoupling>>(
+        m, "SpinPermRecoupling")
+        .def_static("to_str", &SpinPermRecoupling::to_str)
+        .def_static("make_cds", &SpinPermRecoupling::make_cds)
+        .def_static("make_with_cds", &SpinPermRecoupling::make_with_cds)
+        .def_static("split_cds", &SpinPermRecoupling::split_cds)
+        .def_static("count_cds", &SpinPermRecoupling::count_cds)
+        .def_static("make_tensor", &SpinPermRecoupling::make_tensor)
+        .def_static("find_split_index", &SpinPermRecoupling::find_split_index)
+        .def_static("find_split_indices_from_left",
+                    &SpinPermRecoupling::find_split_indices_from_left)
+        .def_static("initialize", &SpinPermRecoupling::initialize);
+
+    py::class_<SpinPermPattern, shared_ptr<SpinPermPattern>>(m,
+                                                             "SpinPermPattern")
+        .def_readwrite("n", &SpinPermPattern::n)
+        .def_readwrite("data", &SpinPermPattern::data)
+        .def(py::init<uint16_t>())
+        .def_static("all_reordering", &SpinPermPattern::all_reordering)
+        .def_static("initialize", &SpinPermPattern::initialize)
+        .def_static("get_unique", &SpinPermPattern::get_unique)
+        .def_static("make_matrix", &SpinPermPattern::make_matrix)
+        .def("count", &SpinPermPattern::count)
+        .def("__getitem__", &SpinPermPattern::operator[])
+        .def("to_str", &SpinPermPattern::to_str);
+
+    py::class_<SpinPermScheme, shared_ptr<SpinPermScheme>>(m, "SpinPermScheme")
+        .def(py::init<>())
+        .def(py::init<string>())
+        .def(py::init<string, bool>())
+        .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
+        .def_readwrite("data", &SpinPermScheme::data)
+        .def_static("initialize_sz", &SpinPermScheme::initialize_sz)
+        .def_static("initialize_su2", &SpinPermScheme::initialize_su2)
+        .def("to_str", &SpinPermScheme::to_str);
+
+    py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,
+                                                        "VectorSpinPermScheme");
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {

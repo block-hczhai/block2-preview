@@ -24,6 +24,7 @@
 #include "dmrg/determinant.hpp"
 #include "dmrg/effective_functions.hpp"
 #include "dmrg/effective_hamiltonian.hpp"
+#include "dmrg/general_mpo.hpp"
 #include "dmrg/moving_environment.hpp"
 #include "dmrg/mpo.hpp"
 #include "dmrg/mpo_fusing.hpp"
