@@ -124,7 +124,7 @@ jobs:
         target: [ ubuntu, macos ]
         parallel: [ mpi, serial ]
         exclude:
-          - target: macos-latest
+          - target: macos
             parallel: mpi
       fail-fast: true
 
