@@ -329,7 +329,7 @@ py::class_<Array<T>, shared_ptr<Array<T>>> bind_array(py::module &m,
             [](Array<T> *self) {
                 return py::make_iterator<
                     py::return_value_policy::reference_internal, T *, T *, T &>(
-                    self->data, self->data + self->n);
+                    move(self->data), move(self->data + self->n));
             },
             py::keep_alive<0, 1>());
 }
