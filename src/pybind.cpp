@@ -177,12 +177,14 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_DMRG
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
+    bind_general_fcidump<double>(m);
     bind_dmrg<SU2, double>(m_su2, "SU2");
     bind_dmrg<SZ, double>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
     bind_trans_mps<SZ, SU2>(m_sz, "su2");
     bind_fl_trans_mps_spin_specific<SU2, SZ, double>(m_su2, "sz");
 #ifdef _USE_COMPLEX
+    bind_general_fcidump<complex<double>>(m_cpx);
     bind_dmrg<SU2, complex<double>>(m_su2_cpx, "SU2");
     bind_dmrg<SZ, complex<double>>(m_sz_cpx, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(m_su2_cpx, "sz");
@@ -212,11 +214,12 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_SINGLE_PREC
-
+    bind_general_fcidump<float>(m_sp);
     bind_dmrg<SU2, float>(m_su2_sp, "SU2");
     bind_dmrg<SZ, float>(m_sz_sp, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, float>(m_su2_sp, "sz");
 #ifdef _USE_COMPLEX
+    bind_general_fcidump<complex<float>>(m_cpx_sp);
     bind_dmrg<SU2, complex<float>>(m_su2_cpx_sp, "SU2");
     bind_dmrg<SZ, complex<float>>(m_sz_cpx_sp, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(m_su2_cpx_sp, "sz");

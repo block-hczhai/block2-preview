@@ -1805,9 +1805,6 @@ void bind_dmrg(py::module &m, const string &name) {
         bind_mpo<S>(m);
     }
 
-    if (is_same<S, SU2>::value)
-        bind_general_fcidump<FL>(m);
-
     bind_fl_mps<S, FL>(m);
     bind_fl_mpo<S, FL>(m);
     bind_fl_partition<S, FL>(m);
