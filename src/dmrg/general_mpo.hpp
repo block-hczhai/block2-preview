@@ -237,8 +237,9 @@ template <typename FL> struct GeneralFCIDUMP {
                 continue;
             vector<uint16_t> idx_idx(nn);
             vector<uint16_t> idx_pat(nn);
-            vector<uint16_t> idx_mat(nn);
-            for (size_t i = 0; i < indices[ix].size(); i += nn) {
+            vector<uint16_t> idx_mat(max(1, nn));
+            for (size_t i = 0; i < (nn == 0 ? 1 : indices[ix].size());
+                 i += (nn == 0 ? 1 : nn)) {
                 for (int j = 0; j < nn; j++)
                     idx_idx[j] = j;
                 sort(idx_idx.begin(), idx_idx.begin() + nn,
@@ -282,8 +283,8 @@ template <typename FL> struct GeneralFCIDUMP {
                             r_data[r_str_mp.at(strd[j].second)];
                         iridx.insert(iridx.end(), idx_pat.begin(),
                                      idx_pat.end());
-                        irdata.push_back(
-                            (FL)(data[ix][i / nn] * (FL)(FP)strd[j].first));
+                        irdata.push_back((FL)(data[ix][nn == 0 ? i : i / nn] *
+                                              (FL)(FP)strd[j].first));
                     }
                 }
             }
@@ -381,8 +382,10 @@ template <typename FL> struct GeneralFCIDUMP {
         return r;
     }
     friend ostream &operator<<(ostream &os, GeneralFCIDUMP x) {
-        os << " NSITES = " << x.n_sites() << " NELEC = " << x.n_elec();
-        os << " TWOS = " << x.twos() << endl;
+        if (x.params.size() != 0) {
+            os << " NSITES = " << x.n_sites() << " NELEC = " << x.n_elec();
+            os << " TWOS = " << x.twos() << endl;
+        }
         os << " SU2 = " << (x.elem_type == ElemOpTypes::SU2);
         os << fixed << setprecision(16) << " CONST E = " << x.const_e << endl;
         for (int ix = 0; ix < (int)x.exprs.size(); ix++) {

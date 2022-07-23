@@ -115,6 +115,10 @@ struct SpinPermTensor {
     vector<vector<SpinPermTerm>> data;
     SpinPermTensor() : data{vector<SpinPermTerm>()} {}
     SpinPermTensor(const vector<vector<SpinPermTerm>> &data) : data(data) {}
+    static SpinPermTensor I() {
+        return SpinPermTensor(vector<vector<SpinPermTerm>>{vector<SpinPermTerm>{
+            SpinPermTerm(vector<pair<SpinOperator, uint16_t>>())}});
+    }
     static SpinPermTensor C(uint16_t index) {
         vector<SpinPermTerm> a = {SpinPermTerm(SpinOperator::CB, index)};
         vector<SpinPermTerm> b = {SpinPermTerm(SpinOperator::CA, index)};
@@ -329,6 +333,9 @@ struct SpinPermRecoupling {
             assert(indices.size() == 1 && cds.size() == 1);
             return cds[0] ? SpinPermTensor::C(indices[0])
                           : SpinPermTensor::D(indices[0]);
+        } else if (x == "") {
+            assert(indices.size() == 0 && cds.size() == 0);
+            return SpinPermTensor::I();
         } else {
             int ix = 0, dot_cnt = 0, depth = 0;
             for (auto &c : x) {
@@ -422,6 +429,8 @@ struct SpinPermPattern {
     vector<uint16_t> data;
     SpinPermPattern(uint16_t n) : n(n), data(initialize(n)) {}
     static vector<uint16_t> all_reordering(const vector<uint16_t> &x) {
+        if (x.size() == 0)
+            return x;
         vector<pair<uint16_t, uint16_t>> pp;
         for (auto &ix : x)
             if (pp.size() == 0 || ix != pp.back().first)
@@ -483,11 +492,11 @@ struct SpinPermPattern {
             }
         }
         size_t cnt = 0;
-        for (uint16_t i = 1; i <= n; i++)
+        for (uint16_t i = 0; i <= n; i++)
             cnt += mp.at(make_pair(i, n)).size();
         vector<uint16_t> r(cnt * (n + 2));
         size_t ic = 0;
-        for (uint16_t i = 1; i <= n; i++) {
+        for (uint16_t i = 0; i <= n; i++) {
             vector<vector<uint16_t>> &mpx = mp.at(make_pair(i, n));
             for (auto &x : mpx) {
                 r[ic++] = i;
@@ -617,9 +626,10 @@ struct SpinPermScheme {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
-            for (int j = 0; j < rr.size(); j += irr.size()) {
-                vector<uint16_t> indices(rr.begin() + j,
-                                         rr.begin() + j + irr.size());
+            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
                 r.data[i][indices] = vector<pair<double, string>>();
                 vector<pair<double, string>> &rec_formula =
                     r.data[i].at(indices);
@@ -645,9 +655,10 @@ struct SpinPermScheme {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
-            for (int j = 0; j < rr.size(); j += irr.size()) {
-                vector<uint16_t> indices(rr.begin() + j,
-                                         rr.begin() + j + irr.size());
+            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
                 r.data[i][indices] = vector<pair<double, string>>();
                 vector<pair<double, string>> &rec_formula =
                     r.data[i].at(indices);

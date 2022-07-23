@@ -80,6 +80,24 @@ TYPED_TEST(TestDMRG, Test) {
     shared_ptr<HamiltonianQC<S, FL>> hamil =
         make_shared<HamiltonianQC<S, FL>>(vacuum, norb, orbsym, fcidump);
 
+    shared_ptr<GeneralFCIDUMP<FL>> ifd = make_shared<GeneralFCIDUMP<FL>>();
+    ifd->elem_type = ElemOpTypes::SZ;
+    ifd->const_e = 0.0;
+    ifd->exprs.push_back("");
+    ifd->indices.push_back(vector<uint16_t>{});
+    ifd->data.push_back(vector<FL>{1.0});
+
+    cout << *ifd << endl;
+
+    ifd = ifd->adjust_order();
+
+    cout << *ifd << endl;
+
+    cout << SpinPermPattern(3).to_str() << endl;
+    cout << SpinPermPattern(2).to_str() << endl;
+    cout << SpinPermPattern(1).to_str() << endl;
+    cout << SpinPermPattern(0).to_str() << endl;
+
     fcidump->symmetrize(orbsym);
     shared_ptr<GeneralFCIDUMP<FL>> gfd =
         GeneralFCIDUMP<FL>::initialize_from_qc(fcidump, ElemOpTypes::SZ);

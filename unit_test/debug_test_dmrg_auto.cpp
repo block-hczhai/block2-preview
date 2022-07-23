@@ -92,6 +92,24 @@ TYPED_TEST(TestDMRG, Test) {
     shared_ptr<HamiltonianQC<S, FL>> hamil =
         make_shared<HamiltonianQC<S, FL>>(vacuum, norb, pg_sym, fcidump);
 
+    shared_ptr<GeneralFCIDUMP<FL>> ifd = make_shared<GeneralFCIDUMP<FL>>();
+    ifd->elem_type = ElemOpTypes::SU2;
+    ifd->const_e = 0.0;
+    ifd->exprs.push_back("");
+    ifd->indices.push_back(vector<uint16_t>{});
+    ifd->data.push_back(vector<FL>{1.0});
+
+    cout << *ifd << endl;
+
+    ifd = ifd->adjust_order();
+
+    cout << *ifd << endl;
+
+    cout << SpinPermPattern(3).to_str() << endl;
+    cout << SpinPermPattern(2).to_str() << endl;
+    cout << SpinPermPattern(1).to_str() << endl;
+    cout << SpinPermPattern(0).to_str() << endl;
+
     fcidump->symmetrize(orbsym);
     shared_ptr<GeneralFCIDUMP<FL>> gfd =
         GeneralFCIDUMP<FL>::initialize_from_qc(fcidump, ElemOpTypes::SU2);
@@ -230,10 +248,10 @@ TYPED_TEST(TestDMRG, Test) {
 
     // DMRG
     // vector<ubond_t> bdims = {50};
-    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500, 500,
-                             500, 750, 750, 750, 750, 750};
-    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5, 1E-5, 1E-5,
-                         1E-5, 1E-6, 0.0};
+    vector<ubond_t> bdims = {250, 250, 250, 250, 250, 500, 500, 500,
+                             500, 500, 750, 750, 750, 750, 750};
+    vector<FP> noises = {1E-4, 1E-4, 1E-4, 1E-4, 1E-4, 1E-5,
+                         1E-5, 1E-5, 1E-5, 1E-6, 0.0};
     vector<FP> davthrs = {1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-5, 1E-6,
                           1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6, 1E-6,
                           5E-7, 5E-7, 5E-7, 5E-7, 5E-7, 5E-7};

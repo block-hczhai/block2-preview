@@ -313,6 +313,11 @@ struct WickTensor {
             tensor_type = WickTensorTypes::CreationOperator;
         else if (name == "D" && indices.size() == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
+        // for external usage
+        else if ((name == "Ca" || name == "Cb") && indices.size() == 1)
+            tensor_type = WickTensorTypes::CreationOperator;
+        else if ((name == "Da" || name == "Db") && indices.size() == 1)
+            tensor_type = WickTensorTypes::DestroyOperator;
         else if (name[0] == 'E' && name.length() == 2 &&
                  indices.size() == (int)(name[1] - '0') * 2) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
@@ -1190,15 +1195,23 @@ struct WickExpr {
         return ss.str();
     }
     static WickExpr
-    parse(const string &tex_expr,
+    parse(const string &expr,
           const map<WickIndexTypes, set<WickIndex>> &idx_map,
           const map<pair<string, int>, vector<WickPermutation>> &perm_map =
               map<pair<string, int>, vector<WickPermutation>>()) {
         vector<WickString> terms;
+        stringstream exx;
+        for (auto &c : expr)
+            if (c == '+' || c == '-')
+                exx << "\n" << c;
+            else
+                exx << c;
+        string tex_expr = exx.str();
         size_t index = tex_expr.find_first_of("\n\r", 0);
         size_t last = 0;
         while (index != string::npos) {
-            if (index > last)
+            if (index > last && tex_expr.substr(last, index - last) !=
+                                    string(index - last, ' '))
                 terms.push_back(WickString::parse(
                     tex_expr.substr(last, index - last), idx_map, perm_map));
             last = index + 1;
