@@ -753,7 +753,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 op_prims["T"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
                 op_prims["T"]->allocate(find_site_op_info(m, S(0, 2, 0)));
                 (*op_prims["T"])[S(twos, twos, twos, 0)](0, 0) =
-                    sqrt(twos * (twos + 2) / (FL)2.0);
+                    sqrt((FL)twos * ((FL)twos + (FL)2.0) / (FL)2.0);
             }
         }
         // site norm operators
