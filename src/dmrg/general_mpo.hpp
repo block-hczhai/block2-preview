@@ -1218,7 +1218,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
             op_prims["Z"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims["Z"]->allocate(find_site_op_info(m, S(0, 0)));
             for (int tm = -twos; tm < twos + 1; tm += 2)
-                (*op_prims["Z"])[S(tm, 0)](0, 0) = (FL)(tm / (FL)2.0);
+                (*op_prims["Z"])[S(tm, 0)](0, 0) = (FL)tm / (FL)2.0;
         }
         // site norm operators
         const string stx[4] = {"", "P", "M", "Z"};
