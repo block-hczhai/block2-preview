@@ -46,7 +46,11 @@ enum struct SpinOperator : uint8_t {
     CA = 4,
     CB = 5,
     DA = 0,
-    DB = 1
+    DB = 1,
+    S = 2,
+    SP = 6,
+    SZ = 3,
+    SM = 7,
 };
 
 inline bool operator&(SpinOperator a, SpinOperator b) {
@@ -58,7 +62,8 @@ inline SpinOperator operator^(SpinOperator a, SpinOperator b) {
 }
 
 inline ostream &operator<<(ostream &os, const SpinOperator c) {
-    const static string repr[] = {"DA", "DB", "C", "D", "CA", "CB"};
+    const static string repr[] = {"DA", "DB", "S",  "SZ",
+                                  "CA", "CB", "SP", "SM"};
     os << repr[(uint8_t)c];
     return os;
 }
@@ -73,6 +78,9 @@ struct SpinPermTerm {
                  double factor = 1.0)
         : factor(factor), ops(ops) {}
     SpinPermTerm operator-() const { return SpinPermTerm(ops, -factor); }
+    SpinPermTerm operator*(double d) const {
+        return SpinPermTerm(ops, d * factor);
+    }
     bool operator<(const SpinPermTerm &other) const {
         if (ops.size() != other.ops.size())
             return ops.size() < other.ops.size();
@@ -128,6 +136,13 @@ struct SpinPermTensor {
         vector<SpinPermTerm> a = {SpinPermTerm(SpinOperator::DA, index)};
         vector<SpinPermTerm> b = {-SpinPermTerm(SpinOperator::DB, index)};
         return SpinPermTensor(vector<vector<SpinPermTerm>>{a, b});
+    }
+    static SpinPermTensor T(uint16_t index) {
+        vector<SpinPermTerm> sp = {-SpinPermTerm(SpinOperator::SP, index)};
+        vector<SpinPermTerm> sz = {SpinPermTerm(SpinOperator::SZ, index) *
+                                   sqrt(2)};
+        vector<SpinPermTerm> sm = {SpinPermTerm(SpinOperator::SM, index)};
+        return SpinPermTensor(vector<vector<SpinPermTerm>>{sp, sz, sm});
     }
     SpinPermTensor simplify() const {
         vector<vector<SpinPermTerm>> zd = data;
@@ -188,7 +203,8 @@ struct SpinPermTensor {
                 for (uint16_t i = 0; i < tx.ops.size(); i++)
                     new_ops[pcnt[tx.ops[i].second]] = tx.ops[i],
                     perm[i] = pcnt[tx.ops[i].second]++;
-                tx.factor *= permutation_parity(perm) ? -1 : 1;
+                if (tx.ops.size() != 0 && !(tx.ops[0].first & SpinOperator::S))
+                    tx.factor *= permutation_parity(perm) ? -1 : 1;
                 tx.ops = new_ops;
             }
         return r;
@@ -291,7 +307,7 @@ struct SpinPermRecoupling {
     static vector<uint8_t> make_cds(const string &x) {
         vector<uint8_t> r;
         for (auto &c : x)
-            r.push_back(c == 'C');
+            r.push_back(c == 'T' ? 2 : (c == 'C'));
         return r;
     }
     static string make_with_cds(const string &x, const vector<uint8_t> &cds) {
@@ -299,7 +315,7 @@ struct SpinPermRecoupling {
         stringstream ss;
         for (auto &c : x)
             if (c == '.')
-                ss << (cds[icd++] ? "C" : "D");
+                ss << (cds[icd] == 2 ? "T" : (cds[icd] ? "C" : "D")), icd++;
             else
                 ss << c;
         return ss.str();
@@ -313,6 +329,8 @@ struct SpinPermRecoupling {
                 ss << '.', cds.push_back(1);
             else if (c == 'D' || c == 'd')
                 ss << '.', cds.push_back(0);
+            else if (c == 'T')
+                ss << '.', cds.push_back(2);
             else
                 ss << c;
         return ss.str();
@@ -331,8 +349,9 @@ struct SpinPermRecoupling {
                                       const SU2CG &cg) {
         if (x == ".") {
             assert(indices.size() == 1 && cds.size() == 1);
-            return cds[0] ? SpinPermTensor::C(indices[0])
-                          : SpinPermTensor::D(indices[0]);
+            return cds[0] == 2 ? SpinPermTensor::T(indices[0])
+                               : (cds[0] ? SpinPermTensor::C(indices[0])
+                                         : SpinPermTensor::D(indices[0]));
         } else if (x == "") {
             assert(indices.size() == 0 && cds.size() == 0);
             return SpinPermTensor::I();
@@ -402,16 +421,19 @@ struct SpinPermRecoupling {
         }
         return r;
     }
-    static vector<string> initialize(uint16_t n, uint16_t twos) {
+    // site_dq = 2 -> heisenberg spin model
+    static vector<string> initialize(uint16_t n, uint16_t twos,
+                                     uint16_t site_dq = 1) {
         map<pair<uint16_t, uint16_t>, vector<string>> mp;
         mp[make_pair(0, 0)] = vector<string>{""};
-        mp[make_pair(1, 1)] = vector<string>{"."};
+        mp[make_pair(1, site_dq)] = vector<string>{"."};
         for (int k = 2; k <= n; k++)
-            for (int j = k % 2; j <= k; j += 2) {
+            for (int j = site_dq == 2 ? 0 : k % 2; j <= k * site_dq; j += 2) {
                 mp[make_pair(k, j)] = vector<string>();
                 vector<string> &mpz = mp.at(make_pair(k, j));
                 for (int p = 1; p < k; p++)
-                    for (int jl = p % 2; jl <= p; jl += 2)
+                    for (int jl = site_dq == 2 ? 0 : p % 2; jl <= p * site_dq;
+                         jl += 2)
                         for (int jr = abs(j - jl); jr <= j + jl; jr += 2)
                             if (mp.count(make_pair(p, jl)) &&
                                 mp.count(make_pair(k - p, jr)))
@@ -548,7 +570,8 @@ struct SpinPermPattern {
         for (int i = 1; i < nn; i++)
             if (indices[i] != indices[i - 1])
                 ref_split_idx.push_back(i);
-        vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
+        bool heis = cds.size() != 0 && cds[0] == 2;
+        vector<string> pp = SpinPermRecoupling::initialize(nn, 0, heis ? 2 : 1);
         vector<SpinPermTensor> ts(pp.size());
         for (int i = 0; i < (int)pp.size(); i++) {
             if (split_idx != -1 &&
@@ -607,14 +630,16 @@ struct SpinPermScheme {
     vector<vector<uint16_t>> index_patterns;
     vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
     SpinPermScheme() {}
-    SpinPermScheme(string spin_str, bool su2 = true) {
+    SpinPermScheme(string spin_str, bool su2 = true, bool is_fermion = true) {
         int nn = SpinPermRecoupling::count_cds(spin_str);
-        SpinPermScheme r = su2 ? SpinPermScheme::initialize_su2(nn, spin_str)
-                               : SpinPermScheme::initialize_sz(nn, spin_str);
+        SpinPermScheme r =
+            su2 ? SpinPermScheme::initialize_su2(nn, spin_str)
+                : SpinPermScheme::initialize_sz(nn, spin_str, is_fermion);
         index_patterns = r.index_patterns;
         data = r.data;
     }
-    static SpinPermScheme initialize_sz(int nn, string spin_str) {
+    static SpinPermScheme initialize_sz(int nn, string spin_str,
+                                        bool is_fermion = true) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SpinPermPattern spat(nn);
@@ -634,7 +659,8 @@ struct SpinPermScheme {
                 vector<pair<double, string>> &rec_formula =
                     r.data[i].at(indices);
                 auto pis = SpinPermTensor::auto_sort_string(indices, spin_str);
-                rec_formula.push_back(make_pair((double)pis.second, pis.first));
+                rec_formula.push_back(make_pair(
+                    is_fermion ? (double)pis.second : 1.0, pis.first));
             }
         }
         return r;
@@ -667,7 +693,9 @@ struct SpinPermScheme {
                 vector<uint8_t> target_cds = cds;
                 for (int j = 0; j < irr.size(); j++)
                     target_cds[j] =
-                        xs.data[0][0].ops[j].first & SpinOperator::C;
+                        ((uint8_t)xs.data[0][0].ops[j].first &
+                         (uint8_t)SpinOperator::S) |
+                        (xs.data[0][0].ops[j].first & SpinOperator::C);
                 vector<string> ttp =
                     SpinPermPattern::get_unique(target_cds, irr, -1, true);
                 vector<T> tts(ttp.size());

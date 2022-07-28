@@ -94,6 +94,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -124,6 +125,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -159,6 +161,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -179,6 +182,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -211,6 +215,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, float>>,
@@ -227,6 +232,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -252,6 +258,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -272,6 +279,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -880,6 +888,8 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         m, "VectorMapOpNamesSpMat");
     py::bind_map<unordered_map<OpNames, shared_ptr<SparseMatrix<S, FL>>>>(
         m, "MapOpNamesSpMat");
+    py::bind_map<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>(
+        m, "MapStrSpMat");
     py::bind_map<
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>>(
         m, "MapOpExprSpMat");
@@ -1409,7 +1419,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("TEMP", OpNames::TEMP)
         .value("XL", OpNames::XL)
         .value("XR", OpNames::XR)
-        .value("X", OpNames::X);
+        .value("X", OpNames::X)
+        .value("SP", OpNames::SP)
+        .value("SM", OpNames::SM)
+        .value("SZ", OpNames::SZ);
 
     py::enum_<DelayedOpNames>(m, "DelayedOpNames", py::arithmetic())
         .value("Nothing", DelayedOpNames::None)
@@ -1544,6 +1557,10 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("CB", SpinOperator::CB)
         .value("DA", SpinOperator::DA)
         .value("DB", SpinOperator::DB)
+        .value("S", SpinOperator::S)
+        .value("SP", SpinOperator::SP)
+        .value("SZ", SpinOperator::SZ)
+        .value("SM", SpinOperator::SM)
         .def(py::self & py::self)
         .def(py::self ^ py::self);
 
@@ -1845,6 +1862,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("factor", &SpinPermTerm::factor)
         .def_readwrite("ops", &SpinPermTerm::ops)
         .def(-py::self)
+        .def(py::self * double())
         .def(py::self < py::self)
         .def(py::self == py::self)
         .def(py::self != py::self)
@@ -1861,6 +1879,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("data", &SpinPermTensor::data)
         .def_static("C", &SpinPermTensor::C)
         .def_static("D", &SpinPermTensor::D)
+        .def_static("T", &SpinPermTensor::T)
         .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
         .def_static("auto_sort_string", &SpinPermTensor::auto_sort_string)
         .def_static("mul", &SpinPermTensor::mul)
@@ -1885,7 +1904,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("find_split_index", &SpinPermRecoupling::find_split_index)
         .def_static("find_split_indices_from_left",
                     &SpinPermRecoupling::find_split_indices_from_left)
-        .def_static("initialize", &SpinPermRecoupling::initialize);
+        .def_static("initialize", &SpinPermRecoupling::initialize, py::arg("n"), py::arg("twos"), py::arg("site_dq") = 1);
 
     py::class_<SpinPermPattern, shared_ptr<SpinPermPattern>>(m,
                                                              "SpinPermPattern")
@@ -1904,6 +1923,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<>())
         .def(py::init<string>())
         .def(py::init<string, bool>())
+        .def(py::init<string, bool, bool>())
         .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
         .def_readwrite("data", &SpinPermScheme::data)
         .def_static("initialize_sz", &SpinPermScheme::initialize_sz)
@@ -2749,8 +2769,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<>())
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SZ *self) { return SZ::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SZ(SZ::invalid); })
         .def_readwrite("data", &SZ::data)
         .def_property("n", &SZ::n, &SZ::set_n)
         .def_property("twos", &SZ::twos, &SZ::set_twos)
@@ -2783,8 +2803,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SU2 *self) { return SU2::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SU2(SU2::invalid); })
         .def_readwrite("data", &SU2::data)
         .def_property("n", &SU2::n, &SU2::set_n)
         .def_property("twos", &SU2::twos, &SU2::set_twos)
@@ -2818,8 +2838,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int>())
         .def(py::init<int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SGF *self) { return SGF::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SGF(SGF::invalid); })
         .def_readwrite("data", &SGF::data)
         .def_property("n", &SGF::n, &SGF::set_n)
         .def_property_readonly("twos", &SGF::twos)
@@ -2852,8 +2872,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int>())
         .def(py::init<int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SGB *self) { return SGB::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SGB(SGB::invalid); })
         .def_readwrite("data", &SGB::data)
         .def_property("n", &SGB::n, &SGB::set_n)
         .def_property_readonly("twos", &SGB::twos)
@@ -2886,8 +2906,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<uint32_t>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SZK *self) { return SZK::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SZK(SZK::invalid); })
         .def_readwrite("data", &SZK::data)
         .def_property("n", &SZK::n, &SZK::set_n)
         .def_property("twos", &SZK::twos, &SZK::set_twos)
@@ -2924,8 +2944,8 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
         .def(py::init<int, int, int, int, int, int>())
-        .def_property_readonly_static("invalid",
-                                      [](SU2K *self) { return SU2K::invalid; })
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SU2K(SU2K::invalid); })
         .def_readwrite("data", &SU2K::data)
         .def_property("n", &SU2K::n, &SU2K::set_n)
         .def_property("twos", &SU2K::twos, &SU2K::set_twos)

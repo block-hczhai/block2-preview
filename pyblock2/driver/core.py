@@ -5,6 +5,7 @@ class SymmetryTypes(Enum):
     SU2 = 0
     SZ = 1
     SGF = 2
+    SGB = 3
 
 class Block2Wrapper:
     def __init__(self, symm_type=SymmetryTypes.SU2):
@@ -12,12 +13,19 @@ class Block2Wrapper:
         if symm_type == SymmetryTypes.SU2:
             import block2.su2 as bs
             self.SX = b.SU2
+            self.VectorSX = b.VectorSU2
         elif symm_type == SymmetryTypes.SZ:
             import block2.sz as bs
             self.SX = b.SZ
+            self.VectorSX = b.VectorSZ
         elif symm_type == SymmetryTypes.SGF:
             import block2.sgf as bs
             self.SX = b.SGF
+            self.VectorSX = b.VectorSGF
+        elif symm_type == SymmetryTypes.SGB:
+            import block2.sgb as bs
+            self.SX = b.SGB
+            self.VectorSX = b.VectorSGB
         self.symm_type = symm_type
         self.b = b
         self.bs = bs
@@ -39,20 +47,22 @@ class DMRGDriver:
         bw.b.Global.frame.minimal_disk_usage = True
         bw.b.Global.frame.use_main_stack = False
     
-    def initialize_system(self, n_sites, n_elec, spin, orb_sym=None):
+    def initialize_system(self, n_sites, n_elec=0, spin=0, orb_sym=None, heis_twos=-1, heis_twosz=0):
         bw = self.bw
         self.vacuum = bw.SX(0, 0, 0)
-        self.target = bw.SX(n_elec, spin, 0)
+        if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
+            n_elec = n_sites * heis_twos
+        self.target = bw.SX(n_elec if heis_twosz == 0 else heis_twosz, spin, 0)
         self.n_sites = n_sites
         if orb_sym is None:
             self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
         else:
             self.orb_sym = bw.b.VectorUInt8(orb_sym)
-        self.ghamil = bw.bs.GeneralHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+        self.ghamil = bw.bs.GeneralHamiltonian(self.vacuum, self.n_sites, self.orb_sym, heis_twos)
     
-    def get_mpo(self, expr):
+    def get_mpo(self, expr, iprint=0):
         bw = self.bw
-        mpo = bw.bs.GeneralMPO(self.ghamil, expr, bw.b.MPOAlgorithmTypes.FastBipartite, 0.0, -1, False)
+        mpo = bw.bs.GeneralMPO(self.ghamil, expr, bw.b.MPOAlgorithmTypes.FastBipartite, 0.0, -1, iprint > 0)
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         return mpo
     
@@ -71,9 +81,13 @@ class DMRGDriver:
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.b.VectorDouble(noises))
         dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbative
         dmrg.davidson_conv_thrds = bw.b.VectorDouble(thrds)
+        dmrg.davidson_max_iter = 5000
+        dmrg.davidson_soft_max_iter = 4000
         dmrg.iprint = iprint
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
+        if isinstance(ket, bw.bs.MultiMPS):
+            ener = list(dmrg.sweep_energies[-1])
         return ener
     
     def align_mps_center(self, ket, ref):
@@ -117,15 +131,20 @@ class DMRGDriver:
         ex = expect.solve(False, ket.center != 0)
         return ex
     
-    def get_random_mps(self, tag, bond_dim=500, center=0, target=None):
+    def get_random_mps(self, tag, bond_dim=500, center=0, target=None, nroots=1):
         bw = self.bw
         if target is None:
             target = self.target
-        mps_info = bw.bs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        if nroots == 1:
+            mps_info = bw.bs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+            mps = bw.bs.MPS(self.n_sites, center, 2)
+        else:
+            targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
+            mps_info = bw.bs.MultiMPSInfo(self.n_sites, self.vacuum, targets, self.ghamil.basis)
+            mps = bw.bs.MultiMPS(self.n_sites, center, 2, nroots)
         mps_info.tag = tag
         mps_info.set_bond_dimension(bond_dim)
         mps_info.bond_dim = bond_dim
-        mps = bw.bs.MPS(self.n_sites, center, 2)
         mps.initialize(mps_info)
         mps.random_canonicalize()
         mps.save_mutable()
@@ -149,6 +168,8 @@ class ExprBuilder:
             self.data.elem_type = bw.b.ElemOpTypes.SZ
         elif bw.symm_type == SymmetryTypes.SGF:
             self.data.elem_type = bw.b.ElemOpTypes.SGF
+        elif bw.symm_type == SymmetryTypes.SGB:
+            self.data.elem_type = bw.b.ElemOpTypes.SGB
         self.data.const_e = 0.0
         self.bw = bw
 

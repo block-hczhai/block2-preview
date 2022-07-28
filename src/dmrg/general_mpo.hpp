@@ -42,7 +42,7 @@ using namespace std;
 
 namespace block2 {
 
-enum struct ElemOpTypes : uint8_t { SU2, SZ, SGF };
+enum struct ElemOpTypes : uint8_t { SU2, SZ, SGF, SGB };
 
 enum struct MPOAlgorithmTypes : uint16_t {
     None = 0,
@@ -79,13 +79,14 @@ inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
 template <typename FL> struct GeneralFCIDUMP {
     typedef decltype(abs((FL)0.0)) FP;
     map<string, string> params;
-    FL const_e;
+    FL const_e = (FL)0.0;
     vector<string> exprs;
     vector<vector<uint16_t>> indices;
     vector<vector<FL>> data;
     ElemOpTypes elem_type;
     bool order_adjusted = false;
     GeneralFCIDUMP() {}
+    GeneralFCIDUMP(ElemOpTypes elem_type) : elem_type(elem_type) {}
     virtual ~GeneralFCIDUMP() = default;
     static shared_ptr<GeneralFCIDUMP>
     initialize_from_qc(const shared_ptr<FCIDUMP<FL>> &fcidump,
@@ -213,7 +214,8 @@ template <typename FL> struct GeneralFCIDUMP {
             psch.resize(exprs.size(), nullptr);
             for (size_t ix = 0; ix < exprs.size(); ix++)
                 psch[ix] = make_shared<SpinPermScheme>(
-                    exprs[ix], elem_type == ElemOpTypes::SU2);
+                    exprs[ix], elem_type == ElemOpTypes::SU2,
+                    elem_type != ElemOpTypes::SGB);
         }
         unordered_map<string, int> r_str_mp;
         vector<vector<uint16_t>> r_indices;
@@ -428,8 +430,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     const static int max_n = 10, max_s = 10;
     GeneralHamiltonian()
         : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
-    GeneralHamiltonian(S vacuum, int n_sites,
-                       const vector<typename S::pg_t> &orb_sym)
+    GeneralHamiltonian(
+        S vacuum, int n_sites,
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int twos = -1)
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
@@ -640,12 +644,14 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                   unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
         op_prims;
     const static int max_n = 10, max_s = 10;
+    int twos;
     GeneralHamiltonian()
         : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
-    GeneralHamiltonian(S vacuum, int n_sites,
-                       const vector<typename S::pg_t> &orb_sym)
-        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
-        // SZ does not need CG factors
+    GeneralHamiltonian(
+        S vacuum, int n_sites,
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int twos = -1)
+        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), twos(twos) {
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>(100));
         opf->cg->initialize();
         basis.resize(n_sites);
@@ -657,7 +663,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
     }
     virtual ~GeneralHamiltonian() = default;
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
-        return SiteBasis<S>::get(orb_sym[m]);
+        if (twos == -1) // fermion model
+            return SiteBasis<S>::get(orb_sym[m]);
+        else // heisenberg spin model
+            return make_shared<StateInfo<S>>(S(twos, twos, orb_sym[m]));
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -696,34 +705,58 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
             site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
                 info.begin(), info.end());
         }
-        for (uint16_t m = 0; m < n_sites; m++) {
-            const typename S::pg_t ipg = orb_sym[m];
-            if (this->op_prims.count(ipg) == 0)
-                this->op_prims[ipg] =
-                    unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
-            else
-                continue;
-            unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &op_prims =
-                this->op_prims.at(ipg);
-            op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims[""]->allocate(find_site_op_info(m, S(0, 0, 0)));
-            (*op_prims[""])[S(0, 0, 0, 0)](0, 0) = 1.0;
-            (*op_prims[""])[S(1, 1, 1, ipg)](0, 0) = 1.0;
-            (*op_prims[""])[S(2, 0, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+        vector<string> stx = vector<string>{"", "C", "D"};
+        if (twos == -1) { // fermion model
+            for (uint16_t m = 0; m < n_sites; m++) {
+                const typename S::pg_t ipg = orb_sym[m];
+                if (this->op_prims.count(ipg) == 0)
+                    this->op_prims[ipg] =
+                        unordered_map<string,
+                                      shared_ptr<SparseMatrix<S, FL>>>();
+                else
+                    continue;
+                unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>
+                    &op_prims = this->op_prims.at(ipg);
+                op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims[""]->allocate(find_site_op_info(m, S(0, 0, 0)));
+                (*op_prims[""])[S(0, 0, 0, 0)](0, 0) = 1.0;
+                (*op_prims[""])[S(1, 1, 1, ipg)](0, 0) = 1.0;
+                (*op_prims[""])[S(2, 0, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
 
-            op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["C"]->allocate(find_site_op_info(m, S(1, 1, ipg)));
-            (*op_prims["C"])[S(0, 1, 0, 0)](0, 0) = 1.0;
-            (*op_prims["C"])[S(1, 0, 1, ipg)](0, 0) = -sqrt(2);
+                op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["C"]->allocate(find_site_op_info(m, S(1, 1, ipg)));
+                (*op_prims["C"])[S(0, 1, 0, 0)](0, 0) = 1.0;
+                (*op_prims["C"])[S(1, 0, 1, ipg)](0, 0) = -sqrt(2);
 
-            op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["D"]->allocate(
-                find_site_op_info(m, S(-1, 1, S::pg_inv(ipg))));
-            (*op_prims["D"])[S(1, 0, 1, ipg)](0, 0) = sqrt(2);
-            (*op_prims["D"])[S(2, 1, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+                op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["D"]->allocate(
+                    find_site_op_info(m, S(-1, 1, S::pg_inv(ipg))));
+                (*op_prims["D"])[S(1, 0, 1, ipg)](0, 0) = sqrt(2);
+                (*op_prims["D"])[S(2, 1, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+            }
+        } else { // heisenberg spin model
+            stx = vector<string>{"", "T"};
+            for (uint16_t m = 0; m < n_sites; m++) {
+                const typename S::pg_t ipg = orb_sym[m];
+                if (this->op_prims.count(ipg) == 0)
+                    this->op_prims[ipg] =
+                        unordered_map<string,
+                                      shared_ptr<SparseMatrix<S, FL>>>();
+                else
+                    continue;
+                unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>
+                    &op_prims = this->op_prims.at(ipg);
+                op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims[""]->allocate(find_site_op_info(m, S(0, 0, 0)));
+                (*op_prims[""])[S(twos, twos, twos, 0)](0, 0) = 1.0;
+
+                op_prims["T"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["T"]->allocate(find_site_op_info(m, S(0, 2, 0)));
+                (*op_prims["T"])[S(twos, twos, twos, 0)](0, 0) =
+                    sqrt(twos * (twos + 2) / (FL)2.0);
+            }
         }
         // site norm operators
-        const string stx[3] = {"", "C", "D"};
         for (uint16_t m = 0; m < n_sites; m++) {
             for (auto t : stx) {
                 site_norm_ops[m][t] = make_shared<SparseMatrix<S, FL>>(nullptr);
@@ -802,6 +835,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 }
             assert(pex.back().first != -1);
             int cnt = 0;
+            bool is_heis = false;
             // singlet embedding (twos will be set later)
             r[ix][0].set_n(pex.back().first);
             vector<uint16_t> stk;
@@ -822,10 +856,13 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                     r[ix][cnt + 1].set_n(r[ix][cnt].n() + 1), cnt++;
                 else if (p.second == 'D')
                     r[ix][cnt + 1].set_n(r[ix][cnt].n() - 1), cnt++;
+                else if (p.second == 'T')
+                    cnt++, is_heis = true;
             }
+            const int site_dq = is_heis ? 2 : 1;
             if (r[ix].size() >= 2) {
-                r[ix][r[ix].size() - 2].set_twos(1);
-                r[ix][r[ix].size() - 2].set_twos_low(1);
+                r[ix][r[ix].size() - 2].set_twos(site_dq);
+                r[ix][r[ix].size() - 2].set_twos_low(site_dq);
             }
         }
         return r;
@@ -867,7 +904,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
             } else if (c == '+') {
                 if (cnt >= i && cnt < j && start != -1 && depth >= start)
                     ss << c;
-            } else if (c == 'C' || c == 'D') {
+            } else if (c == 'C' || c == 'D' || c == 'T') {
                 if (cnt >= i && cnt < j)
                     ss << c;
                 cnt++;
@@ -892,9 +929,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
     }
 };
 
-// General Hamiltonian (general spin)
+// General Hamiltonian (general spin, fermionic)
 template <typename S, typename FL>
-struct GeneralHamiltonian<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
+struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
+    : Hamiltonian<S, FL> {
     typedef typename GMatrix<FL>::FP FP;
     using Hamiltonian<S, FL>::vacuum;
     using Hamiltonian<S, FL>::n_sites;
@@ -914,8 +952,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
     const static int max_n = 10, max_s = 10;
     GeneralHamiltonian()
         : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
-    GeneralHamiltonian(S vacuum, int n_sites,
-                       const vector<typename S::pg_t> &orb_sym)
+    GeneralHamiltonian(
+        S vacuum, int n_sites,
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int twos = -1)
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
@@ -1058,6 +1098,194 @@ struct GeneralHamiltonian<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
             else
                 r.set_pg(S::pg_mul(r.pg(), ipg));
         }
+        return make_pair(l, r);
+    }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        return expr.substr(i, j - i);
+    }
+    void deallocate() override {
+        for (auto &op_prims : this->op_prims)
+            for (auto &p : op_prims.second)
+                p.second->deallocate();
+        for (auto &site_norm_ops : this->site_norm_ops)
+            for (auto &p : site_norm_ops)
+                p.second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
+                site_op_infos[m][j].second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            basis[m]->deallocate();
+        opf->cg->deallocate();
+        Hamiltonian<S, FL>::deallocate();
+    }
+};
+
+// General Hamiltonian (general spin, bosonic or spin)
+template <typename S, typename FL>
+struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
+    : Hamiltonian<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using Hamiltonian<S, FL>::vacuum;
+    using Hamiltonian<S, FL>::n_sites;
+    using Hamiltonian<S, FL>::basis;
+    using Hamiltonian<S, FL>::site_op_infos;
+    using Hamiltonian<S, FL>::orb_sym;
+    using Hamiltonian<S, FL>::find_site_op_info;
+    using Hamiltonian<S, FL>::opf;
+    using Hamiltonian<S, FL>::delayed;
+    // Sparse matrix representation for normal site operators
+    vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        site_norm_ops;
+    // Primitives for sparse matrix representation for normal site operators
+    unordered_map<typename S::pg_t,
+                  unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        op_prims;
+    const static int max_n = 20;
+    int twos;
+    GeneralHamiltonian()
+        : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
+    GeneralHamiltonian(
+        S vacuum, int n_sites,
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int twos = -1)
+        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), twos(twos) {
+        // SZ does not need CG factors
+        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
+        opf->cg->initialize();
+        if (orb_sym.size() == 0)
+            Hamiltonian<S, FL>::orb_sym.resize(n_sites);
+        basis.resize(n_sites);
+        site_op_infos.resize(n_sites);
+        site_norm_ops.resize(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = get_site_basis(m);
+        init_site_ops();
+    }
+    virtual ~GeneralHamiltonian() = default;
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        b->allocate(twos + 1);
+        for (int i = 0, tm = -twos; tm < twos + 1; i++, tm += 2)
+            b->quanta[i] = S(tm, 0), b->n_states[i] = 1;
+        b->sort_states();
+        return b;
+    }
+    void init_site_ops() {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        // site operator infos
+        for (uint16_t m = 0; m < n_sites; m++) {
+            map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+            info[vacuum] = nullptr;
+            for (int n = -max_n; n <= max_n; n++)
+                info[S(n, 0)] = nullptr;
+            for (auto &p : info) {
+                p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                p.second->initialize(*basis[m], *basis[m], p.first,
+                                     p.first.is_fermion());
+            }
+            site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                info.begin(), info.end());
+        }
+        for (uint16_t m = 0; m < n_sites; m++) {
+            const typename S::pg_t ipg = 0;
+            if (this->op_prims.count(ipg) == 0)
+                this->op_prims[ipg] =
+                    unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
+            else
+                continue;
+            unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &op_prims =
+                this->op_prims.at(ipg);
+            op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims[""]->allocate(find_site_op_info(m, S(0, 0)));
+            for (int tm = -twos; tm < twos + 1; tm += 2)
+                (*op_prims[""])[S(tm, 0)](0, 0) = 1.0;
+
+            op_prims["P"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims["P"]->allocate(find_site_op_info(m, S(2, 0)));
+            for (int tm = -twos; tm < twos - 1; tm += 2)
+                (*op_prims["P"])[S(tm, 0)](0, 0) =
+                    sqrt((twos - tm) * (twos + tm + 2) / 4);
+
+            op_prims["M"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims["M"]->allocate(find_site_op_info(m, S(-2, 0)));
+            for (int tm = -twos + 2; tm < twos + 1; tm += 2)
+                (*op_prims["M"])[S(tm, 0)](0, 0) =
+                    sqrt((twos + tm) * (twos - tm + 2) / 4);
+
+            op_prims["Z"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+            op_prims["Z"]->allocate(find_site_op_info(m, S(0, 0)));
+            for (int tm = -twos; tm < twos + 1; tm += 2)
+                (*op_prims["Z"])[S(tm, 0)](0, 0) = (FL)(tm / (FL)2.0);
+        }
+        // site norm operators
+        const string stx[4] = {"", "P", "M", "Z"};
+        for (uint16_t m = 0; m < n_sites; m++)
+            for (auto t : stx) {
+                site_norm_ops[m][t] = make_shared<SparseMatrix<S, FL>>(nullptr);
+                site_norm_ops[m][t]->allocate(
+                    find_site_op_info(
+                        m, op_prims.at(orb_sym[m])[t]->info->delta_quantum),
+                    op_prims.at(orb_sym[m])[t]->data);
+            }
+    }
+    void get_site_string_ops(
+        uint16_t m,
+        unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> tmp =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
+        for (auto &p : ops) {
+            if (site_norm_ops[m].count(p.first))
+                p.second = site_norm_ops[m].at(p.first);
+            else {
+                p.second = site_norm_ops[m].at(string(1, p.first[0]));
+                for (size_t i = 1; i < p.first.length(); i++) {
+                    S q = p.second->info->delta_quantum +
+                          site_norm_ops[m]
+                              .at(string(1, p.first[i]))
+                              ->info->delta_quantum;
+                    tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                    tmp->allocate(find_site_op_info(m, q));
+                    opf->product(0, p.second,
+                                 site_norm_ops[m].at(string(1, p.first[i])),
+                                 tmp);
+                    p.second = tmp;
+                }
+                site_norm_ops[m][p.first] = p.second;
+            }
+        }
+    }
+    static vector<vector<S>>
+    init_string_quanta(const vector<string> &exprs,
+                       const vector<uint16_t> &term_l) {
+        vector<vector<S>> r(exprs.size());
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            r[ix].resize(term_l[ix] + 1);
+            r[ix][0] = S(0, 0);
+            for (int i = 0; i < term_l[ix]; i++)
+                switch (exprs[ix][i]) {
+                case 'P':
+                    r[ix][i + 1] = r[ix][i] + S(2, 0);
+                    break;
+                case 'M':
+                    r[ix][i + 1] = r[ix][i] + S(-2, 0);
+                    break;
+                case 'Z':
+                    r[ix][i + 1] = r[ix][i];
+                    break;
+                default:
+                    assert(false);
+                }
+        }
+        return r;
+    }
+    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
+                                 const uint16_t *idxs, uint16_t k) const {
+        S l = ref[k], r = ref.back() - l;
         return make_pair(l, r);
     }
     static string get_sub_expr(const string &expr, int i, int j) {

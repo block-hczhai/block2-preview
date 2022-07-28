@@ -212,13 +212,13 @@ template <typename S> struct MPSInfo {
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *left_dims_fci[i], *basis[i], target));
+                    *left_dims_fci[i], *basis[i], S(S::invalid)));
         right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
             right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *basis[i], *right_dims_fci[i + 1], target));
+                    *basis[i], *right_dims_fci[i + 1], S(S::invalid)));
     }
     virtual void set_bond_dimension_fci(S left_vacuum = S(S::invalid),
                                         S right_vacuum = S(S::invalid)) {
@@ -1168,13 +1168,13 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
         for (int i = 0; i < n_sites; i++)
             left_dims_fci[i + 1] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *left_dims_fci[i], *adj_basis[i], target));
+                    *left_dims_fci[i], *adj_basis[i], S(S::invalid)));
         right_dims_fci[n_sites] = make_shared<StateInfo<S>>(
             right_vacuum == S(S::invalid) ? vacuum : right_vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                    *adj_basis[i], *right_dims_fci[i + 1], target));
+                    *adj_basis[i], *right_dims_fci[i + 1], S(S::invalid)));
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<CASCIMPSInfo<S>>(*this);

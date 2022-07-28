@@ -110,6 +110,8 @@ TYPED_TEST(TestDMRG, Test) {
     cout << SpinPermPattern(1).to_str() << endl;
     cout << SpinPermPattern(0).to_str() << endl;
 
+    cout << SpinPermScheme::initialize_su2(2, "(T+T)0").to_str() << endl;
+
     fcidump->symmetrize(orbsym);
     shared_ptr<GeneralFCIDUMP<FL>> gfd =
         GeneralFCIDUMP<FL>::initialize_from_qc(fcidump, ElemOpTypes::SU2);

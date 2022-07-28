@@ -371,7 +371,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("save_tensor", &MPS<S, FL>::save_tensor)
         .def("load_tensor", &MPS<S, FL>::load_tensor)
         .def("unload_tensor", &MPS<S, FL>::unload_tensor)
-        .def("deep_copy", &MPS<S, FL>::deep_copy)
+        .def("deep_copy", &MPS<S, FL>::deep_copy, py::arg("tag"))
         .def("estimate_storage", &MPS<S, FL>::estimate_storage,
              py::arg("info") = nullptr)
         .def("deallocate", &MPS<S, FL>::deallocate);
@@ -1763,7 +1763,9 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
     py::class_<GeneralHamiltonian<S, FL>, shared_ptr<GeneralHamiltonian<S, FL>>,
                Hamiltonian<S, FL>>(m, "GeneralHamiltonian")
         .def(py::init<>())
+        .def(py::init<S, int>())
         .def(py::init<S, int, const vector<typename S::pg_t> &>())
+        .def(py::init<S, int, const vector<typename S::pg_t> &, int>())
         .def("get_site_basis", &GeneralHamiltonian<S, FL>::get_site_basis)
         .def("init_site_ops", &GeneralHamiltonian<S, FL>::init_site_ops)
         .def("get_site_string_ops",
@@ -1959,7 +1961,8 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
     py::enum_<ElemOpTypes>(m, "ElemOpTypes", py::arithmetic())
         .value("SU2", ElemOpTypes::SU2)
         .value("SZ", ElemOpTypes::SZ)
-        .value("SGF", ElemOpTypes::SGF);
+        .value("SGF", ElemOpTypes::SGF)
+        .value("SGB", ElemOpTypes::SGB);
 
     py::enum_<MPOAlgorithmTypes>(m, "MPOAlgorithmTypes", py::arithmetic())
         .value("Nothing", MPOAlgorithmTypes::None)
