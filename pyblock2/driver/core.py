@@ -6,29 +6,50 @@ class SymmetryTypes(Enum):
     SZ = 1
     SGF = 2
     SGB = 3
+    SGFCPX = 4
 
 class Block2Wrapper:
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
         if symm_type == SymmetryTypes.SU2:
             import block2.su2 as bs
+            brs = bs
             self.SX = b.SU2
             self.VectorSX = b.VectorSU2
+            self.VectorFL = b.VectorDouble
+            self.GFD = b.GeneralFCIDUMP
         elif symm_type == SymmetryTypes.SZ:
             import block2.sz as bs
+            brs = bs
             self.SX = b.SZ
             self.VectorSX = b.VectorSZ
+            self.VectorFL = b.VectorDouble
+            self.GFD = b.GeneralFCIDUMP
         elif symm_type == SymmetryTypes.SGF:
             import block2.sgf as bs
+            brs = bs
             self.SX = b.SGF
             self.VectorSX = b.VectorSGF
+            self.VectorFL = b.VectorDouble
+            self.GFD = b.GeneralFCIDUMP
+        elif symm_type == SymmetryTypes.SGFCPX:
+            import block2.cpx.sgf as bs
+            import block2.sgf as brs
+            self.SX = b.SGF
+            self.VectorSX = b.VectorSGF
+            self.VectorFL = b.VectorComplexDouble
+            self.GFD = b.cpx.GeneralFCIDUMP
         elif symm_type == SymmetryTypes.SGB:
             import block2.sgb as bs
+            brs = bs
             self.SX = b.SGB
             self.VectorSX = b.VectorSGB
+            self.VectorFL = b.VectorDouble
+            self.GFD = b.GeneralFCIDUMP
         self.symm_type = symm_type
         self.b = b
         self.bs = bs
+        self.brs = brs
 
 class DMRGDriver:
     def __init__(self, stack_mem=1 << 30, scratch='./nodex', n_threads=None, symm_type=SymmetryTypes.SU2):
@@ -136,11 +157,11 @@ class DMRGDriver:
         if target is None:
             target = self.target
         if nroots == 1:
-            mps_info = bw.bs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+            mps_info = bw.brs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
             mps = bw.bs.MPS(self.n_sites, center, 2)
         else:
             targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
-            mps_info = bw.bs.MultiMPSInfo(self.n_sites, self.vacuum, targets, self.ghamil.basis)
+            mps_info = bw.brs.MultiMPSInfo(self.n_sites, self.vacuum, targets, self.ghamil.basis)
             mps = bw.bs.MultiMPS(self.n_sites, center, 2, nroots)
         mps_info.tag = tag
         mps_info.set_bond_dimension(bond_dim)
@@ -161,12 +182,12 @@ class DMRGDriver:
 
 class ExprBuilder:
     def __init__(self, bw=Block2Wrapper()):
-        self.data = bw.b.GeneralFCIDUMP()
+        self.data = bw.GFD()
         if bw.symm_type == SymmetryTypes.SU2:
             self.data.elem_type = bw.b.ElemOpTypes.SU2
         elif bw.symm_type == SymmetryTypes.SZ:
             self.data.elem_type = bw.b.ElemOpTypes.SZ
-        elif bw.symm_type == SymmetryTypes.SGF:
+        elif bw.symm_type in [SymmetryTypes.SGF, SymmetryTypes.SGFCPX]:
             self.data.elem_type = bw.b.ElemOpTypes.SGF
         elif bw.symm_type == SymmetryTypes.SGB:
             self.data.elem_type = bw.b.ElemOpTypes.SGB
@@ -180,7 +201,7 @@ class ExprBuilder:
     def add_term(self, expr, idx, val):
         self.data.exprs.append(expr)
         self.data.indices.append(self.bw.b.VectorUInt16(idx))
-        self.data.data.append(self.bw.b.VectorDouble([val]))
+        self.data.data.append(self.bw.VectorFL([val]))
         return self
 
     def add_sum_term(self, expr, arr, cutoff=1E-12):
@@ -192,7 +213,7 @@ class ExprBuilder:
                 idx.extend(ix)
                 dt.append(arr[ix])
         self.data.indices.append(self.bw.b.VectorUInt16(idx))
-        self.data.data.append(self.bw.b.VectorDouble(dt))
+        self.data.data.append(self.bw.VectorFL(dt))
         return self
 
     def finalize(self):
