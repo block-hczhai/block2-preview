@@ -952,6 +952,15 @@ template <typename S, typename FL> struct SparseMatrix {
                                 "' failed.");
         ofs.close();
     }
+    virtual shared_ptr<SparseMatrix>
+    deep_copy(const shared_ptr<Allocator<FP>> &alloc = nullptr) const {
+        shared_ptr<SparseMatrix> r = make_shared<SparseMatrix>(alloc);
+        *r = *this;
+        r->alloc = alloc == nullptr ? dalloc_<FP>() : alloc;
+        r->data = (FL *)alloc->allocate(total_memory * cpx_sz);
+        memcpy(r->data, data, sizeof(FL) * total_memory);
+        return r;
+    }
     virtual void copy_data_from(const shared_ptr<SparseMatrix> &other,
                                 bool ref = false) {
         assert(total_memory == other->total_memory);

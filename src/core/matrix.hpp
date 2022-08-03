@@ -176,7 +176,8 @@ struct GIdentityMatrix<FL,
     : GDiagonalMatrix<FL> {
     using GDiagonalMatrix<FL>::zero;
     FL one = 1.0;
-    GIdentityMatrix(MKL_INT n) : GDiagonalMatrix<FL>(nullptr, n) {}
+    GIdentityMatrix(MKL_INT n, FL one = 1.0)
+        : GDiagonalMatrix<FL>(nullptr, n), one(one) {}
     FL &operator()(MKL_INT i, MKL_INT j) const {
         return i == j ? const_cast<FL &>(one) : const_cast<FL &>(zero);
     }

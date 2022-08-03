@@ -87,7 +87,7 @@ class DMRGDriver:
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         return mpo
     
-    def dmrg(self, mpo, ket, n_sweeps=10, tol=1E-8, bond_dims=None, noises=None, thrds=None, iprint=0):
+    def dmrg(self, mpo, ket, n_sweeps=10, tol=1E-8, bond_dims=None, noises=None, thrds=None, iprint=0, dav_type=None):
         bw = self.bw
         if bond_dims is None:
             bond_dims = [ket.info.bond_dim]
@@ -95,11 +95,17 @@ class DMRGDriver:
             noises = [1E-5] * 5 + [0]
         if thrds is None:
             thrds = [1E-6] * 4 + [1E-7] * 1
-        me = bw.bs.MovingEnvironment(mpo, ket, ket, "DMRG")
+        if dav_type == "ExactNonHermitian":
+            bra = ket.deep_copy("BRA")
+        else:
+            bra = ket
+        me = bw.bs.MovingEnvironment(mpo, bra, ket, "DMRG")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.init_environments(iprint >= 3)
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.b.VectorDouble(noises))
+        if dav_type is not None:
+            dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbative
         dmrg.davidson_conv_thrds = bw.b.VectorDouble(thrds)
         dmrg.davidson_max_iter = 5000
@@ -170,6 +176,7 @@ class DMRGDriver:
         mps.random_canonicalize()
         mps.save_mutable()
         mps_info.save_mutable()
+        mps.save_data()
         return mps
 
     def expr_builder(self):

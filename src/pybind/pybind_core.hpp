@@ -94,7 +94,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SZ>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, double>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -125,7 +126,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicRowVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicColumnVector<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SymbolicMatrix<SU2>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, double>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -161,7 +163,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -182,7 +185,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -215,7 +219,8 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, float>>,
@@ -232,7 +237,8 @@ PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -258,7 +264,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -279,7 +286,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
-PYBIND11_MAKE_OPAQUE(unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -1500,6 +1508,9 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("DavidsonPrecond", DavidsonTypes::DavidsonPrecond)
         .value("NoPrecond", DavidsonTypes::NoPrecond)
         .value("Normal", DavidsonTypes::Normal)
+        .value("NonHermitian", DavidsonTypes::NonHermitian)
+        .value("Exact", DavidsonTypes::Exact)
+        .value("ExactNonHermitian", DavidsonTypes::ExactNonHermitian)
         .def(py::self & py::self)
         .def(py::self | py::self);
 
@@ -1904,7 +1915,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("find_split_index", &SpinPermRecoupling::find_split_index)
         .def_static("find_split_indices_from_left",
                     &SpinPermRecoupling::find_split_indices_from_left)
-        .def_static("initialize", &SpinPermRecoupling::initialize, py::arg("n"), py::arg("twos"), py::arg("site_dq") = 1);
+        .def_static("initialize", &SpinPermRecoupling::initialize, py::arg("n"),
+                    py::arg("twos"), py::arg("site_dq") = 1);
 
     py::class_<SpinPermPattern, shared_ptr<SpinPermPattern>>(m,
                                                              "SpinPermPattern")

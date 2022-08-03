@@ -1081,7 +1081,7 @@ TYPED_TEST(TestComplexMatrix, TestEig) {
         for (MKL_INT ki = 0; ki < m; ki++)
             for (MKL_INT kj = 0; kj < m; kj++)
                 ap(ki, kj) = a(ki, kj);
-        GMatrixFunctions<FL>::eig(a, w);
+        GMatrixFunctions<FL>::eig(a, w, GMatrix<FL>(nullptr, a.m, a.n));
         GMatrixFunctions<FL>::multiply(a, false, ap, true, ag, 1.0, 0.0);
         for (MKL_INT k = 0; k < m; k++)
             for (MKL_INT j = 0; j < m; j++)

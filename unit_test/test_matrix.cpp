@@ -960,6 +960,213 @@ TYPED_TEST(TestMatrix, TestEigs) {
     }
 }
 
+TYPED_TEST(TestMatrix, TestEig) {
+    using FL = TypeParam;
+    const int sz = is_same<FL, double>::value ? 200 : 75;
+    const FL thrd = is_same<FL, double>::value ? 1E-7 : 1E+0;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ax(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ap(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> vl(dalloc_<FL>()->allocate(m * m), m, m);
+        GDiagonalMatrix<FL> wr(dalloc_<FL>()->allocate(m), m);
+        GDiagonalMatrix<FL> wi(dalloc_<FL>()->allocate(m), m);
+        Random::fill<FL>(a.data, a.size());
+        GMatrixFunctions<FL>::copy(ap, a);
+        GMatrixFunctions<FL>::eig(a, wr, wi, vl);
+        ax.clear();
+        for (MKL_INT k = 0; k < m; k++) {
+            if (wi(k, k) != (FL)0.0) {
+                for (MKL_INT j = 0; j < m; j++) {
+                    ax(k, j) = a(k + 1, j);
+                    ax(k + 1, j) = -a(k + 1, j);
+                    a(k + 1, j) = a(k, j);
+                }
+                k++;
+            }
+        }
+        // X V[i] = W[i] V[i] (ax is imag part of V)
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = a(k, j) * wr(k, k) - ax(k, j) * wi(k, k);
+        GMatrixFunctions<FL>::multiply(a, false, ap, true, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = a(k, j) * wi(k, k) + ax(k, j) * wr(k, k);
+        GMatrixFunctions<FL>::multiply(ax, false, ap, true, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        ax.clear();
+        for (MKL_INT k = 0; k < m; k++) {
+            if (wi(k, k) != (FL)0.0) {
+                for (MKL_INT j = 0; j < m; j++) {
+                    ax(k, j) = -vl(k + 1, j);
+                    ax(k + 1, j) = vl(k + 1, j);
+                    vl(k + 1, j) = vl(k, j);
+                }
+                k++;
+            }
+        }
+        // U[i]**H X = W[i] U[i]**H (ax is imag part of U**H)
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = vl(k, j) * wr(k, k) - ax(k, j) * wi(k, k);
+        GMatrixFunctions<FL>::multiply(vl, false, ap, false, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = vl(k, j) * wi(k, k) + ax(k, j) * wr(k, k);
+        GMatrixFunctions<FL>::multiply(ax, false, ap, false, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        wi.deallocate();
+        wr.deallocate();
+        vl.deallocate();
+        ag.deallocate();
+        ap.deallocate();
+        ax.deallocate();
+        a.deallocate();
+    }
+}
+
+// test for real non-symmetric matrix with only real eigenvalues
+TYPED_TEST(TestMatrix, TestEigRealNonSymmetric) {
+    using FL = TypeParam;
+    const int sz = is_same<FL, double>::value ? 200 : 75;
+    const FL thrd = is_same<FL, double>::value ? 1E-7 : 1E+2;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        GMatrix<FL> a(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ax(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ap(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> ag(dalloc_<FL>()->allocate(m * m), m, m);
+        GMatrix<FL> vl(dalloc_<FL>()->allocate(m * m), m, m);
+        GDiagonalMatrix<FL> wr(dalloc_<FL>()->allocate(m), m);
+        GDiagonalMatrix<FL> wi(dalloc_<FL>()->allocate(m), m);
+        Random::fill<FL>(a.data, a.size());
+        Random::fill<FL>(wr.data, wr.size());
+        GMatrixFunctions<FL>::copy(ag, a);
+        GMatrixFunctions<FL>::inverse(a);
+        for (MKL_INT ki = 0; ki < m; ki++)
+            for (MKL_INT kj = 0; kj < m; kj++)
+                ap(ki, kj) = wr(ki, kj);
+        GMatrixFunctions<FL>::multiply(a, false, ap, false, ax, 1.0, 0.0);
+        GMatrixFunctions<FL>::multiply(ax, false, ag, false, a, 1.0, 0.0);
+        GMatrixFunctions<FL>::copy(ap, a);
+        GMatrixFunctions<FL>::eig(a, wr, wi, vl);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            wi, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        // X V[i] = W[i] V[i] (ax is imag part of V)
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = a(k, j) * wr(k, k);
+        GMatrixFunctions<FL>::multiply(a, false, ap, true, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        // U[i]**H X = W[i] U[i]**H (ax is imag part of U**H)
+        for (MKL_INT k = 0; k < m; k++)
+            for (MKL_INT j = 0; j < m; j++)
+                ag(k, j) = vl(k, j) * wr(k, k);
+        GMatrixFunctions<FL>::multiply(vl, false, ap, false, ag, -1.0, 1.0);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            ag, GIdentityMatrix<FL>(m, (FL)0.0), thrd, thrd));
+        wi.deallocate();
+        wr.deallocate();
+        vl.deallocate();
+        ag.deallocate();
+        ap.deallocate();
+        ax.deallocate();
+        a.deallocate();
+    }
+}
+
+TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
+    using FL = TypeParam;
+    const int sz = is_same<FL, double>::value ? 200 : 75;
+    const FL conv = is_same<FL, double>::value ? 1E-8 : 1E-7;
+    const FL thrd = is_same<FL, double>::value ? 1E-6 : 1E+2;
+    const FL thrd2 = is_same<FL, double>::value ? 1E-3 : 1E+2;
+    using MatMul = typename TestMatrix<FL>::MatMul;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(1, sz);
+        MKL_INT k = min(n, (MKL_INT)Random::rand_int(1, 10));
+        int ndav = 0;
+        GMatrix<FL> a(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ap(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ag(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ax(dalloc_<FL>()->allocate(n * n), n, n);
+        GDiagonalMatrix<FL> aa(dalloc_<FL>()->allocate(n), n);
+        GDiagonalMatrix<FL> ww(dalloc_<FL>()->allocate(n), n);
+        GDiagonalMatrix<FL> wi(dalloc_<FL>()->allocate(n), n);
+        vector<GMatrix<FL>> bs(k * 2, GMatrix<FL>(nullptr, n, 1));
+        Random::fill<FL>(a.data, a.size());
+        Random::fill<FL>(ww.data, ww.size());
+        GMatrixFunctions<FL>::copy(ag, a);
+        GMatrixFunctions<FL>::inverse(a);
+        for (MKL_INT ki = 0; ki < n; ki++)
+            for (MKL_INT kj = 0; kj < n; kj++)
+                ap(ki, kj) = ww(ki, kj);
+        ww.clear();
+        GMatrixFunctions<FL>::multiply(a, false, ap, false, ax, 1.0, 0.0);
+        GMatrixFunctions<FL>::multiply(ax, false, ag, false, a, 1.0, 0.0);
+        for (MKL_INT ki = 0; ki < n; ki++)
+            aa(ki, ki) = a(ki, ki);
+        for (int i = 0; i < k * 2; i++) {
+            bs[i].allocate();
+            bs[i].clear();
+            bs[i].data[i] = 1;
+        }
+        MatMul mop(a);
+        vector<FL> vw = IterativeMatrixFunctions<FL>::davidson(
+            mop, aa, bs, 0, DavidsonTypes::NonHermitian | DavidsonTypes::Exact,
+            ndav, true, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
+            n * k * 5, n * k * 4, k * 2, max((MKL_INT)5, k + 10));
+        ASSERT_EQ((int)vw.size(), k);
+        GDiagonalMatrix<FL> w(&vw[0], k);
+        GMatrixFunctions<FL>::eig(a, ww, wi, ap);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            wi, GIdentityMatrix<FL>(n, (FL)0.0), thrd2, thrd2));
+        vector<int> idxs(n);
+        for (int i = 0; i < n; i++)
+            idxs[i] = i;
+        sort(idxs.begin(), idxs.begin() + n,
+             [&ww](int i, int j) { return ww.data[i] < ww.data[j]; });
+        GDiagonalMatrix<FL> w2(wi.data, k);
+        for (int i = 0; i < k; i++)
+            w2.data[i] = ww.data[idxs[i]];
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(w, w2, thrd, thrd));
+        for (int i = 0; i < k; i++)
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                            bs[i], GMatrix<FL>(a.data + a.n * idxs[i], a.n, 1),
+                            thrd2, thrd2) ||
+                        GMatrixFunctions<FL>::all_close(
+                            bs[i], GMatrix<FL>(a.data + a.n * idxs[i], a.n, 1),
+                            thrd2, thrd2, -1.0));
+        for (int i = 0; i < k; i++)
+            ASSERT_TRUE(
+                GMatrixFunctions<FL>::all_close(
+                    bs[i + k], GMatrix<FL>(ap.data + a.n * idxs[i], a.n, 1),
+                    thrd2, thrd2) ||
+                GMatrixFunctions<FL>::all_close(
+                    bs[i + k], GMatrix<FL>(ap.data + a.n * idxs[i], a.n, 1),
+                    thrd2, thrd2, -1.0));
+        for (int i = k * 2 - 1; i >= 0; i--)
+            bs[i].deallocate();
+        wi.deallocate();
+        ww.deallocate();
+        aa.deallocate();
+        ax.deallocate();
+        ag.deallocate();
+        ap.deallocate();
+        a.deallocate();
+    }
+}
+
 TYPED_TEST(TestMatrix, TestSVD) {
     using FL = TypeParam;
     const int sz = is_same<FL, double>::value ? 200 : 75;

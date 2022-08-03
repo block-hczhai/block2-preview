@@ -110,6 +110,11 @@ extern void ssyev(const char *jobz, const char *uplo, const MKL_INT *n,
                   float *a, const MKL_INT *lda, float *w, float *work,
                   const MKL_INT *lwork, MKL_INT *info);
 
+extern void sgeev(const char *jobvl, const char *jobvr, const MKL_INT *n,
+                  float *a, const MKL_INT *lda, float *wr, float *wi, float *vl,
+                  const MKL_INT *ldvl, float *vr, const MKL_INT *ldvr,
+                  float *work, const MKL_INT *lwork, MKL_INT *info);
+
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
 extern void sgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
@@ -202,6 +207,12 @@ extern void dsyev(const char *jobz, const char *uplo, const MKL_INT *n,
                   double *a, const MKL_INT *lda, double *w, double *work,
                   const MKL_INT *lwork, MKL_INT *info);
 
+extern void dgeev(const char *jobvl, const char *jobvr, const MKL_INT *n,
+                  double *a, const MKL_INT *lda, double *wr, double *wi,
+                  double *vl, const MKL_INT *ldvl, double *vr,
+                  const MKL_INT *ldvr, double *work, const MKL_INT *lwork,
+                  MKL_INT *info);
+
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
 extern void dgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
@@ -224,7 +235,7 @@ extern void dlacpy(const char *uplo, const int *m, const int *n,
 #endif
 }
 
-enum struct DavidsonTypes : uint8_t {
+enum struct DavidsonTypes : uint16_t {
     Normal = 0,
     GreaterThan = 1,
     LessThan = 2,
@@ -234,15 +245,18 @@ enum struct DavidsonTypes : uint8_t {
     HarmonicLessThan = 16 | 2,
     HarmonicCloseTo = 16 | 4,
     DavidsonPrecond = 32,
-    NoPrecond = 64
+    NoPrecond = 64,
+    NonHermitian = 128,
+    Exact = 256,
+    ExactNonHermitian = 128 | 256
 };
 
 inline bool operator&(DavidsonTypes a, DavidsonTypes b) {
-    return ((uint8_t)a & (uint8_t)b) != 0;
+    return ((uint16_t)a & (uint16_t)b) != 0;
 }
 
 inline DavidsonTypes operator|(DavidsonTypes a, DavidsonTypes b) {
-    return DavidsonTypes((uint8_t)a | (uint8_t)b);
+    return DavidsonTypes((uint16_t)a | (uint16_t)b);
 }
 
 template <typename FL>
@@ -607,6 +621,28 @@ inline void xgeev(const char *jobvl, const char *jobvr, const MKL_INT *n, FL *a,
                   const MKL_INT *lda, FL *w, FL *vl, const MKL_INT *ldvl,
                   FL *vr, const MKL_INT *ldvr, FL *work, const MKL_INT *lwork,
                   typename GMatrix<FL>::FP *rwork, MKL_INT *info);
+
+// w_imag will be in rwork
+template <>
+inline void xgeev<double>(const char *jobvl, const char *jobvr,
+                          const MKL_INT *n, double *a, const MKL_INT *lda,
+                          double *w, double *vl, const MKL_INT *ldvl,
+                          double *vr, const MKL_INT *ldvr, double *work,
+                          const MKL_INT *lwork, double *rwork, MKL_INT *info) {
+    dgeev(jobvl, jobvr, n, a, lda, w, rwork, vl, ldvl, vr, ldvr, work, lwork,
+          info);
+}
+
+// w_imag will be in rwork
+template <>
+inline void xgeev<float>(const char *jobvl, const char *jobvr, const MKL_INT *n,
+                         float *a, const MKL_INT *lda, float *w, float *vl,
+                         const MKL_INT *ldvl, float *vr, const MKL_INT *ldvr,
+                         float *work, const MKL_INT *lwork, float *rwork,
+                         MKL_INT *info) {
+    sgeev(jobvl, jobvr, n, a, lda, w, rwork, vl, ldvl, vr, ldvr, work, lwork,
+          info);
+}
 
 // General matrix operations
 template <typename FL, typename = void> struct GMatrixFunctions;
@@ -1302,6 +1338,33 @@ struct GMatrixFunctions<
         if (info != 0)
             cout << "ATTENTION: xsyev info = " << info << endl;
         // assert(info == 0);
+        d_alloc->deallocate(work, lwork);
+    }
+    // eigenvectors for non-symmetric matrices
+    // if any eigenvalue is complex, eigenvectors are stored in separate real
+    // and imag part form
+    static void eig(const GMatrix<FL> &a, const GDiagonalMatrix<FL> &wr,
+                    const GDiagonalMatrix<FL> &wi, const GMatrix<FL> &lv) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        assert(a.m == a.n && wr.n == a.n && wi.n == a.n);
+        MKL_INT lwork = 34 * a.n, info;
+        FL *work = d_alloc->allocate(lwork);
+        FL *vr = d_alloc->allocate(a.m * a.n);
+        xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, wr.data,
+                  vr, &a.n, lv.data, &a.n, work, &lwork, wi.data, &info);
+        assert(info == 0);
+        uint8_t tag = 0;
+        copy(a, GMatrix<FL>(vr, a.m, a.n));
+        for (MKL_INT k = 0; k < a.m; k++)
+            if (wi(k, k) != (FL)0.0) {
+                k++;
+                for (MKL_INT j = 0; j < a.n; j++)
+                    a(k, j) = -a(k, j);
+                for (MKL_INT j = 0; j < a.n; j++)
+                    lv(k, j) = -lv(k, j);
+            }
+        d_alloc->deallocate(vr, a.m * a.n);
         d_alloc->deallocate(work, lwork);
     }
 };

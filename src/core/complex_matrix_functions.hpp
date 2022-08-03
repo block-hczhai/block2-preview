@@ -741,23 +741,40 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         xcopy<FL>(&x.m, xtr.data(), &nrhs, x.data, &nrhs);
         return nr > 0 ? xnrm2<FL>(&nr, xtr.data() + x.m, &nrhs) : 0;
     }
-    // eigenvectors are row right-vectors: A u(j) = lambda(j) u(j)
-    static void eig(const GMatrix<FL> &a, const GDiagonalMatrix<FL> &w) {
+    // eigenvalue for non-hermitian matrix, A is overwritten
+    // row right-vectors: A u(j) = lambda(j) u(j) (stored in alpha)
+    // row left-vectors: u(j)**H A = lambda(j) u(j)**H (optional)
+    static void eig(const GMatrix<FL> &a, const GDiagonalMatrix<FL> &w,
+                    const GMatrix<FL> &lv) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         assert(a.m == a.n && w.n == a.n);
         MKL_INT lwork = 34 * a.n, info;
         FL *work = d_alloc->complex_allocate(lwork);
         FP *rwork = d_alloc->allocate(a.m * 2);
-        FL *vl = d_alloc->complex_allocate(a.m * a.n);
-        xgeev<FL>("V", "N", &a.n, a.data, &a.n, w.data, vl, &a.n, nullptr, &a.n,
-                  work, &lwork, rwork, &info);
+        FL *vr = d_alloc->complex_allocate(a.m * a.n);
+        xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, w.data, vr,
+                  &a.n, lv.data, &a.n, work, &lwork, rwork, &info);
         assert(info == 0);
         for (size_t k = 0; k < a.m * a.n; k++)
-            a.data[k] = conj(vl[k]);
-        d_alloc->complex_deallocate(vl, a.m * a.n);
+            a.data[k] = conj(vr[k]);
+        if (lv.data != 0)
+            conjugate(lv);
+        d_alloc->complex_deallocate(vr, a.m * a.n);
         d_alloc->deallocate(rwork, a.m * 2);
         d_alloc->complex_deallocate(work, lwork);
+    }
+    static void eig(const GMatrix<FL> &a, const GDiagonalMatrix<FP> &wr,
+                    const GDiagonalMatrix<FP> &wi, const GMatrix<FL> &lv) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        GDiagonalMatrix<FL> wx(nullptr, wr.m);
+        wx.allocate();
+        eig(a, wx, lv);
+        extract_complex(GMatrix<FL>(wx.data, wx.m, 1),
+                        GMatrix<FP>(wr.data, wr.m, 1),
+                        GMatrix<FP>(wi.data, wi.m, 1));
+        wx.deallocate();
     }
     // matrix logarithm using diagonalization
     static void logarithm(const GMatrix<FL> &a) {
@@ -771,7 +788,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         GMatrix<FL> ua(nullptr, a.m, a.n);
         ua.data = (FL *)d_alloc->allocate(a.m * a.n * 2);
         memcpy(ua.data, a.data, sizeof(FL) * a.size());
-        eig(ua, w);
+        eig(ua, w, GMatrix<FL>(nullptr, a.m, a.n));
         for (MKL_INT i = 0; i < a.m; i++)
             for (MKL_INT j = 0; j < a.n; j++)
                 wa(i, j) = ua(i, j) * log(w(i, i));

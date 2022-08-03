@@ -2101,6 +2101,20 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                                  NoiseTypes::None);
         psi->factor = 1;
     }
+    // Add wavefunction group to density matrix
+    static void density_matrix_add_wfn_groups(
+        const shared_ptr<SparseMatrix<S, FLS>> &dm,
+        const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &psi,
+        const vector<FPS> weights, bool trace_right, FPS scale = 1.0) {
+        assert(weights.size() == psi.size());
+        for (size_t i = 0; i < psi.size(); i++)
+            for (int j = 0; j < psi[i]->n; j++) {
+                shared_ptr<SparseMatrix<S, FLS>> wfn = (*psi[i])[j];
+                wfn->factor = sqrt(weights[i] * scale);
+                OperatorFunctions<S, FLS>::trans_product(wfn, dm, trace_right,
+                                                         0.0, NoiseTypes::None);
+            }
+    }
     // Density matrix with perturbed wavefunctions as noise
     static void density_matrix_add_perturbative_noise(
         const shared_ptr<SparseMatrix<S, FLS>> &dm, bool trace_right, FPS noise,

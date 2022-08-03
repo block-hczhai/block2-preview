@@ -98,7 +98,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
           compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
-            assert(bra->info == ket->info);
+            // for non-hermitian hamiltonian, bra and ket may share the same
+            // info but they are different objects
+            assert(bra->info->n == ket->info->n);
             diag = make_shared<SparseMatrix<S, FL>>();
             diag->allocate(ket->info);
         }
@@ -372,6 +374,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
         vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{
             GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1)};
+        if (davidson_type & DavidsonTypes::NonHermitian)
+            bs.push_back(GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
         for (size_t i = 0; i < ortho_bra.size(); i++)
@@ -1036,7 +1040,14 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
           compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
-            assert(bra == ket);
+            // for non-hermitian hamiltonian, bra and ket may share the same
+            // info but they are different objects
+            assert(bra.size() == ket.size());
+            for (size_t i = 0; i < bra.size(); i++) {
+                assert(bra[i]->infos.size() == ket[i]->infos.size());
+                for (size_t j = 0; j < bra[i]->infos.size(); j++)
+                    assert(bra[i]->infos[j]->n == ket[i]->infos[j]->n);
+            }
             diag = make_shared<SparseMatrixGroup<S, FL>>();
             diag->allocate(ket[0]->infos);
         }
@@ -1341,6 +1352,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(
                 GMatrix<FL>(ket[i]->data, (MKL_INT)ket[i]->total_memory, 1));
+        if (davidson_type & DavidsonTypes::NonHermitian)
+            for (int i = 0; i < (int)min((MKL_INT)bra.size(), (MKL_INT)aa.n);
+                 i++)
+                bs.push_back(GMatrix<FL>(bra[i]->data,
+                                         (MKL_INT)bra[i]->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
         for (size_t i = 0; i < ortho_bra.size(); i++)
