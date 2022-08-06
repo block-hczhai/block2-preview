@@ -623,7 +623,7 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     FL t(uint8_t s, uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(s, i, i) - mu : fcidump->t(s, i, j);
     }
-    FL e() const { return fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const { return fcidump->e(); }
 };
 
 // Quantum chemistry Hamiltonian (spin-adapted)
@@ -1055,7 +1055,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
     FL t(uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(i, i) - mu : fcidump->t(i, j);
     }
-    FL e() const { return fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const { return fcidump->e(); }
 };
 
 // Quantum chemistry Hamiltonian (general spin)
@@ -1427,7 +1427,7 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
     FL t(uint16_t i, uint16_t j) const {
         return i == j ? fcidump->t(i, i) - mu : fcidump->t(i, j);
     }
-    FL e() const { return fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const { return fcidump->e(); }
 };
 
 } // namespace block2

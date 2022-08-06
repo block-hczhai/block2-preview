@@ -252,7 +252,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                               S::pg_inv(hamil->orb_sym[k]),
                                               S::pg_inv(hamil->orb_sym[l])))));
                         }
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::schemer = nullptr;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -1391,7 +1391,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                               S::pg_inv(hamil->orb_sym[k]),
                                               S::pg_inv(hamil->orb_sym[l])))));
                         }
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::schemer = nullptr;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);

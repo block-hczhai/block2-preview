@@ -194,6 +194,7 @@ typedef GIdentityMatrix<double> IdentityMatrix;
 
 // complex dense matrix
 template <> struct GMatrix<complex<float>> {
+    typedef complex<double> FL;
     typedef float FP;
     typedef complex<float> FC;
     MKL_INT m, n; // m is rows, n is cols
@@ -237,6 +238,7 @@ template <> struct GMatrix<complex<float>> {
 
 // complex dense matrix
 template <> struct GMatrix<complex<double>> {
+    typedef complex<long double> FL;
     typedef double FP;
     typedef complex<double> FC;
     MKL_INT m, n; // m is rows, n is cols

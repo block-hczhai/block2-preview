@@ -84,7 +84,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
         }
         MPO<S, FL>::op = make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(),
                                                        delta_quantum);
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++) {
@@ -313,7 +313,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
             make_shared<VectorAllocator<FP>>();
         assert(bra_basis.size() == ket_basis.size());
         MPO<S, FL>::op = i_op;
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
         for (uint16_t m = 0; m < n_sites; m++) {
@@ -406,7 +406,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
                 MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
         MPO<S, FL>::op = i_op;
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
@@ -474,7 +474,7 @@ template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
         MPO<S, FL>::op = op;
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else
@@ -550,7 +550,7 @@ template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
         assert((uint16_t)ops.size() == n_sites);
         for (auto op : ops)
             assert(op->q_label == ops[0]->q_label);
-        MPO<S, FL>::const_e = 0.0;
+        MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         else

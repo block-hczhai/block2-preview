@@ -37,14 +37,13 @@ struct EffectiveFunctions<
     typedef typename GMatrix<FL>::FC FC;
     // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
     // (real gf, imag gf), (nmult, niter), nflop, tmult
-    static tuple<FC, pair<int, int>, size_t, double>
-    greens_function(const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
-                    FL const_e, LinearSolverTypes solver_type, FL omega, FL eta,
-                    const shared_ptr<SparseMatrix<S, FL>> &real_bra,
-                    pair<int, int> linear_solver_params, bool iprint = false,
-                    FP conv_thrd = 5E-6, int max_iter = 5000,
-                    int soft_max_iter = -1,
-                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    static tuple<FC, pair<int, int>, size_t, double> greens_function(
+        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+        typename const_fl_type<FL>::FL const_e, LinearSolverTypes solver_type,
+        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+        pair<int, int> linear_solver_params, bool iprint = false,
+        FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         if (solver_type == LinearSolverTypes::Automatic)
             solver_type = LinearSolverTypes::GCROT;
         int nmult = 0, nmultx = 0, niter = 0;
@@ -70,7 +69,8 @@ struct EffectiveFunctions<
                                      (MKL_INT)h_eff->diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++)
-                aa.data[i] = FC(h_eff->diag->data[i] + const_e + omega, eta);
+                aa.data[i] =
+                    FC(h_eff->diag->data[i] + (FL)const_e + omega, eta);
         }
         h_eff->precompute();
         const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
@@ -95,13 +95,13 @@ struct EffectiveFunctions<
             f(bre, cre);
             GMatrixFunctions<FC>::fill_complex(
                 c, GMatrix<FL>(nullptr, cre.m, cre.n), cre);
-            GMatrixFunctions<FC>::iadd(c, b, FC(const_e + omega, eta));
+            GMatrixFunctions<FC>::iadd(c, b, FC((FL)const_e + omega, eta));
             nmult += 2;
         };
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         rbra.clear();
         f(ibra, rbra); // TODO not needed for chebychev
-        GMatrixFunctions<FL>::iadd(rbra, ibra, const_e + omega);
+        GMatrixFunctions<FL>::iadd(rbra, ibra, (FL)const_e + omega);
         GMatrixFunctions<FL>::iscale(rbra, -1.0 / eta);
         GMatrixFunctions<FC>::fill_complex(cbra, rbra, ibra);
         cket.clear();
@@ -136,8 +136,7 @@ struct EffectiveFunctions<
                 f(bre, cre);
                 GMatrixFunctions<FC>::fill_complex(
                     c, GMatrix<FL>(nullptr, cre.m, cre.n), cre);
-                GMatrixFunctions<FC>::iadd(
-                    c, b, FC(const_e + omega, -eta));
+                GMatrixFunctions<FC>::iadd(c, b, FC((FL)const_e + omega, -eta));
                 nmult += 2;
             };
             const FP precond_reg = 1E-8;
@@ -259,7 +258,7 @@ struct EffectiveFunctions<
             // assert(linear_solver_params.first > 0);
             int damping =
                 0; // TODO add damping option; linear_solver_params.first
-            FC evalShift(const_e + omega, eta);
+            FC evalShift((FL)const_e + omega, eta);
             const auto nmultpre = nmult;
             gf = IterativeMatrixFunctions<FP>::cheby(
                 Hvec, cbra, mket, evalShift, conv_thrd,
@@ -290,8 +289,9 @@ struct EffectiveFunctions<
     // [rbra] = -([H_eff] + omega) (1/eta) [bra]
     // (real gf, imag gf), (nmult, numltp), nflop, tmult
     static tuple<FC, pair<int, int>, size_t, double> greens_function_squared(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL const_e,
-        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+        typename const_fl_type<FL>::FL const_e, FL omega, FL eta,
+        const shared_ptr<SparseMatrix<S, FL>> &real_bra,
         int n_harmonic_projection = 0, bool iprint = false, FP conv_thrd = 5E-6,
         int max_iter = 5000, int soft_max_iter = -1,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -315,7 +315,7 @@ struct EffectiveFunctions<
                                      (MKL_INT)h_eff->diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++) {
-                aa.data[i] = h_eff->diag->data[i] + const_e + omega;
+                aa.data[i] = h_eff->diag->data[i] + (FL)const_e + omega;
                 aa.data[i] = aa.data[i] * aa.data[i] + eta * eta;
             }
         }
@@ -332,9 +332,9 @@ struct EffectiveFunctions<
                    &nmult](const GMatrix<FL> &b, const GMatrix<FL> &c) -> void {
             btmp.clear();
             f(b, btmp);
-            GMatrixFunctions<FL>::iadd(btmp, b, const_e + omega);
+            GMatrixFunctions<FL>::iadd(btmp, b, (FL)const_e + omega);
             f(btmp, c);
-            GMatrixFunctions<FL>::iadd(c, btmp, const_e + omega);
+            GMatrixFunctions<FL>::iadd(c, btmp, (FL)const_e + omega);
             GMatrixFunctions<FL>::iadd(c, b, eta * eta);
             nmult += 2;
         };
@@ -385,7 +385,7 @@ struct EffectiveFunctions<
         GMatrix<FL> rbra(real_bra->data, (MKL_INT)real_bra->total_memory, 1);
         rbra.clear();
         f(ibra, rbra);
-        GMatrixFunctions<FL>::iadd(rbra, ibra, const_e + omega);
+        GMatrixFunctions<FL>::iadd(rbra, ibra, (FL)const_e + omega);
         GMatrixFunctions<FL>::iscale(rbra, -1 / eta);
         // compute real part green's function
         FL rgf = GMatrixFunctions<FL>::dot(rbra, mket);
@@ -402,7 +402,7 @@ struct EffectiveFunctions<
     // nexpo is number of complex matrix multiplications
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
-        FC beta, FL const_e, bool iprint = false,
+        FC beta, typename const_fl_type<FL>::FL const_e, bool iprint = false,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(h_eff->compute_diag);
         assert(h_eff->ket.size() == 2);
@@ -416,14 +416,15 @@ struct EffectiveFunctions<
         t.get_time();
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         h_eff->precompute();
-        int nexpo = (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
-                     (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
-                        ? GMatrixFunctions<FC>::expo_apply(
-                              *h_eff->tf, beta, anorm, vr, vi, const_e, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm)
-                        : GMatrixFunctions<FC>::expo_apply(
-                              *h_eff, beta, anorm, vr, vi, const_e, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm);
+        int nexpo =
+            (h_eff->tf->opf->seq->mode == SeqTypes::Auto ||
+             (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
+                ? GMatrixFunctions<FC>::expo_apply(
+                      *h_eff->tf, beta, anorm, vr, vi, (FL)const_e, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm)
+                : GMatrixFunctions<FC>::expo_apply(
+                      *h_eff, beta, anorm, vr, vi, (FL)const_e, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm);
         FP norm_re = GMatrixFunctions<FL>::norm(vr);
         FP norm_im = GMatrixFunctions<FL>::norm(vi);
         FP norm = sqrt(norm_re * norm_re + norm_im * norm_im);
@@ -453,7 +454,8 @@ struct EffectiveFunctions<
     // eigenvalue with mixed real and complex Hamiltonian
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
-    static tuple<vector<FP>, int, size_t, double> eigs_mixed(
+    static tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
+    eigs_mixed(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
         bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
@@ -523,10 +525,13 @@ struct EffectiveFunctions<
                     (*x_eff)(b, cc);
                 GMatrixFunctions<FC>::iadd(c, cc, 1.0);
             };
-        vector<FP> eners = IterativeMatrixFunctions<FC>::harmonic_davidson(
+        vector<FP> xeners = IterativeMatrixFunctions<FC>::harmonic_davidson(
             f, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
             max_iter, soft_max_iter);
+        vector<typename const_fl_type<FP>::FL> eners(xeners.size());
+        for (size_t i = 0; i < xeners.size(); i++)
+            eners[i] = (typename const_fl_type<FP>::FL)xeners[i];
         h_eff->post_precompute();
         x_eff->post_precompute();
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop +
@@ -558,14 +563,13 @@ struct EffectiveFunctions<S, FL,
     typedef typename GMatrix<FL>::FC FC;
     // [bra] = ([H_eff] + omega + i eta)^(-1) x [ket]
     // (real gf, imag gf), (nmult, niter), nflop, tmult
-    static tuple<FC, pair<int, int>, size_t, double>
-    greens_function(const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
-                    FL const_e, LinearSolverTypes solver_type, FL omega, FL eta,
-                    const shared_ptr<SparseMatrix<S, FL>> &real_bra,
-                    pair<int, int> linear_solver_params, bool iprint = false,
-                    FP conv_thrd = 5E-6, int max_iter = 5000,
-                    int soft_max_iter = -1,
-                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    static tuple<FC, pair<int, int>, size_t, double> greens_function(
+        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+        typename const_fl_type<FL>::FL const_e, LinearSolverTypes solver_type,
+        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+        pair<int, int> linear_solver_params, bool iprint = false,
+        FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(real_bra == nullptr);
         if (solver_type == LinearSolverTypes::Automatic)
             solver_type = LinearSolverTypes::GCROT;
@@ -578,7 +582,7 @@ struct EffectiveFunctions<S, FL,
         GMatrix<FL> mbra(h_eff->bra->data, (MKL_INT)h_eff->bra->total_memory,
                          1);
         GDiagonalMatrix<FC> aa(nullptr, 0);
-        FC const_x = const_e + omega + FC(0.0, 1.0) * eta;
+        FC const_x = (FL)const_e + omega + FC(0.0, 1.0) * eta;
         if (h_eff->compute_diag) {
             aa = GDiagonalMatrix<FC>(nullptr,
                                      (MKL_INT)h_eff->diag->total_memory);
@@ -659,8 +663,9 @@ struct EffectiveFunctions<S, FL,
     // [rbra] = -([H_eff] + omega) (1/eta) [bra]
     // (real gf, imag gf), (nmult, numltp), nflop, tmult
     static tuple<FC, pair<int, int>, size_t, double> greens_function_squared(
-        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff, FL const_e,
-        FL omega, FL eta, const shared_ptr<SparseMatrix<S, FL>> &real_bra,
+        const shared_ptr<EffectiveHamiltonian<S, FL>> &h_eff,
+        typename const_fl_type<FL>::FL const_e, FL omega, FL eta,
+        const shared_ptr<SparseMatrix<S, FL>> &real_bra,
         int n_harmonic_projection = 0, bool iprint = false, FP conv_thrd = 5E-6,
         int max_iter = 5000, int soft_max_iter = -1,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -672,7 +677,7 @@ struct EffectiveFunctions<S, FL,
     // nexpo is number of complex matrix multiplications
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
-        FC beta, FL const_e, bool iprint = false,
+        FC beta, typename const_fl_type<FL>::FL const_e, bool iprint = false,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(false);
         return make_tuple(0.0, 0.0, 0, (size_t)0, 0.0);
@@ -680,7 +685,8 @@ struct EffectiveFunctions<S, FL,
     // eigenvalue with mixed real and complex Hamiltonian
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
-    static tuple<vector<FP>, int, size_t, double> eigs_mixed(
+    static tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
+    eigs_mixed(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
         bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
@@ -688,7 +694,8 @@ struct EffectiveFunctions<S, FL,
         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(false);
-        return make_tuple(vector<FP>{}, 0, (size_t)0, 0.0);
+        return make_tuple(vector<typename const_fl_type<FP>::FL>{}, 0,
+                          (size_t)0, 0.0);
     }
 };
 

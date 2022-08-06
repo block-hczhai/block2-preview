@@ -148,7 +148,7 @@ TEST_F(TestDMRG, Test) {
     dmrg->iprint = 2;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
-    double e_casci = dmrg->solve(30, true);
+    long double e_casci = dmrg->solve(30, true);
 
     cout << "E(CASCI) = " << setprecision(15) << e_casci << endl;
 

@@ -43,7 +43,7 @@ class TestDMRGSingletEmbedding : public ::testing::Test {
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<double>> &energies,
+                   const vector<vector<long double>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
@@ -69,7 +69,7 @@ bool TestDMRGSingletEmbedding::_mpi = MPITest::okay();
 
 template <typename S, typename FL>
 void TestDMRGSingletEmbedding::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
+    const vector<vector<S>> &targets, const vector<vector<long double>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt) {
 
@@ -151,7 +151,7 @@ void TestDMRGSingletEmbedding::test_dmrg(
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             dmrg->davidson_soft_max_iter = 4000;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -204,7 +204,7 @@ TEST_F(TestDMRGSingletEmbedding, TestSU2) {
             targets[i][j - 1] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<double>> energies(8);
+    vector<vector<long double>> energies(8);
     energies[0] = {-106.939132859668, -107.031449471627};
     energies[1] = {-106.999600016661, -106.633790589321};
     energies[2] = {-107.356943001688, -106.931515926732};

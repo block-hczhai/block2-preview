@@ -79,7 +79,8 @@ inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
 template <typename FL> struct GeneralFCIDUMP {
     typedef decltype(abs((FL)0.0)) FP;
     map<string, string> params;
-    FL const_e = (FL)0.0;
+    typename const_fl_type<FL>::FL const_e =
+        (typename const_fl_type<FL>::FL)0.0;
     vector<string> exprs;
     vector<vector<uint16_t>> indices;
     vector<vector<FL>> data;
@@ -374,7 +375,7 @@ template <typename FL> struct GeneralFCIDUMP {
     uint16_t n_elec() const {
         return (uint16_t)Parsing::to_int(params.at("nelec"));
     }
-    virtual FL e() const { return const_e; }
+    virtual typename const_fl_type<FL>::FL e() const { return const_e; }
     template <typename T> vector<T> orb_sym() const {
         vector<string> x = Parsing::split(params.at("orbsym"), ",", true);
         vector<T> r;

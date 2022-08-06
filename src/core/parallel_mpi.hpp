@@ -383,6 +383,26 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void allreduce_min(long double *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
+                                     min(chunk_size, len - offset) * 2,
+                                     MPI_DOUBLE, MPI_MIN, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void allreduce_min(complex<long double> *data, size_t len) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
+                                     min(chunk_size, len - offset) * 4,
+                                     MPI_DOUBLE, MPI_MIN, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void allreduce_min(float *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -404,6 +424,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         tcomm += _t.get_time();
     }
     void allreduce_min(vector<double> &vs) override {
+        allreduce_min(vs.data(), vs.size());
+    }
+    void allreduce_min(vector<long double> &vs) override {
         allreduce_min(vs.data(), vs.size());
     }
     void allreduce_min(vector<complex<double>> &vs) override {
@@ -457,6 +480,17 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         allreduce_min(vx.data(), vx.size());
         for (size_t i = 0, j = 0; i < vs.size(); i++) {
             memcpy(vs[i].data(), vx.data() + j, vs[i].size() * sizeof(double));
+            j += vs[i].size();
+        }
+    }
+    void allreduce_min(vector<vector<long double>> &vs) override {
+        vector<long double> vx;
+        for (size_t i = 0; i < vs.size(); i++)
+            vx.insert(vx.end(), vs[i].begin(), vs[i].end());
+        allreduce_min(vx.data(), vx.size());
+        for (size_t i = 0, j = 0; i < vs.size(); i++) {
+            memcpy(vs[i].data(), vx.data() + j,
+                   vs[i].size() * sizeof(long double));
             j += vs[i].size();
         }
     }

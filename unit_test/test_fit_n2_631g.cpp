@@ -12,7 +12,7 @@ class TestFITN2631G : public ::testing::Test {
     typedef double FP;
 
     template <typename S, typename FL>
-    void test_dmrg(int n_ext, int ci_order, const S target, double energy,
+    void test_dmrg(int n_ext, int ci_order, const S target, long double energy,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
@@ -34,7 +34,7 @@ class TestFITN2631G : public ::testing::Test {
 
 template <typename S, typename FL>
 void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
-                              double energy,
+                              long double energy,
                               const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                               const string &name, DecompositionTypes dt,
                               NoiseTypes nt) {
@@ -125,7 +125,7 @@ void TestFITN2631G::test_dmrg(int n_ext, int ci_order, const S target,
     dmrg->decomp_type = dt;
     dmrg->noise_type = nt;
     dmrg->decomp_last_site = dcl;
-    double ener = dmrg->solve(5, mps->center == 0, 1E-8);
+    long double ener = dmrg->solve(5, mps->center == 0, 1E-8);
 
     cout << "== " << name << " ==" << setw(20) << target << " E = " << fixed
          << setw(22) << setprecision(12) << ener << " error = " << scientific
@@ -351,7 +351,7 @@ TEST_F(TestFITN2631G, TestSU2) {
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), 0, 0);
-    double energy = 0.1;
+    long double energy = 0.1;
 
     shared_ptr<HamiltonianQC<SU2, double>> hamil =
         make_shared<HamiltonianQC<SU2, double>>(vacuum, fcidump->n_sites(),
@@ -375,7 +375,7 @@ TEST_F(TestFITN2631G, TestSZ) {
 
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), 0, 0);
-    double energy = 0.1;
+    long double energy = 0.1;
 
     shared_ptr<HamiltonianQC<SZ, double>> hamil =
         make_shared<HamiltonianQC<SZ, double>>(vacuum, fcidump->n_sites(),

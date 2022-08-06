@@ -1019,10 +1019,10 @@ void bind_fl_dmrg(py::module &m) {
     py::class_<typename DMRG<S, FL, FLS>::Iteration,
                shared_ptr<typename DMRG<S, FL, FLS>::Iteration>>(
         m, "DMRGIteration")
-        .def(py::init<const vector<typename DMRG<S, FL, FLS>::FPS> &,
+        .def(py::init<const vector<typename DMRG<S, FL, FLS>::FPLS> &,
                       typename DMRG<S, FL, FLS>::FPS, int, int, size_t,
                       double>())
-        .def(py::init<const vector<typename DMRG<S, FL, FLS>::FPS> &,
+        .def(py::init<const vector<typename DMRG<S, FL, FLS>::FPLS> &,
                       typename DMRG<S, FL, FLS>::FPS, int, int>())
         .def_readwrite("mmps", &DMRG<S, FL, FLS>::Iteration::mmps)
         .def_readwrite("energies", &DMRG<S, FL, FLS>::Iteration::energies)
@@ -1112,9 +1112,9 @@ void bind_fl_td_dmrg(py::module &m) {
                shared_ptr<typename TDDMRG<S, FL, FLS>::Iteration>>(
         m, "TDDMRGIteration")
         .def(py::init<
-             typename TDDMRG<S, FL, FLS>::FPS, typename TDDMRG<S, FL, FLS>::FPS,
+             typename TDDMRG<S, FL, FLS>::FLLS, typename TDDMRG<S, FL, FLS>::FPS,
              typename TDDMRG<S, FL, FLS>::FPS, int, int, size_t, double>())
-        .def(py::init<typename TDDMRG<S, FL, FLS>::FPS,
+        .def(py::init<typename TDDMRG<S, FL, FLS>::FLLS,
                       typename TDDMRG<S, FL, FLS>::FPS,
                       typename TDDMRG<S, FL, FLS>::FPS, int, int>())
         .def_readwrite("mmps", &TDDMRG<S, FL, FLS>::Iteration::mmps)
@@ -1177,11 +1177,11 @@ void bind_fl_td_dmrg(py::module &m) {
     py::class_<typename TimeEvolution<S, FL, FLS>::Iteration,
                shared_ptr<typename TimeEvolution<S, FL, FLS>::Iteration>>(
         m, "TimeEvolutionIteration")
-        .def(py::init<typename TimeEvolution<S, FL, FLS>::FPS,
+        .def(py::init<typename TimeEvolution<S, FL, FLS>::FLLS,
                       typename TimeEvolution<S, FL, FLS>::FPS,
                       typename TimeEvolution<S, FL, FLS>::FPS, int, int, int,
                       size_t, double>())
-        .def(py::init<typename TimeEvolution<S, FL, FLS>::FPS,
+        .def(py::init<typename TimeEvolution<S, FL, FLS>::FLLS,
                       typename TimeEvolution<S, FL, FLS>::FPS,
                       typename TimeEvolution<S, FL, FLS>::FPS, int, int, int>())
         .def_readwrite("mmps", &TimeEvolution<S, FL, FLS>::Iteration::mmps)

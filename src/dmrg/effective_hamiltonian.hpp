@@ -361,7 +361,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<FP, int, size_t, double>
+    tuple<typename const_fl_type<FP>::FL, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -404,16 +404,16 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         if (para_rule != nullptr)
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
-        return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
+        return make_tuple((typename const_fl_type<FP>::FL)eners[0], ndav,
+                          (size_t)nflop, t.get_time());
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
-    tuple<FL, pair<int, int>, size_t, double>
-    inverse_multiply(FL const_e, LinearSolverTypes solver_type,
-                     pair<int, int> linear_solver_params, bool iprint = false,
-                     FP conv_thrd = 5E-6, int max_iter = 5000,
-                     int soft_max_iter = -1,
-                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    tuple<FL, pair<int, int>, size_t, double> inverse_multiply(
+        typename const_fl_type<FL>::FL const_e, LinearSolverTypes solver_type,
+        pair<int, int> linear_solver_params, bool iprint = false,
+        FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         if (solver_type == LinearSolverTypes::Automatic)
             solver_type = LinearSolverTypes::MinRes;
         int nmult = 0, niter = 0;
@@ -428,7 +428,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             aa = GDiagonalMatrix<FL>(nullptr, (MKL_INT)diag->total_memory);
             aa.allocate();
             for (MKL_INT i = 0; i < aa.size(); i++)
-                aa.data[i] = diag->data[i] + const_e;
+                aa.data[i] = diag->data[i] + (FL)const_e;
         }
         precompute();
         const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
@@ -442,18 +442,18 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         FL r =
             solver_type == LinearSolverTypes::CG
                 ? IterativeMatrixFunctions<FL>::conjugate_gradient(
-                      f, aa, mbra, mket, nmult, const_e, iprint,
+                      f, aa, mbra, mket, nmult, (FL)const_e, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter)
                 : (solver_type == LinearSolverTypes::MinRes
                        ? IterativeMatrixFunctions<FL>::minres(
-                             f, mbra, mket, nmult, const_e, iprint,
+                             f, mbra, mket, nmult, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter)
                        : IterativeMatrixFunctions<FL>::gcrotmk(
                              f, aa, mbra, mket, nmult, niter,
                              linear_solver_params.first,
-                             linear_solver_params.second, const_e, iprint,
+                             linear_solver_params.second, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, max_iter, soft_max_iter));
         if (compute_diag && solver_type != LinearSolverTypes::MinRes)
@@ -467,9 +467,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                           t.get_time());
     }
     shared_ptr<OpExpr<S>>
-    add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
+    add_const_term(typename const_fl_type<FL>::FL const_e,
+                   const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != (FP)0.0) {
+        if ((FL)const_e != (FP)0.0) {
             // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
@@ -493,11 +494,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                                     xiop, xiop,
                                     vector<shared_ptr<OpElement<S, FL>>>{xiop,
                                                                          xiop},
-                                    vector<bool>{false, false}, const_e, 0);
+                                    vector<bool>{false, false}, (FL)const_e, 0);
                     else
-                        op->mat->data[0] = expr + const_e * (iop * iop);
+                        op->mat->data[0] = expr + (FL)const_e * (iop * iop);
                 } else
-                    op->mat->data[0] = expr + const_e * (iop * iop);
+                    op->mat->data[0] = expr + (FL)const_e * (iop * iop);
             }
         }
         return expr;
@@ -505,7 +506,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // [bra] = [H_eff] x [ket]
     // norm, nmult, nflop, tmult
     tuple<FP, int, size_t, double>
-    multiply(FL const_e,
+    multiply(typename const_fl_type<FL>::FL const_e,
              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         bra->clear();
         shared_ptr<OpExpr<S>> expr = add_const_term(const_e, para_rule);
@@ -532,11 +533,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, FL>>, size_t, double>
-    expect(FL const_e, ExpectationAlgorithmTypes algo_type,
-           ExpectationTypes ex_type,
+    expect(typename const_fl_type<FL>::FL const_e,
+           ExpectationAlgorithmTypes algo_type, ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
+        if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         assert(ex_type == ExpectationTypes::Real || is_complex<FL>::value);
         if (algo_type == ExpectationAlgorithmTypes::Automatic)
@@ -609,7 +610,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         } else
             expectations = tf->tensor_product_expectation(
                 op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
-        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
+        if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -620,7 +621,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     }
     // return |ket> and beta [H_eff] |ket>
     pair<vector<shared_ptr<SparseMatrix<S, FL>>>, tuple<int, size_t, double>>
-    first_rk4_apply(FL beta, FL const_e,
+    first_rk4_apply(FL beta, typename const_fl_type<FL>::FL const_e,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
@@ -662,7 +663,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     }
     pair<vector<shared_ptr<SparseMatrix<S, FL>>>,
          tuple<FL, FP, int, size_t, double>>
-    second_rk4_apply(FL beta, FL const_e,
+    second_rk4_apply(FL beta, typename const_fl_type<FL>::FL const_e,
                      const shared_ptr<SparseMatrix<S, FL>> &hket,
                      bool eval_energy = false,
                      const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -709,14 +710,14 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * const_e);
+            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * (FL)const_e);
             GMatrixFunctions<FL>::copy(r[i], v);
             GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
                 GMatrixFunctions<FL>::iadd(r[i], k[j], cs[i][j] * factor);
         }
         FP norm = GMatrixFunctions<FL>::norm(r[2]);
-        FL energy = -const_e;
+        FL energy = -(FL)const_e;
         if (eval_energy) {
             k[0].clear();
             f(r[2], k[0], 1.0);
@@ -736,7 +737,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
     pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
-    rk4_apply(FL beta, FL const_e, bool eval_energy = false,
+    rk4_apply(FL beta, typename const_fl_type<FL>::FL const_e,
+              bool eval_energy = false,
               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
         vector<GMatrix<FL>> k, r;
@@ -779,14 +781,14 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * const_e);
+            FL factor = exp(beta * (FL)(i + 1.0) / (FL)3.0 * (FL)const_e);
             GMatrixFunctions<FL>::copy(r[i], v);
             GMatrixFunctions<FL>::iscale(r[i], factor);
             for (size_t j = 0; j < 4; j++)
                 GMatrixFunctions<FL>::iadd(r[i], k[j], cs[i][j] * factor);
         }
         FP norm = GMatrixFunctions<FL>::norm(r[2]);
-        FL energy = -const_e;
+        FL energy = -(FL)const_e;
         if (eval_energy) {
             k[0].clear();
             f(r[2], k[0], 1.0);
@@ -806,7 +808,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // [ket] = exp( [H_eff] ) | [ket] > (exact)
     // energy, norm, nexpo, nflop, texpo
     tuple<FL, FP, int, size_t, double>
-    expo_apply(FL beta, FL const_e, bool symmetric, bool iprint = false,
+    expo_apply(FL beta, typename const_fl_type<FL>::FL const_e, bool symmetric,
+               bool iprint = false,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(compute_diag);
         FP anorm = GMatrixFunctions<FL>::norm(
@@ -816,14 +819,15 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        int nexpo = (tf->opf->seq->mode == SeqTypes::Auto ||
-                     (tf->opf->seq->mode & SeqTypes::Tasked))
-                        ? IterativeMatrixFunctions<FL>::expo_apply(
-                              *tf, beta, anorm, v, const_e, symmetric, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm)
-                        : IterativeMatrixFunctions<FL>::expo_apply(
-                              *this, beta, anorm, v, const_e, symmetric, iprint,
-                              para_rule == nullptr ? nullptr : para_rule->comm);
+        int nexpo =
+            (tf->opf->seq->mode == SeqTypes::Auto ||
+             (tf->opf->seq->mode & SeqTypes::Tasked))
+                ? IterativeMatrixFunctions<FL>::expo_apply(
+                      *tf, beta, anorm, v, (FL)const_e, symmetric, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm)
+                : IterativeMatrixFunctions<FL>::expo_apply(
+                      *this, beta, anorm, v, (FL)const_e, symmetric, iprint,
+                      para_rule == nullptr ? nullptr : para_rule->comm);
         FP norm = GMatrixFunctions<FL>::norm(v);
         GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
         tmp.allocate();
@@ -911,7 +915,7 @@ template <typename S, typename FL> struct LinearEffectiveHamiltonian {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
-    tuple<FP, int, size_t, double>
+    tuple<typename const_fl_type<FP>::FL, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -948,7 +952,8 @@ template <typename S, typename FL> struct LinearEffectiveHamiltonian {
             para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
         tf->opf->seq->cumulative_nflop = 0;
         aa.deallocate();
-        return make_tuple(eners[0], ndav, (size_t)nflop, t.get_time());
+        return make_tuple((typename const_fl_type<FP>::FL)eners[0], ndav,
+                          (size_t)nflop, t.get_time());
     }
     void deallocate() {}
 };
@@ -1337,7 +1342,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
-    tuple<vector<FP>, int, size_t, double>
+    tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
          int soft_max_iter = -1,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -1367,7 +1372,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<FP> eners =
+        vector<FP> xeners =
             (tf->opf->seq->mode == SeqTypes::Auto ||
              (tf->opf->seq->mode & SeqTypes::Tasked))
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
@@ -1380,6 +1385,9 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
                       projection_weights);
+        vector<typename const_fl_type<FP>::FL> eners(xeners.size());
+        for (size_t i = 0; i < xeners.size(); i++)
+            eners[i] = (typename const_fl_type<FP>::FL)xeners[i];
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1388,9 +1396,10 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         return make_tuple(eners, ndav, (size_t)nflop, t.get_time());
     }
     shared_ptr<OpExpr<S>>
-    add_const_term(FL const_e, const shared_ptr<ParallelRule<S>> &para_rule) {
+    add_const_term(typename const_fl_type<FL>::FL const_e,
+                   const shared_ptr<ParallelRule<S>> &para_rule) {
         shared_ptr<OpExpr<S>> expr = op->mat->data[0];
-        if (const_e != (FL)0.0) {
+        if ((FL)const_e != (FL)0.0) {
             // q_label does not matter
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
@@ -1414,11 +1423,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                     xiop, xiop,
                                     vector<shared_ptr<OpElement<S, FL>>>{xiop,
                                                                          xiop},
-                                    vector<bool>{false, false}, const_e, 0);
+                                    vector<bool>{false, false}, (FL)const_e, 0);
                     else
-                        op->mat->data[0] = expr + const_e * (iop * iop);
+                        op->mat->data[0] = expr + (FL)const_e * (iop * iop);
                 } else
-                    op->mat->data[0] = expr + const_e * (iop * iop);
+                    op->mat->data[0] = expr + (FL)const_e * (iop * iop);
             }
         }
         return expr;
@@ -1426,11 +1435,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     // X = < [bra] | [H_eff] | [ket] >
     // expectations, nflop, tmult
     tuple<vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>>, size_t, double>
-    expect(FL const_e, ExpectationAlgorithmTypes algo_type,
-           ExpectationTypes ex_type,
+    expect(typename const_fl_type<FL>::FL const_e,
+           ExpectationAlgorithmTypes algo_type, ExpectationTypes ex_type,
            const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         shared_ptr<OpExpr<S>> expr = nullptr;
-        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
+        if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         Timer t;
         t.get_time();
@@ -1517,7 +1526,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 assert(false);
         }
         btmp.deallocate();
-        if (const_e != (FL)0.0 && op->mat->data.size() > 0)
+        if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         if (results.size() != 0) {
             assert(para_rule != nullptr);
@@ -1536,7 +1545,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     // [ket] = exp( [H_eff] ) | [ket] > (RK4 approximation)
     // k1~k4, energy, norm, nexpo, nflop, texpo
     pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
-    rk4_apply(FC beta, FL const_e, bool eval_energy = false,
+    rk4_apply(FC beta, typename const_fl_type<FL>::FL const_e,
+              bool eval_energy = false,
               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(ket.size() == 2);
         GMatrix<FL> vr(ket[0]->data, (MKL_INT)ket[0]->total_memory, 1);
@@ -1604,7 +1614,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         }
         // r0 ~ r2
         for (int i = 0; i < 3; i++) {
-            FC factor = exp(beta * (FL)((i + 1) / 3) * const_e);
+            FC factor = exp(beta * (FL)((i + 1) / 3) * (FL)const_e);
             r[i + i].clear(), r[i + i + 1].clear();
             if (factor.real() != 0) {
                 GMatrixFunctions<FL>::iadd(r[i + i], vr, factor.real());
@@ -1632,7 +1642,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         FP norm_re = GMatrixFunctions<FL>::norm(r[2 + 2]);
         FP norm_im = GMatrixFunctions<FL>::norm(r[2 + 2 + 1]);
         FP norm = sqrt(norm_re * norm_re + norm_im * norm_im);
-        FL energy = -const_e;
+        FL energy = -(FL)const_e;
         if (eval_energy) {
             k[0].clear();
             k[1].clear();

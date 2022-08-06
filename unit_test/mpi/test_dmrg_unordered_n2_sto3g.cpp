@@ -43,7 +43,7 @@ class TestDMRGUnorderedN2STO3G : public ::testing::Test {
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<double>> &energies,
+                   const vector<vector<long double>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
@@ -71,7 +71,7 @@ bool TestDMRGUnorderedN2STO3G::_mpi = MPITest::okay();
 
 template <typename S, typename FL>
 void TestDMRGUnorderedN2STO3G::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<double>> &energies,
+    const vector<vector<S>> &targets, const vector<vector<long double>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt) {
 
@@ -152,7 +152,7 @@ void TestDMRGUnorderedN2STO3G::test_dmrg(
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             dmrg->davidson_soft_max_iter = 4000;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             cout << "== PAR " << name << " ==" << setw(20) << target
                  << " E = " << fixed << setw(22) << setprecision(12) << energy
@@ -216,7 +216,7 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSU2) {
             targets[i][j] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<double>> energies(8);
+    vector<vector<long double>> energies(8);
     energies[0] = {-107.654122447525, -106.939132859668, -107.031449471627};
     energies[1] = {-106.959626154680, -106.999600016661, -106.633790589321};
     energies[2] = {-107.306744734756, -107.356943001688, -106.931515926732};
@@ -272,7 +272,7 @@ TEST_F(TestDMRGUnorderedN2STO3G, TestSZ) {
             targets[i][j] = SZ(fcidump->n_elec(), (j - 2) * 2, i);
     }
 
-    vector<vector<double>> energies(8);
+    vector<vector<long double>> energies(8);
     energies[0] = {-107.031449471627, -107.031449471627, -107.654122447525,
                    -107.031449471627, -107.031449471627};
     energies[1] = {-106.633790589321, -106.999600016661, -106.999600016661,

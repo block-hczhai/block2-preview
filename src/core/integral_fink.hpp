@@ -116,7 +116,7 @@ struct FinkFCIDUMP : FCIDUMP<double> {
         else
             return fcidump->v(sl, sr, i, j, k, l);
     }
-    double e() const override { return fcidump->const_e; }
+    long double e() const override { return fcidump->const_e; }
     void deallocate() override {
         data = nullptr;
         fcidump->deallocate();

@@ -10,10 +10,11 @@ template <typename FL> class TestTTODMRGN2STO3G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FL FLL;
 
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<FL>> &energies,
+                   const vector<vector<FLL>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt,
                    int tto);
@@ -39,7 +40,7 @@ template <typename FL> class TestTTODMRGN2STO3G : public ::testing::Test {
 template <typename FL>
 template <typename S>
 void TestTTODMRGN2STO3G<FL>::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
+    const vector<vector<S>> &targets, const vector<vector<FLL>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt, int tto) {
     Timer t;
@@ -104,7 +105,7 @@ void TestTTODMRGN2STO3G<FL>::test_dmrg(
             dmrg->solve(tto, mps->center == 0, 0);
 
             me->dot = 1;
-            FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            FLL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -139,6 +140,7 @@ TYPED_TEST_CASE(TestTTODMRGN2STO3G, TestFL);
 
 TYPED_TEST(TestTTODMRGN2STO3G, TestSU2) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -157,7 +159,7 @@ TYPED_TEST(TestTTODMRGN2STO3G, TestSU2) {
             targets[i][j] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-107.654122447525, -106.939132859668, -107.031449471627};
     energies[1] = {-106.959626154680, -106.999600016661, -106.633790589321};
     energies[2] = {-107.306744734756, -107.356943001688, -106.931515926732};
@@ -192,6 +194,7 @@ TYPED_TEST(TestTTODMRGN2STO3G, TestSU2) {
 
 TYPED_TEST(TestTTODMRGN2STO3G, TestSZ) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -210,7 +213,7 @@ TYPED_TEST(TestTTODMRGN2STO3G, TestSZ) {
             targets[i][j] = SZ(fcidump->n_elec(), (j - 2) * 2, i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-107.031449471627, -107.031449471627, -107.654122447525,
                    -107.031449471627, -107.031449471627};
     energies[1] = {-106.633790589321, -106.999600016661, -106.999600016661,

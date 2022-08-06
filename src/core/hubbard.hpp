@@ -74,7 +74,7 @@ struct HubbardFCIDUMP : FCIDUMP<double> {
              uint16_t l) const override {
         return i == j && j == k && k == l ? const_u : 0;
     }
-    double e() const override { return 0.0; }
+    long double e() const override { return (long double)0.0; }
     void deallocate() override {}
 };
 
@@ -124,7 +124,7 @@ struct HubbardKSpaceFCIDUMP : FCIDUMP<double> {
         const int n = n_sites();
         return (i + n - j + k + n - l) % n == 0 ? const_u / n : 0;
     }
-    double e() const override { return 0.0; }
+    long double e() const override { return (long double)0.0; }
     void deallocate() override {}
 };
 

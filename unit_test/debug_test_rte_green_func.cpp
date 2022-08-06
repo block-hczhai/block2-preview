@@ -131,7 +131,7 @@ void TestGreenFunctionH10STO6G::test_dmrg(S target,
     shared_ptr<DMRG<S>> dmrg = make_shared<DMRG<S>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::SVD;
-    double energy = dmrg->solve(20, mps->center == 0, 1E-12);
+    long double energy = dmrg->solve(20, mps->center == 0, 1E-12);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy

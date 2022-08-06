@@ -10,6 +10,7 @@ template <typename FL> class TestLinearN2STO3G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 28;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FL FLL;
 
     template <typename S>
     void test_dmrg(S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil,
@@ -36,7 +37,7 @@ void TestLinearN2STO3G<FL>::test_dmrg(
     S target, const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     int dot) {
 
-    FL energy_std = -107.654122447525;
+    FLL energy_std = -107.654122447525;
 
     Timer t;
     t.get_time();
@@ -106,7 +107,7 @@ void TestLinearN2STO3G<FL>::test_dmrg(
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->noise_type = NoiseTypes::Perturbative;
-    FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    FLL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
@@ -141,7 +142,7 @@ void TestLinearN2STO3G<FL>::test_dmrg(
     // Left ME
     shared_ptr<MovingEnvironment<S, FL, FL>> lme =
         make_shared<MovingEnvironment<S, FL, FL>>(mpo, imps, imps, "LINEAR");
-    FL ce = mpo->const_e;
+    FLL ce = mpo->const_e;
     mpo->const_e = 0;
     lme->init_environments();
 
@@ -154,7 +155,8 @@ void TestLinearN2STO3G<FL>::test_dmrg(
     cps->decomp_type = DecompositionTypes::SVD;
     FL norm = cps->solve(10, mps->center == 0, 1E-10);
 
-    EXPECT_LT(abs(norm - 1.0 / (energy_std - ce)), dot == 1 ? 1E-4 : 1E-7);
+    EXPECT_LT(abs((FLL)norm - (FLL)1.0 / (energy_std - ce)),
+              dot == 1 ? 1E-4 : 1E-7);
 
     // Energy ME
     shared_ptr<MovingEnvironment<S, FL, FL>> eme =
@@ -173,7 +175,7 @@ void TestLinearN2STO3G<FL>::test_dmrg(
          << (energy - energy_std) << " T = " << fixed << setw(10)
          << setprecision(3) << t.get_time() << endl;
 
-    EXPECT_LT(abs(energy + 1.0), dot == 1 ? 1E-4 : 1E-7);
+    EXPECT_LT(abs(energy + (FLL)1.0), dot == 1 ? 1E-4 : 1E-7);
 
     imps_info->deallocate();
     mps_info->deallocate();

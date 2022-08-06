@@ -10,9 +10,10 @@ template <typename FL> class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FL FLL;
 
     template <typename S>
-    void test_dmrg(const vector<S> &targets, const vector<FL> &energies,
+    void test_dmrg(const vector<S> &targets, const vector<FLL> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
@@ -35,7 +36,7 @@ template <typename FL> class TestOneSiteDMRGN2STO3GSA : public ::testing::Test {
 template <typename FL>
 template <typename S>
 void TestOneSiteDMRGN2STO3GSA<FL>::test_dmrg(
-    const vector<S> &targets, const vector<FL> &energies,
+    const vector<S> &targets, const vector<FLL> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     ubond_t bond_dim, uint16_t nroots) {
 
@@ -92,7 +93,7 @@ void TestOneSiteDMRGN2STO3GSA<FL>::test_dmrg(
     dmrg->davidson_soft_max_iter = 2000;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
-    FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    FLL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     // deallocate persistent stack memory
     mps_info->deallocate();
@@ -121,6 +122,7 @@ TYPED_TEST_CASE(TestOneSiteDMRGN2STO3GSA, TestFL);
 
 TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSU2) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -140,7 +142,7 @@ TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSU2) {
                 if (na - nb >= 0)
                     targets.push_back(SU2(na + nb, na - nb, i));
 
-    vector<FL> energies = {
+    vector<FLL> energies = {
         -107.654122447525, // < N=14 S=0 PG=0 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
@@ -165,6 +167,7 @@ TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSU2) {
 
 TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSZ) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -183,7 +186,7 @@ TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSZ) {
             for (int nb = ne - 1; nb <= ne + 1; nb++)
                 targets.push_back(SZ(na + nb, na - nb, i));
 
-    vector<FL> energies = {
+    vector<FLL> energies = {
         -107.654122447526, // < N=14 S=0 PG=0 >
         -107.356943001689, // < N=14 S=-1|0|1 PG=2|3 >
         -107.356943001688, // < N=14 S=-1|0|1 PG=2|3 >

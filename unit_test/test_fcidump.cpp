@@ -93,7 +93,7 @@ TEST_F(TestFCIDUMP, TestComplexRead) {
     EXPECT_EQ(fcidump.isym(), 1);
     EXPECT_EQ(fcidump.twos(), 0);
     EXPECT_EQ(fcidump.uhf, false);
-    EXPECT_LT(abs(fcidump.const_e - 181.4321866011428597), 1E-15);
+    EXPECT_LT(abs(fcidump.const_e - (long double)181.4321866011428597), 1E-15);
     EXPECT_LT(abs(fcidump.ts[0](0, 0) - (-295.3905965169317369)), 1E-15);
     EXPECT_LT(abs(fcidump.ts[0](0, 3) - 0.1592759388906264), 1E-15);
     EXPECT_EQ(fcidump.ts[0](0, 3), fcidump.ts[0](3, 0));
@@ -120,7 +120,7 @@ TEST_F(TestFCIDUMP, TestCompressedComplexRead) {
     EXPECT_EQ(fcidump.isym(), 1);
     EXPECT_EQ(fcidump.twos(), 0);
     EXPECT_EQ(fcidump.uhf, false);
-    EXPECT_LT(abs(fcidump.const_e - 181.4321866011428597), 1E-15);
+    EXPECT_LT(abs(fcidump.const_e - (long double)181.4321866011428597), 1E-15);
     EXPECT_LT(abs(fcidump.cps_ts[0](0, 0) - (-295.3905965169317369)), 1E-15);
     EXPECT_LT(abs(fcidump.cps_ts[0](0, 3) - 0.1592759388906264), 1E-15);
     EXPECT_EQ(fcidump.cps_ts[0](0, 3), fcidump.cps_ts[0](3, 0));

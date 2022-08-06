@@ -10,10 +10,11 @@ template <typename FL> class TestNonHermDMRGN2STO3G : public ::testing::Test {
     size_t isize = 1L << 24;
     size_t dsize = 1L << 32;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FL FLL;
 
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<FL>> &energies,
+                   const vector<vector<FLL>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt,
                    bool condense = false);
@@ -41,7 +42,7 @@ template <typename FL> class TestNonHermDMRGN2STO3G : public ::testing::Test {
 template <typename FL>
 template <typename S>
 void TestNonHermDMRGN2STO3G<FL>::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
+    const vector<vector<S>> &targets, const vector<vector<FLL>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt, bool condense) {
     Timer t;
@@ -114,7 +115,7 @@ void TestNonHermDMRGN2STO3G<FL>::test_dmrg(
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             dmrg->davidson_soft_max_iter = 200;
-            FL energy = dmrg->solve(10, mps->center == 0, conv * 0.1);
+            FLL energy = dmrg->solve(10, mps->center == 0, conv * 0.1);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -182,7 +183,7 @@ TYPED_TEST(TestNonHermDMRGN2STO3G, TestSU2) {
             targets[i][j] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-107.654122447525, -106.939132859668, -107.031449471627};
     energies[1] = {-106.959626154680, -106.999600016661, -106.633790589321};
     energies[2] = {-107.306744734756, -107.356943001688, -106.931515926732};
@@ -254,7 +255,7 @@ TYPED_TEST(TestNonHermDMRGN2STO3G, TestSZ) {
             targets[i][j] = SZ(fcidump->n_elec(), (j - 2) * 2, i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-107.031449471627, -107.031449471627, -107.654122447525,
                    -107.031449471627, -107.031449471627};
     energies[1] = {-106.633790589321, -106.999600016661, -106.999600016661,
@@ -339,7 +340,7 @@ TYPED_TEST(TestNonHermDMRGN2STO3G, TestSGF) {
         targets[i][0] = SGF(fcidump->n_elec(), i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-107.654122447525};
     energies[1] = {-106.999600016661};
     energies[2] = {-107.356943001688};

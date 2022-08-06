@@ -69,6 +69,8 @@ inline bool has_abort_file() {
 template <typename S, typename FL, typename FLS> struct DMRG {
     typedef typename MovingEnvironment<S, FL, FLS>::FP FP;
     typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
+    typedef typename MovingEnvironment<S, FL, FLS>::FLLS FLLS;
+    typedef typename MovingEnvironment<S, FL, FLS>::FPLS FPLS;
     typedef typename GMatrix<FL>::FC FC;
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
@@ -77,10 +79,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<ubond_t> bond_dims;
     vector<vector<ubond_t>> site_dependent_bond_dims;
     vector<FPS> noises;
-    vector<vector<FPS>> energies;
+    vector<vector<FPLS>> energies;
     vector<FPS> discarded_weights;
     vector<vector<vector<pair<S, FPS>>>> mps_quanta;
-    vector<vector<FPS>> sweep_energies;
+    vector<vector<FPLS>> sweep_energies;
     vector<double> sweep_time;
     vector<FPS> sweep_discarded_weights;
     vector<vector<vector<pair<S, FPS>>>> sweep_quanta;
@@ -121,13 +123,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     }
     virtual ~DMRG() = default;
     struct Iteration {
-        vector<FPS> energies;
+        vector<FPLS> energies;
         vector<vector<pair<S, FPS>>> quanta;
         FPS error;
         double tdav;
         int ndav, mmps;
         size_t nflop;
-        Iteration(const vector<FPS> &energies, FPS error, int mmps, int ndav,
+        Iteration(const vector<FPLS> &energies, FPS error, int mmps, int ndav,
                   size_t nflop = 0, double tdav = 1.0)
             : energies(energies), error(error), mmps(mmps), ndav(ndav),
               nflop(nflop), tdav(tdav) {}
@@ -544,15 +546,15 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(
-            vector<FPS>{get<0>(pdi) + xreal<FLS>(me->mpo->const_e)}, error,
+            vector<FPLS>{get<0>(pdi) + xreal<FLLS>(me->mpo->const_e)}, error,
             mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
-    virtual tuple<FPS, int, size_t, double>
+    virtual tuple<FPLS, int, size_t, double>
     one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
                              const int i, const FPS davidson_conv_thrd,
                              const FPS noise,
                              shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
-        tuple<FPS, int, size_t, double> pdi;
+        tuple<FPLS, int, size_t, double> pdi;
         vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
         _t.get_time();
         if (state_specific || projection_weights.size() != 0) {
@@ -582,7 +584,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_type,
-                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
         if (state_specific || projection_weights.size() != 0)
@@ -839,14 +841,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         return Iteration(
-            vector<FPS>{get<0>(pdi) + xreal<FLS>(me->mpo->const_e)}, error,
+            vector<FPLS>{get<0>(pdi) + xreal<FLLS>(me->mpo->const_e)}, error,
             mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
     }
-    virtual tuple<FPS, int, size_t, double>
+    virtual tuple<FPLS, int, size_t, double>
     two_dot_eigs_and_perturb(const bool forward, const int i,
                              const FPS davidson_conv_thrd, const FPS noise,
                              shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
-        tuple<FPS, int, size_t, double> pdi;
+        tuple<FPLS, int, size_t, double> pdi;
         vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
         _t.get_time();
         if (state_specific || projection_weights.size() != 0) {
@@ -875,7 +877,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_type,
-                          davidson_shift - xreal<FL>(me->mpo->const_e),
+                          davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
         if (state_specific || projection_weights.size() != 0)
@@ -970,7 +972,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         int mmps = 0;
         FPS error = 0.0;
-        tuple<vector<FPS>, int, size_t, double> pdi;
+        tuple<vector<FPLS>, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
@@ -1266,19 +1268,19 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
-            x += xreal<FLS>(me->mpo->const_e);
+            x += xreal<FLLS>(me->mpo->const_e);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
         return r;
     }
-    virtual tuple<vector<FPS>, int, size_t, double>
+    virtual tuple<vector<FPLS>, int, size_t, double>
     multi_one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
                                    const int i, const FPS davidson_conv_thrd,
                                    const FPS noise,
                                    shared_ptr<SparseMatrixGroup<S, FLS>> &pket,
                                    vector<vector<pair<S, FPS>>> &mps_quanta) {
-        tuple<vector<FPS>, int, size_t, double> pdi;
+        tuple<vector<FPLS>, int, size_t, double> pdi;
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
@@ -1330,12 +1332,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
                 davidson_max_iter, davidson_soft_max_iter, davidson_type,
-                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+                davidson_shift - xreal<FL>((FL)me->mpo->const_e),
+                me->para_rule);
         else
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                             davidson_soft_max_iter, davidson_type,
-                            davidson_shift - xreal<FL>(me->mpo->const_e),
+                            davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                             me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
@@ -1402,7 +1405,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         // effective hamiltonian
         int mmps = 0;
         FPS error = 0.0;
-        tuple<vector<FPS>, int, size_t, double> pdi;
+        tuple<vector<FPLS>, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
@@ -1603,19 +1606,19 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
-            x += xreal<FLS>(me->mpo->const_e);
+            x += xreal<FLLS>(me->mpo->const_e);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
         return r;
     }
-    virtual tuple<vector<FPS>, int, size_t, double>
+    virtual tuple<vector<FPLS>, int, size_t, double>
     multi_two_dot_eigs_and_perturb(const bool forward, const int i,
                                    const FPS davidson_conv_thrd,
                                    const FPS noise,
                                    shared_ptr<SparseMatrixGroup<S, FLS>> &pket,
                                    vector<vector<pair<S, FPS>>> &mps_quanta) {
-        tuple<vector<FPS>, int, size_t, double> pdi;
+        tuple<vector<FPLS>, int, size_t, double> pdi;
         vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
@@ -1662,12 +1665,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
                 davidson_max_iter, davidson_soft_max_iter, davidson_type,
-                davidson_shift - xreal<FL>(me->mpo->const_e), me->para_rule);
+                davidson_shift - xreal<FL>((FL)me->mpo->const_e),
+                me->para_rule);
         else
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
                             davidson_soft_max_iter, davidson_type,
-                            davidson_shift - xreal<FL>(me->mpo->const_e),
+                            davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                             me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
@@ -1706,7 +1710,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             cpx_me->move_to(i);
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
-        Iteration it(vector<FPS>(), 0, 0, 0);
+        Iteration it(vector<FPLS>(), 0, 0, 0);
         // use site dependent bond dims
         if (site_dependent_bond_dims.size() > 0) {
             const int bond_update_idx =
@@ -1748,7 +1752,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         return it;
     }
     // one standard DMRG sweep
-    virtual tuple<vector<FPS>, FPS, vector<vector<pair<S, FPS>>>>
+    virtual tuple<vector<FPLS>, FPS, vector<vector<pair<S, FPS>>>>
     sweep(bool forward, ubond_t bond_dim, FPS noise, FPS davidson_conv_thrd) {
         teff = teig = tprt = tblk = tmve = tdm = tsplt = tsvd = torth = 0;
         me->mpo->tread = me->mpo->twrite = 0;
@@ -1808,10 +1812,11 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             if (frame_<FPS>()->restart_dir_optimal_mps != "" ||
                 frame_<FPS>()->restart_dir_optimal_mps_per_sweep != "") {
                 size_t midx =
-                    min_element(sweep_energies.begin(), sweep_energies.end(),
-                                [](const vector<FPS> &x, const vector<FPS> &y) {
-                                    return x.back() < y.back();
-                                }) -
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<FPLS> &x, const vector<FPLS> &y) {
+                            return x.back() < y.back();
+                        }) -
                     sweep_energies.begin();
                 if (midx == sweep_energies.size() - 1) {
                     if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -1850,7 +1855,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         size_t idx =
             min_element(sweep_energies.begin(), sweep_energies.end(),
-                        [](const vector<FPS> &x, const vector<FPS> &y) {
+                        [](const vector<FPLS> &x, const vector<FPLS> &y) {
                             return x.back() < y.back();
                         }) -
             sweep_energies.begin();
@@ -2032,7 +2037,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
     }
     // one unordered DMRG sweep (multi-center MPS required)
-    tuple<vector<FPS>, FPS, vector<vector<pair<S, FPS>>>>
+    tuple<vector<FPLS>, FPS, vector<vector<pair<S, FPS>>>>
     unordered_sweep(bool forward, ubond_t bond_dim, FPS noise,
                     FPS davidson_conv_thrd) {
         assert(me->ket->get_type() == MPSTypes::MultiCenter);
@@ -2063,7 +2068,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
         frame_<FPS>()->reset_peak_used_memory();
-        sweep_energies.resize(me->n_sites - me->dot + 1, vector<FPS>{1E9});
+        sweep_energies.resize(me->n_sites - me->dot + 1, vector<FPLS>{1E9});
         sweep_time.resize(me->n_sites - me->dot + 1, 0);
         sweep_discarded_weights.resize(me->n_sites - me->dot + 1);
         sweep_quanta.resize(me->n_sites - me->dot + 1);
@@ -2164,7 +2169,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         para_mps->disable_parallel_writing();
         size_t idx =
             min_element(sweep_energies.begin(), sweep_energies.end(),
-                        [](const vector<FPS> &x, const vector<FPS> &y) {
+                        [](const vector<FPLS> &x, const vector<FPLS> &y) {
                             return x.back() < y.back();
                         }) -
             sweep_energies.begin();
@@ -2213,7 +2218,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         return make_tuple(sweep_energies[idx], max_dw, sweep_quanta[idx]);
     }
     // energy optimization using multiple DMRG sweeps
-    FPS solve(int n_sweeps, bool forward = true, FPS tol = 1E-6) {
+    FPLS solve(int n_sweeps, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)

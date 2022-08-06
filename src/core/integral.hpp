@@ -545,7 +545,7 @@ template <typename FL> struct FCIDUMP {
     vector<V8Int<FL>> vs;
     vector<V4Int<FL>> vabs;
     vector<V1Int<FL>> vgs;
-    FL const_e;
+    typename const_fl_type<FL>::FL const_e;
     FL *data;
     size_t total_memory;
     bool uhf, general;
@@ -555,10 +555,11 @@ template <typename FL> struct FCIDUMP {
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
     virtual ~FCIDUMP() = default;
     virtual void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                               uint16_t isym, FL e, const FL *ta, size_t lta,
-                               const FL *tb, size_t ltb, const FL *va,
-                               size_t lva, const FL *vb, size_t lvb,
-                               const FL *vab, size_t lvab) {
+                               uint16_t isym, typename const_fl_type<FL>::FL e,
+                               const FL *ta, size_t lta, const FL *tb,
+                               size_t ltb, const FL *va, size_t lva,
+                               const FL *vb, size_t lvb, const FL *vab,
+                               size_t lvab) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -622,7 +623,8 @@ template <typename FL> struct FCIDUMP {
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
     virtual void initialize_su2(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym, FL e, const FL *t,
+                                uint16_t twos, uint16_t isym,
+                                typename const_fl_type<FL>::FL e, const FL *t,
                                 size_t lt, const FL *v, size_t lv) {
         params.clear();
         ts.clear();
@@ -665,7 +667,8 @@ template <typename FL> struct FCIDUMP {
     }
     // Initialize with only h1e integral
     virtual void initialize_h1e(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym, FL e, const FL *t,
+                                uint16_t twos, uint16_t isym,
+                                typename const_fl_type<FL>::FL e, const FL *t,
                                 size_t lt) {
         params.clear();
         ts.clear();
@@ -733,7 +736,7 @@ template <typename FL> struct FCIDUMP {
             }
             for (size_t i = 0; i < ts.size(); i++)
                 ofs << ts[i], fd_write_line(ofs, 0.0);
-            fd_write_line(ofs, this->const_e);
+            fd_write_line(ofs, (FL)this->const_e);
         }
         if (!ofs.good())
             throw runtime_error("FCIDUMP::write on '" + filename + "' failed.");
@@ -745,7 +748,7 @@ template <typename FL> struct FCIDUMP {
         ts.clear();
         vs.clear();
         vabs.clear();
-        const_e = 0.0;
+        const_e = (typename const_fl_type<FL>::FL)0.0;
         ifstream ifs(filename.c_str());
         if (!ifs.good())
             throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
@@ -797,6 +800,10 @@ template <typename FL> struct FCIDUMP {
             }
             vector<string> ls = Parsing::split(ll, " ", true);
             fd_read_line(int_idx[ill], int_val[ill], ls);
+            if (int_idx[ill][0] + int_idx[ill][1] + int_idx[ill][2] +
+                    int_idx[ill][3] ==
+                0)
+                fd_read_line(int_idx[ill], const_e, ls);
         }
         threading->activate_normal();
         uint16_t n = (uint16_t)Parsing::to_int(params["norb"]);
@@ -832,7 +839,7 @@ template <typename FL> struct FCIDUMP {
                 if (int_idx[i][0] + int_idx[i][1] + int_idx[i][2] +
                         int_idx[i][3] ==
                     0)
-                    const_e = int_val[i];
+                    ;
                 else if (int_idx[i][2] + int_idx[i][3] == 0)
                     ts[0](int_idx[i][0] - 1, int_idx[i][1] - 1) = int_val[i];
                 else if (!general)
@@ -886,7 +893,7 @@ template <typename FL> struct FCIDUMP {
                     0) {
                     ip++;
                     if (ip == 6)
-                        const_e = int_val[i];
+                        ;
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];
@@ -1312,22 +1319,23 @@ template <typename FL> struct FCIDUMP {
         if (params.count("ksym"))
             set_k_sym(reorder(k_sym<int>(), ord));
     }
-    virtual void rescale(FL shift = 0) {
-        FL x = 0;
+    virtual void rescale(typename const_fl_type<FL>::FL shift = 0) {
+        typename const_fl_type<FL>::FL x = 0;
         uint16_t xn = 0;
         for (size_t i = 0; i < ts.size(); i++) {
             xn += ts[i].n;
             for (uint16_t j = 0; j < ts[i].n; j++)
                 x += ts[i](j, j);
         }
-        if (shift == (FL)0.0)
-            x = x / (FP)xn;
+        if (shift == (typename const_fl_type<FL>::FL)0.0)
+            x = x / (typename const_fl_type<FP>::FL)xn;
         else
-            x = (shift - const_e) / (FP)n_elec();
+            x = (shift - const_e) /
+                (typename const_fl_type<FP>::FL)n_elec();
         for (size_t i = 0; i < ts.size(); i++)
             for (uint16_t j = 0; j < ts[i].n; j++)
-                ts[i](j, j) = ts[i](j, j) - x;
-        const_e = const_e + x * (FP)n_elec();
+                ts[i](j, j) = ts[i](j, j) - (FL)x;
+        const_e = const_e + x * (typename const_fl_type<FP>::FL)n_elec();
     }
     // orbital rotation
     // rot_mat: (old, new)
@@ -1400,7 +1408,7 @@ template <typename FL> struct FCIDUMP {
         } else
             return general ? vgs[0](i, j, k, l) : vs[0](i, j, k, l);
     }
-    virtual FL e() const { return const_e; }
+    virtual typename const_fl_type<FL>::FL e() const { return const_e; }
     virtual void deallocate() {
         assert(total_memory != 0);
         vdata = nullptr;
@@ -1445,7 +1453,9 @@ template <typename FL> struct MRCISFCIDUMP : FCIDUMP<FL> {
         const int cnt = (i >= nocc) + (j >= nocc) + (k >= nocc) + (l >= nocc);
         return cnt <= 2 ? prim_fcidump->v(sl, sr, i, j, k, l) : 0;
     }
-    FL e() const override { return prim_fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const override {
+        return prim_fcidump->e();
+    }
     void deallocate() override {}
 };
 
@@ -1503,7 +1513,9 @@ template <typename FL> struct SpinOrbitalFCIDUMP : FCIDUMP<FL> {
         assert(false);
         return v(i, j, k, l);
     }
-    FL e() const override { return prim_fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const override {
+        return prim_fcidump->e();
+    }
     void deallocate() override {}
 };
 

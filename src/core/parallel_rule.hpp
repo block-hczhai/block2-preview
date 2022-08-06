@@ -164,6 +164,12 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_min(complex<double> *data, size_t len) {
         assert(size == 1);
     }
+    virtual void allreduce_min(long double *data, size_t len) {
+        assert(size == 1);
+    }
+    virtual void allreduce_min(complex<long double> *data, size_t len) {
+        assert(size == 1);
+    }
     virtual void allreduce_min(float *data, size_t len) { assert(size == 1); }
     virtual void allreduce_min(complex<float> *data, size_t len) {
         assert(size == 1);
@@ -171,8 +177,12 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_min(vector<vector<double>> &vs) {
         assert(size == 1);
     }
+    virtual void allreduce_min(vector<vector<long double>> &vs) {
+        assert(size == 1);
+    }
     virtual void allreduce_min(vector<vector<float>> &vs) { assert(size == 1); }
     virtual void allreduce_min(vector<double> &vs) { assert(size == 1); }
+    virtual void allreduce_min(vector<long double> &vs) { assert(size == 1); }
     virtual void allreduce_min(vector<complex<double>> &vs) {
         assert(size == 1);
     }

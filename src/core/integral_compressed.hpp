@@ -431,9 +431,10 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
     void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                       uint16_t isym, FL e, istream &ta, size_t lta,
-                       istream &tb, size_t ltb, istream &va, size_t lva,
-                       istream &vb, size_t lvb, istream &vab, size_t lvab) {
+                       uint16_t isym, typename const_fl_type<FL>::FL e,
+                       istream &ta, size_t lta, istream &tb, size_t ltb,
+                       istream &va, size_t lva, istream &vb, size_t lvb,
+                       istream &vab, size_t lvab) {
         params.clear();
         cps_ts.clear();
         cps_vs.clear();
@@ -490,8 +491,8 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
     void initialize_su2(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
-                        uint16_t isym, FL e, istream &t, size_t lt, istream &v,
-                        size_t lv) {
+                        uint16_t isym, typename const_fl_type<FL>::FL e,
+                        istream &t, size_t lt, istream &v, size_t lv) {
         params.clear();
         cps_ts.clear();
         cps_vs.clear();
@@ -573,7 +574,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
         cps_ts.clear();
         cps_vs.clear();
         cps_vabs.clear();
-        const_e = 0.0;
+        const_e = (typename const_fl_type<FL>::FL)0.0;
         ifstream ifs(filename.c_str());
         if (!ifs.good())
             throw runtime_error("FCIDUMP::read on '" + filename + "' failed.");
@@ -625,6 +626,10 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
             }
             vector<string> ls = Parsing::split(ll, " ", true);
             fd_read_line(int_idx[ill], int_val[ill], ls);
+            if (int_idx[ill][0] + int_idx[ill][1] + int_idx[ill][2] +
+                    int_idx[ill][3] ==
+                0)
+                fd_read_line(int_idx[ill], const_e, ls);
         }
         threading->activate_normal();
         uint16_t n = (uint16_t)Parsing::to_int(params["norb"]);
@@ -655,7 +660,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                 if (int_idx[i][0] + int_idx[i][1] + int_idx[i][2] +
                         int_idx[i][3] ==
                     0)
-                    const_e = int_val[i];
+                    ;
                 else if (int_idx[i][2] + int_idx[i][3] == 0)
                     cps_ts[0](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];
@@ -710,7 +715,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                     0) {
                     ip++;
                     if (ip == 6)
-                        const_e = int_val[i];
+                        ;
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     cps_ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];
@@ -851,9 +856,9 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                 FCIDUMP<FL>::template orb_sym<int>(), ord));
         freeze();
     }
-    void rescale(FL shift = 0) override {
+    void rescale(typename const_fl_type<FL>::FL shift = 0) override {
         vector<CompressedTInt<FL>> rts(cps_ts);
-        FL x = 0;
+        typename const_fl_type<FL>::FL x = 0;
         uint16_t xn = 0;
         for (size_t i = 0; i < cps_ts.size(); i++) {
             rts[i].cps_data = make_shared<CompressedVector<FP>>(
@@ -863,18 +868,18 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
             for (uint16_t j = 0; j < cps_ts[i].n; j++)
                 x += ((const CompressedTInt<FL> &)cps_ts[i])(j, j);
         }
-        if (shift == (FL)0.0)
-            x = x / (FP)xn;
+        if (shift == (typename const_fl_type<FL>::FL)0.0)
+            x = x / (typename const_fl_type<FP>::FL)xn;
         else
-            x = (shift - const_e) / (FP)n_elec();
+            x = (shift - const_e) / (typename const_fl_type<FP>::FL)n_elec();
         for (size_t i = 0; i < cps_ts.size(); i++)
             for (uint16_t j = 0; j < cps_ts[i].n; j++)
                 for (uint16_t k = 0;
                      k < (cps_ts[i].general ? cps_ts[i].n : j + 1); k++)
                     rts[i](j, k) =
                         ((const CompressedTInt<FL> &)cps_ts[i])(j, k) -
-                        (j == k ? x : (FL)0.0);
-        const_e = const_e + x * (FP)n_elec();
+                        (j == k ? (FL)x : (FL)0.0);
+        const_e = const_e + x * (typename const_fl_type<FP>::FL)n_elec();
         cps_ts = rts;
         int ntg = threading->activate_global();
         for (auto &cs : cps_ts)

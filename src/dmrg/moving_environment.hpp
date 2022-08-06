@@ -147,6 +147,8 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
 template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     typedef typename GMatrix<FL>::FP FP;
     typedef typename GMatrix<FLS>::FP FPS;
+    typedef typename const_fl_type<FLS>::FL FLLS;
+    typedef typename const_fl_type<typename GMatrix<FLS>::FP>::FL FPLS;
     typedef typename GMatrix<FLS>::FC FCS;
     int n_sites, center, dot;
     shared_ptr<MPO<S, FL>> mpo;

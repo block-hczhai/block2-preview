@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "matrix.hpp"
 #include "integral.hpp"
+#include "matrix.hpp"
 
 using namespace std;
 
@@ -40,9 +40,9 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     shared_ptr<FCIDUMP<double>> fcidump;
     uint16_t n_inactive, n_virtual, n_active;
     bool fock_uhf = false;
-    double const_e_dyall;
-    DyallFCIDUMP(const shared_ptr<FCIDUMP<double>> &fcidump, uint16_t n_inactive,
-                 uint16_t n_virtual)
+    long double const_e_dyall;
+    DyallFCIDUMP(const shared_ptr<FCIDUMP<double>> &fcidump,
+                 uint16_t n_inactive, uint16_t n_virtual)
         : fcidump(fcidump), n_inactive(n_inactive), n_virtual(n_virtual),
           n_active(fcidump->n_sites() - n_inactive - n_virtual) {
         params = fcidump->params;
@@ -185,10 +185,10 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         uhf = fcidump->uhf;
     }
     void initialize_const() {
-        const_e_dyall = 0;
+        const_e_dyall = (long double)0.0;
         if (!fock_uhf) {
             for (uint16_t i = 0; i < n_inactive; i++)
-                const_e_dyall -= 2 * fock[0](i, i);
+                const_e_dyall -= (long double)2.0 * fock[0](i, i);
         } else {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t i = 0; i < n_inactive; i++)
@@ -196,10 +196,10 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         }
         if (!fcidump->uhf) {
             for (uint16_t i = 0; i < n_inactive; i++) {
-                const_e_dyall += 2 * fcidump->t(i, i);
+                const_e_dyall += (long double)2.0 * fcidump->t(i, i);
                 for (uint16_t j = 0; j < n_inactive; j++)
-                    const_e_dyall +=
-                        2 * fcidump->v(i, i, j, j) - fcidump->v(i, j, i, j);
+                    const_e_dyall += (long double)2.0 * fcidump->v(i, i, j, j) -
+                                     fcidump->v(i, j, i, j);
             }
         } else {
             for (uint8_t s = 0; s < 2; s++)
@@ -207,11 +207,11 @@ struct DyallFCIDUMP : FCIDUMP<double> {
                     const_e_dyall += fcidump->t(s, i, i);
                     for (uint8_t sj = 0; sj < 2; sj++)
                         for (uint16_t j = 0; j < n_inactive; j++) {
-                            const_e_dyall +=
-                                0.5 * fcidump->v(s, sj, i, i, j, j);
+                            const_e_dyall += (long double)0.5 *
+                                             fcidump->v(s, sj, i, i, j, j);
                             if (sj == s)
-                                const_e_dyall -=
-                                    0.5 * fcidump->v(s, sj, i, j, i, j);
+                                const_e_dyall -= (long double)0.5 *
+                                                 fcidump->v(s, sj, i, j, i, j);
                         }
                 }
         }
@@ -339,7 +339,7 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         else
             return fcidump->v(sl, sr, i, j, k, l);
     }
-    double e() const override { return const_e_dyall + fcidump->const_e; }
+    long double e() const override { return const_e_dyall + fcidump->const_e; }
     void deallocate() override {
         vdata_fock = nullptr;
         vdata_heff = nullptr;

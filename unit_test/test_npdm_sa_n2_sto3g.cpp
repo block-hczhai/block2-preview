@@ -12,7 +12,7 @@ class TestNPDMN2STO3GSA : public ::testing::Test {
     typedef double FP;
 
     template <typename S, typename FL>
-    void test_dmrg(const vector<S> &targets, const vector<double> &energies,
+    void test_dmrg(const vector<S> &targets, const vector<long double> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
@@ -34,7 +34,7 @@ class TestNPDMN2STO3GSA : public ::testing::Test {
 
 template <typename S, typename FL>
 void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
-                                  const vector<double> &energies,
+                                  const vector<long double> &energies,
                                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                   const string &name, ubond_t bond_dim,
                                   uint16_t nroots) {
@@ -89,7 +89,7 @@ void TestNPDMN2STO3GSA::test_dmrg(const vector<S> &targets,
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
-    double energy = dmrg->solve(20, mps->center == 0, 1E-8);
+    long double energy = dmrg->solve(20, mps->center == 0, 1E-8);
 
     for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
         cout << "== " << name << " (SA) =="
@@ -163,7 +163,7 @@ TEST_F(TestNPDMN2STO3GSA, TestSU2) {
     for (int i = 0; i < 4; i++)
         targets.push_back(SU2(fcidump->n_elec(), fcidump->twos(), i));
 
-    vector<double> energies = {
+    vector<long double> energies = {
         -107.654122447525, // < N=14 S=0 PG=0 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
@@ -202,7 +202,7 @@ TEST_F(TestNPDMN2STO3GSA, TestSZ) {
     for (int i = 0; i < 4; i++)
         targets.push_back(SZ(fcidump->n_elec(), fcidump->twos(), i));
 
-    vector<double> energies = {
+    vector<long double> energies = {
         -107.654122447526, // < N=14 S=0 PG=0 >
         -107.356943001689, // < N=14 S=-1|0|1 PG=2|3 >
         -107.356943001688, // < N=14 S=-1|0|1 PG=2|3 >

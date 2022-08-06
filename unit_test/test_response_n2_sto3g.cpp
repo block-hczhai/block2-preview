@@ -122,7 +122,7 @@ void TestResponseN2STO3G::test_dmrg(
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::Perturbative;
-    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy

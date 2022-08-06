@@ -161,7 +161,7 @@ void TestLinearN2STO3G::test_dmrg(S target,
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::DensityMatrix;
-    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     para_comm->reduce_sum(&para_comm->tcomm, 1, para_comm->root);
     para_comm->tcomm /= para_comm->size;

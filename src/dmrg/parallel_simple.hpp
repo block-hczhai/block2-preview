@@ -104,8 +104,8 @@ template <typename S, typename FL> struct ParallelFCIDUMP : FCIDUMP<FL> {
     ParallelFCIDUMP(const shared_ptr<FCIDUMP<FL>> &fcidump,
                     const shared_ptr<ParallelRuleSimple<S, FL>> &rule)
         : fcidump(fcidump), rule(rule) {
-            params = fcidump->params;
-        }
+        params = fcidump->params;
+    }
     virtual ~ParallelFCIDUMP() = default;
     // One-electron integral element (SU(2))
     FL t(uint16_t i, uint16_t j) const override {
@@ -125,7 +125,7 @@ template <typename S, typename FL> struct ParallelFCIDUMP : FCIDUMP<FL> {
         return rule->index_prefactor(i, j, k, l) *
                fcidump->v(sl, sr, i, j, k, l);
     }
-    FL e() const override { return fcidump->e(); }
+    typename const_fl_type<FL>::FL e() const override { return fcidump->e(); }
     void deallocate() override { fcidump->deallocate(); }
 };
 

@@ -134,7 +134,7 @@ template <typename S, typename FL> struct MPO {
     // Number of sites
     int n_sites;
     // Const energy term
-    FL const_e;
+    typename const_fl_type<FL>::FL const_e;
     shared_ptr<TensorFunctions<S, FL>> tf;
     vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>> site_op_infos;
     vector<shared_ptr<StateInfo<S>>> basis; // only for fused mpo
@@ -148,7 +148,7 @@ template <typename S, typename FL> struct MPO {
     mutable double tread = 0;  //!< IO Time cost for reading scratch files.
     mutable double twrite = 0; //!< IO Time cost for writing scratch files.
     MPO(int n_sites, const string &tag = "H")
-        : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'), const_e(0.0),
+        : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'), const_e((typename const_fl_type<FL>::FL)0.0),
           op(nullptr), schemer(nullptr), tf(nullptr) {}
     virtual ~MPO() = default;
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
@@ -928,7 +928,7 @@ template <typename S, typename FL> struct MPO {
             rmpo->save_middle_operators(ix);
             rmpo->unload_middle_operators(ix);
         }
-        rmpo->const_e = d * rmpo->const_e;
+        rmpo->const_e = (typename const_fl_type<FL>::FL)d * rmpo->const_e;
         return rmpo;
     }
 };

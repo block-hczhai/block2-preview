@@ -61,11 +61,12 @@ enum struct TruncPatternTypes : uint8_t { None, TruncAfterOdd, TruncAfterEven };
 // Imaginary/Real Time Evolution (td-DMRG++/RK4)
 template <typename S, typename FL, typename FLS> struct TDDMRG {
     typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
+    typedef typename MovingEnvironment<S, FL, FLS>::FLLS FLLS;
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     shared_ptr<MovingEnvironment<S, FL, FLS>> lme, rme;
     vector<ubond_t> bond_dims;
     vector<FPS> noises;
-    vector<FLS> energies;
+    vector<FLLS> energies;
     vector<FPS> normsqs;
     vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -89,12 +90,12 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
            const vector<FPS> &noises = vector<FPS>())
         : me(me), bond_dims(bond_dims), noises(noises), forward(false) {}
     struct Iteration {
-        FLS energy;
+        FLLS energy;
         FPS normsq, error;
         int nmult, mmps;
         double tmult;
         size_t nflop;
-        Iteration(FLS energy, FPS normsq, FPS error, int mmps, int nmult,
+        Iteration(FLLS energy, FPS normsq, FPS error, int mmps, int nmult,
                   size_t nflop = 0, double tmult = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nmult(nmult), nflop(nflop), tmult(tmult) {}
@@ -419,7 +420,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), bra_error, bra_mmps,
                          get<2>(pdi), get<3>(pdi), get<4>(pdi));
     }
@@ -612,7 +613,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), bra_error, bra_mmps,
                          get<2>(pdi), get<3>(pdi), get<4>(pdi));
     }
@@ -635,11 +636,11 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         }
         return it;
     }
-    tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FPS beta,
-                               ubond_t bond_dim, FPS noise) {
+    tuple<FLLS, FPS, FPS> sweep(bool forward, bool advance, FPS beta,
+                                ubond_t bond_dim, FPS noise) {
         lme->prepare();
         rme->prepare();
-        vector<FLS> energies;
+        vector<FLLS> energies;
         vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;
         frame_<FPS>()->reset_peak_used_memory();
@@ -709,7 +710,7 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
         rme->bra = me->ket->shallow_copy(avail_mps_tag);
         lme->bra = lme->ket = rme->bra;
     }
-    FLS solve(int n_sweeps, FPS beta, bool forward = true, FPS tol = 1E-6) {
+    FLLS solve(int n_sweeps, FPS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
@@ -793,10 +794,11 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
 template <typename S, typename FL, typename FLS> struct TimeEvolution {
     typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
     typedef typename MovingEnvironment<S, FL, FLS>::FCS FCS;
+    typedef typename MovingEnvironment<S, FL, FLS>::FLLS FLLS;
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<ubond_t> bond_dims;
     vector<FPS> noises;
-    vector<FLS> energies;
+    vector<FLLS> energies;
     vector<FPS> normsqs;
     vector<FPS> discarded_weights;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
@@ -822,12 +824,12 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         : me(me), bond_dims(bond_dims), noises(vector<FPS>{0.0}),
           forward(false), mode(mode), n_sub_sweeps(n_sub_sweeps) {}
     struct Iteration {
-        FLS energy;
+        FLLS energy;
         FPS normsq, error;
         int nexpo, nexpok, mmps;
         double texpo;
         size_t nflop;
-        Iteration(FLS energy, FPS normsq, FPS error, int mmps, int nexpo,
+        Iteration(FLLS energy, FPS normsq, FPS error, int mmps, int nexpo,
                   int nexpok, size_t nflop = 0, double texpo = 1.0)
             : energy(energy), normsq(normsq), error(error), mmps(mmps),
               nexpo(nexpo), nexpok(nexpok), nflop(nflop), texpo(texpo) {}
@@ -1140,7 +1142,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
                          expok, get<3>(pdi), get<4>(pdi));
     }
@@ -1321,7 +1323,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
                          expok, get<3>(pdi), get<4>(pdi));
     }
@@ -1704,7 +1706,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         mket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
                          expok, get<3>(pdi), get<4>(pdi));
     }
@@ -1906,7 +1908,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         mket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(get<0>(pdi) + me->mpo->const_e,
+        return Iteration((FLLS)get<0>(pdi) + me->mpo->const_e,
                          get<1>(pdi) * get<1>(pdi), error, mmps, get<2>(pdi),
                          expok, get<3>(pdi), get<4>(pdi));
     }
@@ -1954,15 +1956,15 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         }
         return it;
     }
-    tuple<FLS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
-                               ubond_t bond_dim, FPS noise) {
+    tuple<FLLS, FPS, FPS> sweep(bool forward, bool advance, FCS beta,
+                                ubond_t bond_dim, FPS noise) {
         frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
             0;
         frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
         if (frame_<FPS>()->fp_codec != nullptr)
             frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         me->prepare();
-        vector<FLS> energies;
+        vector<FLLS> energies;
         vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;
         vector<int> sweep_range;
@@ -2034,7 +2036,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 me->para_rule->comm->barrier();
         }
     }
-    FLS solve(int n_sweeps, FCS beta, bool forward = true, FPS tol = 1E-6) {
+    FLLS solve(int n_sweeps, FCS beta, bool forward = true, FPS tol = 1E-6) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)

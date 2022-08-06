@@ -127,7 +127,7 @@ template <typename S, typename FL> struct ClassicParallelMPO : MPO<S, FL> {
             for (size_t j = 0; j < x->data.size(); j++)
                 x->data[j] = d * x->data[j];
         }
-        rmpo->const_e = d * rmpo->const_e;
+        rmpo->const_e = (typename const_fl_type<FL>::FL)d * rmpo->const_e;
         return rmpo;
     }
 };
@@ -296,7 +296,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
             rmpo->save_middle_operators(ix);
             rmpo->unload_middle_operators(ix);
         }
-        rmpo->const_e = d * rmpo->const_e;
+        rmpo->const_e = (typename const_fl_type<FL>::FL)d * rmpo->const_e;
         return rmpo;
     }
 };

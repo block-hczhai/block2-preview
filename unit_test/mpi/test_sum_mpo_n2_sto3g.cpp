@@ -43,7 +43,7 @@ class TestSumMPON2STO3G : public ::testing::Test {
 
     template <typename S, typename FL>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<double>> &energies,
+                   const vector<vector<long double>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
@@ -67,7 +67,7 @@ bool TestSumMPON2STO3G::_mpi = MPITest::okay();
 
 template <typename S, typename FL>
 void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
-                                  const vector<vector<double>> &energies,
+                                  const vector<vector<long double>> &energies,
                                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                   const string &name, DecompositionTypes dt,
                                   NoiseTypes nt) {
@@ -141,7 +141,7 @@ void TestSumMPON2STO3G::test_dmrg(const vector<vector<S>> &targets,
             dmrg->iprint = 0;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
-            double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -206,7 +206,7 @@ TEST_F(TestSumMPON2STO3G, TestSZ) {
             targets[i][j] = SZ(fcidump->n_elec(), (j - 2) * 2, i);
     }
 
-    vector<vector<double>> energies(8);
+    vector<vector<long double>> energies(8);
     energies[0] = {-107.031449471627, -107.031449471627, -107.654122447525,
                    -107.031449471627, -107.031449471627};
     energies[1] = {-106.633790589321, -106.999600016661, -106.999600016661,

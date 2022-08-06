@@ -42,7 +42,7 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
     typedef double FP;
 
     template <typename S, typename FL>
-    void test_dmrg(const vector<S> &targets, const vector<double> &energies,
+    void test_dmrg(const vector<S> &targets, const vector<long double> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
@@ -66,7 +66,7 @@ bool TestDMRGN2STO3GSA::_mpi = MPITest::okay();
 
 template <typename S, typename FL>
 void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
-                                  const vector<double> &energies,
+                                  const vector<long double> &energies,
                                   const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                                   const string &name, ubond_t bond_dim,
                                   uint16_t nroots) {
@@ -138,7 +138,7 @@ void TestDMRGN2STO3GSA::test_dmrg(const vector<S> &targets,
     dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
-    double energy = dmrg->solve(10, mps->center == 0, 1E-8);
+    long double energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
     // deallocate persistent stack memory
     mps_info->deallocate();
@@ -187,7 +187,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSU2) {
                 if (na - nb >= 0)
                     targets.push_back(SU2(na + nb, na - nb, i));
 
-    vector<double> energies = {
+    vector<long double> energies = {
         -107.654122447525, // < N=14 S=0 PG=0 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
         -107.356943001688, // < N=14 S=1 PG=2|3 >
@@ -229,7 +229,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
             for (int nb = ne - 1; nb <= ne + 1; nb++)
                 targets.push_back(SZ(na + nb, na - nb, i));
 
-    vector<double> energies = {
+    vector<long double> energies = {
         -107.654122447526, // < N=14 S=0 PG=0 >
         -107.356943001689, // < N=14 S=-1|0|1 PG=2|3 >
         -107.356943001688, // < N=14 S=-1|0|1 PG=2|3 >

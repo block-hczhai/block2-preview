@@ -159,7 +159,7 @@ void TestRealTEH10STO6G<FL>::test_dmrg(
         make_shared<DMRG<S, FL, FL>>(me, ket_bdims, noises);
     dmrg->noise_type = NoiseTypes::ReducedPerturbative;
     dmrg->decomp_type = DecompositionTypes::SVD;
-    double energy = dmrg->solve(20, mps->center == 0, 1E-12);
+    FL energy = (FL)dmrg->solve(20, mps->center == 0, 1E-12);
 
     cout << "== " << name << " (DMRG) ==" << setw(20) << target
          << " E = " << fixed << setw(22) << setprecision(12) << energy
@@ -238,7 +238,7 @@ void TestRealTEH10STO6G<FL>::test_dmrg(
         else
             te->solve(1, FC(0, dt), cpx_mps->center == 0);
         mme->init_environments();
-        EXPECT_LT(abs(te->energies.back() - energy_dyn), 1E-7);
+        EXPECT_LT(abs((FL)te->energies.back() - energy_dyn), 1E-7);
         FC overlap = ex->solve(false);
         overlaps.push_back(overlap);
         cout << setprecision(12);

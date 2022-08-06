@@ -32,6 +32,7 @@ namespace block2 {
 template <typename S, typename FL, typename FLS>
 struct DMRGBigSite : DMRG<S, FL, FLS> {
     typedef typename DMRG<S, FL, FLS>::FPS FPS;
+    typedef typename DMRG<S, FL, FLS>::FPLS FPLS;
     using DMRG<S, FL, FLS>::iprint;
     using DMRG<S, FL, FLS>::me;
     using DMRG<S, FL, FLS>::ext_mes;
@@ -290,6 +291,7 @@ struct LinearBigSite : Linear<S, FL, FLS> {
 template <typename S, typename FL, typename FLS>
 struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
     typedef typename DMRGBigSite<S, FL, FLS>::FPS FPS;
+    typedef typename DMRGBigSite<S, FL, FLS>::FPLS FPLS;
     using DMRGBigSite<S, FL, FLS>::iprint;
     using DMRGBigSite<S, FL, FLS>::me;
     using DMRGBigSite<S, FL, FLS>::ext_mes;
@@ -431,10 +433,10 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         return aqcc_eff;
     }
 
-    tuple<FPS, int, size_t, double> two_dot_eigs_and_perturb(
+    tuple<FPLS, int, size_t, double> two_dot_eigs_and_perturb(
         const bool forward, const int i, const FPS davidson_conv_thrd,
         const FPS noise, shared_ptr<SparseMatrixGroup<S, FLS>> &pket) override {
-        tuple<FPS, int, size_t, double> pdi;
+        tuple<FPLS, int, size_t, double> pdi;
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 =
@@ -476,17 +478,17 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                 d_eff->deallocate();
             }
         }
-        const auto energy = std::get<0>(pdi) + me->mpo->const_e;
+        const FPS energy = (FPS)std::get<0>(pdi) + (FPS)me->mpo->const_e;
         smallest_energy = min(energy, smallest_energy);
         delta_e = smallest_energy - ref_energy;
         return pdi;
     }
-    tuple<FPS, int, size_t, double> one_dot_eigs_and_perturb(
+    tuple<FPLS, int, size_t, double> one_dot_eigs_and_perturb(
         const bool forward, const bool fuse_left, const int i_site,
         const FPS davidson_conv_thrd, const FPS noise,
         shared_ptr<SparseMatrixGroup<S, FL>> &pket) override {
-        tuple<FPS, int, size_t, double> pdi{0., 0, 0,
-                                            0.}; // energy, ndav, nflop, tdav
+        tuple<FPLS, int, size_t, double> pdi{0., 0, 0,
+                                             0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0) and
                             abs(davidson_soft_max_iter) > 0;
@@ -519,13 +521,14 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
             if (sweep_energies.size() > 0) {
                 // vv taken from DRMG::sweep
                 size_t idx =
-                    min_element(sweep_energies.begin(), sweep_energies.end(),
-                                [](const vector<FPS> &x, const vector<FPS> &y) {
-                                    return x[0] < y[0];
-                                }) -
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<FPLS> &x, const vector<FPLS> &y) {
+                            return x[0] < y[0];
+                        }) -
                     sweep_energies.begin();
                 smallest_energy =
-                    min(sweep_energies[idx].at(0), smallest_energy);
+                    min((FPS)sweep_energies[idx].at(0), smallest_energy);
                 delta_e = smallest_energy - ref_energy;
             }
             FPS last_delta_e = delta_e;
@@ -547,7 +550,8 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                     aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                    davidson_max_iter, davidson_soft_max_iter,
                                    DavidsonTypes::Normal, 0.0, me->para_rule);
-                const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
+                const FPS energy =
+                    (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
                 std::get<0>(pdi) = std::get<0>(pdi2);
                 std::get<1>(pdi) += std::get<1>(pdi2); // ndav
@@ -595,7 +599,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
             pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                  davidson_max_iter, davidson_soft_max_iter,
                                  DavidsonTypes::Normal, 0.0, me->para_rule);
-            const auto energy = std::get<0>(pdi) + me->mpo->const_e;
+            const FPS energy = (FPS)std::get<0>(pdi) + (FPS)me->mpo->const_e;
             smallest_energy = min(energy, smallest_energy);
             delta_e = smallest_energy - ref_energy;
         }
@@ -621,6 +625,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
 template <typename S, typename FL, typename FLS>
 struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
     typedef typename DMRGBigSite<S, FL, FLS>::FPS FPS;
+    typedef typename DMRGBigSite<S, FL, FLS>::FPLS FPLS;
     using DMRGBigSite<S, FL, FLS>::iprint;
     using DMRGBigSite<S, FL, FLS>::me;
     using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
@@ -657,12 +662,12 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
         modify_mpo_mats(true, 0.0); // Save diagonals
     }
 
-    tuple<FPS, int, size_t, double> one_dot_eigs_and_perturb(
+    tuple<FPLS, int, size_t, double> one_dot_eigs_and_perturb(
         const bool forward, const bool fuse_left, const int i_site,
         const double davidson_conv_thrd, const double noise,
         shared_ptr<SparseMatrixGroup<S, FL>> &pket) override {
-        tuple<FPS, int, size_t, double> pdi{0., 0, 0,
-                                            0.}; // energy, ndav, nflop, tdav
+        tuple<FPLS, int, size_t, double> pdi{0., 0, 0,
+                                             0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC =
             i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
@@ -679,12 +684,13 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
             if (sweep_energies.size() > 0) {
                 // vv taken from DRMG::sweep
                 size_t idx =
-                    min_element(sweep_energies.begin(), sweep_energies.end(),
-                                [](const vector<FPS> &x, const vector<FPS> &y) {
-                                    return x[0] < y[0];
-                                }) -
+                    min_element(
+                        sweep_energies.begin(), sweep_energies.end(),
+                        [](const vector<FPLS> &x, const vector<FPLS> &y) {
+                            return x[0] < y[0];
+                        }) -
                     sweep_energies.begin();
-                delta_e = sweep_energies[idx].at(0) - ref_energy;
+                delta_e = (FPS)sweep_energies[idx].at(0) - ref_energy;
             }
             FPS last_delta_e = delta_e;
             if (iprint >= 2) {
@@ -744,7 +750,8 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                     h_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                 davidson_max_iter, davidson_soft_max_iter,
                                 DavidsonTypes::Normal, 0.0, me->para_rule);
-                const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
+                const auto energy =
+                    (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
                 std::get<0>(pdi) = std::get<0>(pdi2);
                 std::get<1>(pdi) += std::get<1>(pdi2); // ndav

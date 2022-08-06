@@ -75,7 +75,7 @@ struct HeisenbergFCIDUMP : FCIDUMP<double> {
         else
             return 0;
     }
-    double e() const override { return 0.0; }
+    long double e() const override { return (long double)0.0; }
     void deallocate() override {}
 };
 

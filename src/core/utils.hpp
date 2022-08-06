@@ -67,6 +67,10 @@ inline int gettimeofday(struct timeval *tp, struct timezone *tzp) {
 
 template <typename FL> inline FL xconj(FL x) { return x; }
 
+template <> inline complex<long double> xconj<complex<long double>>(complex<long double> x) {
+    return conj(x);
+}
+
 template <> inline complex<double> xconj<complex<double>>(complex<double> x) {
     return conj(x);
 }
@@ -79,6 +83,11 @@ template <typename FL> inline decltype(abs((FL)0.0)) ximag(FL x) {
     return (decltype(abs((FL)0.0)))0.0;
 }
 
+template <>
+inline long double ximag<complex<long double>>(complex<long double> x) {
+    return imag(x);
+}
+
 template <> inline double ximag<complex<double>>(complex<double> x) {
     return imag(x);
 }
@@ -89,6 +98,11 @@ template <> inline float ximag<complex<float>>(complex<float> x) {
 
 template <typename FL> inline decltype(abs((FL)0.0)) xreal(FL x) {
     return (decltype(abs((FL)0.0)))x;
+}
+
+template <>
+inline long double xreal<complex<long double>>(complex<long double> x) {
+    return real(x);
 }
 
 template <> inline double xreal<complex<double>>(complex<double> x) {
@@ -108,6 +122,20 @@ template <> struct alt_fl_type<double> { typedef float FL; };
 template <> struct alt_fl_type<complex<float>> { typedef complex<double> FL; };
 
 template <> struct alt_fl_type<complex<double>> { typedef complex<float> FL; };
+
+template <typename FL> struct const_fl_type;
+
+template <> struct const_fl_type<float> { typedef double FL; };
+
+template <> struct const_fl_type<double> { typedef long double FL; };
+
+template <> struct const_fl_type<complex<float>> {
+    typedef complex<double> FL;
+};
+
+template <> struct const_fl_type<complex<double>> {
+    typedef complex<long double> FL;
+};
 
 template <typename T> struct is_complex : integral_constant<bool, false> {};
 

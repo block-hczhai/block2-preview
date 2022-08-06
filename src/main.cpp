@@ -569,6 +569,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     mps->deallocate();
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
+    mps->save_data();
 
     int iprint = 2;
     if (params.count("iprint") != 0)
@@ -650,7 +651,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("cutoff") != 0)
         dmrg->cutoff = (FP)Parsing::to_double(params.at("cutoff"));
 
-    double ener = 0;
+    long double ener = 0;
     if (params.count("twodot_to_onedot") == 0)
         ener = dmrg->solve(n_sweeps, forward, tol);
     else {

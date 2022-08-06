@@ -10,10 +10,11 @@ template <typename FL> class TestDMRGSingletEmbedding : public ::testing::Test {
     size_t isize = 1L << 20;
     size_t dsize = 1L << 24;
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename GMatrix<FL>::FL FLL;
 
     template <typename S>
     void test_dmrg(const vector<vector<S>> &targets,
-                   const vector<vector<FL>> &energies,
+                   const vector<vector<FLL>> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, DecompositionTypes dt, NoiseTypes nt);
     void SetUp() override {
@@ -38,7 +39,7 @@ template <typename FL> class TestDMRGSingletEmbedding : public ::testing::Test {
 template <typename FL>
 template <typename S>
 void TestDMRGSingletEmbedding<FL>::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<FL>> &energies,
+    const vector<vector<S>> &targets, const vector<vector<FLL>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt) {
     Timer t;
@@ -104,7 +105,7 @@ void TestDMRGSingletEmbedding<FL>::test_dmrg(
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
             dmrg->davidson_soft_max_iter = 4000;
-            FL energy = dmrg->solve(10, mps->center == 0, 1E-8);
+            FLL energy = dmrg->solve(10, mps->center == 0, 1E-8);
 
             // deallocate persistent stack memory
             mps_info->deallocate();
@@ -139,6 +140,7 @@ TYPED_TEST_CASE(TestDMRGSingletEmbedding, TestFL);
 
 TYPED_TEST(TestDMRGSingletEmbedding, TestSU2) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -157,7 +159,7 @@ TYPED_TEST(TestDMRGSingletEmbedding, TestSU2) {
             targets[i][j - 1] = SU2(fcidump->n_elec(), j * 2, i);
     }
 
-    vector<vector<FL>> energies(8);
+    vector<vector<FLL>> energies(8);
     energies[0] = {-106.939132859668, -107.031449471627};
     energies[1] = {-106.999600016661, -106.633790589321};
     energies[2] = {-107.356943001688, -106.931515926732};
