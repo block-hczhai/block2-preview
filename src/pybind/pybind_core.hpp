@@ -40,6 +40,7 @@ PYBIND11_MAKE_OPAQUE(vector<int16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
+PYBIND11_MAKE_OPAQUE(vector<long double>);
 PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<string>);
@@ -48,6 +49,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<uint16_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 3>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<long double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<complex<double>>>>);
@@ -1219,6 +1221,13 @@ void bind_trans_state_info(py::module &m, const string &aux_name) {
           &TransStateInfo<S, T>::forward);
 }
 
+template <typename S, typename FL1, typename FL2>
+void bind_trans_sparse_matrix(py::module &m, const string &aux_name) {
+
+    m.def(("trans_sparse_matrix_to_" + aux_name).c_str(),
+          &TransSparseMatrix<S, FL1, FL2>::forward);
+}
+
 template <typename S, typename T>
 auto bind_trans_state_info_spin_specific(py::module &m, const string &aux_name)
     -> decltype(typename S::is_su2_t(typename T::is_sz_t())) {
@@ -1248,6 +1257,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<vector<uint16_t>>>(m, "VectorVectorUInt16");
     py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
+    py::bind_vector<vector<vector<long double>>>(m, "VectorVectorLDouble");
     py::bind_vector<vector<vector<complex<double>>>>(
         m, "VectorVectorComplexDouble");
     py::bind_vector<vector<vector<int>>>(m, "VectorVectorInt");
@@ -3207,6 +3217,19 @@ extern template void bind_fl_operator<SU2, float>(py::module &m);
 extern template void bind_fl_hamiltonian<SU2, float>(py::module &m);
 extern template void bind_fl_rule<SU2, float>(py::module &m);
 
+extern template void
+bind_trans_sparse_matrix<SU2, float, double>(py::module &m,
+                                             const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SU2, double, float>(py::module &m,
+                                             const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SZ, float, double>(py::module &m,
+                                            const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SZ, double, float>(py::module &m,
+                                            const string &aux_name);
+
 #ifdef _USE_COMPLEX
 
 extern template void bind_fl_matrix<complex<float>>(py::module &m);
@@ -3228,6 +3251,19 @@ extern template void bind_fl_parallel<SU2, complex<float>>(py::module &m);
 extern template void bind_fl_operator<SU2, complex<float>>(py::module &m);
 extern template void bind_fl_hamiltonian<SU2, complex<float>>(py::module &m);
 extern template void bind_fl_rule<SU2, complex<float>>(py::module &m);
+
+extern template void
+bind_trans_sparse_matrix<SU2, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SU2, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SZ, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SZ, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);
 
 #endif
 
@@ -3251,6 +3287,19 @@ extern template void bind_fl_operator<SGB, float>(py::module &m);
 extern template void bind_fl_hamiltonian<SGB, float>(py::module &m);
 extern template void bind_fl_rule<SGB, float>(py::module &m);
 
+extern template void
+bind_trans_sparse_matrix<SGF, float, double>(py::module &m,
+                                             const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGF, double, float>(py::module &m,
+                                             const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGB, float, double>(py::module &m,
+                                             const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGB, double, float>(py::module &m,
+                                             const string &aux_name);
+
 #ifdef _USE_COMPLEX
 extern template void bind_fl_expr<SGF, complex<float>>(py::module &m);
 extern template void
@@ -3269,6 +3318,19 @@ extern template void bind_fl_parallel<SGB, complex<float>>(py::module &m);
 extern template void bind_fl_operator<SGB, complex<float>>(py::module &m);
 extern template void bind_fl_hamiltonian<SGB, complex<float>>(py::module &m);
 extern template void bind_fl_rule<SGB, complex<float>>(py::module &m);
+
+extern template void
+bind_trans_sparse_matrix<SGF, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGF, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGB, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+extern template void
+bind_trans_sparse_matrix<SGB, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);
 
 #endif
 

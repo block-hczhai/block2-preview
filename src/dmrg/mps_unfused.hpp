@@ -493,7 +493,7 @@ template <typename S1, typename S2, typename FL, typename = void,
           typename = void>
 struct TransUnfusedMPS;
 
-// Translation between SU2 and SZ MPSInfo
+// Translation between SU2 and SZ unfused MPS
 // only works for normal nstate = 1 basis
 template <typename S1, typename S2, typename FL>
 struct TransUnfusedMPS<S1, S2, FL, typename S1::is_su2_t,

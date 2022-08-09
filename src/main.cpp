@@ -57,7 +57,8 @@ map<string, string> read_input(const string &filename) {
     return params;
 }
 
-template <typename S, typename FL> void run(const map<string, string> &params) {
+template <typename S, typename FL>
+void prepare(const map<string, string> &params) {
     typedef typename GMatrix<FL>::FP FP;
 
     size_t memory = 4ULL << 30;
@@ -83,9 +84,9 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         (size_t)(0.1 * memory), (size_t)(0.9 * memory), scratch, dmain_ratio);
     frame_<FP>()->use_main_stack = false;
 
-    double fp_cps_cutoff = 1E-16;
+    FP fp_cps_cutoff = 1E-16;
     if (params.count("fp_cps_cutoff") != 0)
-        fp_cps_cutoff = Parsing::to_double(params.at("fp_cps_cutoff"));
+        fp_cps_cutoff = (FP)Parsing::to_double(params.at("fp_cps_cutoff"));
 
     frame_<FP>()->fp_codec = make_shared<FPCodec<FP>>(fp_cps_cutoff, 1024);
 
@@ -93,6 +94,20 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         Random::rand_seed(Parsing::to_int(params.at("rand_seed")));
     else
         Random::rand_seed(0);
+
+    cout << "integer stack memory = " << fixed << setprecision(4)
+         << ((frame_<FP>()->isize << 2) / 1E9) << " GB" << endl;
+    cout << "double  stack memory = " << fixed << setprecision(4)
+         << ((frame_<FP>()->dsize << 3) / 1E9) << " GB" << endl;
+
+    cout << "bond integer size = " << sizeof(ubond_t) << endl;
+    cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
+}
+
+template <typename S, typename FL> void run(const map<string, string> &params) {
+    typedef typename GMatrix<FL>::FP FP;
+
+    prepare<S, FL>(params);
 
 #ifdef _HAS_MPI
     shared_ptr<ParallelCommunicator<S>> para_comm =
@@ -103,14 +118,6 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
 #endif
     shared_ptr<ParallelRule<S, FL>> para_rule =
         make_shared<ParallelRuleQC<S, FL>>(para_comm);
-
-    cout << "integer stack memory = " << fixed << setprecision(4)
-         << ((frame_<FP>()->isize << 2) / 1E9) << " GB" << endl;
-    cout << "double  stack memory = " << fixed << setprecision(4)
-         << ((frame_<FP>()->dsize << 3) / 1E9) << " GB" << endl;
-
-    cout << "bond integer size = " << sizeof(ubond_t) << endl;
-    cout << "mkl integer size = " << sizeof(MKL_INT) << endl;
 
     if (params.count("simple_parallel") != 0) {
         cout << "using simple parallel ..." << endl;
@@ -169,9 +176,10 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
         cout << "filder reorder" << endl;
         auto hmat = fcidump->abs_h1e_matrix();
         auto kmat = fcidump->abs_exchange_matrix();
+        vector<double> gmat(kmat.size());
         for (size_t i = 0; i < kmat.size(); i++)
-            kmat[i] = hmat[i] * 1E-7 + kmat[i];
-        vector<uint16_t> x = OrbitalOrdering::fiedler(fcidump->n_sites(), kmat);
+            gmat[i] = (double)(hmat[i] * (FP)1E-7 + kmat[i]);
+        vector<uint16_t> x = OrbitalOrdering::fiedler(fcidump->n_sites(), gmat);
         cout << "BEST = ";
         for (int i = 0; i < fcidump->n_sites(); i++)
             cout << setw(4) << x[i];
@@ -242,9 +250,12 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     }
 
     QCTypes qc_type = QCTypes::Conventional;
+    bool general_mpo = false;
 
     if (params.count("qc_type") != 0) {
-        if (params.at("qc_type") == "conventional")
+        if (params.at("qc_type") == "general")
+            general_mpo = true;
+        else if (params.at("qc_type") == "conventional")
             qc_type = QCTypes::Conventional;
         else if (params.at("qc_type") == "nc")
             qc_type = QCTypes::NC;
@@ -255,6 +266,42 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
             abort();
         }
     }
+
+    // general mpo parameters
+    MPOAlgorithmTypes mpo_algo_type = MPOAlgorithmTypes::FastBipartite;
+
+    if (params.count("mpo_algo_type") != 0) {
+        if (!general_mpo) {
+            cerr << "mpo algo type only useful with general mpo!" << endl;
+            abort();
+        }
+        if (params.at("mpo_algo_type") == "bipartite")
+            mpo_algo_type = MPOAlgorithmTypes::Bipartite;
+        else if (params.at("mpo_algo_type") == "fast_bipartite")
+            mpo_algo_type = MPOAlgorithmTypes::FastBipartite;
+        else if (params.at("mpo_algo_type") == "svd")
+            mpo_algo_type = MPOAlgorithmTypes::SVD;
+        else if (params.at("mpo_algo_type") == "fast_svd")
+            mpo_algo_type = MPOAlgorithmTypes::FastSVD;
+        else if (params.at("mpo_algo_type") == "rescaled_svd")
+            mpo_algo_type = MPOAlgorithmTypes::RescaledSVD;
+        else if (params.at("mpo_algo_type") == "fast_rescaled_svd")
+            mpo_algo_type = MPOAlgorithmTypes::FastRescaledSVD;
+        else {
+            cerr << "unknown mpo algo type : " << params.at("mpo_algo_type")
+                 << endl;
+            abort();
+        }
+    }
+
+    FP mpo_cutoff = (FP)0.0;
+    int mpo_max_bond_dim = -1;
+
+    if (params.count("mpo_cutoff") != 0)
+        mpo_cutoff = (FP)Parsing::to_double(params.at("mpo_cutoff"));
+
+    if (params.count("mpo_max_bond_dim") != 0)
+        mpo_max_bond_dim = Parsing::to_int(params.at("mpo_max_bond_dim"));
 
     // middle transformation site for conventional mpo
     int trans_center = -1;
@@ -294,7 +341,24 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     } else {
         // MPO construction
         cout << "MPO start" << endl;
-        mpo = make_shared<MPOQC<S, FL>>(hamil, qc_type, "HQC", trans_center);
+        if (general_mpo) {
+            shared_ptr<GeneralHamiltonian<S, FL>> gham =
+                make_shared<GeneralHamiltonian<S, FL>>(
+                    hamil->vacuum, hamil->n_sites, hamil->orb_sym);
+            ElemOpTypes elem_type =
+                is_same<SU2, S>::value
+                    ? ElemOpTypes::SU2
+                    : (is_same<SZ, S>::value ? ElemOpTypes::SZ
+                                             : ElemOpTypes::SGF);
+            shared_ptr<GeneralFCIDUMP<FL>> gfd =
+                GeneralFCIDUMP<FL>::initialize_from_qc(hamil->fcidump,
+                                                       elem_type);
+            gfd = gfd->adjust_order();
+            mpo = make_shared<GeneralMPO<S, FL>>(gham, gfd, mpo_algo_type,
+                                                 mpo_cutoff, mpo_max_bond_dim);
+        } else
+            mpo =
+                make_shared<MPOQC<S, FL>>(hamil, qc_type, "HQC", trans_center);
         cout << "MPO end .. T = " << t.get_time() << endl;
 
         if (params.count("fused") != 0 || params.count("mrci-fused") != 0) {
@@ -651,7 +715,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("cutoff") != 0)
         dmrg->cutoff = (FP)Parsing::to_double(params.at("cutoff"));
 
-    long double ener = 0;
+    typename const_fl_type<FP>::FL ener = 0;
     if (params.count("twodot_to_onedot") == 0)
         ener = dmrg->solve(n_sweeps, forward, tol);
     else {
@@ -705,12 +769,53 @@ int main(int argc, char *argv[]) {
     auto startt = chrono::system_clock::to_time_t(start);
     cout << "START AT " << ctime(&startt) << endl;
 
-    if (params.count("su2") == 0 || !!Parsing::to_int(params.at("su2"))) {
+    bool single_prec = params.count("single_prec") &&
+                       (params.at("single_prec") == "" ||
+                        Parsing::to_int(params.at("single_prec")));
+    bool use_complex = params.count("use_complex") &&
+                       (params.at("use_complex") == "" ||
+                        Parsing::to_int(params.at("use_complex")));
+    bool sgf = params.count("general_spin") &&
+               (params.at("general_spin") == "" ||
+                Parsing::to_int(params.at("general_spin")));
+    bool su2 = params.count("su2") == 0 || !!Parsing::to_int(params.at("su2"));
+
+    if (single_prec && su2 && use_complex && !sgf) {
+        cout << "SPIN-ADAPTED SINGLE-PREC COMPLEX" << endl;
+        run<SU2, complex<float>>(params);
+    } else if (single_prec && !su2 && use_complex && !sgf) {
+        cout << "NON-SPIN-ADAPTED SINGLE-PREC COMPLEX" << endl;
+        run<SZ, complex<float>>(params);
+    } else if (single_prec && !su2 && use_complex && sgf) {
+        cout << "GENERAL-SPIN SINGLE-PREC COMPLEX" << endl;
+        run<SGF, complex<float>>(params);
+    } else if (su2 && use_complex && !sgf) {
+        cout << "SPIN-ADAPTED COMPLEX" << endl;
+        run<SU2, complex<double>>(params);
+    } else if (use_complex && !sgf) {
+        cout << "NON-SPIN-ADAPTED COMPLEX" << endl;
+        run<SZ, complex<double>>(params);
+    } else if (use_complex && sgf) {
+        cout << "GENERAL-SPIN COMPLEX" << endl;
+        run<SGF, complex<double>>(params);
+    } else if (single_prec && su2 && !sgf) {
+        cout << "SPIN-ADAPTED SINGLE-PREC" << endl;
+        run<SU2, float>(params);
+    } else if (single_prec && !su2 && !sgf) {
+        cout << "NON-SPIN-ADAPTED SINGLE-PREC" << endl;
+        run<SZ, float>(params);
+    } else if (single_prec && sgf) {
+        cout << "GENERAL-SPIN SINGLE-PREC" << endl;
+        run<SGF, float>(params);
+    } else if (su2 && !sgf) {
         cout << "SPIN-ADAPTED" << endl;
         run<SU2, double>(params);
-    } else {
+    } else if (!su2 && !sgf) {
         cout << "NON-SPIN-ADAPTED" << endl;
         run<SZ, double>(params);
+    } else if (sgf) {
+        cout << "GENERAL-SPIN" << endl;
+        run<SGF, double>(params);
     }
 
     auto finish = chrono::system_clock::now();

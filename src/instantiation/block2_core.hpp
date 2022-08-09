@@ -1002,6 +1002,11 @@ extern template struct block2::SparseMatrixGroup<block2::SZ, float>;
 extern template struct block2::SparseMatrix<block2::SU2, float>;
 extern template struct block2::SparseMatrixGroup<block2::SU2, float>;
 
+extern template struct block2::TransSparseMatrix<block2::SZ, float, double>;
+extern template struct block2::TransSparseMatrix<block2::SZ, double, float>;
+extern template struct block2::TransSparseMatrix<block2::SU2, float, double>;
+extern template struct block2::TransSparseMatrix<block2::SU2, double, float>;
+
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, float>;
 extern template struct block2::TensorFunctions<block2::SU2, float>;
@@ -1093,6 +1098,11 @@ extern template struct block2::SparseMatrixGroup<block2::SGF, float>;
 extern template struct block2::SparseMatrix<block2::SGB, float>;
 extern template struct block2::SparseMatrixGroup<block2::SGB, float>;
 
+extern template struct block2::TransSparseMatrix<block2::SGF, float, double>;
+extern template struct block2::TransSparseMatrix<block2::SGF, double, float>;
+extern template struct block2::TransSparseMatrix<block2::SGB, float, double>;
+extern template struct block2::TransSparseMatrix<block2::SGB, double, float>;
+
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SGF, float>;
 extern template struct block2::TensorFunctions<block2::SGB, float>;
@@ -1102,8 +1112,7 @@ extern template struct block2::TensorFunctions<block2::SGB, float>;
 #ifdef _USE_COMPLEX
 
 // archived_sparse_matrix.hpp
-extern template struct block2::ArchivedSparseMatrix<block2::SZ,
-                                                    complex<float>>;
+extern template struct block2::ArchivedSparseMatrix<block2::SZ, complex<float>>;
 extern template struct block2::ArchivedSparseMatrix<block2::SU2,
                                                     complex<float>>;
 
@@ -1114,8 +1123,7 @@ extern template struct block2::ArchivedTensorFunctions<block2::SU2,
                                                        complex<float>>;
 
 // csr_operator_functions.hpp
-extern template struct block2::CSROperatorFunctions<block2::SZ,
-                                                    complex<float>>;
+extern template struct block2::CSROperatorFunctions<block2::SZ, complex<float>>;
 extern template struct block2::CSROperatorFunctions<block2::SU2,
                                                     complex<float>>;
 
@@ -1125,8 +1133,7 @@ extern template struct block2::CSRSparseMatrix<block2::SU2, complex<float>>;
 
 // delayed_sparse_matrix.hpp
 extern template struct block2::DelayedSparseMatrix<block2::SZ, complex<float>>;
-extern template struct block2::DelayedSparseMatrix<block2::SU2,
-                                                   complex<float>>;
+extern template struct block2::DelayedSparseMatrix<block2::SU2, complex<float>>;
 extern template struct block2::DelayedSparseMatrix<
     block2::SZ, complex<float>,
     block2::SparseMatrix<block2::SZ, complex<float>>>;
@@ -1211,6 +1218,15 @@ extern template struct block2::SparseMatrixGroup<block2::SZ, complex<float>>;
 extern template struct block2::SparseMatrix<block2::SU2, complex<float>>;
 extern template struct block2::SparseMatrixGroup<block2::SU2, complex<float>>;
 
+extern template struct block2::TransSparseMatrix<block2::SZ, complex<float>,
+                                                 complex<double>>;
+extern template struct block2::TransSparseMatrix<block2::SZ, complex<double>,
+                                                 complex<float>>;
+extern template struct block2::TransSparseMatrix<block2::SU2, complex<float>,
+                                                 complex<double>>;
+extern template struct block2::TransSparseMatrix<block2::SU2, complex<double>,
+                                                 complex<float>>;
+
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, complex<float>>;
 extern template struct block2::TensorFunctions<block2::SU2, complex<float>>;
@@ -1240,10 +1256,8 @@ extern template struct block2::CSRSparseMatrix<block2::SGF, complex<float>>;
 extern template struct block2::CSRSparseMatrix<block2::SGB, complex<float>>;
 
 // delayed_sparse_matrix.hpp
-extern template struct block2::DelayedSparseMatrix<block2::SGF,
-                                                   complex<float>>;
-extern template struct block2::DelayedSparseMatrix<block2::SGB,
-                                                   complex<float>>;
+extern template struct block2::DelayedSparseMatrix<block2::SGF, complex<float>>;
+extern template struct block2::DelayedSparseMatrix<block2::SGB, complex<float>>;
 extern template struct block2::DelayedSparseMatrix<
     block2::SGF, complex<float>,
     block2::SparseMatrix<block2::SGF, complex<float>>>;
@@ -1322,6 +1336,15 @@ extern template struct block2::SparseMatrixGroup<block2::SGF, complex<float>>;
 
 extern template struct block2::SparseMatrix<block2::SGB, complex<float>>;
 extern template struct block2::SparseMatrixGroup<block2::SGB, complex<float>>;
+
+extern template struct block2::TransSparseMatrix<block2::SGF, complex<float>,
+                                                 complex<double>>;
+extern template struct block2::TransSparseMatrix<block2::SGF, complex<double>,
+                                                 complex<float>>;
+extern template struct block2::TransSparseMatrix<block2::SGB, complex<float>,
+                                                 complex<double>>;
+extern template struct block2::TransSparseMatrix<block2::SGB, complex<double>,
+                                                 complex<float>>;
 
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SGF, complex<float>>;

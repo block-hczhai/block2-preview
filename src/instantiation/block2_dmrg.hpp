@@ -873,7 +873,8 @@ extern template struct block2::EffectiveHamiltonian<
 extern template struct block2::GeneralHamiltonian<block2::SZK, complex<double>>;
 extern template struct block2::GeneralMPO<block2::SZK, complex<double>>;
 
-extern template struct block2::GeneralHamiltonian<block2::SU2K, complex<double>>;
+extern template struct block2::GeneralHamiltonian<block2::SU2K,
+                                                  complex<double>>;
 extern template struct block2::GeneralMPO<block2::SU2K, complex<double>>;
 
 // moving_environment.hpp
@@ -1304,6 +1305,11 @@ extern template struct block2::SimplifiedMPO<block2::SU2, float>;
 extern template struct block2::MPS<block2::SZ, float>;
 extern template struct block2::MPS<block2::SU2, float>;
 
+extern template struct block2::TransMPS<block2::SZ, double, float>;
+extern template struct block2::TransMPS<block2::SZ, float, double>;
+extern template struct block2::TransMPS<block2::SU2, double, float>;
+extern template struct block2::TransMPS<block2::SU2, float, double>;
+
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SZ, float>;
 extern template struct block2::UnfusedMPS<block2::SZ, float>;
@@ -1473,6 +1479,11 @@ extern template struct block2::SimplifiedMPO<block2::SGB, float>;
 // mps.hpp
 extern template struct block2::MPS<block2::SGF, float>;
 extern template struct block2::MPS<block2::SGB, float>;
+
+extern template struct block2::TransMPS<block2::SGF, double, float>;
+extern template struct block2::TransMPS<block2::SGF, float, double>;
+extern template struct block2::TransMPS<block2::SGB, double, float>;
+extern template struct block2::TransMPS<block2::SGB, float, double>;
 
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SGF, float>;
@@ -1658,6 +1669,15 @@ extern template struct block2::SimplifiedMPO<block2::SU2, complex<float>>;
 // mps.hpp
 extern template struct block2::MPS<block2::SZ, complex<float>>;
 extern template struct block2::MPS<block2::SU2, complex<float>>;
+
+extern template struct block2::TransMPS<block2::SZ, complex<double>,
+                                        complex<float>>;
+extern template struct block2::TransMPS<block2::SZ, complex<float>,
+                                        complex<double>>;
+extern template struct block2::TransMPS<block2::SU2, complex<double>,
+                                        complex<float>>;
+extern template struct block2::TransMPS<block2::SU2, complex<float>,
+                                        complex<double>>;
 
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SZ, complex<float>>;
@@ -1845,6 +1865,15 @@ extern template struct block2::SimplifiedMPO<block2::SGB, complex<float>>;
 // mps.hpp
 extern template struct block2::MPS<block2::SGF, complex<float>>;
 extern template struct block2::MPS<block2::SGB, complex<float>>;
+
+extern template struct block2::TransMPS<block2::SGF, complex<double>,
+                                        complex<float>>;
+extern template struct block2::TransMPS<block2::SGF, complex<float>,
+                                        complex<double>>;
+extern template struct block2::TransMPS<block2::SGB, complex<double>,
+                                        complex<float>>;
+extern template struct block2::TransMPS<block2::SGB, complex<float>,
+                                        complex<double>>;
 
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SGF, complex<float>>;

@@ -22,3 +22,16 @@
 
 template void bind_fl_sparse<SZ, float>(py::module &m);
 template void bind_fl_sparse<SU2, float>(py::module &m);
+
+template void
+bind_trans_sparse_matrix<SU2, float, double>(py::module &m,
+                                             const string &aux_name);
+template void
+bind_trans_sparse_matrix<SU2, double, float>(py::module &m,
+                                             const string &aux_name);
+template void
+bind_trans_sparse_matrix<SZ, float, double>(py::module &m,
+                                            const string &aux_name);
+template void
+bind_trans_sparse_matrix<SZ, double, float>(py::module &m,
+                                            const string &aux_name);

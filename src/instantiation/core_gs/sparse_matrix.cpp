@@ -24,3 +24,8 @@ template struct block2::SparseMatrix<block2::SGF, float>;
 template struct block2::SparseMatrixGroup<block2::SGF, float>;
 template struct block2::SparseMatrix<block2::SGB, float>;
 template struct block2::SparseMatrixGroup<block2::SGB, float>;
+
+template struct block2::TransSparseMatrix<block2::SGF, float, double>;
+template struct block2::TransSparseMatrix<block2::SGF, double, float>;
+template struct block2::TransSparseMatrix<block2::SGB, float, double>;
+template struct block2::TransSparseMatrix<block2::SGB, double, float>;

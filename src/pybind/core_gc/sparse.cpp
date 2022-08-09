@@ -22,3 +22,12 @@
 
 template void bind_fl_sparse<SGF, complex<float>>(py::module &m);
 template void bind_fl_sparse<SGB, complex<float>>(py::module &m);
+
+template void bind_trans_sparse_matrix<SGF, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+template void bind_trans_sparse_matrix<SGF, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);
+template void bind_trans_sparse_matrix<SGB, complex<float>, complex<double>>(
+    py::module &m, const string &aux_name);
+template void bind_trans_sparse_matrix<SGB, complex<double>, complex<float>>(
+    py::module &m, const string &aux_name);

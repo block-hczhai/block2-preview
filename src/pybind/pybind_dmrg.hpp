@@ -1894,6 +1894,13 @@ void bind_trans_mps(py::module &m, const string &aux_name) {
           &TransMPSInfo<S, T>::forward);
 }
 
+template <typename S, typename FL1, typename FL2>
+void bind_fl_trans_mps(py::module &m, const string &aux_name) {
+
+    m.def(("trans_mps_to_" + aux_name).c_str(),
+          &TransMPS<S, FL1, FL2>::forward);
+}
+
 template <typename S, typename T, typename FL>
 auto bind_fl_trans_mps_spin_specific(py::module &m, const string &aux_name)
     -> decltype(typename S::is_su2_t(typename T::is_sz_t())) {
@@ -2470,6 +2477,15 @@ bind_fl_trans_mps_spin_specific<SU2, SZ, float>(py::module &m,
                                                 const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
+extern template void
+bind_fl_trans_mps<SU2, float, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SU2, double, float>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, float, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, double, float>(py::module &m, const string &aux_name);
+
 #ifdef _USE_COMPLEX
 
 extern template void bind_general_fcidump<complex<float>>(py::module &m);
@@ -2530,6 +2546,19 @@ bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(py::module &m,
                                                          const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
+extern template void
+bind_fl_trans_mps<SU2, complex<float>, complex<double>>(py::module &m,
+                                                        const string &aux_name);
+extern template void
+bind_fl_trans_mps<SU2, complex<double>, complex<float>>(py::module &m,
+                                                        const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, complex<float>, complex<double>>(py::module &m,
+                                                       const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, complex<double>, complex<float>>(py::module &m,
+                                                       const string &aux_name);
+
 #endif
 
 #ifdef _USE_SG
@@ -2577,6 +2606,15 @@ bind_fl_expect<SGB, float, float, complex<float>>(py::module &m,
                                                   const string &name);
 extern template auto bind_fl_spin_specific<SGB, float>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
+
+extern template void
+bind_fl_trans_mps<SGF, float, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGF, double, float>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, float, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, double, float>(py::module &m, const string &aux_name);
 
 #ifdef _USE_COMPLEX
 
@@ -2627,6 +2665,19 @@ bind_fl_linear<SGB, complex<float>, complex<float>>(py::module &m);
 extern template void
 bind_fl_expect<SGB, complex<float>, complex<float>, complex<float>>(
     py::module &m, const string &name);
+
+extern template void
+bind_fl_trans_mps<SGF, complex<float>, complex<double>>(py::module &m,
+                                                        const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGF, complex<double>, complex<float>>(py::module &m,
+                                                        const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, complex<float>, complex<double>>(py::module &m,
+                                                        const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, complex<double>, complex<float>>(py::module &m,
+                                                        const string &aux_name);
 
 #endif
 

@@ -6,12 +6,60 @@ import subprocess
 import platform
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
+from distutils.command.build_scripts import build_scripts
 
 
 class CMakeExt(Extension):
     def __init__(self, name, cmdir='.'):
         Extension.__init__(self, name, [])
         self.cmake_lists_dir = os.path.abspath(cmdir)
+
+
+from distutils.dep_util import newer
+from distutils import log
+from stat import ST_MODE
+from distutils.util import convert_path
+
+
+class BinBuild(build_scripts):
+
+    def initialize_options(self):
+        build_scripts.initialize_options(self)
+        self.build_temp = None
+
+    def finalize_options(self):
+        build_scripts.finalize_options(self)
+        self.set_undefined_options('build', ('build_temp', 'build_temp'))
+
+    def copy_scripts(self):
+        self.scripts = [x for x in self.scripts if x != 'block2']
+        outfiles, updated_files = build_scripts.copy_scripts(self)
+        self.scripts += ['block2']
+        for script in ['block2']:
+            script = os.path.join(self.build_temp, script)
+            script = convert_path(script)
+            outfile = os.path.join(self.build_dir, os.path.basename(script))
+            outfiles.append(outfile)
+
+            if not self.force and not newer(script, outfile):
+                log.debug("not copying %s (up-to-date)", script)
+                continue
+
+            updated_files.append(outfile)
+            self.copy_file(script, outfile)
+
+        if os.name == 'posix':
+            for file in outfiles:
+                if self.dry_run:
+                    log.info("changing mode of %s", file)
+                else:
+                    oldmode = os.stat(file)[ST_MODE] & 0o7777
+                    newmode = (oldmode | 0o555) & 0o7777
+                    if newmode != oldmode:
+                        log.info("changing mode of %s from %o to %o",
+                                 file, oldmode, newmode)
+                        os.chmod(file, newmode)
+        return outfiles, updated_files
 
 
 class CMakeBuild(build_ext):
@@ -74,13 +122,27 @@ class CMakeBuild(build_ext):
 
             subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=2'],
                                   cwd=self.build_temp)
+            
+            cmake_args = [x for x in cmake_args if x != '-DBUILD_LIB=ON']
+            cmake_args += ['-DBUILD_LIB=OFF']
+
+            subprocess.check_call(['cmake', ext.cmake_lists_dir] + cmake_args,
+                                  cwd=self.build_temp)
+
+            subprocess.check_call(['cmake', '--build', '.', '--config', cfg, '--', '--jobs=2'],
+                                  cwd=self.build_temp)
+
+
+from distutils.command.build import build
+build.sub_commands = ([c for c in build.sub_commands if c[0] == 'build_ext'] +
+                      [c for c in build.sub_commands if c[0] != 'build_ext'])
 
 
 setup(name='block2',
       version='0.1.10',
       packages=find_packages(),
       ext_modules=[CMakeExt('block2')],
-      cmdclass={'build_ext': CMakeBuild},
+      cmdclass={'build_ext': CMakeBuild, 'build_scripts': BinBuild},
       license='LICENSE',
       description="""An efficient MPO implementation of DMRG for quantum chemistry.""",
       long_description=open('README.md').read(),
@@ -99,5 +161,6 @@ setup(name='block2',
           "pybind11"
       ],
       scripts=["pyblock2/driver/block2main", "pyblock2/driver/gaopt",
-               "pyblock2/driver/readwfn.py", "pyblock2/driver/writewfn.py"]
+               "pyblock2/driver/readwfn.py", "pyblock2/driver/writewfn.py",
+               "block2"]
       )

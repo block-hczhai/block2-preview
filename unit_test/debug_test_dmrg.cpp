@@ -255,6 +255,7 @@ TYPED_TEST(TestDMRG, Test) {
     mps->deallocate();
     mps_info->save_mutable();
     mps_info->deallocate_mutable();
+    mps->save_data();
 
     // ME
     shared_ptr<MovingEnvironment<S, FL, FL>> me =

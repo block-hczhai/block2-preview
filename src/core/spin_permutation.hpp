@@ -724,7 +724,8 @@ struct SpinPermScheme {
                             break;
                         }
                 auto pgg = SpinPermPattern::make_matrix(tts, std);
-                mptr.resize(pgg[0].size() * tts.size());
+                mptr.resize((pgg[0].size() + 1) *
+                            max(tts.size() + 1, (size_t)5));
                 for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
                     for (int jb = ja + 1; jb < (int)pgg.size() && !found;
                          jb++) {

@@ -2299,4 +2299,23 @@ template <typename S, typename FL> struct SparseMatrixGroup {
     }
 };
 
+// Translation between SparseMatrix with different precision
+template <typename S, typename FL1, typename FL2> struct TransSparseMatrix {
+    static shared_ptr<SparseMatrix<S, FL2>>
+    forward(const shared_ptr<SparseMatrix<S, FL1>> &mat) {
+        shared_ptr<VectorAllocator<typename GMatrix<FL2>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL2>::FP>>();
+        shared_ptr<SparseMatrix<S, FL2>> xmat =
+            make_shared<SparseMatrix<S, FL2>>(d_alloc);
+        xmat->allocate(mat->info);
+        xmat->factor = (FL2)mat->factor;
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (size_t i = 0; i < xmat->total_memory; i++)
+            xmat->data[i] = (FL2)mat->data[i];
+        threading->activate_normal();
+        return xmat;
+    }
+};
+
 } // namespace block2

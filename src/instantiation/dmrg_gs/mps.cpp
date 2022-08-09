@@ -22,3 +22,8 @@
 
 template struct block2::MPS<block2::SGF, float>;
 template struct block2::MPS<block2::SGB, float>;
+
+template struct block2::TransMPS<block2::SGF, double, float>;
+template struct block2::TransMPS<block2::SGF, float, double>;
+template struct block2::TransMPS<block2::SGB, double, float>;
+template struct block2::TransMPS<block2::SGB, float, double>;

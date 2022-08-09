@@ -2170,9 +2170,15 @@ template <typename S, typename FL> struct MPS {
     }
     virtual string get_filename(int i, const string &dir = "") const {
         stringstream ss;
-        ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
-           << frame_<FP>()->prefix << ".MPS." << info->tag << "."
-           << Parsing::to_string(i);
+        if (frame_<FP>() != nullptr)
+            ss << (dir == "" ? frame_<FP>()->mps_dir : dir) << "/"
+               << frame_<FP>()->prefix << ".MPS." << info->tag << "."
+               << Parsing::to_string(i);
+        else
+            ss << (dir == "" ? frame_<typename alt_fl_type<FP>::FL>()->mps_dir
+                             : dir)
+               << "/" << frame_<typename alt_fl_type<FP>::FL>()->prefix
+               << ".MPS." << info->tag << "." << Parsing::to_string(i);
         return ss.str();
     }
     void shallow_copy_to(const shared_ptr<MPS> &mps) const {
@@ -2251,7 +2257,9 @@ template <typename S, typename FL> struct MPS {
         ofs.write((char *)&bs[0], sizeof(uint8_t) * n_sites);
     }
     virtual void save_data() const {
-        if (frame_<FP>()->prefix_can_write) {
+        if (frame_<FP>() != nullptr
+                ? frame_<FP>()->prefix_can_write
+                : frame_<typename alt_fl_type<FP>::FL>()->prefix_can_write) {
             string filename = get_filename(-1);
             if (Parsing::link_exists(filename))
                 Parsing::remove_file(filename);
@@ -2300,7 +2308,9 @@ template <typename S, typename FL> struct MPS {
             }
     }
     virtual void save_mutable() const {
-        if (frame_<FP>()->prefix_can_write)
+        if (frame_<FP>() != nullptr
+                ? frame_<FP>()->prefix_can_write
+                : frame_<typename alt_fl_type<FP>::FL>()->prefix_can_write)
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     tensors[i]->save_data(get_filename(i), true);
@@ -2332,6 +2342,36 @@ template <typename S, typename FL> struct MPS {
         for (int i = n_sites - 1; i >= 0; i--)
             if (tensors[i] != nullptr)
                 tensors[i]->info->deallocate();
+    }
+};
+
+// Translation between MPS with different precision
+template <typename S, typename FL1, typename FL2> struct TransMPS {
+    static shared_ptr<MPS<S, FL2>> forward(const shared_ptr<MPS<S, FL1>> &mps,
+                                           const string &xtag) {
+        shared_ptr<MPSInfo<S>> xinfo = mps->info->deep_copy();
+        xinfo->load_mutable();
+        shared_ptr<MPS<S, FL2>> xmps = make_shared<MPS<S, FL2>>(xinfo);
+        xmps->load_data();
+        xinfo->tag = xtag;
+        xinfo->save_mutable();
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<typename GMatrix<FL1>::FP>> d_alloc =
+            make_shared<VectorAllocator<typename GMatrix<FL1>::FP>>();
+        for (int i = 0; i < xmps->n_sites; i++)
+            if (xmps->tensors[i] != nullptr) {
+                shared_ptr<SparseMatrix<S, FL1>> tensor =
+                    make_shared<SparseMatrix<S, FL1>>(d_alloc);
+                tensor->load_data(mps->get_filename(i), true, i_alloc);
+                xmps->tensors[i] =
+                    TransSparseMatrix<S, FL1, FL2>::forward(tensor);
+            }
+        xmps->save_mutable();
+        xmps->save_data();
+        xmps->deallocate();
+        xinfo->deallocate_mutable();
+        return xmps;
     }
 };
 

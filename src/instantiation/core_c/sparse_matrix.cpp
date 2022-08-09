@@ -25,3 +25,12 @@ template struct block2::SparseMatrixGroup<block2::SZ, complex<float>>;
 
 template struct block2::SparseMatrix<block2::SU2, complex<float>>;
 template struct block2::SparseMatrixGroup<block2::SU2, complex<float>>;
+
+template struct block2::TransSparseMatrix<block2::SZ, complex<float>,
+                                          complex<double>>;
+template struct block2::TransSparseMatrix<block2::SZ, complex<double>,
+                                          complex<float>>;
+template struct block2::TransSparseMatrix<block2::SU2, complex<float>,
+                                          complex<double>>;
+template struct block2::TransSparseMatrix<block2::SU2, complex<double>,
+                                          complex<float>>;

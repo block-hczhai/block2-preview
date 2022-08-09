@@ -303,11 +303,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                             alpha(i, j) = complex_dot(bs[i], sigmas[j]);
                     }
 #pragma omp single
-                    if (davidson_type & DavidsonTypes::NonHermitian)
-                        eig(alpha, ld, ld_imag, left);
-                    else
-                        eigs(alpha, ld);
-                        // note alpha row/column is diff from python
+                    {
+                        if (davidson_type & DavidsonTypes::NonHermitian)
+                            eig(alpha, ld, ld_imag, left);
+                        else
+                            eigs(alpha, ld);
+                    }
+                    // note alpha row/column is diff from python
 #pragma omp for schedule(static)
                     // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
                     for (int j = 0; j < m; j++) {

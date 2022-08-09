@@ -147,10 +147,24 @@ PYBIND11_MODULE(block2, m) {
 
     bind_core<SU2, float>(m_su2_sp, "SU2", "Float");
     bind_core<SZ, float>(m_sz_sp, "SZ", "Float");
+
+    bind_trans_sparse_matrix<SU2, float, double>(m_su2_sp, "double");
+    bind_trans_sparse_matrix<SU2, double, float>(m_su2, "float");
+    bind_trans_sparse_matrix<SZ, float, double>(m_sz_sp, "double");
+    bind_trans_sparse_matrix<SZ, double, float>(m_sz, "float");
 #ifdef _USE_COMPLEX
     bind_fl_matrix<complex<float>>(m_cpx_sp);
     bind_core<SU2, complex<float>>(m_su2_cpx_sp, "SU2", "Float");
     bind_core<SZ, complex<float>>(m_sz_cpx_sp, "SZ", "Float");
+
+    bind_trans_sparse_matrix<SU2, complex<float>, complex<double>>(m_su2_cpx_sp,
+                                                                   "double");
+    bind_trans_sparse_matrix<SU2, complex<double>, complex<float>>(m_su2_cpx,
+                                                                   "float");
+    bind_trans_sparse_matrix<SZ, complex<float>, complex<double>>(m_sz_cpx_sp,
+                                                                  "double");
+    bind_trans_sparse_matrix<SZ, complex<double>, complex<float>>(m_sz_cpx,
+                                                                  "float");
 #endif
 
 #ifdef _USE_SG
@@ -160,6 +174,11 @@ PYBIND11_MODULE(block2, m) {
         m_sp.def_submodule("sgb", "General spin (bosonic single precision).");
     bind_core<SGF, float>(m_sgf_sp, "SGF", "Float");
     bind_core<SGB, float>(m_sgb_sp, "SGB", "Float");
+
+    bind_trans_sparse_matrix<SGF, float, double>(m_sgf_sp, "double");
+    bind_trans_sparse_matrix<SGF, double, float>(m_sgf, "float");
+    bind_trans_sparse_matrix<SGB, float, double>(m_sgb_sp, "double");
+    bind_trans_sparse_matrix<SGB, double, float>(m_sgb, "float");
 #ifdef _USE_COMPLEX
     py::module m_sgf_cpx_sp = m_cpx_sp.def_submodule(
         "sgf", "General spin (fermionic, complex single precision).");
@@ -167,6 +186,15 @@ PYBIND11_MODULE(block2, m) {
         "sgb", "General spin (bosonic, complex single precision).");
     bind_core<SGF, complex<float>>(m_sgf_cpx_sp, "SGF", "Float");
     bind_core<SGB, complex<float>>(m_sgb_cpx_sp, "SGB", "Float");
+
+    bind_trans_sparse_matrix<SGF, complex<float>, complex<double>>(m_sgf_cpx_sp,
+                                                                   "double");
+    bind_trans_sparse_matrix<SGF, complex<double>, complex<float>>(m_sgf_cpx,
+                                                                   "float");
+    bind_trans_sparse_matrix<SGB, complex<float>, complex<double>>(m_sgb_cpx_sp,
+                                                                   "double");
+    bind_trans_sparse_matrix<SGB, complex<double>, complex<float>>(m_sgb_cpx,
+                                                                   "float");
 #endif
 #endif
 
@@ -218,19 +246,44 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg<SU2, float>(m_su2_sp, "SU2");
     bind_dmrg<SZ, float>(m_sz_sp, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, float>(m_su2_sp, "sz");
+
+    bind_fl_trans_mps<SU2, float, double>(m_su2_sp, "double");
+    bind_fl_trans_mps<SU2, double, float>(m_su2, "float");
+    bind_fl_trans_mps<SZ, float, double>(m_sz_sp, "double");
+    bind_fl_trans_mps<SZ, double, float>(m_sz, "float");
 #ifdef _USE_COMPLEX
     bind_general_fcidump<complex<float>>(m_cpx_sp);
     bind_dmrg<SU2, complex<float>>(m_su2_cpx_sp, "SU2");
     bind_dmrg<SZ, complex<float>>(m_sz_cpx_sp, "SZ");
-    bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(m_su2_cpx_sp, "sz");
+    bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(m_su2_cpx_sp,
+                                                             "sz");
+
+    bind_fl_trans_mps<SU2, complex<float>, complex<double>>(m_su2_cpx_sp,
+                                                            "double");
+    bind_fl_trans_mps<SU2, complex<double>, complex<float>>(m_su2_cpx, "float");
+    bind_fl_trans_mps<SZ, complex<float>, complex<double>>(m_sz_cpx_sp,
+                                                           "double");
+    bind_fl_trans_mps<SZ, complex<double>, complex<float>>(m_sz_cpx, "float");
 #endif
 
 #ifdef _USE_SG
     bind_dmrg<SGF, float>(m_sgf_sp, "SGF");
     bind_dmrg<SGB, float>(m_sgb_sp, "SGB");
+
+    bind_fl_trans_mps<SGF, float, double>(m_sgf_sp, "double");
+    bind_fl_trans_mps<SGF, double, float>(m_sgf, "float");
+    bind_fl_trans_mps<SGB, float, double>(m_sgb_sp, "double");
+    bind_fl_trans_mps<SGB, double, float>(m_sgb, "float");
 #ifdef _USE_COMPLEX
     bind_dmrg<SGF, complex<float>>(m_sgf_cpx_sp, "SGF");
     bind_dmrg<SGB, complex<float>>(m_sgb_cpx_sp, "SGB");
+
+    bind_fl_trans_mps<SGF, complex<float>, complex<double>>(m_sgf_cpx_sp,
+                                                            "double");
+    bind_fl_trans_mps<SGF, complex<double>, complex<float>>(m_sgf_cpx, "float");
+    bind_fl_trans_mps<SGB, complex<float>, complex<double>>(m_sgb_cpx_sp,
+                                                            "double");
+    bind_fl_trans_mps<SGB, complex<double>, complex<float>>(m_sgb_cpx, "float");
 #endif
 #endif
 
