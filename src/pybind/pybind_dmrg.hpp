@@ -108,6 +108,39 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, complex<float>>>>);
 
 #endif
 
+class checked_ostream_redirect {
+  protected:
+    std::streambuf *old = nullptr;
+    std::ostream &costream;
+    py::detail::pythonbuf buffer;
+
+  public:
+    explicit checked_ostream_redirect(
+        std::ostream &costream = std::cout,
+        const py::object &pyostream = py::module_::import("sys").attr("stdout"))
+        : costream(costream), buffer(pyostream), old(nullptr) {
+        if (!costream.fail())
+            old = costream.rdbuf(&buffer);
+    }
+    ~checked_ostream_redirect() {
+        if (old != nullptr)
+            costream.rdbuf(old);
+    }
+    checked_ostream_redirect(const checked_ostream_redirect &) = delete;
+    checked_ostream_redirect(checked_ostream_redirect &&other) = default;
+    checked_ostream_redirect &
+    operator=(const checked_ostream_redirect &) = delete;
+    checked_ostream_redirect &operator=(checked_ostream_redirect &&) = delete;
+};
+
+class checked_estream_redirect : public checked_ostream_redirect {
+  public:
+    explicit checked_estream_redirect(
+        std::ostream &costream = std::cerr,
+        const py::object &pyostream = py::module_::import("sys").attr("stderr"))
+        : checked_ostream_redirect(costream, pyostream) {}
+};
+
 template <typename S, typename FL>
 auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_su2_t()) {
 
@@ -723,13 +756,13 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def("init_environments",
              &MovingEnvironment<S, FL, FLS>::init_environments,
              py::arg("iprint") = false,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def("finalize_environments",
              &MovingEnvironment<S, FL, FLS>::finalize_environments,
              py::arg("renormalize_ops") = true,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def("prepare", &MovingEnvironment<S, FL, FLS>::prepare,
              py::arg("start_site") = 0, py::arg("end_site") = -1)
         .def("move_to", &MovingEnvironment<S, FL, FLS>::move_to, py::arg("i"),
@@ -997,8 +1030,8 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def("sweep", &Expect<S, FL, FLS, FLX>::sweep)
         .def("solve", &Expect<S, FL, FLS, FLX>::solve, py::arg("propagate"),
              py::arg("forward") = true,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def("get_1pdm_spatial", &Expect<S, FL, FLS, FLX>::get_1pdm_spatial,
              py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1pdm", &Expect<S, FL, FLS, FLX>::get_1pdm,
@@ -1101,8 +1134,8 @@ void bind_fl_dmrg(py::module &m) {
         .def("sweep", &DMRG<S, FL, FLS>::sweep)
         .def("solve", &DMRG<S, FL, FLS>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>());
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 }
 
 template <typename S, typename FL, typename FLS>
@@ -1111,9 +1144,10 @@ void bind_fl_td_dmrg(py::module &m) {
     py::class_<typename TDDMRG<S, FL, FLS>::Iteration,
                shared_ptr<typename TDDMRG<S, FL, FLS>::Iteration>>(
         m, "TDDMRGIteration")
-        .def(py::init<
-             typename TDDMRG<S, FL, FLS>::FLLS, typename TDDMRG<S, FL, FLS>::FPS,
-             typename TDDMRG<S, FL, FLS>::FPS, int, int, size_t, double>())
+        .def(py::init<typename TDDMRG<S, FL, FLS>::FLLS,
+                      typename TDDMRG<S, FL, FLS>::FPS,
+                      typename TDDMRG<S, FL, FLS>::FPS, int, int, size_t,
+                      double>())
         .def(py::init<typename TDDMRG<S, FL, FLS>::FLLS,
                       typename TDDMRG<S, FL, FLS>::FPS,
                       typename TDDMRG<S, FL, FLS>::FPS, int, int>())
@@ -1171,8 +1205,8 @@ void bind_fl_td_dmrg(py::module &m) {
         .def("normalize", &TDDMRG<S, FL, FLS>::normalize)
         .def("solve", &TDDMRG<S, FL, FLS>::solve, py::arg("n_sweeps"),
              py::arg("beta"), py::arg("forward") = true, py::arg("tol") = 1E-6,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>());
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 
     py::class_<typename TimeEvolution<S, FL, FLS>::Iteration,
                shared_ptr<typename TimeEvolution<S, FL, FLS>::Iteration>>(
@@ -1244,8 +1278,8 @@ void bind_fl_td_dmrg(py::module &m) {
         .def("normalize", &TimeEvolution<S, FL, FLS>::normalize)
         .def("solve", &TimeEvolution<S, FL, FLS>::solve, py::arg("n_sweeps"),
              py::arg("beta"), py::arg("forward") = true, py::arg("tol") = 1E-6,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>());
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 }
 
 template <typename S, typename FL, typename FLS>
@@ -1374,8 +1408,8 @@ void bind_fl_linear(py::module &m) {
         .def("sweep", &Linear<S, FL, FLS>::sweep)
         .def("solve", &Linear<S, FL, FLS>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6,
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>());
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 }
 
 template <typename S, typename FL> void bind_fl_parallel_dmrg(py::module &m) {
@@ -1798,29 +1832,29 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &,
                       MPOAlgorithmTypes>(),
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
                       typename GeneralMPO<S, FL>::FP>(),
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
                       typename GeneralMPO<S, FL>::FP, int>(),
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
                       typename GeneralMPO<S, FL>::FP, int, bool>(),
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>())
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
                       typename GeneralMPO<S, FL>::FP, int, bool,
                       const string &>(),
-             py::call_guard<py::scoped_ostream_redirect,
-                            py::scoped_estream_redirect>());
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 }
 
 template <typename S, typename FL>
