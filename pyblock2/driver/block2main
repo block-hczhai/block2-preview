@@ -1819,6 +1819,8 @@ def get_mps_from_tags(iroot, proj_mps=False, ref_center=0):
     if smps_info.bond_dim < max_bdim:
         smps_info.bond_dim = max_bdim
     smps.load_data()
+    if MPI is not None:
+        MPI.barrier()
     if smps.dot == 2 and smps.center == smps.n_sites - 1 and dot == 1:
         smps.dot = 1
     elif smps.dot == 2 and smps.center == 0 and dot == 1:
