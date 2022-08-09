@@ -833,6 +833,9 @@ if pre_run or not no_pre_run:
     n_sites = n_orbs
     if orb_sym is None:
         orb_sym = VectorUInt8(map(swap_pg, fcidump.orb_sym))
+        for x in orb_sym:
+            if x == 8:
+                raise RuntimeError("Wrong point group symmetry : ", dic.get("sym", "d2h"))
     sym_error = fcidump.symmetrize(orb_sym)
     _print("integral sym error = %12.4g" % sym_error)
     if "k_symmetry" in dic:

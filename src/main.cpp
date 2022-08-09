@@ -210,6 +210,12 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
               PointGroup::swap_pg(pg));
+    for (auto x : orbsym)
+        if (x == 8) {
+            cerr << "wrong point group symmetry irrep: pg is "
+                 << (params.count("pg") != 0 ? params.at("pg") : "c1") << endl;
+            abort();
+        }
     typename FCIDUMP<FL>::FP integral_error = fcidump->symmetrize(orbsym);
     if (integral_error != 0)
         cout << "integral error = " << scientific << setprecision(5)

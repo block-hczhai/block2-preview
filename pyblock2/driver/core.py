@@ -124,6 +124,9 @@ class DMRGDriver:
         fcidump.read(filename)
         swap_pg = getattr(bw.b.PointGroup, "swap_" + pg)
         self.orb_sym = bw.b.VectorUInt8(map(swap_pg, fcidump.orb_sym))
+        for x in self.orb_sym:
+            if x == 8:
+                raise RuntimeError("Wrong point group symmetry : ", pg)
         self.n_sites = fcidump.n_sites
         self.n_elec = fcidump.n_elec
         self.spin = fcidump.twos

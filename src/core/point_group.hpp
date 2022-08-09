@@ -47,7 +47,7 @@ struct PointGroup {
     // 0  1  2  3  (XOR)
     // A1 A2 B1 B2
     static int16_t swap_c2v(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 2, 3, 1};
+        static int16_t arr_swap[] = {8, 0, 2, 3, 1, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // C2H
@@ -56,7 +56,7 @@ struct PointGroup {
     // 0  1  2  3  (XOR)
     // Ag Bg Au Bu
     static int16_t swap_c2h(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 2, 3, 1};
+        static int16_t arr_swap[] = {8, 0, 2, 3, 1, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // D2
@@ -65,7 +65,7 @@ struct PointGroup {
     // 0  1  2  3  (XOR)
     // A1 B1 B2 B3
     static int16_t swap_d2(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 3, 2, 1};
+        static int16_t arr_swap[] = {8, 0, 3, 2, 1, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // CS
@@ -74,7 +74,7 @@ struct PointGroup {
     // 0  1  (XOR)
     // A' A''
     static int16_t swap_cs(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 1};
+        static int16_t arr_swap[] = {8, 0, 1, 8, 8, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // C2
@@ -83,7 +83,7 @@ struct PointGroup {
     // 0  1  (XOR)
     // A  B
     static int16_t swap_c2(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 1};
+        static int16_t arr_swap[] = {8, 0, 1, 8, 8, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // CI
@@ -92,7 +92,7 @@ struct PointGroup {
     // 0  1  (XOR)
     // Ag Au
     static int16_t swap_ci(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0, 1};
+        static int16_t arr_swap[] = {8, 0, 1, 8, 8, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     // C1
@@ -101,7 +101,7 @@ struct PointGroup {
     // 0  (XOR)
     // A
     static int16_t swap_c1(int16_t isym) {
-        static int16_t arr_swap[] = {8, 0};
+        static int16_t arr_swap[] = {8, 0, 8, 8, 8, 8, 8, 8, 8};
         return arr_swap[isym];
     }
     static int16_t swap_nopg(int16_t isym) {
