@@ -1523,6 +1523,12 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("ExactNonHermitian", DavidsonTypes::ExactNonHermitian)
         .value("NonHermitianDavidsonPrecond",
                DavidsonTypes::NonHermitianDavidsonPrecond)
+        .value("LeftEigen", DavidsonTypes::LeftEigen)
+        .value("ExactNonHermitianLeftEigen",
+               DavidsonTypes::ExactNonHermitianLeftEigen)
+        .value("NonHermitianDavidsonPrecondLeftEigen",
+               DavidsonTypes::NonHermitianDavidsonPrecondLeftEigen)
+        .value("NonHermitianLeftEigen", DavidsonTypes::NonHermitianLeftEigen)
         .def(py::self & py::self)
         .def(py::self | py::self);
 

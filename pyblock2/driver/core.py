@@ -154,6 +154,15 @@ class DMRGDriver:
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         return mpo
 
+    def orbital_reordering(self, h1e, g2e):
+        bw = self.bw
+        import numpy as np
+        xmat = np.abs(np.einsum('ijji->ij', g2e, optimize=True))
+        kmat = np.abs(h1e) * 1E-7 + xmat
+        kmat = bw.b.VectorDouble(kmat.flatten())
+        idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
+        return np.array(idx)
+
     def dmrg(
         self,
         mpo,
@@ -176,7 +185,7 @@ class DMRGDriver:
                 thrds = [1e-6] * 4 + [1e-7] * 1
             else:
                 thrds = [1e-5] * 4 + [5e-6] * 1
-        if dav_type is not None and "NonHermitian" in dav_type:
+        if dav_type is not None and "LeftEigen" in dav_type:
             bra = ket.deep_copy("BRA")
         else:
             bra = ket

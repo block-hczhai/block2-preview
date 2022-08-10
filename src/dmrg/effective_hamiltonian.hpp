@@ -374,7 +374,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
         vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{
             GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1)};
-        if (davidson_type & DavidsonTypes::NonHermitian)
+        if (davidson_type & DavidsonTypes::LeftEigen)
             bs.push_back(GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
@@ -1357,7 +1357,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(
                 GMatrix<FL>(ket[i]->data, (MKL_INT)ket[i]->total_memory, 1));
-        if (davidson_type & DavidsonTypes::NonHermitian)
+        if (davidson_type & DavidsonTypes::LeftEigen)
             for (int i = 0; i < (int)min((MKL_INT)bra.size(), (MKL_INT)aa.n);
                  i++)
                 bs.push_back(GMatrix<FL>(bra[i]->data,

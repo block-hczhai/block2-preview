@@ -98,9 +98,9 @@ void TestNonHermDMRGN2STO3G<FL>::test_dmrg(
             mps->save_data();
 
             // ME
-            shared_ptr<MPS<S, FL>> bra = mps->deep_copy("BRA");
+            // shared_ptr<MPS<S, FL>> bra = mps->deep_copy("BRA");
             shared_ptr<MovingEnvironment<S, FL, FL>> me =
-                make_shared<MovingEnvironment<S, FL, FL>>(mpo, bra, mps,
+                make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps,
                                                           "DMRG");
             me->init_environments(false);
             if (!condense)
@@ -110,7 +110,7 @@ void TestNonHermDMRGN2STO3G<FL>::test_dmrg(
             // DMRG
             shared_ptr<DMRG<S, FL, FL>> dmrg =
                 make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
-            dmrg->davidson_type = DavidsonTypes::ExactNonHermitian;
+            dmrg->davidson_type = DavidsonTypes::NonHermitian;
             dmrg->iprint = 2;
             dmrg->decomp_type = dt;
             dmrg->noise_type = nt;
@@ -162,6 +162,7 @@ TYPED_TEST_CASE(TestNonHermDMRGN2STO3G, TestFL);
 
 TYPED_TEST(TestNonHermDMRGN2STO3G, TestSU2) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -234,6 +235,7 @@ TYPED_TEST(TestNonHermDMRGN2STO3G, TestSU2) {
 
 TYPED_TEST(TestNonHermDMRGN2STO3G, TestSZ) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -319,6 +321,7 @@ TYPED_TEST(TestNonHermDMRGN2STO3G, TestSZ) {
 
 TYPED_TEST(TestNonHermDMRGN2STO3G, TestSGF) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;

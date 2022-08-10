@@ -1123,7 +1123,9 @@ TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetricExact) {
         }
         MatMul mop(a);
         vector<FL> vw = IterativeMatrixFunctions<FL>::davidson(
-            mop, aa, bs, 0, DavidsonTypes::NonHermitian | DavidsonTypes::Exact,
+            mop, aa, bs, 0,
+            DavidsonTypes::NonHermitian | DavidsonTypes::Exact |
+                DavidsonTypes::LeftEigen,
             ndav, true, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
             n * k * 5, n * k * 4, k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
@@ -1209,8 +1211,9 @@ TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
         MatMul mop(a);
         vector<FL> vw = IterativeMatrixFunctions<FL>::davidson(
             mop, aa, bs, 0,
-            DavidsonTypes::NonHermitian | DavidsonTypes::DavidsonPrecond, ndav,
-            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
+            DavidsonTypes::NonHermitian | DavidsonTypes::DavidsonPrecond |
+                DavidsonTypes::LeftEigen,
+            ndav, false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
             n * k * 50, n * k * 40, k * 2, min(max((MKL_INT)5, k * 5 + 10), n));
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FL> w(&vw[0], k);

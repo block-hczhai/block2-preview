@@ -2241,11 +2241,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             throw runtime_error(
                 "Parallel MPS and different bra and ket is not yet supported!");
         if ((me->bra != me->ket &&
-             !(davidson_type & DavidsonTypes::NonHermitian)) ||
+             !((davidson_type & DavidsonTypes::NonHermitian) &&
+               (davidson_type & DavidsonTypes::LeftEigen))) ||
             (me->bra == me->ket &&
-             (davidson_type & DavidsonTypes::NonHermitian)))
-            throw runtime_error("Different BRA and KET must be used together "
-                                "with non-hermitian Hamiltonian!");
+             ((davidson_type & DavidsonTypes::NonHermitian) &&
+              (davidson_type & DavidsonTypes::LeftEigen))))
+            throw runtime_error(
+                "Different BRA and KET must be used together "
+                "with non-hermitian Hamiltonian and left eigen vector!");
         Timer start, current;
         start.get_time();
         current.get_time();

@@ -248,8 +248,12 @@ enum struct DavidsonTypes : uint16_t {
     NoPrecond = 64,
     NonHermitian = 128,
     Exact = 256,
+    LeftEigen = 512,
     ExactNonHermitian = 128 | 256,
-    NonHermitianDavidsonPrecond = 128 | 32
+    ExactNonHermitianLeftEigen = 128 | 256 | 512,
+    NonHermitianDavidsonPrecond = 128 | 32,
+    NonHermitianDavidsonPrecondLeftEigen = 128 | 32 | 512,
+    NonHermitianLeftEigen = 128 | 512
 };
 
 inline bool operator&(DavidsonTypes a, DavidsonTypes b) {
@@ -1352,8 +1356,9 @@ struct GMatrixFunctions<
         MKL_INT lwork = 34 * a.n, info;
         FL *work = d_alloc->allocate(lwork);
         FL *vr = d_alloc->allocate(a.m * a.n);
-        xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, wr.data,
-                  vr, &a.n, lv.data, &a.n, work, &lwork, wi.data, &info);
+        xgeev<FL>("V", lv.data == nullptr ? "N" : "V", &a.n, a.data, &a.n,
+                  wr.data, vr, &a.n, lv.data, &a.n, work, &lwork, wi.data,
+                  &info);
         assert(info == 0);
         uint8_t tag = 0;
         copy(a, GMatrix<FL>(vr, a.m, a.n));
@@ -1362,8 +1367,9 @@ struct GMatrixFunctions<
                 k++;
                 for (MKL_INT j = 0; j < a.n; j++)
                     a(k, j) = -a(k, j);
-                for (MKL_INT j = 0; j < a.n; j++)
-                    lv(k, j) = -lv(k, j);
+                if (lv.data != nullptr)
+                    for (MKL_INT j = 0; j < a.n; j++)
+                        lv(k, j) = -lv(k, j);
             }
         d_alloc->deallocate(vr, a.m * a.n);
         d_alloc->deallocate(work, lwork);

@@ -51,8 +51,8 @@ void TestDMRGN2STO3GSA<FL>::test_dmrg(
     // MPO simplification
     cout << "MPO simplification start" << endl;
     mpo = make_shared<SimplifiedMPO<S, FL>>(
-        mpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()), true, true,
-        OpNamesSet({OpNames::R, OpNames::RD}));
+        mpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
+        true, true, OpNamesSet({OpNames::R, OpNames::RD}));
     cout << "MPO simplification end .. T = " << t.get_time() << endl;
 
     bond_dim = 120;
@@ -82,9 +82,9 @@ void TestDMRGN2STO3GSA<FL>::test_dmrg(
     mps->save_data();
 
     // ME
-    shared_ptr<MPS<S, FL>> bra = mps->deep_copy("BRA");
+    // shared_ptr<MPS<S, FL>> bra = mps->deep_copy("BRA");
     shared_ptr<MovingEnvironment<S, FL, FL>> me =
-        make_shared<MovingEnvironment<S, FL, FL>>(mpo, bra, mps, "DMRG");
+        make_shared<MovingEnvironment<S, FL, FL>>(mpo, mps, mps, "DMRG");
     me->init_environments(true);
     me->delayed_contraction = OpNamesSet::normal_ops();
     me->cached_contraction = true;

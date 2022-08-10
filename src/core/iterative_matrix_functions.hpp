@@ -108,7 +108,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                             FP imag_cutoff = (FP)1E-3) {
         int k = (int)vs.size();
         MKL_INT vm = vs[0].m, vn = vs[0].n, n = vm * vn;
-        if (davidson_type & DavidsonTypes::NonHermitian) {
+        if (davidson_type & DavidsonTypes::LeftEigen) {
             assert(k % 2 == 0);
             k = k / 2;
         }
@@ -137,7 +137,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             threading->activate_global_mkl();
             if (davidson_type & DavidsonTypes::NonHermitian) {
                 tl.resize((size_t)n * n);
-                left.data = tl.data();
+                if (davidson_type & DavidsonTypes::LeftEigen)
+                    left.data = tl.data();
                 eig(h, ld, ld_imag, left);
             } else
                 eigs(h, ld);
@@ -156,7 +157,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 eigvals[i] = ld.data[eigval_idxs[i]];
                 copy(vs[i], GMatrix<FL>(h.data + eigval_idxs[i] * n, vm, vn));
             }
-            if (davidson_type & DavidsonTypes::NonHermitian)
+            if (davidson_type & DavidsonTypes::LeftEigen)
                 for (int i = 0; i < k; i++)
                     copy(vs[i + k],
                          GMatrix<FL>(left.data + eigval_idxs[i] * n, vm, vn));
@@ -165,7 +166,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
             for (int j = 0; j < k; j++)
                 pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
-            if (davidson_type & DavidsonTypes::NonHermitian)
+            if (davidson_type & DavidsonTypes::LeftEigen)
                 for (int j = 0; j < k; j++)
                     pcomm->broadcast(vs[j + vs.size() / 2].data,
                                      vs[j + vs.size() / 2].size(), pcomm->root);
@@ -186,8 +187,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         int k = (int)vs.size();
-        assert(k % 2 == 0);
-        k = k / 2;
+        if (davidson_type & DavidsonTypes::LeftEigen) {
+            assert(k % 2 == 0);
+            k = k / 2;
+        }
         if (deflation_min_size < k)
             deflation_min_size = k;
         if (deflation_max_size < k + k / 2)
@@ -244,7 +247,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 sigmas[i].clear();
                 op(bs[i], sigmas[i]);
             }
-            GMatrix<FL> left(leftd.data(), m, m);
+            GMatrix<FL> left(nullptr, m, m);
+            if (davidson_type & DavidsonTypes::LeftEigen)
+                left.data = leftd.data();
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 GDiagonalMatrix<FP> ld(nullptr, m), ld_imag(nullptr, m);
                 GMatrix<FL> alpha(nullptr, m, m);
@@ -325,7 +330,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 for (int i = ck; i < k; i++) {
                     copy(qs[i - ck], sigmaxs[i]);
-                    iadd(qs[i - ck], bxs[i], -ld(eigval_idxs[i], eigval_idxs[i]));
+                    iadd(qs[i - ck], bxs[i],
+                         -ld(eigval_idxs[i], eigval_idxs[i]));
                 }
                 qq = complex_dot(qs[0], qs[0]);
                 if (iprint) {
@@ -339,8 +345,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 for (int i = ck; i < k; i++) {
                     if (davidson_type & DavidsonTypes::DavidsonPrecond)
-                        davidson_precondition(qs[i - ck], ld.data[eigval_idxs[ck]],
-                                              aa);
+                        davidson_precondition(qs[i - ck],
+                                              ld.data[eigval_idxs[ck]], aa);
                     else if (!(davidson_type & DavidsonTypes::NoPrecond))
                         olsen_precondition(qs[i - ck], bxs[i],
                                            ld.data[eigval_idxs[ck]], aa);
@@ -359,7 +365,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (abs(qq) < conv_thrd) {
                 ck++;
                 if (ck == k) {
-                    if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    if ((davidson_type & DavidsonTypes::LeftEigen) &&
+                        (pcomm == nullptr || pcomm->root == pcomm->rank)) {
                         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                         {
@@ -406,7 +413,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     pcomm->broadcast(&m, 1, pcomm->root);
             }
             if (xiter == soft_max_iter) {
-                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                if ((davidson_type & DavidsonTypes::LeftEigen) &&
+                    (pcomm == nullptr || pcomm->root == pcomm->rank)) {
                     int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                     {
@@ -438,16 +446,18 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             for (int i = 0; i < k; i++)
                 copy(vs[i], bxs[i]);
-            for (int i = 0; i < k; i++)
-                copy(vs[i + vs.size() / 2], sigmaxs[i]);
+            if (davidson_type & DavidsonTypes::LeftEigen)
+                for (int i = 0; i < k; i++)
+                    copy(vs[i + vs.size() / 2], sigmaxs[i]);
         }
         if (pcomm != nullptr) {
             pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
             for (int j = 0; j < k; j++)
                 pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
-            for (int j = 0; j < k; j++)
-                pcomm->broadcast(vs[j + vs.size() / 2].data,
-                                 vs[j + vs.size() / 2].size(), pcomm->root);
+            if (davidson_type & DavidsonTypes::LeftEigen)
+                for (int j = 0; j < k; j++)
+                    pcomm->broadcast(vs[j + vs.size() / 2].data,
+                                     vs[j + vs.size() / 2].size(), pcomm->root);
         }
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.deallocate();
