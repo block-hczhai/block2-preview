@@ -1085,7 +1085,7 @@ TYPED_TEST(TestMatrix, TestEigRealNonSymmetric) {
     }
 }
 
-TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
+TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetricExact) {
     using FL = TypeParam;
     const int sz = is_same<FL, double>::value ? 200 : 75;
     const FL conv = is_same<FL, double>::value ? 1E-8 : 1E-7;
@@ -1155,6 +1155,93 @@ TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
                 GMatrixFunctions<FL>::all_close(
                     bs[i + k], GMatrix<FL>(ap.data + a.n * idxs[i], a.n, 1),
                     thrd2, thrd2, -1.0));
+        for (int i = k * 2 - 1; i >= 0; i--)
+            bs[i].deallocate();
+        wi.deallocate();
+        ww.deallocate();
+        aa.deallocate();
+        ax.deallocate();
+        ag.deallocate();
+        ap.deallocate();
+        a.deallocate();
+    }
+}
+
+TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
+    using FL = TypeParam;
+    const int sz = is_same<FL, double>::value ? 120 : 50;
+    const FL conv = is_same<FL, double>::value ? 1E-14 : 1E-7;
+    const FL thrd = is_same<FL, double>::value ? 1E-3 : 1E+2;
+    const FL thrd2 = is_same<FL, double>::value ? 5E-1 : 1E+2;
+    const FL thrd3 = is_same<FL, double>::value ? 1E+0 : 1E+3;
+    using MatMul = typename TestMatrix<FL>::MatMul;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT n = Random::rand_int(1, sz);
+        MKL_INT k = min(n, (MKL_INT)Random::rand_int(1, 10));
+        int ndav = 0;
+        GMatrix<FL> a(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ap(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ag(dalloc_<FL>()->allocate(n * n), n, n);
+        GMatrix<FL> ax(dalloc_<FL>()->allocate(n * n), n, n);
+        GDiagonalMatrix<FL> aa(dalloc_<FL>()->allocate(n), n);
+        GDiagonalMatrix<FL> ww(dalloc_<FL>()->allocate(n), n);
+        GDiagonalMatrix<FL> wi(dalloc_<FL>()->allocate(n), n);
+        vector<GMatrix<FL>> bs(k * 2, GMatrix<FL>(nullptr, n, 1));
+        Random::fill<FL>(a.data, a.size());
+        GMatrixFunctions<FL>::qr(a, ap, ag);
+        GMatrixFunctions<FL>::iadd(a, ap, (FL)0.95, false, (FL)0.05);
+        Random::fill<FL>(ww.data, ww.size());
+        GMatrixFunctions<FL>::copy(ag, a);
+        GMatrixFunctions<FL>::inverse(a);
+        for (MKL_INT ki = 0; ki < n; ki++)
+            for (MKL_INT kj = 0; kj < n; kj++)
+                ap(ki, kj) = ww(ki, kj);
+        ww.clear();
+        GMatrixFunctions<FL>::multiply(a, false, ap, false, ax, 1.0, 0.0);
+        GMatrixFunctions<FL>::multiply(ax, false, ag, false, a, 1.0, 0.0);
+        for (MKL_INT ki = 0; ki < n; ki++)
+            aa(ki, ki) = a(ki, ki);
+        for (int i = 0; i < k * 2; i++) {
+            bs[i].allocate();
+            bs[i].clear();
+            bs[i].data[i] = 1;
+        }
+        MatMul mop(a);
+        vector<FL> vw = IterativeMatrixFunctions<FL>::davidson(
+            mop, aa, bs, 0,
+            DavidsonTypes::NonHermitian | DavidsonTypes::DavidsonPrecond, ndav,
+            false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
+            n * k * 50, n * k * 40, k * 2, min(max((MKL_INT)5, k * 5 + 10), n));
+        ASSERT_EQ((int)vw.size(), k);
+        GDiagonalMatrix<FL> w(&vw[0], k);
+        GMatrixFunctions<FL>::eig(a, ww, wi, ap);
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+            wi, GIdentityMatrix<FL>(n, (FL)0.0), thrd2, thrd2));
+        vector<int> idxs(n);
+        for (int i = 0; i < n; i++)
+            idxs[i] = i;
+        sort(idxs.begin(), idxs.begin() + n,
+             [&ww](int i, int j) { return ww.data[i] < ww.data[j]; });
+        GDiagonalMatrix<FL> w2(wi.data, k);
+        for (int i = 0; i < k; i++)
+            w2.data[i] = ww.data[idxs[i]];
+        ASSERT_TRUE(GMatrixFunctions<FL>::all_close(w, w2, thrd, thrd));
+        for (int i = 0; i < k; i++)
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                            bs[i], GMatrix<FL>(a.data + a.n * idxs[i], a.n, 1),
+                            thrd2, thrd2) ||
+                        GMatrixFunctions<FL>::all_close(
+                            bs[i], GMatrix<FL>(a.data + a.n * idxs[i], a.n, 1),
+                            thrd2, thrd2, -1.0));
+        for (int i = 0; i < k; i++) {
+            ASSERT_TRUE(
+                GMatrixFunctions<FL>::all_close(
+                    bs[i + k], GMatrix<FL>(ap.data + a.n * idxs[i], a.n, 1),
+                    thrd3, thrd3) ||
+                GMatrixFunctions<FL>::all_close(
+                    bs[i + k], GMatrix<FL>(ap.data + a.n * idxs[i], a.n, 1),
+                    thrd3, thrd3, -1.0));
+        }
         for (int i = k * 2 - 1; i >= 0; i--)
             bs[i].deallocate();
         wi.deallocate();

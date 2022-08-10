@@ -176,7 +176,7 @@ class DMRGDriver:
                 thrds = [1e-6] * 4 + [1e-7] * 1
             else:
                 thrds = [1e-5] * 4 + [5e-6] * 1
-        if dav_type == "ExactNonHermitian":
+        if dav_type is not None and "NonHermitian" in dav_type:
             bra = ket.deep_copy("BRA")
         else:
             bra = ket

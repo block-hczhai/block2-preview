@@ -248,7 +248,8 @@ enum struct DavidsonTypes : uint16_t {
     NoPrecond = 64,
     NonHermitian = 128,
     Exact = 256,
-    ExactNonHermitian = 128 | 256
+    ExactNonHermitian = 128 | 256,
+    NonHermitianDavidsonPrecond = 128 | 32
 };
 
 inline bool operator&(DavidsonTypes a, DavidsonTypes b) {

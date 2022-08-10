@@ -788,31 +788,61 @@ int main(int argc, char *argv[]) {
 
     if (single_prec && su2 && use_complex && !sgf) {
         cout << "SPIN-ADAPTED SINGLE-PREC COMPLEX" << endl;
+#ifdef _USE_COMPLEX
+#ifdef _USE_SINGLE_PREC
         run<SU2, complex<float>>(params);
+#endif
+#endif
     } else if (single_prec && !su2 && use_complex && !sgf) {
         cout << "NON-SPIN-ADAPTED SINGLE-PREC COMPLEX" << endl;
+#ifdef _USE_COMPLEX
+#ifdef _USE_SINGLE_PREC
         run<SZ, complex<float>>(params);
+#endif
+#endif
     } else if (single_prec && !su2 && use_complex && sgf) {
         cout << "GENERAL-SPIN SINGLE-PREC COMPLEX" << endl;
+#ifdef _USE_SG
+#ifdef _USE_COMPLEX
+#ifdef _USE_SINGLE_PREC
         run<SGF, complex<float>>(params);
+#endif
+#endif
+#endif
     } else if (su2 && use_complex && !sgf) {
         cout << "SPIN-ADAPTED COMPLEX" << endl;
+#ifdef _USE_COMPLEX
         run<SU2, complex<double>>(params);
+#endif
     } else if (use_complex && !sgf) {
         cout << "NON-SPIN-ADAPTED COMPLEX" << endl;
+#ifdef _USE_COMPLEX
         run<SZ, complex<double>>(params);
+#endif
     } else if (use_complex && sgf) {
         cout << "GENERAL-SPIN COMPLEX" << endl;
+#ifdef _USE_SG
+#ifdef _USE_COMPLEX
         run<SGF, complex<double>>(params);
+#endif
+#endif
     } else if (single_prec && su2 && !sgf) {
         cout << "SPIN-ADAPTED SINGLE-PREC" << endl;
+#ifdef _USE_SINGLE_PREC
         run<SU2, float>(params);
+#endif
     } else if (single_prec && !su2 && !sgf) {
         cout << "NON-SPIN-ADAPTED SINGLE-PREC" << endl;
+#ifdef _USE_SINGLE_PREC
         run<SZ, float>(params);
+#endif
     } else if (single_prec && sgf) {
         cout << "GENERAL-SPIN SINGLE-PREC" << endl;
+#ifdef _USE_SG
+#ifdef _USE_SINGLE_PREC
         run<SGF, float>(params);
+#endif
+#endif
     } else if (su2 && !sgf) {
         cout << "SPIN-ADAPTED" << endl;
         run<SU2, double>(params);
@@ -821,7 +851,9 @@ int main(int argc, char *argv[]) {
         run<SZ, double>(params);
     } else if (sgf) {
         cout << "GENERAL-SPIN" << endl;
+#ifdef _USE_SG
         run<SGF, double>(params);
+#endif
     }
 
     auto finish = chrono::system_clock::now();

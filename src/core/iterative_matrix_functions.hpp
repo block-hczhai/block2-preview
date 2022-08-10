@@ -143,15 +143,15 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 eigs(h, ld);
             threading->activate_normal();
             sort(eigval_idxs.begin(), eigval_idxs.begin() + n,
-                 [&ld, &ld_imag, imag_cutoff](int i, int j) {
-                     if ((imag_cutoff > ld_imag.data[i]) !=
-                         (imag_cutoff > ld_imag.data[j]))
-                         return imag_cutoff > ld_imag.data[i];
-                     if (imag_cutoff > ld_imag.data[i])
-                         return ld.data[i] < ld.data[j];
-                     else
-                         return ld_imag.data[i] < ld_imag.data[j];
+                 [&ld_imag](int i, int j) {
+                     return abs(ld_imag.data[i]) < abs(ld_imag.data[j]);
                  });
+            int kk = k;
+            for (; kk < n; kk++)
+                if (abs(ld_imag.data[eigval_idxs[kk]]) > imag_cutoff)
+                    break;
+            sort(eigval_idxs.begin(), eigval_idxs.begin() + kk,
+                 [&ld](int i, int j) { return ld.data[i] < ld.data[j]; });
             for (int i = 0; i < k; i++) {
                 eigvals[i] = ld.data[eigval_idxs[i]];
                 copy(vs[i], GMatrix<FL>(h.data + eigval_idxs[i] * n, vm, vn));
@@ -171,6 +171,290 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                      vs[j + vs.size() / 2].size(), pcomm->root);
         }
         ndav = n;
+        return eigvals;
+    }
+    // Non-Hermitian Davidson algorithm
+    template <typename MatMul, typename PComm>
+    static vector<FP> davidson_non_hermitian(
+        MatMul &op, const GDiagonalMatrix<FL> &aa, vector<GMatrix<FL>> &vs,
+        DavidsonTypes davidson_type, int &ndav, bool iprint = false,
+        const PComm &pcomm = nullptr, FP conv_thrd = 5E-6, int max_iter = 5000,
+        int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50, FP imag_cutoff = (FP)1E-3) {
+        assert(!(davidson_type & DavidsonTypes::Harmonic));
+        assert(davidson_type & DavidsonTypes::NonHermitian);
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        int k = (int)vs.size();
+        assert(k % 2 == 0);
+        k = k / 2;
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        if (deflation_max_size < k + k / 2)
+            deflation_max_size = k + k / 2;
+        GMatrix<FL> pbs(nullptr,
+                        (MKL_INT)((deflation_max_size + k) * vs[0].size()), 1);
+        GMatrix<FL> pss(nullptr,
+                        (MKL_INT)((deflation_max_size + k) * vs[0].size()), 1);
+        GMatrix<FL> pqs(nullptr, (MKL_INT)(k * vs[0].size()), 1);
+        pbs.data = d_alloc->allocate((deflation_max_size + k) * vs[0].size());
+        pss.data = d_alloc->allocate((deflation_max_size + k) * vs[0].size());
+        pqs.data = d_alloc->allocate(k * vs[0].size());
+        vector<GMatrix<FL>> bs(deflation_max_size,
+                               GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> sigmas(deflation_max_size,
+                                   GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> bxs(k, GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> sigmaxs(k, GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> qs(k, GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        for (int i = 0; i < deflation_max_size; i++) {
+            bs[i].data = pbs.data + bs[i].size() * i;
+            sigmas[i].data = pss.data + sigmas[i].size() * i;
+        }
+        for (int i = 0; i < k; i++) {
+            qs[i].data = pqs.data + qs[i].size() * i;
+            bxs[i].data = pbs.data + bxs[i].size() * (i + deflation_max_size);
+            sigmaxs[i].data =
+                pss.data + sigmaxs[i].size() * (i + deflation_max_size);
+        }
+        for (int i = 0; i < k; i++)
+            copy(bs[i], vs[i]);
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < i; j++)
+                iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
+            iscale(bs[i], (FP)1.0 / norm(bs[i]));
+        }
+        vector<FP> eigvals(k);
+        vector<int> eigval_idxs(deflation_max_size);
+        vector<FL> leftd(deflation_max_size * deflation_max_size);
+        GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate();
+        int ck = 0, msig = 0, m = k, xiter = 0;
+        FL qq;
+        if (iprint)
+            cout << endl;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm != nullptr && xiter != 1)
+                pcomm->broadcast(pbs.data + bs[0].size() * msig,
+                                 bs[0].size() * (m - msig), pcomm->root);
+            for (int i = msig; i < m; i++, msig++) {
+                sigmas[i].clear();
+                op(bs[i], sigmas[i]);
+            }
+            GMatrix<FL> left(leftd.data(), m, m);
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                GDiagonalMatrix<FP> ld(nullptr, m), ld_imag(nullptr, m);
+                GMatrix<FL> alpha(nullptr, m, m);
+                ld.allocate();
+                ld_imag.allocate();
+                ld_imag.clear();
+                alpha.allocate();
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++)
+                        int i = ij / m, j = ij % m;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+                    for (int i = 0; i < m; i++)
+                        for (int j = 0; j < m; j++)
+#endif
+                    alpha(i, j) = complex_dot(bs[i], sigmas[j]);
+                }
+                eig(alpha, ld, ld_imag, left);
+                for (int i = 0; i < m; i++)
+                    eigval_idxs[i] = i;
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
+                     [&ld_imag](int i, int j) {
+                         return abs(ld_imag.data[i]) < abs(ld_imag.data[j]);
+                     });
+                FP max_imag_tol = max(
+                    imag_cutoff, abs(ld_imag.data[eigval_idxs[min(m, k) - 1]]));
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
+                     [&ld, &ld_imag, &max_imag_tol](int i, int j) {
+                         if ((max_imag_tol > abs(ld_imag.data[i])) !=
+                             (max_imag_tol > abs(ld_imag.data[j])))
+                             return max_imag_tol > abs(ld_imag.data[i]);
+                         if (max_imag_tol > abs(ld_imag.data[i]))
+                             return ld.data[i] < ld.data[j];
+                         else
+                             return abs(ld_imag.data[i]) < abs(ld_imag.data[j]);
+                     });
+#pragma omp parallel num_threads(ntg)
+                {
+                    // note alpha row/column is diff from python
+#pragma omp for schedule(static)
+                    // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+                    for (int j = 0; j < k; j++) {
+                        copy(sigmaxs[j], sigmas[eigval_idxs[j]]);
+                        iscale(sigmaxs[j],
+                               alpha(eigval_idxs[j], eigval_idxs[j]));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < k; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != eigval_idxs[j])
+                                iadd(sigmaxs[j], sigmas[i],
+                                     alpha(eigval_idxs[j], i));
+#pragma omp for schedule(static)
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+                    for (int j = 0; j < k; j++) {
+                        copy(bxs[j], bs[eigval_idxs[j]]);
+                        iscale(bxs[j], alpha(eigval_idxs[j], eigval_idxs[j]));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < k; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != eigval_idxs[j])
+                                iadd(bxs[j], bs[i], alpha(eigval_idxs[j], i));
+                }
+                threading->activate_normal();
+                alpha.deallocate();
+                for (int i = 0; i < ck; i++) {
+                    copy(qs[i], sigmaxs[i]);
+                    iadd(qs[i], bxs[i], -ld(eigval_idxs[i], eigval_idxs[i]));
+                    if (abs(complex_dot(qs[i], qs[i])) >= conv_thrd) {
+                        ck = i;
+                        break;
+                    }
+                }
+                for (int i = ck; i < k; i++) {
+                    copy(qs[i - ck], sigmaxs[i]);
+                    iadd(qs[i - ck], bxs[i], -ld(eigval_idxs[i], eigval_idxs[i]));
+                }
+                qq = complex_dot(qs[0], qs[0]);
+                if (iprint) {
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
+                         << fixed << setw(15) << setprecision(8)
+                         << ld.data[eigval_idxs[ck]];
+                    cout << fixed << setw(15) << setprecision(8)
+                         << ld_imag.data[eigval_idxs[ck]];
+                    cout << scientific << setw(13) << setprecision(2) << abs(qq)
+                         << endl;
+                }
+                for (int i = ck; i < k; i++) {
+                    if (davidson_type & DavidsonTypes::DavidsonPrecond)
+                        davidson_precondition(qs[i - ck], ld.data[eigval_idxs[ck]],
+                                              aa);
+                    else if (!(davidson_type & DavidsonTypes::NoPrecond))
+                        olsen_precondition(qs[i - ck], bxs[i],
+                                           ld.data[eigval_idxs[ck]], aa);
+                }
+                eigvals.resize(ck + 1);
+                if (ck + 1 != 0)
+                    for (int i = 0; i <= ck; i++)
+                        eigvals[i] = ld.data[eigval_idxs[i]];
+                ld_imag.deallocate();
+                ld.deallocate();
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
+            }
+            if (abs(qq) < conv_thrd) {
+                ck++;
+                if (ck == k) {
+                    if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                        {
+#pragma omp for schedule(static)
+                            // b[1:m] = np.dot(b[:], left[:, 1:m])
+                            for (int j = 0; j < k; j++) {
+                                copy(sigmaxs[j], bs[eigval_idxs[j]]);
+                                iscale(sigmaxs[j],
+                                       left(eigval_idxs[j], eigval_idxs[j]));
+                            }
+#pragma omp for schedule(static)
+                            for (int j = 0; j < k; j++)
+                                for (int i = 0; i < m; i++)
+                                    if (i != eigval_idxs[j])
+                                        iadd(sigmaxs[j], bs[i],
+                                             left(eigval_idxs[j], i));
+                        }
+                        threading->activate_normal();
+                    }
+                    break;
+                }
+            } else {
+                bool do_deflation = false;
+                int maxq = k - ck;
+                if (m >= deflation_max_size) {
+                    m = msig = 0;
+                    for (int j = 0; j < k; j++)
+                        copy(qs[j], bxs[j]);
+                    maxq = k;
+                }
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    for (int iq = 0; iq < maxq; iq++) {
+                        for (int j = 0; j < m; j++)
+                            iadd(qs[iq], bs[j], -complex_dot(bs[j], qs[iq]));
+                        FP normx = norm(qs[iq]);
+                        if (abs(normx * normx) >= 1E-14 &&
+                            m < deflation_max_size) {
+                            iscale(qs[iq], (FP)1.0 / normx);
+                            copy(bs[m++], qs[iq]);
+                        }
+                    }
+                }
+                if (pcomm != nullptr)
+                    pcomm->broadcast(&m, 1, pcomm->root);
+            }
+            if (xiter == soft_max_iter) {
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                    {
+#pragma omp for schedule(static)
+                        // b[1:m] = np.dot(b[:], left[:, 1:m])
+                        for (int j = 0; j < k; j++) {
+                            copy(sigmaxs[j], bs[eigval_idxs[j]]);
+                            iscale(sigmaxs[j],
+                                   left(eigval_idxs[j], eigval_idxs[j]));
+                        }
+#pragma omp for schedule(static)
+                        for (int j = 0; j < k; j++)
+                            for (int i = 0; i < m; i++)
+                                if (i != eigval_idxs[j])
+                                    iadd(sigmaxs[j], bs[i],
+                                         left(eigval_idxs[j], i));
+                    }
+                    threading->activate_normal();
+                }
+                break;
+            }
+        }
+        if (xiter == soft_max_iter)
+            eigvals.resize(k, 0);
+        if (xiter == max_iter) {
+            cout << "Error : only " << ck << " converged!" << endl;
+            assert(false);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+            for (int i = 0; i < k; i++)
+                copy(vs[i], bxs[i]);
+            for (int i = 0; i < k; i++)
+                copy(vs[i + vs.size() / 2], sigmaxs[i]);
+        }
+        if (pcomm != nullptr) {
+            pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
+            for (int j = 0; j < k; j++)
+                pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
+            for (int j = 0; j < k; j++)
+                pcomm->broadcast(vs[j + vs.size() / 2].data,
+                                 vs[j + vs.size() / 2].size(), pcomm->root);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate();
+        d_alloc->deallocate(pqs.data, k * vs[0].size());
+        d_alloc->deallocate(pss.data, (deflation_max_size + k) * vs[0].size());
+        d_alloc->deallocate(pbs.data, (deflation_max_size + k) * vs[0].size());
+        ndav = xiter;
         return eigvals;
     }
     // Davidson algorithm
@@ -195,10 +479,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (davidson_type & DavidsonTypes::Exact)
             return exact_diagonalization(op, vs, davidson_type, ndav, iprint,
                                          pcomm, imag_cutoff);
-        if (davidson_type & DavidsonTypes::NonHermitian) {
-            assert(k % 2 == 0);
-            k = k / 2;
-        }
+        if (davidson_type & DavidsonTypes::NonHermitian)
+            return davidson_non_hermitian(op, aa, vs, davidson_type, ndav,
+                                          iprint, pcomm, conv_thrd, max_iter,
+                                          soft_max_iter, deflation_min_size,
+                                          deflation_max_size, imag_cutoff);
         // if proj_weights is empty, then projection is done by (1 - |v><v|)
         // if proj_weights is not empty, projection is done by change H to (H +
         // w |v><v|)
@@ -254,7 +539,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
         vector<FP> eigvals(k);
         vector<int> eigval_idxs(deflation_max_size);
-        vector<FL> leftd(deflation_max_size * deflation_max_size);
         GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.allocate();
@@ -275,17 +559,15 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     iadd(sigmas[i], ors[j],
                          complex_dot(ors[j], bs[i]) * proj_weights[j]);
             }
-            vector<GMatrix<FL>> tmp(m, GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
-            for (int i = 0; i < m; i++)
-                tmp[i].allocate();
-            GMatrix<FL> left(leftd.data(), m, m);
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                GDiagonalMatrix<FP> ld(nullptr, m), ld_imag(nullptr, m);
+                GDiagonalMatrix<FP> ld(nullptr, m);
                 GMatrix<FL> alpha(nullptr, m, m);
                 ld.allocate();
-                ld_imag.allocate();
-                ld_imag.clear();
                 alpha.allocate();
+                vector<GMatrix<FL>> tmp(m,
+                                        GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
+                for (int i = 0; i < m; i++)
+                    tmp[i].allocate();
                 int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                 {
@@ -298,17 +580,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     for (int i = 0; i < m; i++)
                         for (int j = 0; j < m; j++) {
 #endif
-                        if (j <= i ||
-                            (davidson_type & DavidsonTypes::NonHermitian))
+                        if (j <= i)
                             alpha(i, j) = complex_dot(bs[i], sigmas[j]);
                     }
 #pragma omp single
-                    {
-                        if (davidson_type & DavidsonTypes::NonHermitian)
-                            eig(alpha, ld, ld_imag, left);
-                        else
-                            eigs(alpha, ld);
-                    }
+                    eigs(alpha, ld);
                     // note alpha row/column is diff from python
 #pragma omp for schedule(static)
                     // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
@@ -334,6 +610,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                 iadd(bs[j], tmp[i], alpha(j, i));
                 }
                 threading->activate_normal();
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate();
                 alpha.deallocate();
                 for (int i = 0; i < m; i++)
                     eigval_idxs[i] = i;
@@ -363,17 +641,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                              else
                                  return ld.data[i] - shift < ld.data[j] - shift;
                          });
-                else if (davidson_type & DavidsonTypes::NonHermitian)
-                    sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
-                         [&ld, &ld_imag, imag_cutoff](int i, int j) {
-                             if ((imag_cutoff > ld_imag.data[i]) !=
-                                 (imag_cutoff > ld_imag.data[j]))
-                                 return imag_cutoff > ld_imag.data[i];
-                             if (imag_cutoff > ld_imag.data[i])
-                                 return ld.data[i] < ld.data[j];
-                             else
-                                 return ld_imag.data[i] < ld_imag.data[j];
-                         });
                 for (int i = 0; i < ck; i++) {
                     int ii = eigval_idxs[i];
                     copy(q, sigmas[ii]);
@@ -391,16 +658,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         iadd(q, ors[j],
                              -complex_dot(ors[j], q) / or_normsqs[j]);
                 qq = complex_dot(q, q);
-                if (iprint) {
+                if (iprint)
                     cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
-                         << fixed << setw(15) << setprecision(8)
-                         << ld.data[ick];
-                    if (davidson_type & DavidsonTypes::NonHermitian)
-                        cout << fixed << setw(15) << setprecision(8)
-                             << ld_imag.data[ick];
-                    cout << scientific << setw(13) << setprecision(2) << abs(qq)
+                         << fixed << setw(15) << setprecision(8) << ld.data[ick]
+                         << scientific << setw(13) << setprecision(2) << abs(qq)
                          << endl;
-                }
                 if (davidson_type & DavidsonTypes::DavidsonPrecond)
                     davidson_precondition(q, ld.data[ick], aa);
                 else if (!(davidson_type & DavidsonTypes::NoPrecond))
@@ -409,7 +671,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 if (ck + 1 != 0)
                     for (int i = 0; i <= ck; i++)
                         eigvals[i] = ld.data[eigval_idxs[i]];
-                ld_imag.deallocate();
                 ld.deallocate();
             }
             if (pcomm != nullptr) {
@@ -418,30 +679,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             }
             if (abs(qq) < conv_thrd) {
                 ck++;
-                if (ck == k) {
-                    if ((davidson_type & DavidsonTypes::NonHermitian) &&
-                        (pcomm == nullptr || pcomm->root == pcomm->rank)) {
-                        int ntg = threading->activate_global();
-#pragma omp parallel num_threads(ntg)
-                        {
-#pragma omp for schedule(static)
-                            // b[1:m] = np.dot(b[:], left[:, 1:m])
-                            for (int j = 0; j < k; j++) {
-                                copy(sigmas[j], tmp[j]);
-                                iscale(sigmas[j], left(j, j));
-                            }
-#pragma omp for schedule(static)
-                            for (int j = 0; j < k; j++)
-                                for (int i = 0; i < k; i++)
-                                    if (i != j)
-                                        iadd(sigmas[j], tmp[i], left(j, i));
-                        }
-                        threading->activate_normal();
-                    }
-                    for (int i = (int)tmp.size() - 1; i >= 0; i--)
-                        tmp[i].deallocate();
+                if (ck == k)
                     break;
-                }
             } else {
                 bool do_deflation = false;
                 if (m >= deflation_max_size) {
@@ -453,6 +692,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                     if (do_deflation) {
+                        vector<GMatrix<FL>> tmp(
+                            m, GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
+                        for (int i = 0; i < m; i++)
+                            tmp[i].allocate();
                         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                         {
@@ -470,6 +713,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                 copy(sigmas[j], tmp[j]);
                         }
                         threading->activate_normal();
+                        for (int i = m - 1; i >= 0; i--)
+                            tmp[i].deallocate();
                     }
                     for (int j = 0; j < m; j++)
                         iadd(q, bs[j], -complex_dot(bs[j], q));
@@ -482,32 +727,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 m++;
             }
-            if (xiter == soft_max_iter) {
-                if ((davidson_type & DavidsonTypes::NonHermitian) &&
-                    (pcomm == nullptr || pcomm->root == pcomm->rank)) {
-                    int ntg = threading->activate_global();
-#pragma omp parallel num_threads(ntg)
-                    {
-#pragma omp for schedule(static)
-                        // b[1:m] = np.dot(b[:], left[:, 1:m])
-                        for (int j = 0; j < k; j++) {
-                            copy(sigmas[j], tmp[j]);
-                            iscale(sigmas[j], left(j, j));
-                        }
-#pragma omp for schedule(static)
-                        for (int j = 0; j < k; j++)
-                            for (int i = 0; i < k; i++)
-                                if (i != j)
-                                    iadd(sigmas[j], tmp[i], left(j, i));
-                    }
-                    threading->activate_normal();
-                }
-                for (int i = (int)tmp.size() - 1; i >= 0; i--)
-                    tmp[i].deallocate();
+            if (xiter == soft_max_iter)
                 break;
-            }
-            for (int i = (int)tmp.size() - 1; i >= 0; i--)
-                tmp[i].deallocate();
         }
         if (xiter == soft_max_iter)
             eigvals.resize(k, 0);
@@ -515,21 +736,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             cout << "Error : only " << ck << " converged!" << endl;
             assert(false);
         }
-        if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
             for (int i = 0; i < k; i++)
                 copy(vs[i], bs[eigval_idxs[i]]);
-            if (davidson_type & DavidsonTypes::NonHermitian)
-                for (int i = 0; i < k; i++)
-                    copy(vs[i + vs.size() / 2], sigmas[eigval_idxs[i]]);
-        }
         if (pcomm != nullptr) {
             pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
             for (int j = 0; j < k; j++)
                 pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
-            if (davidson_type & DavidsonTypes::NonHermitian)
-                for (int j = 0; j < k; j++)
-                    pcomm->broadcast(vs[j + vs.size() / 2].data,
-                                     vs[j + vs.size() / 2].size(), pcomm->root);
         }
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.deallocate();

@@ -1521,6 +1521,8 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("NonHermitian", DavidsonTypes::NonHermitian)
         .value("Exact", DavidsonTypes::Exact)
         .value("ExactNonHermitian", DavidsonTypes::ExactNonHermitian)
+        .value("NonHermitianDavidsonPrecond",
+               DavidsonTypes::NonHermitianDavidsonPrecond)
         .def(py::self & py::self)
         .def(py::self | py::self);
 

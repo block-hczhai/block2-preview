@@ -92,8 +92,8 @@ void TestDMRGN2STO3GSA<FL>::test_dmrg(
     // DMRG
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
-    dmrg->davidson_type = DavidsonTypes::ExactNonHermitian;
-    dmrg->iprint = 3;
+    dmrg->davidson_type = DavidsonTypes::NonHermitianDavidsonPrecond;
+    dmrg->iprint = 2;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
     dmrg->cutoff = 1E-20;
@@ -126,6 +126,7 @@ TYPED_TEST_CASE(TestDMRGN2STO3GSA, TestFL);
 
 TYPED_TEST(TestDMRGN2STO3GSA, TestSU2) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
@@ -170,6 +171,7 @@ TYPED_TEST(TestDMRGN2STO3GSA, TestSU2) {
 
 TYPED_TEST(TestDMRGN2STO3GSA, TestSZ) {
     using FL = TypeParam;
+    using FLL = typename GMatrix<FL>::FL;
 
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     PGTypes pg = PGTypes::D2H;
