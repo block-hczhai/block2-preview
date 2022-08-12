@@ -62,12 +62,14 @@ class DMRGDriver:
         self,
         stack_mem=1 << 30,
         scratch="./nodex",
+        restart_dir=None,
         n_threads=None,
         symm_type=SymmetryTypes.SU2,
     ):
 
         self.scratch = scratch
         self.stack_mem = stack_mem
+        self.restart_dir = restart_dir
         self.set_symm_type(symm_type)
         bw = self.bw
 
@@ -100,6 +102,11 @@ class DMRGDriver:
             self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True
         self.frame.use_main_stack = False
+        if self.restart_dir is not None:
+            import os
+            if not os.path.isdir(self.restart_dir):
+                os.makedirs(self.restart_dir)
+            self.frame.restart_dir = self.restart_dir
 
     def initialize_system(
         self, n_sites, n_elec=0, spin=0, orb_sym=None, heis_twos=-1, heis_twosz=0
@@ -248,9 +255,41 @@ class DMRGDriver:
         ex = expect.solve(False, ket.center != 0)
         return ex
 
+    def fix_restarting_mps(self, mps):
+        bw = self.bw
+        cg = bw.bs.CG(200)
+        cg.initialize()
+        if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
+            mps.center += 1
+            if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
+                mps.flip_fused_form(mps.center, cg, None)
+                mps.save_data()
+                mps.load_mutable()
+                mps.info.load_mutable()
+        elif mps.canonical_form[mps.center] in "CMKJST" and mps.center != 0:
+            if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
+                mps.flip_fused_form(mps.center, cg, None)
+                mps.save_data()
+                mps.load_mutable()
+                mps.info.load_mutable()
+            if not mps.canonical_form[mps.center:mps.center + 2] == "CC" and mps.dot == 2:
+                mps.center -= 1
+        elif mps.center == mps.n_sites - 1 and mps.dot == 2:
+            if mps.canonical_form[mps.center] in "KJ":
+                mps.flip_fused_form(mps.center, cg, None)
+            mps.center = mps.n_sites - 2
+            mps.save_data()
+            mps.load_mutable()
+            mps.info.load_mutable()
+        elif mps.center == 0 and mps.dot == 2:
+            if mps.canonical_form[mps.center] in "ST":
+                mps.flip_fused_form(mps.center, cg, None)
+            mps.save_data()
+            mps.load_mutable()
+            mps.info.load_mutable()
+
     def load_mps(self, tag, nroots=1):
         import os
-
         bw = self.bw
         mps_info = bw.brs.MPSInfo(0) if nroots == 1 else bw.brs.MultiMPSInfo(0)
         if os.path.isfile(self.scratch + "/%s-mps_info.bin" % tag):
@@ -263,6 +302,7 @@ class DMRGDriver:
         mps = bw.bs.MPS(mps_info) if nroots == 1 else bw.bs.MultiMPS(mps_info)
         mps.load_data()
         mps.load_mutable()
+        self.fix_restarting_mps(mps)
         return mps
 
     def mps_change_precision(self, mps, tag):
