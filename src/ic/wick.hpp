@@ -322,6 +322,11 @@ struct WickTensor {
                  indices.size() == (int)(name[1] - '0') * 2) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
             perms = WickPermutation::pair_symmetric((int)(name[1] - '0'));
+        } else if (name[0] == 'E' && name.length() == indices.size() + 1 &&
+                   all_of(name.begin() + 1, name.end(),
+                          [](const char &c) { return c == 'C' || c == 'D'; })) {
+            tensor_type = WickTensorTypes::SpinFreeOperator;
+            perms = WickPermutation::non_symmetric();
         } else if (name[0] == 'R' && name.length() == 2 &&
                    indices.size() == (int)(name[1] - '0') * 2) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
@@ -342,6 +347,15 @@ struct WickTensor {
                indices != other.indices;
     }
     bool operator<(const WickTensor &other) const noexcept {
+        int fc = fermi_type_compare(other);
+        return fc != 0 ? (fc == -1)
+                       : (name != other.name
+                              ? name < other.name
+                              : (type == other.type ? indices < other.indices
+                                                    : type < other.type));
+    }
+    // -1 = less than; +1 = greater than; 0 = equal to
+    int fermi_type_compare(const WickTensor &other) const noexcept {
         const WickIndexTypes mask = WickIndexTypes::Inactive |
                                     WickIndexTypes::Active |
                                     WickIndexTypes::External;
@@ -360,11 +374,9 @@ struct WickTensor {
              max_type == WickIndexTypes::Active))
             occ_type = WickIndexTypes::Inactive;
         return fermi_type(occ_type) != other.fermi_type(occ_type)
-                   ? fermi_type(occ_type) < other.fermi_type(occ_type)
-                   : (name != other.name
-                          ? name < other.name
-                          : (type == other.type ? indices < other.indices
-                                                : type < other.type));
+                   ? (fermi_type(occ_type) < other.fermi_type(occ_type) ? -1
+                                                                        : 1)
+                   : 0;
     }
     WickTensor operator*(const WickPermutation &perm) const noexcept {
         vector<WickIndex> xindices(indices.size());
@@ -417,6 +429,17 @@ struct WickTensor {
         name << "E" << k;
         return WickTensor(name.str(), indices,
                           WickPermutation::pair_symmetric(k),
+                          WickTensorTypes::SpinFreeOperator);
+    }
+    static WickTensor general_spin_free(const vector<WickIndex> &indices,
+                                        const vector<uint8_t> &cds) {
+        assert(indices.size() % 2 == 0);
+        const int k = (int)(indices.size() / 2);
+        stringstream name;
+        name << "E";
+        for (auto &c : cds)
+            name << (c ? 'C' : 'D');
+        return WickTensor(name.str(), indices, WickPermutation::non_symmetric(),
                           WickTensorTypes::SpinFreeOperator);
     }
     // with additional pq,rs -> rs,pq symmetry
@@ -1311,16 +1334,20 @@ struct WickExpr {
         }
         return r;
     }
-    WickExpr expand(int max_unctr = -1, bool no_ctr = false) const {
-        return split_index_types().normal_order_impl(max_unctr, no_ctr);
+    WickExpr expand(int max_unctr = -1, bool no_ctr = false,
+                    bool no_unctr_sf_inact = true) const {
+        return split_index_types().normal_order_impl(max_unctr, no_ctr,
+                                                     no_unctr_sf_inact);
     }
-    WickExpr normal_order_impl(int max_unctr = -1, bool no_ctr = false) const {
+    WickExpr normal_order_impl(int max_unctr = -1, bool no_ctr = false,
+                               bool no_unctr_sf_inact = true) const {
         int ntg = threading->activate_global();
         vector<WickExpr> r(ntg);
 #pragma omp parallel for schedule(static) num_threads(ntg)
         for (int k = 0; k < (int)terms.size(); k++) {
             int tid = threading->get_thread_id();
-            WickExpr rr = normal_order_impl_new(terms[k], max_unctr, no_ctr);
+            WickExpr rr = normal_order_impl_new(terms[k], max_unctr, no_ctr,
+                                                no_unctr_sf_inact);
             r[tid].terms.insert(r[tid].terms.end(), rr.terms.begin(),
                                 rr.terms.end());
         }
@@ -1505,9 +1532,14 @@ struct WickExpr {
         }
         return r;
     }
+    // no_unctr_sf_inact: if false, will keep spin-free operators with
+    // destroy operators before creation operators
+    // note that under this case there can be extra terms due to the
+    // ambiguity in the definition of normal order for spin-free operators
     static WickExpr normal_order_impl_new(const WickString &x,
                                           int max_unctr = -1,
-                                          bool no_ctr = false) {
+                                          bool no_ctr = false,
+                                          bool no_unctr_sf_inact = true) {
         WickExpr r;
         bool cd_type = any_of(
             x.tensors.begin(), x.tensors.end(), [](const WickTensor &wt) {
@@ -1595,7 +1627,7 @@ struct WickExpr {
             for (int i = 0; i < (int)cd_tensors.size(); i++)
                 tensor_idxs[i] = i;
             // arg sort of tensors in the normal order
-            if (sf_type) {
+            if (sf_type && no_unctr_sf_inact) {
                 stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                             [&cd_tensors](int i, int j) {
                                 return cd_tensors[i].type < cd_tensors[j].type;
@@ -1606,6 +1638,14 @@ struct WickExpr {
                                   return cd_tensors[i].type ==
                                          WickTensorTypes::CreationOperator;
                               }));
+            } else if (sf_type && !no_unctr_sf_inact) {
+                stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
+                            [&cd_tensors](int i, int j) {
+                                return cd_tensors[i].fermi_type(
+                                           WickIndexTypes::Inactive) <
+                                       cd_tensors[j].fermi_type(
+                                           WickIndexTypes::Inactive);
+                            });
             } else {
                 stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                             [&cd_tensors](int i, int j) {
@@ -1685,7 +1725,8 @@ struct WickExpr {
                         n_inactive_idxs_b[d] - n_inactive_idxs_b[d + 1];
                     // paired inactive must be all contracted
                     // otherwise it cannot be represented as spin-free operators
-                    if (n_inact_a + n_inactive_idxs_a[c + 1] <
+                    if (no_unctr_sf_inact &&
+                        n_inact_a + n_inactive_idxs_a[c + 1] <
                             n_inactive_idxs_a[0] &&
                         n_inact_b + n_inactive_idxs_b[d + 1] <
                             n_inactive_idxs_b[0])
@@ -1716,19 +1757,44 @@ struct WickExpr {
             if (max_unctr != -1 && cd_tensors.size() - (l + l + 2) > max_unctr)
                 continue;
             if (sf_type) {
-                if (n_inact_a < n_inactive_idxs_a[0] &&
+                if (no_unctr_sf_inact && n_inact_a < n_inactive_idxs_a[0] &&
                     n_inact_b < n_inactive_idxs_b[0])
                     continue;
                 int sf_n = cd_tensors.size() / 2, tn = sf_n - l - 1;
                 vector<WickIndex> wis(tn * 2);
-                for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
-                    if (!cur_idxs_mask[tensor_idxs[i]] &&
-                        cd_tensors[tensor_idxs[i]].type ==
-                            WickTensorTypes::CreationOperator) {
-                        rev_idxs[k] = tensor_idxs[i];
-                        rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
-                        k++;
-                    }
+                if (no_unctr_sf_inact) {
+                    for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
+                        if (!cur_idxs_mask[tensor_idxs[i]] &&
+                            cd_tensors[tensor_idxs[i]].type ==
+                                WickTensorTypes::CreationOperator) {
+                            rev_idxs[k] = tensor_idxs[i];
+                            rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
+                            k++;
+                        }
+                } else {
+                    vector<int> tvis(tensor_idxs.size(), -1);
+                    for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
+                        if (!cur_idxs_mask[tensor_idxs[i]] &&
+                            tvis[tensor_idxs[i]] == -1) {
+                            rev_idxs[k] = tensor_idxs[i];
+                            rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
+                            tvis[tensor_idxs[i]] = k;
+                            tvis[cd_idx_map_rev[tensor_idxs[i]]] = k;
+                            k++;
+                        }
+                    // move all virtual C near the middle
+                    // so that the right half order can be fixed
+                    for (int i = 0; i < tn; i++)
+                        if (cd_tensors[rev_idxs[i]].type ==
+                            WickTensorTypes::CreationOperator)
+                            for (int j = tn - 1; j > i; j--)
+                                if (cd_tensors[rev_idxs[j]].type ==
+                                    WickTensorTypes::DestroyOperator) {
+                                    swap(rev_idxs[i], rev_idxs[j]);
+                                    swap(rev_idxs[i + tn], rev_idxs[j + tn]);
+                                    break;
+                                }
+                }
                 for (int i = 0; i < tn + tn; i++)
                     wis[i] = cd_tensors[rev_idxs[i]].indices[0];
                 // sign for reversing destroy operator
@@ -1737,8 +1803,24 @@ struct WickExpr {
                 for (int i = 0; i < (int)(tn + tn); i++)
                     for (int j = i + 1; j < (int)(tn + tn); j++)
                         final_sign ^= (rev_idxs[j] < rev_idxs[i]);
-                if (wis.size() != 0)
-                    ot_tensors.push_back(WickTensor::spin_free(wis));
+                if (no_unctr_sf_inact) {
+                    if (wis.size() != 0)
+                        ot_tensors.push_back(WickTensor::spin_free(wis));
+                } else {
+                    vector<uint8_t> cds(tn + tn);
+                    for (int i = 0; i < tn + tn; i++) {
+                        cds[i] = cd_tensors[rev_idxs[i]].type ==
+                                 WickTensorTypes::CreationOperator;
+                        // due to su2 factor, CD = DC, this will cancel
+                        // normal fermionic factor whenever there is
+                        // a D operator in the first half
+                        if (!cds[i] && i < tn)
+                            inact_fac = -inact_fac;
+                    }
+                    if (wis.size() != 0)
+                        ot_tensors.push_back(
+                            WickTensor::general_spin_free(wis, cds));
+                }
             } else {
                 for (int i = 0; i < (int)tensor_idxs.size(); i++)
                     if (!cur_idxs_mask[tensor_idxs[i]])

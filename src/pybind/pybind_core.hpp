@@ -1882,6 +1882,21 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("size", &block2::MPI::size);
 #endif
 
+    py::class_<SU2CG, shared_ptr<SU2CG>>(m, "SU2CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def("initialize", [](SU2CG *self) { self->initialize(); })
+        .def("deallocate", &SU2CG::deallocate)
+        .def("wigner_6j", &SU2CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &SU2CG::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &SU2CG::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &SU2CG::transpose_cg, py::arg("td"), py::arg("tl"),
+             py::arg("tr"));
+
     py::class_<SpinPermTerm, shared_ptr<SpinPermTerm>>(m, "SpinPermTerm")
         .def(py::init<>())
         .def(py::init<SpinOperator, uint16_t>())

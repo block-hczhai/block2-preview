@@ -477,7 +477,7 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("substitute", &WickExpr::substitute)
         .def("index_map", &WickExpr::index_map)
         .def("expand", &WickExpr::expand, py::arg("max_unctr") = -1,
-             py::arg("no_ctr") = false)
+             py::arg("no_ctr") = false, py::arg("no_unctr_sf_inact") = true)
         .def("simple_sort", &WickExpr::simple_sort)
         .def("simplify_delta", &WickExpr::simplify_delta)
         .def("simplify_zero", &WickExpr::simplify_zero)
