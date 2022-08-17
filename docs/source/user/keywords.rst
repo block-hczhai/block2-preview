@@ -619,7 +619,7 @@ irrep\_reorder
     Group orbitals with the same irrep together.
 
 reorder
-    Followed by the name of a file including the space-sparated orbital reordering indices (counting from zero).
+    Followed by the name of a file including the space-sparated orbital reordering indices (counting from one).
 
 Unused Keywords
 ---------------

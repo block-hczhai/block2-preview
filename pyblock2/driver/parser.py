@@ -362,7 +362,7 @@ def orbital_reorder(fcidump, method='gaopt'):
         midx = np.array(idx)
     elif method.startswith("manual "):
         method = method[len("manual "):]
-        idx = [int(x)-1
+        idx = [int(x) - 1
                for x in open(method, "r").readline().split()]
         f = OrbitalOrdering.evaluate(n_sites, kmat, VectorUInt16(idx))
         idx = np.array(idx)
