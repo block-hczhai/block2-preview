@@ -6,7 +6,7 @@ from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
-@pytest.fixture(scope="module", params=["N2", "C2"])
+@pytest.fixture(scope="module", params=["N2"])
 def system_def(request):
     from pyscf import gto
 

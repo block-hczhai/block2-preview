@@ -371,13 +371,13 @@ Some reference outputs (the memory information can be different for each run): :
     post-load-mpo memory usage =    52.8 MB
     post-load-mpo memory usage =    48.9 MB
     post-load-mpo memory usage =    48.8 MB
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
-    MRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
+    DMRG Energy =  -75.728475151371001
 
 We can see that the memory usage after loading MPO is smaller,
 compared to the non-minimal-memory-usage mode.
