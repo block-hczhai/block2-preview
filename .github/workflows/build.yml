@@ -22,7 +22,7 @@ jobs:
         python: [ 3.9 ]
         manylinux: [ 2010 ]
         plat: [ x86_64 ]
-        parallel: [ mpi, serial ]
+        parallel: [ mpi, serial, serial-pytest ]
         exclude:
           - os: macos-latest
             parallel: mpi
@@ -68,6 +68,16 @@ jobs:
           brew update
           brew install libomp
 
+      - name: build test (serial-pytest, linux)
+        if: matrix.parallel == 'serial-pytest'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          make -j 2
+
       - name: build test (serial, linux)
         if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-latest'
         env:
@@ -93,6 +103,13 @@ jobs:
         run: |
           cd build_test
           ./block2_tests
+      
+      - name: run test (serial-pytest)
+        if: matrix.parallel == 'serial-pytest'
+        run: |
+          python -m pip install pyscf pytest
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          py.test pyblock2/unit_test/*.py
 
       - name: build test (mpi)
         if: matrix.parallel == 'mpi'

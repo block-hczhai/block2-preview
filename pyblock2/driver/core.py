@@ -181,6 +181,8 @@ class DMRGDriver:
         thrds=None,
         iprint=0,
         dav_type=None,
+        cutoff=1E-20,
+        dav_max_iter=4000,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -205,13 +207,16 @@ class DMRGDriver:
             dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbative
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
-        dmrg.davidson_max_iter = 5000
-        dmrg.davidson_soft_max_iter = 4000
+        dmrg.davidson_max_iter = dav_max_iter + 100
+        dmrg.davidson_soft_max_iter = dav_max_iter
         dmrg.iprint = iprint
+        dmrg.cutoff = cutoff
+        dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
             ener = list(dmrg.sweep_energies[-1])
+        self._dmrg = dmrg
         return ener
 
     def align_mps_center(self, ket, ref):
