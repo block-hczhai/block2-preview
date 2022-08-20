@@ -28,10 +28,10 @@ class TestDMRG:
 
         if "x2c" in soc_type:
             mf = scf.RHF(mol).sfx2c1e().run(conv_tol=1e-14)
-            assert abs(mf.e_tot - -460.87496073796086) < 1e-10
+            assert abs(mf.e_tot - -460.87496073796086) < 1e-7
         else:
             mf = scf.RHF(mol).run(conv_tol=1e-14)
-            assert abs(mf.e_tot - -459.1079678030042) < 1e-10
+            assert abs(mf.e_tot - -459.1079678030042) < 1e-7
 
         ncaselec = mol.nelectron - ncore * 2
         mc = mcscf.CASSCF(mf, ncas, ncaselec).state_average_(np.ones(3) / 3.0)
@@ -81,9 +81,9 @@ class TestDMRG:
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
         if "x2c" in soc_type:
-            assert abs(zfs * au2cm - 823.00213) < 1e-2
+            assert abs(zfs * au2cm - 823.00213) < 0.1
         else:
-            assert abs(zfs * au2cm - 837.29645) < 1e-2
+            assert abs(zfs * au2cm - 837.29645) < 0.1
 
         driver.finalize()
 
@@ -94,10 +94,10 @@ class TestDMRG:
 
         if "x2c" in soc_type:
             mf = scf.UHF(mol).sfx2c1e().run(conv_tol=1e-14)
-            assert abs(mf.e_tot - -460.8789016293768) < 1e-10
+            assert abs(mf.e_tot - -460.8789016293768) < 1e-7
         else:
             mf = scf.UHF(mol).run(conv_tol=1e-14)
-            assert abs(mf.e_tot - -459.11192524585005) < 1e-10
+            assert abs(mf.e_tot - -459.11192524585005) < 1e-7
 
         ncaselec = mol.nelectron - ncore * 2
         mc = mcscf.UCASSCF(mf, ncas, ncaselec).state_average_(np.ones(3) / 3.0)
@@ -150,8 +150,8 @@ class TestDMRG:
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
         if "x2c" in soc_type:
-            assert abs(zfs * au2cm - 843.50084) < 1e-2
+            assert abs(zfs * au2cm - 843.50084) < 0.1
         else:
-            assert abs(zfs * au2cm - 857.67109) < 1e-2
+            assert abs(zfs * au2cm - 857.67109) < 0.1
 
         driver.finalize()
