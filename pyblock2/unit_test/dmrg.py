@@ -47,10 +47,10 @@ class TestDMRG:
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
 
-        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(0, 1, 3, 2).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 2, 3).conj()) < 1e-10
+        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
         b = driver.expr_builder()
         b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
@@ -75,7 +75,7 @@ class TestDMRG:
             assert abs(energies[0] - -107.654122447523) < 1e-6
             assert abs(energies[1] - -106.959626154679) < 1e-6
             assert abs(energies[2] - -106.943756938989) < 1e-6
-        elif name == "C2":
+        elif name == "C2": # may stuck in local minima
             assert abs(energies[0] - -75.552895292451) < 1e-6
             assert abs(energies[1] - -75.536490900344) < 1e-6
             assert abs(energies[2] - -75.536490900079) < 1e-6
@@ -94,6 +94,23 @@ class TestDMRG:
             assert abs(energy - -107.654122447523) < 1e-6
         elif name == "C2":
             assert abs(energy - -75.552895292451) < 1e-6
+
+        driver.target.pg = 2
+        ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)
+        energy = driver.dmrg(
+            mpo,
+            ket,
+            n_sweeps=20,
+            bond_dims=bond_dims,
+            noises=noises,
+            thrds=thrds,
+            iprint=1,
+        )
+        print(energy)
+        if name == "N2":
+            assert abs(energy - -107.30674473475638) < 1e-6
+        elif name == "C2":
+            assert abs(energy - -75.36070319318232) < 1e-6
 
     def test_uhf(self, tmp_path, system_def):
         from pyscf import scf
@@ -115,13 +132,13 @@ class TestDMRG:
         )
         for h1e in h1es:
             h1e[np.abs(h1e) < 1e-7] = 0
-            assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-10
+            assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
         for ig, g2e in enumerate(g2es):
             g2e[np.abs(g2e) < 1e-7] = 0
             if ig != 1:
-                assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1).conj()) < 1e-10
-            assert np.linalg.norm(g2e - g2e.transpose(0, 1, 3, 2).conj()) < 1e-10
-            assert np.linalg.norm(g2e - g2e.transpose(1, 0, 2, 3).conj()) < 1e-10
+                assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-7
+            assert np.linalg.norm(g2e - g2e.transpose(0, 1, 3, 2).conj()) < 1e-7
+            assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
         b = driver.expr_builder()
         b.add_sum_term("cd", h1es[0])
@@ -190,10 +207,10 @@ class TestDMRG:
         )
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
-        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-10
+        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
         b = driver.expr_builder()
         b.add_sum_term("CD", h1e)
@@ -218,7 +235,7 @@ class TestDMRG:
             assert abs(energies[0] - -107.654122447523) < 1e-6
             assert abs(energies[1] - -107.031449471625) < 1e-6
             assert abs(energies[2] - -107.031449471625) < 1e-6
-        elif name == "C2":
+        elif name == "C2": # may stuck in local minima
             assert abs(energies[0] - -75.552895292344) < 1e-6
             assert abs(energies[1] - -75.536490899999) < 1e-6
             assert abs(energies[2] - -75.536490899999) < 1e-6
@@ -258,10 +275,10 @@ class TestDMRG:
         )
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
-        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-10
-        assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-10
+        assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
+        assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
         b = driver.expr_builder()
         b.add_sum_term("CD", h1e)

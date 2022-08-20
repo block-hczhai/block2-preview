@@ -1,3 +1,21 @@
+#  block2: Efficient MPO implementation of quantum chemistry DMRG
+#  Copyright (C) 2022 Huanchen Zhai <hczhai@caltech.edu>
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+#
+
 import numpy as np
 
 
@@ -11,7 +29,7 @@ def get_rhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         ncas = mo.shape[1] - ncore
 
     if pg_symm and mol.symmetry:
-        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo, tol=1E-2)
+        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo, tol=1e-2)
         orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
         orb_sym = orb_sym[ncore : ncore + ncas]
     else:
@@ -53,7 +71,7 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         ncas = mo_a.shape[1] - ncore
 
     if pg_symm and mol.symmetry:
-        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1E-2)
+        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2)
         orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
         orb_sym = orb_sym[ncore : ncore + ncas]
     else:
@@ -107,7 +125,7 @@ def get_ghf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
     if pg_symm and mol.symmetry:
         s = np.kron(np.eye(2, dtype=int), mol.intor_symmetric("int1e_ovlp"))
         symm_orb = [np.kron(np.eye(2, dtype=int), c) for c in mol.symm_orb]
-        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, symm_orb, mo, s=s, tol=1E-2)
+        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, symm_orb, mo, s=s, tol=1e-2)
         orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
         orb_sym = orb_sym[ncore * 2 : ncore * 2 + ncas * 2]
     else:
@@ -192,12 +210,6 @@ def get_dhf_integrals(mf, ncore=0, ncas=None, pg_symm=True):
     g2e = ao2mo.general(
         mol, (mo_l, mo_l, mo_s, mo_s), intor="int2e_spsp2_spinor", aosym=4
     )
-    # print(
-    #     np.linalg.norm(
-    #         g2e.transpose(1, 0)
-    #         - ao2mo.general(mol, (mo_s, mo_s, mo_l, mo_l), intor="int2e_spsp1_spinor")
-    #     )
-    # )
     g2e = (g2e + g2e.transpose(1, 0)) * c1 ** 2
     g2e += ao2mo.full(mol, mo_l, intor="int2e_spinor", aosym=4)
     g2e += ao2mo.full(mol, mo_s, intor="int2e_spsp1spsp2_spinor", aosym=4) * c1 ** 4
@@ -217,18 +229,6 @@ def get_dhf_integrals(mf, ncore=0, ncas=None, pg_symm=True):
             mol, (mo_l, mo_s, mo_s, mo_l), intor=p + "ssp1sps2_spinor", aosym=1, comp=1
         )
         g2e_slls = g2e_lssl.transpose(1, 0)
-        # print(
-        #     np.linalg.norm(
-        #         g2e_slsl.reshape((ncas * 2,) * 4).transpose(3, 2, 1, 0).conj()
-        #         - g2e_lsls.reshape((ncas * 2,) * 4)
-        #     )
-        # )
-        # print(
-        #     np.linalg.norm(
-        #         g2e_lssl.reshape((ncas * 2,) * 4).transpose(2, 3, 0, 1)
-        #         - g2e_slls.reshape((ncas * 2,) * 4)
-        #     )
-        # )
 
         if mf.with_breit:
             g2e += (g2e_lsls + g2e_slsl + g2e_lssl + g2e_slls) * c1 ** 2

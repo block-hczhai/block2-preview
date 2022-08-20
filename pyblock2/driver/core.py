@@ -1,3 +1,21 @@
+#  block2: Efficient MPO implementation of quantum chemistry DMRG
+#  Copyright (C) 2022 Huanchen Zhai <hczhai@caltech.edu>
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program. If not, see <https://www.gnu.org/licenses/>.
+#
+#
+
 from enum import IntFlag
 
 
@@ -104,18 +122,24 @@ class DMRGDriver:
         self.frame.use_main_stack = False
         if self.restart_dir is not None:
             import os
+
             if not os.path.isdir(self.restart_dir):
                 os.makedirs(self.restart_dir)
             self.frame.restart_dir = self.restart_dir
 
     def initialize_system(
-        self, n_sites, n_elec=0, spin=0, orb_sym=None, heis_twos=-1, heis_twosz=0
+        self, n_sites, n_elec=0, spin=0, pg_irrep=None, orb_sym=None, heis_twos=-1, heis_twosz=0
     ):
         bw = self.bw
         self.vacuum = bw.SX(0, 0, 0)
         if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
             n_elec = n_sites * heis_twos
-        self.target = bw.SX(n_elec if heis_twosz == 0 else heis_twosz, spin, 0)
+        if pg_irrep is None:
+            if hasattr(self, 'pg_irrep'):
+                pg_irrep = self.pg_irrep
+            else:
+                pg_irrep = 0
+        self.target = bw.SX(n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep)
         self.n_sites = n_sites
         if orb_sym is None:
             self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
@@ -125,7 +149,7 @@ class DMRGDriver:
             self.vacuum, self.n_sites, self.orb_sym, heis_twos
         )
 
-    def read_fcidump(self, filename, pg='d2h', rescale=None, iprint=1):
+    def read_fcidump(self, filename, pg="d2h", rescale=None, iprint=1):
         bw = self.bw
         fcidump = bw.bx.FCIDUMP()
         fcidump.read(filename)
@@ -137,20 +161,25 @@ class DMRGDriver:
         self.n_sites = fcidump.n_sites
         self.n_elec = fcidump.n_elec
         self.spin = fcidump.twos
-        self.ipg = fcidump.isym
+        self.pg_irrep = swap_pg(fcidump.isym)
         if rescale is not None:
-            print('original const = ', fcidump.const_e)
+            print("original const = ", fcidump.const_e)
             if isinstance(rescale, float):
                 fcidump.rescale(rescale)
             elif rescale:
                 fcidump.rescale()
-            print('rescaled const = ', fcidump.const_e)
+            print("rescaled const = ", fcidump.const_e)
         self.const_e = fcidump.const_e
         import numpy as np
-        self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape((self.n_sites, ) * 2)
-        self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape((self.n_sites, ) * 4)
+
+        self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape(
+            (self.n_sites,) * 2
+        )
+        self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape(
+            (self.n_sites,) * 4
+        )
         if iprint >= 1:
-            print('symmetrize error = ', fcidump.symmetrize(self.orb_sym))
+            print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
         return fcidump
 
     def get_mpo(self, expr, iprint=0):
@@ -164,8 +193,9 @@ class DMRGDriver:
     def orbital_reordering(self, h1e, g2e):
         bw = self.bw
         import numpy as np
-        xmat = np.abs(np.einsum('ijji->ij', g2e, optimize=True))
-        kmat = np.abs(h1e) * 1E-7 + xmat
+
+        xmat = np.abs(np.einsum("ijji->ij", g2e, optimize=True))
+        kmat = np.abs(h1e) * 1e-7 + xmat
         kmat = bw.b.VectorDouble(kmat.flatten())
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
         return np.array(idx)
@@ -181,7 +211,7 @@ class DMRGDriver:
         thrds=None,
         iprint=0,
         dav_type=None,
-        cutoff=1E-20,
+        cutoff=1e-20,
         dav_max_iter=4000,
     ):
         bw = self.bw
@@ -264,7 +294,10 @@ class DMRGDriver:
         bw = self.bw
         cg = bw.bs.CG(200)
         cg.initialize()
-        if mps.canonical_form[mps.center] == 'L' and mps.center != mps.n_sites - mps.dot:
+        if (
+            mps.canonical_form[mps.center] == "L"
+            and mps.center != mps.n_sites - mps.dot
+        ):
             mps.center += 1
             if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
                 mps.flip_fused_form(mps.center, cg, None)
@@ -277,7 +310,10 @@ class DMRGDriver:
                 mps.save_data()
                 mps.load_mutable()
                 mps.info.load_mutable()
-            if not mps.canonical_form[mps.center:mps.center + 2] == "CC" and mps.dot == 2:
+            if (
+                not mps.canonical_form[mps.center : mps.center + 2] == "CC"
+                and mps.dot == 2
+            ):
                 mps.center -= 1
         elif mps.center == mps.n_sites - 1 and mps.dot == 2:
             if mps.canonical_form[mps.center] in "KJ":
@@ -295,6 +331,7 @@ class DMRGDriver:
 
     def load_mps(self, tag, nroots=1):
         import os
+
         bw = self.bw
         mps_info = bw.brs.MPSInfo(0) if nroots == 1 else bw.brs.MultiMPSInfo(0)
         if os.path.isfile(self.scratch + "/%s-mps_info.bin" % tag):
@@ -320,7 +357,9 @@ class DMRGDriver:
         r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return r
 
-    def get_random_mps(self, tag, bond_dim=500, center=0, dot=2, target=None, nroots=1, occs=None):
+    def get_random_mps(
+        self, tag, bond_dim=500, center=0, dot=2, target=None, nroots=1, occs=None
+    ):
         bw = self.bw
         if target is None:
             target = self.target

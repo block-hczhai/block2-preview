@@ -306,3 +306,30 @@ MRCI/SCI computations
 **Solution:** Add the following code. Attention: This will change the fcidump. Use with case and check ``symmetrize_error``  ::
 
      symmetrize_error = fcidump.symmetrize(orb_sym)
+
+Library Import
+--------------
+
+[2022-08-18]
+
+**Error:** ::
+    
+    *** Error in `python': double free or corruption (out)
+
+**Reason:** This can happen if there are two pybind11 libraries, but they are built with differrent compiler versions.
+    When import both libraries in the same python script, this error can happen.
+
+**Solution:** One workaround is to write two python scripts so that the two pybind11 libraries are not imported in the same script.
+    Otherwise, one needs to compile both extensions manually, or use the pip version for both libraries, so that they can be used
+    together.
+
+[2022-08-19]
+
+**Error:** ::
+
+    /.../libmkl_avx2.so: undefined symbol: mkl__blas_write_lock_dgemm_hashtable
+    INTEL MKL ERROR: /.../libmkl_avx2.so.1: undefined symbol: mkl_sparse_optimize_bsr_trsm_i8.
+    OSError: /.../libmkl_def.so: undefined symbol: mkl_dnn_getTtl_F32
+
+**Solution:** This can be solved by add link flags ``-Wl,--no-as-needed`` with all absolute ``*so`` path for mkl libraries.
+    Note that flags ``-Wl,-rpath -Wl,/../lib -L/.../lib`` should not be used.
