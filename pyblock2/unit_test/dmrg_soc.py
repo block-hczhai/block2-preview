@@ -11,7 +11,7 @@ def system_def(request):
     from pyscf import gto
 
     if request.param == "Cl":
-        mol = gto.M(atom="Cl 0 0 0", basis='cc-pvdz-dk', verbose=0, spin=1)
+        mol = gto.M(atom="Cl 0 0 0", basis="cc-pvdz-dk", verbose=0, spin=1)
         return mol, 5, 4, "Cl"
 
 
@@ -47,9 +47,7 @@ class TestDMRG:
         driver = DMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
         )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+        driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
 
@@ -78,6 +76,7 @@ class TestDMRG:
             iprint=1,
         )
         from pyscf.data import nist
+
         au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
@@ -85,6 +84,8 @@ class TestDMRG:
             assert abs(zfs * au2cm - 823.00213) < 1e-2
         else:
             assert abs(zfs * au2cm - 837.29645) < 1e-2
+
+        driver.finalize()
 
     def test_uhf(self, tmp_path, system_def, soc_type):
         from pyscf import scf, mcscf
@@ -115,9 +116,7 @@ class TestDMRG:
         driver = DMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
         )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+        driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
 
@@ -146,6 +145,7 @@ class TestDMRG:
             iprint=1,
         )
         from pyscf.data import nist
+
         au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
@@ -153,3 +153,5 @@ class TestDMRG:
             assert abs(zfs * au2cm - 843.50084) < 1e-2
         else:
             assert abs(zfs * au2cm - 857.67109) < 1e-2
+
+        driver.finalize()

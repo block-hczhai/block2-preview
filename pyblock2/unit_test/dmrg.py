@@ -112,6 +112,8 @@ class TestDMRG:
         elif name == "C2":
             assert abs(energy - -75.36070319318232) < 1e-6
 
+        driver.finalize()
+
     def test_uhf(self, tmp_path, system_def):
         from pyscf import scf
 
@@ -186,6 +188,8 @@ class TestDMRG:
             assert abs(energy - -107.654122447523) < 1e-6
         elif name == "C2":
             assert abs(energy - -75.552895292345) < 1e-6
+            
+        driver.finalize()
 
     def test_ghf(self, tmp_path, system_def):
         from pyscf import scf
@@ -239,6 +243,8 @@ class TestDMRG:
             assert abs(energies[0] - -75.552895292344) < 1e-6
             assert abs(energies[1] - -75.536490899999) < 1e-6
             assert abs(energies[2] - -75.536490899999) < 1e-6
+
+        driver.finalize()
 
     def test_dhf(self, tmp_path, system_def, dhf_type):
         from pyscf import scf
@@ -320,3 +326,5 @@ class TestDMRG:
             elif dhf_type == "Breit":
                 assert abs(energies[0] - -75.579482776888) < 1e-6
                 assert abs(energies[1] - -75.563315259912) < 1e-6
+
+        driver.finalize()
