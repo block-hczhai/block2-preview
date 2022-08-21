@@ -81,9 +81,9 @@ class TestDMRG:
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
         if "x2c" in soc_type:
-            assert abs(zfs * au2cm - 823.00213) < 0.1
+            assert abs(zfs * au2cm - 823.00213) < 1
         else:
-            assert abs(zfs * au2cm - 837.29645) < 0.1
+            assert abs(zfs * au2cm - 837.29645) < 1
 
         driver.finalize()
 
@@ -150,8 +150,8 @@ class TestDMRG:
         zfs = np.average(energies[4:6]) - np.average(energies[0:4])
 
         if "x2c" in soc_type:
-            assert abs(zfs * au2cm - 843.50084) < 0.1
+            assert abs(zfs * au2cm - 843.50084) < 1
         else:
-            assert abs(zfs * au2cm - 857.67109) < 0.1
+            assert abs(zfs * au2cm - 857.67109) < 1
 
         driver.finalize()
