@@ -685,18 +685,17 @@ struct GMatrixFunctions<
     // a = a + scale * op(b)
     static void iadd(const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale,
                      bool conj = false, FL cfactor = 1.0) {
-        static const FL x = 1.0;
+        const FL one = 1.0;
         if (!conj) {
             assert(a.m == b.m && a.n == b.n);
             MKL_INT n = a.m * a.n, inc = 1;
             if (cfactor == 1.0)
                 xaxpy<FL>(&n, &scale, b.data, &inc, a.data, &inc);
             else
-                xgemm<FL>("n", "n", &inc, &n, &inc, &scale, &x, &inc, b.data,
+                xgemm<FL>("n", "n", &inc, &n, &inc, &scale, &one, &inc, b.data,
                           &inc, &cfactor, a.data, &inc);
         } else {
             assert(a.m == b.n && a.n == b.m);
-            const FL one = 1.0;
             for (MKL_INT k = 0, inc = 1; k < b.n; k++)
                 xgemm<FL>("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n,
                           &one, &inc, &cfactor, &a(k, 0), &a.n);

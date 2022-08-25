@@ -286,9 +286,9 @@ On most cases, ``ParallelMPO`` may not work with unsimplified MPO. The MPO shoul
     core/matrix_functions.hpp:307: static void block2::GMatrixFunctions<double>::multiply(const MatrixRef&, uint8_t, const MatrixRef&, uint8_t, const MatrixRef&, double, double): Assertion `a.n >= b.m && c.m == a.m && c.n >= b.n' failed.
 
 **Reason:** For transition reduced density matrix, if bra and ket are the MPSs with the same tag,
-    they must be the same object. For example, this is the case when they are the same ith root from a state-averaged MultiMPS.
-    Therefore, one should not "extract" the same root twice with the same tag. This will cause the conflict in the disk storage.
-    This was a bug in the main driver for onedot transition 1/2 reduced density matrix with more than one root.
+they must be the same object. For example, this is the case when they are the same ith root from a state-averaged MultiMPS.
+Therefore, one should not "extract" the same root twice with the same tag. This will cause the conflict in the disk storage.
+This was a bug in the main driver for onedot transition 1/2 reduced density matrix with more than one root.
 
 MRCI/SCI computations
 ---------------------
@@ -317,11 +317,11 @@ Library Import
     *** Error in `python': double free or corruption (out)
 
 **Reason:** This can happen if there are two pybind11 libraries, but they are built with differrent compiler versions.
-    When import both libraries in the same python script, this error can happen.
+When import both libraries in the same python script, this error can happen.
 
 **Solution:** One workaround is to write two python scripts so that the two pybind11 libraries are not imported in the same script.
-    Otherwise, one needs to compile both extensions manually, or use the pip version for both libraries, so that they can be used
-    together.
+Otherwise, one needs to compile both extensions manually, or use the pip version for both libraries, so that they can be used
+together.
 
 [2022-08-19]
 
@@ -332,4 +332,7 @@ Library Import
     OSError: /.../libmkl_def.so: undefined symbol: mkl_dnn_getTtl_F32
 
 **Solution:** This can be solved by add link flags ``-Wl,--no-as-needed`` with all absolute ``*so`` path for mkl libraries.
-    Note that flags ``-Wl,-rpath -Wl,/../lib -L/.../lib`` should not be used.
+Note that flags ``-Wl,-rpath -Wl,/../lib -L/.../lib`` should not be used.
+
+A special case is when both the "so.1" (2021 MKL) and "so" (2019 ML) are used. We need to make sure the ``block2.so``
+library is linked to only pure "so.1" or only pure "so".

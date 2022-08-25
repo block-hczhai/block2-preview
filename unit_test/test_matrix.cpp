@@ -70,7 +70,7 @@ TYPED_TEST(TestMatrix, TestIadd) {
         if (conjb == 2)
             GMatrixFunctions<FL>::transpose(c, tb, scale);
         else
-            GMatrixFunctions<FL>::iadd(c, tb, scale, conjb, cfactor);
+            GMatrixFunctions<FL>::iadd(c, tb, scale, (bool)conjb, cfactor);
         for (MKL_INT ik = 0; ik < m; ik++)
             for (MKL_INT jk = 0; jk < n; jk++)
                 ASSERT_LT(

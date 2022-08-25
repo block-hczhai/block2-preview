@@ -94,6 +94,11 @@ class DMRGDriver:
         symm_type=SymmetryTypes.SU2,
         mpi=None,
     ):
+        if mpi is not None and mpi:
+            self.mpi = True
+        else:
+            self.mpi = None
+            self.prule = None
 
         self.scratch = scratch
         self.stack_mem = stack_mem
@@ -110,21 +115,15 @@ class DMRGDriver:
             1,
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
-        if mpi is not None:
-            self.mpi = bw.brs.MPICommunicator()
-            self.prule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, mpi)
-        else:
-            self.mpi = None
-            self.prule = None
 
     def parallelize_integrals(self, para_type, h1e, g2e, const):
         import numpy as np
 
         if para_type == ParallelTypes.Nothing or self.mpi is None:
             return h1e, g2e, const
-        ixs = np.ndindex(*h1e.shape)
+        ixs = np.mgrid[tuple(slice(x) for x in h1e.shape)].reshape((h1e.ndim, -1)).T
         sixs = np.sort(ixs, axis=1)
-        gixs = np.ndindex(*g2e.shape)
+        gixs = np.mgrid[tuple(slice(x) for x in g2e.shape)].reshape((g2e.ndim, -1)).T
         gsixs = np.sort(gixs, axis=1)
 
         if para_type == ParallelTypes.I:
@@ -140,7 +139,7 @@ class DMRGDriver:
             mask1 = sixs[:, 1] % self.mpi.size == self.mpi.rank
             mask2 = gsixs[:, 1] % self.mpi.size == self.mpi.rank
         elif para_type == ParallelTypes.SIJ:
-            mask1 = sixs[:, 0] % self.mpi.size != self.mpi.rank
+            mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
             mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (
                 gsixs[:, 1] % self.mpi.size == self.mpi.rank
             )
@@ -161,8 +160,8 @@ class DMRGDriver:
                 )
             )
             mask2 = mask2a | mask2b | mask2c
-        h1e[~mask1] = 0.0
-        g2e[~mask2] = 0.0
+        h1e[~mask1.reshape(h1e.shape)] = 0.0
+        g2e[~mask2.reshape(g2e.shape)] = 0.0
         if self.mpi.rank != self.mpi.root:
             const = 0
         return h1e, g2e, const
@@ -170,6 +169,7 @@ class DMRGDriver:
     def set_symm_type(self, symm_type):
         self.bw = Block2Wrapper(symm_type)
         bw = self.bw
+
         if SymmetryTypes.SP not in bw.symm_type:
             bw.b.Global.frame = bw.b.DoubleDataFrame(
                 int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
@@ -186,11 +186,21 @@ class DMRGDriver:
             self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True
         self.frame.use_main_stack = False
+
+        if self.mpi:
+            self.mpi = bw.brs.MPICommunicator()
+            self.prule = bw.bs.ParallelRuleSimple(
+                bw.b.ParallelSimpleTypes.Nothing, self.mpi
+            )
+
         if self.restart_dir is not None:
             import os
 
-            if not os.path.isdir(self.restart_dir):
-                os.makedirs(self.restart_dir)
+            if self.mpi is None or self.mpi.rank == self.mpi.root:
+                if not os.path.isdir(self.restart_dir):
+                    os.makedirs(self.restart_dir)
+            if self.mpi is not None:
+                self.mpi.barrier()
             self.frame.restart_dir = self.restart_dir
 
     def initialize_system(
@@ -324,6 +334,8 @@ class DMRGDriver:
         if isinstance(ket, bw.bs.MultiMPS):
             ener = list(dmrg.sweep_energies[-1])
         self._dmrg = dmrg
+        if self.mpi is not None:
+            self.mpi.barrier()
         return ener
 
     def align_mps_center(self, ket, ref):
@@ -356,6 +368,8 @@ class DMRGDriver:
         cps = bw.bs.Linear(me, bw.b.VectorUBond(bond_dims), bw.b.VectorUBond(bond_dims))
         cps.iprint = iprint
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
+        if self.mpi is not None:
+            self.mpi.barrier()
         return norm
 
     def expectation(self, bra, mpo, ket, iprint=0):
@@ -369,6 +383,8 @@ class DMRGDriver:
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         expect.iprint = iprint
         ex = expect.solve(False, ket.center != 0)
+        if self.mpi is not None:
+            self.mpi.barrier()
         return ex
 
     def fix_restarting_mps(self, mps):
@@ -381,34 +397,58 @@ class DMRGDriver:
         ):
             mps.center += 1
             if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
+                if self.mpi is not None:
+                    self.mpi.barrier()
                 mps.flip_fused_form(mps.center, cg, self.prule)
                 mps.save_data()
+                if self.mpi is not None:
+                    self.mpi.barrier()
                 mps.load_mutable()
                 mps.info.load_mutable()
+                if self.mpi is not None:
+                    self.mpi.barrier()
         elif mps.canonical_form[mps.center] in "CMKJST" and mps.center != 0:
             if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
+                if self.mpi is not None:
+                    self.mpi.barrier()
                 mps.flip_fused_form(mps.center, cg, self.prule)
                 mps.save_data()
+                if self.mpi is not None:
+                    self.mpi.barrier()
                 mps.load_mutable()
                 mps.info.load_mutable()
+                if self.mpi is not None:
+                    self.mpi.barrier()
             if (
                 not mps.canonical_form[mps.center : mps.center + 2] == "CC"
                 and mps.dot == 2
             ):
                 mps.center -= 1
         elif mps.center == mps.n_sites - 1 and mps.dot == 2:
+            if self.mpi is not None:
+                self.mpi.barrier()
             if mps.canonical_form[mps.center] in "KJ":
                 mps.flip_fused_form(mps.center, cg, self.prule)
             mps.center = mps.n_sites - 2
             mps.save_data()
+            if self.mpi is not None:
+                self.mpi.barrier()
             mps.load_mutable()
             mps.info.load_mutable()
+            if self.mpi is not None:
+                self.mpi.barrier()
         elif mps.center == 0 and mps.dot == 2:
+            if self.mpi is not None:
+                self.mpi.barrier()
             if mps.canonical_form[mps.center] in "ST":
                 mps.flip_fused_form(mps.center, cg, self.prule)
             mps.save_data()
+            if self.mpi is not None:
+                self.mpi.barrier()
             mps.load_mutable()
             mps.info.load_mutable()
+            if self.mpi is not None:
+                self.mpi.barrier()
 
     def load_mps(self, tag, nroots=1):
         import os
