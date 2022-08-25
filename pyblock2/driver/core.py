@@ -31,6 +31,15 @@ class SymmetryTypes(IntFlag):
     SPCPX = 32 | 16
 
 
+class ParallelTypes(IntFlag):
+    Nothing = 0
+    I = 1
+    J = 2
+    SI = 3
+    SJ = 4
+    SIJ = 5
+
+
 class Block2Wrapper:
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
@@ -83,6 +92,7 @@ class DMRGDriver:
         restart_dir=None,
         n_threads=None,
         symm_type=SymmetryTypes.SU2,
+        mpi=None,
     ):
 
         self.scratch = scratch
@@ -100,6 +110,62 @@ class DMRGDriver:
             1,
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
+        if mpi is not None:
+            self.mpi = bw.brs.MPICommunicator()
+            self.prule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, mpi)
+        else:
+            self.mpi = None
+            self.prule = None
+
+    def parallelize_integrals(self, para_type, h1e, g2e, const):
+        import numpy as np
+
+        if para_type == ParallelTypes.Nothing or self.mpi is None:
+            return h1e, g2e, const
+        ixs = np.ndindex(*h1e.shape)
+        sixs = np.sort(ixs, axis=1)
+        gixs = np.ndindex(*g2e.shape)
+        gsixs = np.sort(gixs, axis=1)
+
+        if para_type == ParallelTypes.I:
+            mask1 = ixs[:, 0] % self.mpi.size == self.mpi.rank
+            mask2 = gixs[:, 0] % self.mpi.size == self.mpi.rank
+        elif para_type == ParallelTypes.SI:
+            mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
+            mask2 = gsixs[:, 0] % self.mpi.size == self.mpi.rank
+        elif para_type == ParallelTypes.J:
+            mask1 = ixs[:, 1] % self.mpi.size == self.mpi.rank
+            mask2 = gixs[:, 1] % self.mpi.size == self.mpi.rank
+        elif para_type == ParallelTypes.SJ:
+            mask1 = sixs[:, 1] % self.mpi.size == self.mpi.rank
+            mask2 = gsixs[:, 1] % self.mpi.size == self.mpi.rank
+        elif para_type == ParallelTypes.SIJ:
+            mask1 = sixs[:, 0] % self.mpi.size != self.mpi.rank
+            mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (
+                gsixs[:, 1] % self.mpi.size == self.mpi.rank
+            )
+            mask2b = (
+                (gsixs[:, 1] != gsixs[:, 2])
+                & (gsixs[:, 0] <= gsixs[:, 1])
+                & (
+                    (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0]) % self.mpi.size
+                    == self.mpi.rank
+                )
+            )
+            mask2c = (
+                (gsixs[:, 1] != gsixs[:, 2])
+                & (gsixs[:, 0] > gsixs[:, 1])
+                & (
+                    (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1]) % self.mpi.size
+                    == self.mpi.rank
+                )
+            )
+            mask2 = mask2a | mask2b | mask2c
+        h1e[~mask1] = 0.0
+        g2e[~mask2] = 0.0
+        if self.mpi.rank != self.mpi.root:
+            const = 0
+        return h1e, g2e, const
 
     def set_symm_type(self, symm_type):
         self.bw = Block2Wrapper(symm_type)
@@ -128,14 +194,21 @@ class DMRGDriver:
             self.frame.restart_dir = self.restart_dir
 
     def initialize_system(
-        self, n_sites, n_elec=0, spin=0, pg_irrep=None, orb_sym=None, heis_twos=-1, heis_twosz=0
+        self,
+        n_sites,
+        n_elec=0,
+        spin=0,
+        pg_irrep=None,
+        orb_sym=None,
+        heis_twos=-1,
+        heis_twosz=0,
     ):
         bw = self.bw
         self.vacuum = bw.SX(0, 0, 0)
         if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
             n_elec = n_sites * heis_twos
         if pg_irrep is None:
-            if hasattr(self, 'pg_irrep'):
+            if hasattr(self, "pg_irrep"):
                 pg_irrep = self.pg_irrep
             else:
                 pg_irrep = 0
@@ -163,12 +236,14 @@ class DMRGDriver:
         self.spin = fcidump.twos
         self.pg_irrep = swap_pg(fcidump.isym)
         if rescale is not None:
-            print("original const = ", fcidump.const_e)
+            if iprint >= 1:
+                print("original const = ", fcidump.const_e)
             if isinstance(rescale, float):
                 fcidump.rescale(rescale)
             elif rescale:
                 fcidump.rescale()
-            print("rescaled const = ", fcidump.const_e)
+            if iprint >= 1:
+                print("rescaled const = ", fcidump.const_e)
         self.const_e = fcidump.const_e
         import numpy as np
 
@@ -188,6 +263,8 @@ class DMRGDriver:
             self.ghamil, expr, bw.b.MPOAlgorithmTypes.FastBipartite, 0.0, -1, iprint > 0
         )
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
+        if self.mpi:
+            mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
 
     def orbital_reordering(self, h1e, g2e):
@@ -250,18 +327,22 @@ class DMRGDriver:
         return ener
 
     def align_mps_center(self, ket, ref):
+        if self.mpi is not None:
+            self.mpi.barrier()
         ket.info.bond_dim = max(ket.info.bond_dim, ket.info.get_max_bond_dimension())
         if ket.center != ref.center:
             if ref.center == 0:
                 ket.center += 1
                 ket.canonical_form = ket.canonical_form[:-1] + "S"
                 while ket.center != 0:
-                    ket.move_left(self.ghamil.opf.cg, None)
+                    ket.move_left(self.ghamil.opf.cg, self.prule)
             else:
                 ket.canonical_form = "K" + ket.canonical_form[1:]
                 while ket.center != ket.n_sites - 1:
-                    ket.move_right(self.ghamil.opf.cg, None)
+                    ket.move_right(self.ghamil.opf.cg, self.prule)
                 ket.center -= 1
+        if self.mpi is not None:
+            self.mpi.barrier()
 
     def multiply(self, bra, mpo, ket, n_sweeps=10, tol=1e-8, bond_dims=None, iprint=0):
         bw = self.bw
@@ -300,13 +381,13 @@ class DMRGDriver:
         ):
             mps.center += 1
             if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
-                mps.flip_fused_form(mps.center, cg, None)
+                mps.flip_fused_form(mps.center, cg, self.prule)
                 mps.save_data()
                 mps.load_mutable()
                 mps.info.load_mutable()
         elif mps.canonical_form[mps.center] in "CMKJST" and mps.center != 0:
             if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
-                mps.flip_fused_form(mps.center, cg, None)
+                mps.flip_fused_form(mps.center, cg, self.prule)
                 mps.save_data()
                 mps.load_mutable()
                 mps.info.load_mutable()
@@ -317,14 +398,14 @@ class DMRGDriver:
                 mps.center -= 1
         elif mps.center == mps.n_sites - 1 and mps.dot == 2:
             if mps.canonical_form[mps.center] in "KJ":
-                mps.flip_fused_form(mps.center, cg, None)
+                mps.flip_fused_form(mps.center, cg, self.prule)
             mps.center = mps.n_sites - 2
             mps.save_data()
             mps.load_mutable()
             mps.info.load_mutable()
         elif mps.center == 0 and mps.dot == 2:
             if mps.canonical_form[mps.center] in "ST":
-                mps.flip_fused_form(mps.center, cg, None)
+                mps.flip_fused_form(mps.center, cg, self.prule)
             mps.save_data()
             mps.load_mutable()
             mps.info.load_mutable()

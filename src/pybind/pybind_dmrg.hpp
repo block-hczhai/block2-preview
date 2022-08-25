@@ -2019,6 +2019,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("RightCopy", OpCachingTypes::RightCopy);
 
     py::enum_<ParallelSimpleTypes>(m, "ParallelSimpleTypes", py::arithmetic())
+        .value("Nothing", ParallelSimpleTypes::None)
         .value("I", ParallelSimpleTypes::I)
         .value("J", ParallelSimpleTypes::J)
         .value("IJ", ParallelSimpleTypes::IJ)

@@ -240,6 +240,21 @@ struct WickPermutation {
                                        WickPermutation({1, 0, 2, 3}, true),
                                        WickPermutation({0, 1, 3, 2}, true)};
     }
+    static vector<WickPermutation> pair_anti_symmetric(int n) {
+        vector<WickPermutation> r(max(n - 1, 0) * 2);
+        vector<int16_t> x(n * 2);
+        for (int i = 1; i < n; i++) {
+            for (int j = 0; j < n; j++)
+                x[j] = j == 0 ? i : (j == i ? 0 : j);
+            r[i - 1] = WickPermutation(x, true);
+        }
+        for (int i = 1; i < n; i++) {
+            for (int j = 0; j < n; j++)
+                x[j + n] = j == 0 ? i + n : (j == i ? n : j + n);
+            r[i - 1 + n - 1] = WickPermutation(x, true);
+        }
+        return r;
+    }
     static vector<WickPermutation> pair_symmetric(int n,
                                                   bool hermitian = false) {
         vector<WickPermutation> r(max(n - 1, 0));

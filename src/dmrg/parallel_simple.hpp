@@ -31,7 +31,7 @@ using namespace std;
 namespace block2 {
 
 // Operator names
-enum struct ParallelSimpleTypes : uint8_t { I, J, IJ, KL };
+enum struct ParallelSimpleTypes : uint8_t { None, I, J, IJ, KL };
 
 // Rule for parallel dispatcher for quantum chemistry MPO
 template <typename S, typename FL>
