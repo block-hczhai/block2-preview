@@ -63,6 +63,8 @@ struct ParallelRuleSimple : ParallelRule<S, FL> {
         case ParallelSimpleTypes::KL:
             return (FL)0.5 * ((FL)(FP)(comm->rank == i % comm->size) +
                               (FL)(FP)(comm->rank == j % comm->size));
+        case ParallelSimpleTypes::None:
+            return (FL)(FP)(1.0);
         }
         return (FL)0.0;
     }
@@ -90,6 +92,8 @@ struct ParallelRuleSimple : ParallelRule<S, FL> {
                                   (kk <= ll ? (int)ll * (ll + 1) / 2 + kk
                                             : (int)kk * (kk + 1) / 2 + ll) %
                                       comm->size);
+        case ParallelSimpleTypes::None:
+            return (FL)(FP)(1.0);
         }
         return (FL)0.0;
     }
