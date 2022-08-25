@@ -43,7 +43,7 @@ One can install ``block2`` using ``pip``:
 
       pip install block2-mpi
 
-* Binary format is prepared via ``pip`` for python 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI). If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source (for example, ``pip install block2 --no-binary block2``).
+* Binary format is prepared via ``pip`` for python 3.6, 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI). If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source (for example, ``pip install block2 --no-binary block2``).
 
 * One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``, but its dependence on mpi library can sometimes be difficult to deal with. Some guidance for resolving environment problems can be found in issue [#7](https://github.com/block-hczhai/block2-preview/issues/7) and [here](https://block2.readthedocs.io/en/latest/user/installation.html#installation-with-anaconda).
 
@@ -225,7 +225,7 @@ One can add both the repo root directory and the ``build`` directory into ``PYTH
 
 ### MKL
 
-If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required (with limited support for multi-threading).
+If `-DUSE_MKL=ON` is not given, `blas` and `lapack` are required. Sometimes, the `blas` and `lapack` function names can contain the extra underscore. Therefore, it is recommended to use `-DUSE_MKL=OFF` and `-DF77UNDERSCORE=ON` together to prevent this underscore problem. If this generates the undefined reference error, one should try `-DUSE_MKL=OFF -DF77UNDERSCORE=OFF` instead.
 
 Use `-DUSE_MKL64=ON` instead of `-DUSE_MKL=ON` to enable using matrices with 64-bit integer type.
 
@@ -276,7 +276,7 @@ The following will use tbb mkl library:
 
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DOMP_LIB=TBB -DTBB=ON
 
-Note: for `CSR sparse MKL + ThreadingTypes::Operator`, if `-DOMP_LIB=GNU`,
+Note for developers : for `CSR sparse MKL + ThreadingTypes::Operator`, if `-DOMP_LIB=GNU`,
 it is not possible to set both `n_threads_mkl` not equal to 1 and `n_threads_op` not equal to 1.
 In other words, nested openMP is not possible for CSR sparse matrix (generating wrong result/non-convergence).
 For `-DOMP_LIB=SEQ`, CSR sparse matrix is okay (non-nested openMP).

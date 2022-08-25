@@ -48,6 +48,15 @@ using namespace std;
 
 namespace block2 {
 
+#define CONCAT(a, b) CONCATX(a, b)
+#define CONCATX(a, b) a##b
+
+#ifdef _F77UNDERSCORE
+#define FNAME(X) CONCAT(X, _)
+#else
+#define FNAME(X) X
+#endif
+
 #ifdef _WIN32
 
 struct timeval {
