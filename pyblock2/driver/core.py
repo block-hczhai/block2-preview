@@ -46,39 +46,50 @@ class Block2Wrapper:
 
         self.b = b
         self.symm_type = symm_type
+        has_cpx = hasattr(b, "cpx")
+        has_sp = hasattr(b, "sp")
+        has_spcpx = has_sp and hasattr(b.sp, "cpx")
         if SymmetryTypes.SPCPX in symm_type:
             self.VectorFL = b.VectorComplexFloat
             self.VectorFP = b.VectorFloat
             self.bx = b.sp.cpx
+            self.bc = self.bx
         elif SymmetryTypes.CPX in symm_type:
             self.VectorFL = b.VectorComplexDouble
             self.VectorFP = b.VectorDouble
             self.bx = b.cpx
+            self.bc = self.bx
         elif SymmetryTypes.SP in symm_type:
             self.VectorFL = b.VectorFloat
             self.VectorFP = b.VectorFloat
             self.bx = b.sp
+            self.bc = b.sp.cpx if has_spcpx else None
         else:
             self.VectorFL = b.VectorDouble
             self.VectorFP = b.VectorDouble
             self.bx = b
+            self.bc = b.cpx if has_cpx else None
         if SymmetryTypes.SU2 in symm_type:
             self.bs = self.bx.su2
+            self.bcs = self.bc.su2 if self.bc is not None else None
             self.brs = b.su2
             self.SX = b.SU2
             self.VectorSX = b.VectorSU2
         elif SymmetryTypes.SZ in symm_type:
             self.bs = self.bx.sz
+            self.bcs = self.bc.sz if self.bc is not None else None
             self.brs = b.sz
             self.SX = b.SZ
             self.VectorSX = b.VectorSZ
         elif SymmetryTypes.SGF in symm_type:
             self.bs = self.bx.sgf
+            self.bcs = self.bc.sgf if self.bc is not None else None
             self.brs = b.sgf
             self.SX = b.SGF
             self.VectorSX = b.VectorSGF
         elif SymmetryTypes.SGB in symm_type:
             self.bs = self.bx.sgb
+            self.bcs = self.bc.sgb if self.bc is not None else None
             self.brs = b.sgb
             self.SX = b.SGB
             self.VectorSX = b.VectorSGB
@@ -121,69 +132,89 @@ class DMRGDriver:
 
         if para_type == ParallelTypes.Nothing or self.mpi is None:
             return h1e, g2e, const
-        ixs = np.mgrid[tuple(slice(x) for x in h1e.shape)].reshape((h1e.ndim, -1)).T
-        sixs = np.sort(ixs, axis=1)
-        gixs = np.mgrid[tuple(slice(x) for x in g2e.shape)].reshape((g2e.ndim, -1)).T
-        gsixs = np.sort(gixs, axis=1)
+        if h1e is not None:
+            ixs = np.mgrid[tuple(slice(x) for x in h1e.shape)].reshape((h1e.ndim, -1)).T
+            sixs = np.sort(ixs, axis=1)
+        if g2e is not None:
+            gixs = (
+                np.mgrid[tuple(slice(x) for x in g2e.shape)].reshape((g2e.ndim, -1)).T
+            )
+            gsixs = np.sort(gixs, axis=1)
 
         if para_type == ParallelTypes.I:
-            mask1 = ixs[:, 0] % self.mpi.size == self.mpi.rank
-            mask2 = gixs[:, 0] % self.mpi.size == self.mpi.rank
+            if h1e is not None:
+                mask1 = ixs[:, 0] % self.mpi.size == self.mpi.rank
+            if g2e is not None:
+                mask2 = gixs[:, 0] % self.mpi.size == self.mpi.rank
         elif para_type == ParallelTypes.SI:
-            mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
-            mask2 = gsixs[:, 0] % self.mpi.size == self.mpi.rank
+            if h1e is not None:
+                mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
+            if g2e is not None:
+                mask2 = gsixs[:, 0] % self.mpi.size == self.mpi.rank
         elif para_type == ParallelTypes.J:
-            mask1 = ixs[:, 1] % self.mpi.size == self.mpi.rank
-            mask2 = gixs[:, 1] % self.mpi.size == self.mpi.rank
+            if h1e is not None:
+                mask1 = ixs[:, 1] % self.mpi.size == self.mpi.rank
+            if g2e is not None:
+                mask2 = gixs[:, 1] % self.mpi.size == self.mpi.rank
         elif para_type == ParallelTypes.SJ:
-            mask1 = sixs[:, 1] % self.mpi.size == self.mpi.rank
-            mask2 = gsixs[:, 1] % self.mpi.size == self.mpi.rank
+            if h1e is not None:
+                mask1 = sixs[:, 1] % self.mpi.size == self.mpi.rank
+            if g2e is not None:
+                mask2 = gsixs[:, 1] % self.mpi.size == self.mpi.rank
         elif para_type == ParallelTypes.SIJ:
-            mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
-            mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (
-                gsixs[:, 1] % self.mpi.size == self.mpi.rank
-            )
-            mask2b = (
-                (gsixs[:, 1] != gsixs[:, 2])
-                & (gsixs[:, 0] <= gsixs[:, 1])
-                & (
-                    (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0]) % self.mpi.size
-                    == self.mpi.rank
+            if h1e is not None:
+                mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
+            if g2e is not None:
+                mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (
+                    gsixs[:, 1] % self.mpi.size == self.mpi.rank
                 )
-            )
-            mask2c = (
-                (gsixs[:, 1] != gsixs[:, 2])
-                & (gsixs[:, 0] > gsixs[:, 1])
-                & (
-                    (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1]) % self.mpi.size
-                    == self.mpi.rank
+                mask2b = (
+                    (gsixs[:, 1] != gsixs[:, 2])
+                    & (gsixs[:, 0] <= gsixs[:, 1])
+                    & (
+                        (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0])
+                        % self.mpi.size
+                        == self.mpi.rank
+                    )
                 )
-            )
-            mask2 = mask2a | mask2b | mask2c
-        h1e[~mask1.reshape(h1e.shape)] = 0.0
-        g2e[~mask2.reshape(g2e.shape)] = 0.0
+                mask2c = (
+                    (gsixs[:, 1] != gsixs[:, 2])
+                    & (gsixs[:, 0] > gsixs[:, 1])
+                    & (
+                        (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1])
+                        % self.mpi.size
+                        == self.mpi.rank
+                    )
+                )
+                mask2 = mask2a | mask2b | mask2c
+        if h1e is not None:
+            h1e[~mask1.reshape(h1e.shape)] = 0.0
+        if g2e is not None:
+            g2e[~mask2.reshape(g2e.shape)] = 0.0
         if self.mpi.rank != self.mpi.root:
             const = 0
         return h1e, g2e, const
 
-    def set_symm_type(self, symm_type):
+    def set_symm_type(self, symm_type, reset_frame=True):
         self.bw = Block2Wrapper(symm_type)
         bw = self.bw
 
-        if SymmetryTypes.SP not in bw.symm_type:
-            bw.b.Global.frame = bw.b.DoubleDataFrame(
-                int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
-            )
-            bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(1e-16, 1024)
-            bw.b.Global.frame_float = None
-            self.frame = bw.b.Global.frame
-        else:
-            bw.b.Global.frame_float = bw.b.FloatDataFrame(
-                int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
-            )
-            bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(1e-16, 1024)
-            bw.b.Global.frame = None
-            self.frame = bw.b.Global.frame_float
+        # reset_frame only required when switching between dp/sp
+        if reset_frame:
+            if SymmetryTypes.SP not in bw.symm_type:
+                bw.b.Global.frame = bw.b.DoubleDataFrame(
+                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
+                )
+                bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(1e-16, 1024)
+                bw.b.Global.frame_float = None
+                self.frame = bw.b.Global.frame
+            else:
+                bw.b.Global.frame_float = bw.b.FloatDataFrame(
+                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
+                )
+                bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(1e-16, 1024)
+                bw.b.Global.frame = None
+                self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True
         self.frame.use_main_stack = False
 
@@ -232,6 +263,50 @@ class DMRGDriver:
             self.vacuum, self.n_sites, self.orb_sym, heis_twos
         )
 
+    def write_fcidump(self, h1e, g2e, ecore=0, filename=None, pg="d2h"):
+        bw = self.bw
+        import numpy as np
+
+        fcidump = bw.bx.FCIDUMP()
+        swap_pg = getattr(bw.b.PointGroup, "swap_" + pg)
+        fw_map = np.array([swap_pg(x) for x in range(1, 9)])
+        bk_map = np.argsort(fw_map) + 1
+        if SymmetryTypes.SZ in bw.symm_type:
+            mh1e = tuple(x.flatten() for x in h1e)
+            mg2e = tuple(x.flatten() for x in g2e)
+            fcidump.initialize_sz(
+                self.n_sites,
+                self.target.n,
+                self.target.twos,
+                bk_map[self.target.pg],
+                ecore,
+                mh1e,
+                mg2e,
+            )
+        elif g2e is not None:
+            fcidump.initialize_su2(
+                self.n_sites,
+                self.target.n,
+                self.target.twos,
+                bk_map[self.target.pg],
+                ecore,
+                h1e.flatten(),
+                g2e.flatten(),
+            )
+        else:
+            fcidump.initialize_h1e(
+                self.n_sites,
+                self.target.n,
+                self.target.twos,
+                bk_map[self.target.pg],
+                ecore,
+                h1e.flatten(),
+            )
+        fcidump.orb_sym = bw.b.VectorUInt8([bk_map[x] for x in self.orb_sym])
+        if filename is not None:
+            fcidump.write(filename)
+        return fcidump
+
     def read_fcidump(self, filename, pg="d2h", rescale=None, iprint=1):
         bw = self.bw
         fcidump = bw.bx.FCIDUMP()
@@ -266,6 +341,108 @@ class DMRGDriver:
         if iprint >= 1:
             print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
         return fcidump
+
+    def get_conventional_qc_mpo(self, fcidump):
+        bw = self.bw
+        hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
+        mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.Conventional, "HQC")
+        mpo = bw.bs.SimplifiedMPO(
+            mpo,
+            bw.bs.RuleQC(),
+            True,
+            True,
+            bw.b.OpNamesSet((bw.b.OpNames.R, bw.b.OpNames.RD)),
+        )
+        if self.mpi:
+            mpo = bw.bs.ParallelMPO(mpo, self.prule)
+        return mpo
+
+    def get_qc_mpo(self, h1e, g2e, ecore=0, para_type=None, reorder=None, iprint=1):
+        import numpy as np
+
+        bw = self.bw
+
+        if reorder is not None:
+            if isinstance(reorder, np.ndarray):
+                idx = reorder
+            else:
+                idx = self.orbital_reordering(h1e, g2e)
+            if iprint:
+                print("reordering = ", idx)
+            self.reorder_idx = idx
+            if SymmetryTypes.SZ in bw.symm_type:
+                for i in enumerate(len(h1e)):
+                    h1e[i] = h1e[i][idx][:, idx]
+                for i in enumerate(len(g2e)):
+                    g2e[i] = g2e[i][idx][:, idx][:, :, idx][:, :, :, idx]
+            else:
+                h1e = h1e[idx][:, idx]
+                g2e = g2e[idx][:, idx][:, :, idx][:, :, :, idx]
+            if self.orb_sym is not None:
+                self.orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[idx])
+        else:
+            self.reorder_idx = None
+
+        if para_type is None:
+            para_type = ParallelTypes.SIJ
+
+        if SymmetryTypes.SZ in bw.symm_type:
+            if h1e is not None:
+                h1e = list(h1e)
+                h1e[0], _, ecore = self.parallelize_integrals(
+                    para_type, h1e[0], None, ecore
+                )
+                h1e[1], _, _ = self.parallelize_integrals(para_type, h1e[1], None, 0)
+            if g2e is not None:
+                g2e = list(g2e)
+                _, g2e[0], ecore = self.parallelize_integrals(
+                    para_type, None, g2e[0], ecore
+                )
+                _, g2e[1], _ = self.parallelize_integrals(para_type, None, g2e[1], 0)
+                _, g2e[2], _ = self.parallelize_integrals(para_type, None, g2e[2], 0)
+        else:
+            h1e, g2e, ecore = self.parallelize_integrals(para_type, h1e, g2e, ecore)
+
+        # build Hamiltonian expression
+        b = self.expr_builder()
+
+        if SymmetryTypes.SU2 in bw.symm_type:
+            if h1e is not None:
+                b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
+            if g2e is not None:
+                b.add_sum_term("((C+(C+D)0)1+D)0", g2e.transpose(0, 2, 3, 1))
+        elif SymmetryTypes.SZ in bw.symm_type:
+            if h1e is not None:
+                b.add_sum_term("cd", h1e[0])
+                b.add_sum_term("CD", h1e[1])
+            if g2e is not None:
+                b.add_sum_term("ccdd", 0.5 * g2e[0].transpose(0, 2, 3, 1))
+                b.add_sum_term("cCDd", 0.5 * g2e[1].transpose(0, 2, 3, 1))
+                b.add_sum_term("CcdD", 0.5 * g2e[1].transpose(2, 0, 1, 3))
+                b.add_sum_term("CCDD", 0.5 * g2e[2].transpose(0, 2, 3, 1))
+        elif SymmetryTypes.SGF in bw.symm_type:
+            if h1e is not None:
+                b.add_sum_term("CD", h1e)
+            if g2e is not None:
+                b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
+
+        b.add_const(ecore)
+        bx = b.finalize()
+
+        if iprint:
+            if self.mpi is not None:
+                for i in range(self.mpi.size):
+                    self.mpi.barrier()
+                    if i == self.mpi.rank:
+                        print(
+                            "rank = %5d mpo terms = %10d"
+                            % (i, sum([len(x) for x in bx.data]))
+                        )
+                    self.mpi.barrier()
+            else:
+                print("mpo terms = %10d" % sum([len(x) for x in bx.data]))
+
+        return self.get_mpo(bx, iprint)
 
     def get_mpo(self, expr, iprint=0):
         bw = self.bw
@@ -329,14 +506,120 @@ class DMRGDriver:
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
+        self._dmrg = dmrg
+        if n_sweeps == -1:
+            return None
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
             ener = list(dmrg.sweep_energies[-1])
-        self._dmrg = dmrg
         if self.mpi is not None:
             self.mpi.barrier()
         return ener
+
+    def get_dmrg_results(self):
+        import numpy as np
+
+        energies = np.array(self._dmrg.energies)
+        dws = np.array(self._dmrg.discarded_weights)
+        bond_dims = np.array(self._dmrg.bond_dims)[: len(energies)]
+        return bond_dims, dws, energies
+
+    def get_npdm(self, ket, pdm_type=1, soc=False, site_type=1, iprint=0):
+        bw = self.bw
+        import numpy as np
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+
+        mps = ket.deep_copy("PDM-TMP")
+        assert mps.dot == 2
+        if site_type != 2:
+            mps.dot = 1
+            if mps.center == mps.n_sites - 2:
+                mps.center = mps.n_sites - 1
+                mps.canonical_form = mps.canonical_form[:-1] + "S"
+            elif mps.center == 0:
+                mps.canonical_form = "K" + mps.canonical_form[1:]
+            else:
+                assert False
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+
+        mps.load_mutable()
+        mps.info.bond_dim = max(mps.info.bond_dim, mps.info.get_max_bond_dimension())
+
+        if pdm_type == 1:
+            pmpo = bw.bs.PDM1MPOQC(self.ghamil, 1 if soc else 0)
+        elif pdm_type == 2:
+            pmpo = bw.bs.PDM2MPOQC(self.ghamil)
+        else:
+            raise NotImplementedError()
+        pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.RuleQC())
+        if self.mpi:
+            if pdm_type == 1:
+                prule = bw.bs.ParallelRulePDM1QC(self.mpi)
+            elif pdm_type == 2:
+                prule = bw.bs.ParallelRulePDM2QC(self.mpi)
+            pmpo = bw.bs.ParallelMPO(pmpo, prule)
+
+        pme = bw.bs.MovingEnvironment(pmpo, mps, mps, "NPDM")
+        pme.init_environments(iprint >= 2)
+        pme.cached_contraction = True
+        expect = bw.bs.Expect(pme, mps.info.bond_dim, mps.info.bond_dim)
+        if site_type == 0:
+            expect.zero_dot_algo = True
+        expect.iprint = iprint
+        expect.solve(True, mps.center == 0)
+
+        if pdm_type == 1:
+            if SymmetryTypes.SZ in bw.symm_type:
+                dmr = expect.get_1pdm(self.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+                dm = dm.reshape((self.n_sites, 2, self.n_sites, 2))
+                dm = np.transpose(dm, (0, 2, 1, 3))
+                dm = np.concatenate(
+                    [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0
+                )
+            else:
+                dmr = expect.get_1pdm(self.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+
+            if self.reorder_idx is not None:
+                rev_idx = np.argsort(self.reorder_idx)
+                dm = dm[..., rev_idx, :][..., :, rev_idx]
+        elif pdm_type == 2:
+            dmr = expect.get_2pdm(self.n_sites)
+            dm = np.array(dmr, copy=True)
+            dm = dm.reshape(
+                (self.n_sites, 2, self.n_sites, 2, self.n_sites, 2, self.n_sites, 2)
+            )
+            dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
+            dm = np.concatenate(
+                [
+                    dm[None, :, :, :, :, 0, 0, 0, 0],
+                    dm[None, :, :, :, :, 0, 1, 1, 0],
+                    dm[None, :, :, :, :, 1, 1, 1, 1],
+                ],
+                axis=0,
+            )
+            if self.reorder_idx is not None:
+                dm[:, :, :, :, :] = dm[:, rev_idx, :, :, :][:, :, rev_idx, :, :][
+                    :, :, :, rev_idx, :
+                ][:, :, :, :, rev_idx]
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return dm
+
+    def get_1pdm(self, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=1, *args, **kwargs)
+
+    def get_2pdm(self, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=2, *args, **kwargs)
 
     def align_mps_center(self, ket, ref):
         if self.mpi is not None:
@@ -379,7 +662,7 @@ class DMRGDriver:
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
-        me.init_environments(iprint >= 3)
+        me.init_environments(iprint >= 2)
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         expect.iprint = iprint
         ex = expect.solve(False, ket.center != 0)
@@ -504,6 +787,11 @@ class DMRGDriver:
         mps_info.bond_dim = bond_dim
         mps.initialize(mps_info)
         mps.random_canonicalize()
+        if nroots == 1:
+            mps.tensors[mps.center].normalize()
+        else:
+            for xwfn in mps.wfns:
+                xwfn.normalize()
         mps.save_mutable()
         mps_info.save_mutable()
         mps.save_data()
@@ -516,6 +804,45 @@ class DMRGDriver:
     def finalize(self):
         bw = self.bw
         bw.b.Global.frame = None
+
+
+class SOCDMRGDriver(DMRGDriver):
+    def __init__(
+        self,
+        stack_mem=1 << 30,
+        scratch="./nodex",
+        restart_dir=None,
+        n_threads=None,
+        symm_type=SymmetryTypes.SU2,
+        mpi=None,
+    ):
+        super().__init__(
+            stack_mem=stack_mem,
+            scratch=scratch,
+            restart_dir=restart_dir,
+            n_threads=n_threads,
+            symm_type=symm_type,
+            mpi=mpi,
+        )
+
+    def hybrid_mpo_dmrg(
+        self, mpo, mpo_cpx, ket, n_sweeps=10, iprint=0, tol=1e-8, **kwargs
+    ):
+        bw = self.bw
+        assert ket.nroots % 2 == 0
+        super().dmrg(mpo, ket, n_sweeps=-1, iprint=iprint, tol=tol, **kwargs)
+        self._dmrg.me.cached_contraction = False
+        cpx_me = bw.bcs.MovingEnvironmentX(mpo_cpx, ket, ket, "DMRG-CPX")
+        cpx_me.cached_contraction = False
+        cpx_me.init_environments(iprint >= 2)
+        self._dmrg.cpx_me = cpx_me
+        ener = self._dmrg.solve(n_sweeps, ket.center == 0, tol)
+        ket.info.bond_dim = max(ket.info.bond_dim, self._dmrg.bond_dims[-1])
+        if isinstance(ket, bw.bs.MultiMPS):
+            ener = list(self._dmrg.sweep_energies[-1])
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return ener
 
 
 class ExprBuilder:

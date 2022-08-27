@@ -705,7 +705,7 @@ if pre_run or not no_pre_run:
                         fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, np.real(fd_cpx.const_e), rh1e, rg2e)
                 fcidump.orb_sym = fd_cpx.orb_sym
                 fd_cpx_h1e = FCIDUMPCPX()
-                fd_cpx_h1e.initialize_h1e(fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, np.imag(fd_cpx.const_e), ch1e)
+                fd_cpx_h1e.initialize_h1e(fd_cpx.n_sites, fd_cpx.n_elec, fd_cpx.twos, fd_cpx.isym, 1j * np.imag(fd_cpx.const_e), ch1e)
                 fd_cpx_h1e.orb_sym = fd_cpx.orb_sym
             else:
                 fcidump = FCIDUMP()

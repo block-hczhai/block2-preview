@@ -1545,6 +1545,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("const_e", &MPO<S, FL>::const_e)
         .def_readwrite("tensors", &MPO<S, FL>::tensors)
         .def_readwrite("basis", &MPO<S, FL>::basis)
+        .def_readwrite("hamil", &MPO<S, FL>::hamil)
         .def_readwrite("sparse_form", &MPO<S, FL>::sparse_form)
         .def_readwrite("left_operator_names", &MPO<S, FL>::left_operator_names)
         .def_readwrite("right_operator_names",

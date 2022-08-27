@@ -21,6 +21,7 @@
 #pragma once
 
 #include "../core/csr_operator_functions.hpp"
+#include "../core/hamiltonian.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/rule.hpp"
 #include "../core/symbolic.hpp"
@@ -147,9 +148,13 @@ template <typename S, typename FL> struct MPO {
     string tag = "H";
     mutable double tread = 0;  //!< IO Time cost for reading scratch files.
     mutable double twrite = 0; //!< IO Time cost for writing scratch files.
+    shared_ptr<Hamiltonian<S, FL>> hamil =
+        nullptr; //!< Optional field, to prevent early release of Hamiltonian
+                 //!< data causing MPO data invalid
     MPO(int n_sites, const string &tag = "H")
-        : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'), const_e((typename const_fl_type<FL>::FL)0.0),
-          op(nullptr), schemer(nullptr), tf(nullptr) {}
+        : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'),
+          const_e((typename const_fl_type<FL>::FL)0.0), op(nullptr),
+          schemer(nullptr), tf(nullptr) {}
     virtual ~MPO() = default;
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual ParallelTypes get_parallel_type() const {

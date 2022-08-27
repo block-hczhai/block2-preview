@@ -252,6 +252,7 @@ struct PDM2MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
                                               S::pg_inv(hamil->orb_sym[k]),
                                               S::pg_inv(hamil->orb_sym[l])))));
                         }
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::schemer = nullptr;
@@ -1391,6 +1392,7 @@ struct PDM2MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                                               S::pg_inv(hamil->orb_sym[k]),
                                               S::pg_inv(hamil->orb_sym[l])))));
                         }
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::schemer = nullptr;

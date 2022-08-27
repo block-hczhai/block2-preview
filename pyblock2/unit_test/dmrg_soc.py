@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from pyblock2._pyscf.ao2mo import soc_integrals as itgsoc
-from pyblock2.driver.core import DMRGDriver, SymmetryTypes
+from pyblock2.driver.core import SOCDMRGDriver, SymmetryTypes
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
@@ -15,7 +15,10 @@ def system_def(request):
         return mol, 5, 4, "Cl"
 
 
-@pytest.fixture(scope="module", params=["bp", "bp-amfi", "x2c", "x2c-amfi"])
+@pytest.fixture(
+    scope="module",
+    params=["bp", "bp-amfi", "bp-amfi-hybrid", "x2c", "x2c-amfi", "x2c-amfi-hybrid"],
+)
 def soc_type(request):
     return request.param
 
@@ -44,7 +47,7 @@ class TestDMRG:
             mf, ncore, ncas, pg_symm=False, amfi=amfi, x2c1e=x2c, x2c2e=x2c
         )
 
-        driver = DMRGDriver(
+        driver = SOCDMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
         )
         driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
@@ -56,25 +59,39 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("CD", h1e)
-        b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
-        ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
         bond_dims = [400] * 8
         noises = [1e-4] * 4 + [1e-5] * 4 + [0]
         thrds = [1e-10] * 8
-        energies = driver.dmrg(
-            mpo,
-            ket,
-            n_sweeps=20,
-            bond_dims=bond_dims,
-            noises=noises,
-            thrds=thrds,
-            iprint=1,
-        )
+
+        if "hybrid" in soc_type:
+            assert np.linalg.norm(g2e.imag) < 1e-7
+            mpo_cpx = driver.get_qc_mpo(h1e=h1e - h1e.real, g2e=None, ecore=0, iprint=1)
+            driver.set_symm_type(symm_type=SymmetryTypes.SGF, reset_frame=False)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
+            mpo = driver.get_qc_mpo(h1e=h1e.real, g2e=g2e.real, ecore=ecore, iprint=1)
+            ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6 * 2)
+            energies = driver.hybrid_mpo_dmrg(
+                mpo,
+                mpo_cpx,
+                ket,
+                n_sweeps=20,
+                bond_dims=bond_dims,
+                noises=noises,
+                thrds=thrds,
+                iprint=1,
+            )
+        else:
+            mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
+            ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
+            energies = driver.dmrg(
+                mpo,
+                ket,
+                n_sweeps=20,
+                bond_dims=bond_dims,
+                noises=noises,
+                thrds=thrds,
+                iprint=1,
+            )
         from pyscf.data import nist
 
         au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
@@ -113,7 +130,7 @@ class TestDMRG:
             mf, ncore, ncas, pg_symm=False, amfi=amfi, x2c1e=x2c, x2c2e=x2c
         )
 
-        driver = DMRGDriver(
+        driver = SOCDMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
         )
         driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
@@ -125,12 +142,7 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("CD", h1e)
-        b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
+        mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
         bond_dims = [400] * 8
         noises = [1e-4] * 4 + [1e-5] * 4 + [0]

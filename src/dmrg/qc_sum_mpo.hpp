@@ -83,6 +83,7 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> p_op[n_sites][n_sites][4];
         shared_ptr<OpExpr<S>> q_op[n_sites][n_sites][4];
 #endif
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)

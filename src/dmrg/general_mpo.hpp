@@ -1351,6 +1351,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         else if (algo_type == MPOAlgorithmTypes::None)
             throw runtime_error("Invalid MPO algorithm None!");
         vector<typename S::pg_t> orb_sym = hamil->orb_sym;
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = afd->e();
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         n_sites = (int)orb_sym.size();

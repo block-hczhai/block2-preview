@@ -52,12 +52,7 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
-        b.add_sum_term("((C+(C+D)0)1+D)0", (2 * 0.5) * g2e.transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
+        mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=3)
         bond_dims = [250] * 8
         noises = [1e-4] * 4 + [1e-5] * 4 + [0]
@@ -142,16 +137,7 @@ class TestDMRG:
             assert np.linalg.norm(g2e - g2e.transpose(0, 1, 3, 2).conj()) < 1e-7
             assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("cd", h1es[0])
-        b.add_sum_term("CD", h1es[1])
-        b.add_sum_term("ccdd", 0.5 * g2es[0].transpose(0, 2, 3, 1))
-        b.add_sum_term("cCDd", 0.5 * g2es[1].transpose(0, 2, 3, 1))
-        b.add_sum_term("CcdD", 0.5 * g2es[1].transpose(2, 0, 1, 3))
-        b.add_sum_term("CCDD", 0.5 * g2es[2].transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
+        mpo = driver.get_qc_mpo(h1e=h1es, g2e=g2es, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=3)
         bond_dims = [400] * 8
         noises = [1e-4] * 4 + [1e-5] * 4 + [0]
@@ -216,12 +202,7 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("CD", h1e)
-        b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
+        mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=3)
         bond_dims = [400] * 8
         noises = [1e-3] * 4 + [1e-4] * 4 + [0]
@@ -286,12 +267,7 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        b = driver.expr_builder()
-        b.add_sum_term("CD", h1e)
-        b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
-        b.add_const(ecore)
-
-        mpo = driver.get_mpo(b.finalize(), iprint=1)
+        mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=2)
         bond_dims = [400] * 8
         noises = [1e-3] * 4 + [1e-4] * 4 + [0]

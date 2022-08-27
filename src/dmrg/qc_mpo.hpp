@@ -405,6 +405,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
             if (hamil->get_n_orbs_right() > 0)
                 MPO<S, FL>::sparse_form[n_sites - 1] = 'S';
         }
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = i_op;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
@@ -473,6 +474,7 @@ template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = op;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
@@ -546,6 +548,7 @@ template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
         int n_orbs_big_right = max(hamil->get_n_orbs_right(), 1);
         uint16_t n_orbs =
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = h_op;
         assert((uint16_t)ops.size() == n_sites);
         for (auto op : ops)
@@ -703,6 +706,7 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs][4];
         shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs][4];
 #endif
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
@@ -1894,6 +1898,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs][2];
         shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs][2];
 #endif
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
@@ -2939,6 +2944,7 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         shared_ptr<OpExpr<S>> pd_op[n_orbs][n_orbs];
         shared_ptr<OpExpr<S>> q_op[n_orbs][n_orbs];
 #endif
+        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
