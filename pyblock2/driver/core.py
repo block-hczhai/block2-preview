@@ -496,7 +496,6 @@ class DMRGDriver:
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "DMRG")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
-        me.init_environments(iprint >= 2)
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
         if dav_type is not None:
             dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
@@ -510,6 +509,7 @@ class DMRGDriver:
         self._dmrg = dmrg
         if n_sweeps == -1:
             return None
+        me.init_environments(iprint >= 2)
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
@@ -940,6 +940,7 @@ class SOCDMRGDriver(DMRGDriver):
         super().dmrg(mpo, ket, n_sweeps=-1, iprint=iprint, tol=tol, **kwargs)
         self._dmrg.me.cached_contraction = False
         self._dmrg.me.delayed_contraction = bw.b.OpNamesSet()
+        self._dmrg.me.init_environments(iprint >= 2)
         cpx_me = bw.bcs.MovingEnvironmentX(mpo_cpx, ket, ket, "DMRG-CPX")
         cpx_me.cached_contraction = False
         cpx_me.init_environments(iprint >= 2)
