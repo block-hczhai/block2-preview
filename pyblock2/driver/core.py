@@ -512,7 +512,7 @@ class DMRGDriver:
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
-            ener = list(dmrg.sweep_energies[-1])
+            ener = list(dmrg.energies[-1])
         if self.mpi is not None:
             self.mpi.barrier()
         return ener
@@ -832,6 +832,7 @@ class SOCDMRGDriver(DMRGDriver):
         assert ket.nroots % 2 == 0
         super().dmrg(mpo, ket, n_sweeps=-1, iprint=iprint, tol=tol, **kwargs)
         self._dmrg.me.cached_contraction = False
+        self._dmrg.me.delayed_contraction = bw.b.OpNamesSet()
         cpx_me = bw.bcs.MovingEnvironmentX(mpo_cpx, ket, ket, "DMRG-CPX")
         cpx_me.cached_contraction = False
         cpx_me.init_environments(iprint >= 2)
@@ -839,7 +840,7 @@ class SOCDMRGDriver(DMRGDriver):
         ener = self._dmrg.solve(n_sweeps, ket.center == 0, tol)
         ket.info.bond_dim = max(ket.info.bond_dim, self._dmrg.bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
-            ener = list(self._dmrg.sweep_energies[-1])
+            ener = list(self._dmrg.energies[-1])
         if self.mpi is not None:
             self.mpi.barrier()
         return ener

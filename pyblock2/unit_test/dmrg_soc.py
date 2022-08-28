@@ -78,6 +78,7 @@ class TestDMRG:
                 bond_dims=bond_dims,
                 noises=noises,
                 thrds=thrds,
+                dav_max_iter=250,
                 iprint=1,
             )
         else:
@@ -90,8 +91,10 @@ class TestDMRG:
                 bond_dims=bond_dims,
                 noises=noises,
                 thrds=thrds,
+                dav_max_iter=250,
                 iprint=1,
             )
+
         from pyscf.data import nist
 
         au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
@@ -142,20 +145,42 @@ class TestDMRG:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
-        ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
         bond_dims = [400] * 8
         noises = [1e-4] * 4 + [1e-5] * 4 + [0]
         thrds = [1e-10] * 8
-        energies = driver.dmrg(
-            mpo,
-            ket,
-            n_sweeps=20,
-            bond_dims=bond_dims,
-            noises=noises,
-            thrds=thrds,
-            iprint=1,
-        )
+
+        if "hybrid" in soc_type:
+            assert np.linalg.norm(g2e.imag) < 1e-7
+            mpo_cpx = driver.get_qc_mpo(h1e=h1e - h1e.real, g2e=None, ecore=0, iprint=1)
+            driver.set_symm_type(symm_type=SymmetryTypes.SGF, reset_frame=False)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
+            mpo = driver.get_qc_mpo(h1e=h1e.real, g2e=g2e.real, ecore=ecore, iprint=1)
+            ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6 * 2)
+            energies = driver.hybrid_mpo_dmrg(
+                mpo,
+                mpo_cpx,
+                ket,
+                n_sweeps=20,
+                bond_dims=bond_dims,
+                noises=noises,
+                thrds=thrds,
+                dav_max_iter=250,
+                iprint=1,
+            )
+        else:
+            mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
+            ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
+            energies = driver.dmrg(
+                mpo,
+                ket,
+                n_sweeps=20,
+                bond_dims=bond_dims,
+                noises=noises,
+                thrds=thrds,
+                dav_max_iter=250,
+                iprint=1,
+            )
+
         from pyscf.data import nist
 
         au2cm = nist.HARTREE2J / nist.PLANCK / nist.LIGHT_SPEED_SI * 1e-2
