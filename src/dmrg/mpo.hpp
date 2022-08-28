@@ -1162,6 +1162,7 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
         const auto n_sites = MPO<S, FL>::n_sites;
         const shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::tf = mpo->tf;
@@ -1453,6 +1454,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
     using MPO<S, FL>::n_sites;
     IdentityAddedMPO(const shared_ptr<MPO<S, FL>> &mpo, const string &tag = "")
         : MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag) {
+        MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::tf = mpo->tf;

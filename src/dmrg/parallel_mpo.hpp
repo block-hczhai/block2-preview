@@ -42,6 +42,7 @@ template <typename S, typename FL> struct ClassicParallelMPO : MPO<S, FL> {
             rule->comm->para_type =
                 rule->comm->para_type ^ ParallelTypes::NewScheme;
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::tensors = mpo->tensors;
         MPO<S, FL>::basis = mpo->basis;
@@ -154,6 +155,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         // cannot parallelize archived mpo
         // one should archive parallelized mpo instead
         assert(mpo->archive_filename == "");
+        MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::tensors = mpo->tensors;
         if (MPO<S, FL>::tag != mpo->tag)

@@ -778,9 +778,7 @@ class DMRGDriver:
         return ex
 
     def fix_restarting_mps(self, mps):
-        bw = self.bw
-        cg = bw.bs.CG(200)
-        cg.initialize()
+        cg = self.ghamil.opf.cg
         if (
             mps.canonical_form[mps.center] == "L"
             and mps.center != mps.n_sites - mps.dot

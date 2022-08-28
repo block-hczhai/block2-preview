@@ -69,6 +69,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         if (!collect_terms)
             use_intermediate = false;
         static shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::tensors = mpo->tensors;
         MPO<S, FL>::basis = mpo->basis;
