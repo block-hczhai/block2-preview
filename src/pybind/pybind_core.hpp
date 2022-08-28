@@ -1139,7 +1139,36 @@ template <typename S> void bind_parallel(py::module &m) {
         .def_readwrite("para_type", &ParallelCommunicator<S>::para_type)
         .def("get_parallel_type", &ParallelCommunicator<S>::get_parallel_type)
         .def("barrier", &ParallelCommunicator<S>::barrier)
-        .def("split", &ParallelCommunicator<S>::split);
+        .def("split", &ParallelCommunicator<S>::split)
+        .def("broadcast",
+             [](ParallelCommunicator<S> *self, py::array_t<double> arr,
+                int owner) {
+                 self->broadcast(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("broadcast",
+             [](ParallelCommunicator<S> *self, py::array_t<float> arr,
+                int owner) {
+                 self->broadcast(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("broadcast",
+             [](ParallelCommunicator<S> *self, py::array_t<complex<double>> arr,
+                int owner) {
+                 self->broadcast(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("broadcast",
+             [](ParallelCommunicator<S> *self, py::array_t<complex<float>> arr,
+                int owner) {
+                 self->broadcast(arr.mutable_data(), arr.size(), owner);
+             })
+        .def(
+            "broadcast",
+            [](ParallelCommunicator<S> *self, py::array_t<int> arr, int owner) {
+                self->broadcast(arr.mutable_data(), arr.size(), owner);
+            })
+        .def("broadcast", [](ParallelCommunicator<S> *self,
+                             py::array_t<long long int> arr, int owner) {
+            self->broadcast(arr.mutable_data(), arr.size(), owner);
+        });
 
 #ifdef _HAS_MPI
     py::class_<MPICommunicator<S>, shared_ptr<MPICommunicator<S>>,

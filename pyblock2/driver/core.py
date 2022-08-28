@@ -450,6 +450,7 @@ class DMRGDriver:
             self.ghamil, expr, bw.b.MPOAlgorithmTypes.FastBipartite, 0.0, -1, iprint > 0
         )
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
+        mpo = bw.bs.IdentityAddedMPO(mpo)
         if self.mpi:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
@@ -525,38 +526,53 @@ class DMRGDriver:
         bond_dims = np.array(self._dmrg.bond_dims)[: len(energies)]
         return bond_dims, dws, energies
 
-    def get_npdm(self, ket, pdm_type=1, soc=False, site_type=1, iprint=0):
+    def get_npdm(self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0):
         bw = self.bw
         import numpy as np
 
         if self.mpi is not None:
             self.mpi.barrier()
 
-        mps = ket.deep_copy("PDM-TMP")
-        assert mps.dot == 2
-        if site_type != 2:
-            mps.dot = 1
-            if mps.center == mps.n_sites - 2:
-                mps.center = mps.n_sites - 1
-                mps.canonical_form = mps.canonical_form[:-1] + "S"
-            elif mps.center == 0:
-                mps.canonical_form = "K" + mps.canonical_form[1:]
-            else:
-                assert False
+        mket = ket.deep_copy("PDM-KET@TMP")
+        mpss = [mket]
+        if bra is not None and bra != ket:
+            mbra = bra.deep_copy("PDM-BRA@TMP")
+            mpss.append(mbra)
+        else:
+            mbra = mket
+        for mps in mpss:
+            if mps.dot == 2 and site_type != 2:
+                mps.dot = 1
+                if mps.center == mps.n_sites - 2:
+                    mps.center = mps.n_sites - 1
+                    mps.canonical_form = mps.canonical_form[:-1] + "S"
+                elif mps.center == 0:
+                    mps.canonical_form = "K" + mps.canonical_form[1:]
+                else:
+                    assert False
 
-        if self.mpi is not None:
-            self.mpi.barrier()
+            if self.mpi is not None:
+                self.mpi.barrier()
 
-        mps.load_mutable()
-        mps.info.bond_dim = max(mps.info.bond_dim, mps.info.get_max_bond_dimension())
+            mps.load_mutable()
+            mps.info.bond_dim = max(
+                mps.info.bond_dim, mps.info.get_max_bond_dimension()
+            )
 
+        self.align_mps_center(mbra, mket)
+        hamil = bw.bs.HamiltonianQC(
+            self.vacuum, self.n_sites, self.orb_sym, bw.b.FCIDUMP()
+        )
         if pdm_type == 1:
-            pmpo = bw.bs.PDM1MPOQC(self.ghamil, 1 if soc else 0)
+            pmpo = bw.bs.PDM1MPOQC(hamil, 1 if soc else 0)
         elif pdm_type == 2:
-            pmpo = bw.bs.PDM2MPOQC(self.ghamil)
+            pmpo = bw.bs.PDM2MPOQC(hamil)
         else:
             raise NotImplementedError()
-        pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.RuleQC())
+        if mbra == mket:
+            pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.RuleQC())
+        else:
+            pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.NoTransposeRule(bw.bs.RuleQC()))
         if self.mpi:
             if pdm_type == 1:
                 prule = bw.bs.ParallelRulePDM1QC(self.mpi)
@@ -564,14 +580,14 @@ class DMRGDriver:
                 prule = bw.bs.ParallelRulePDM2QC(self.mpi)
             pmpo = bw.bs.ParallelMPO(pmpo, prule)
 
-        pme = bw.bs.MovingEnvironment(pmpo, mps, mps, "NPDM")
+        pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
         pme.init_environments(iprint >= 2)
         pme.cached_contraction = True
-        expect = bw.bs.Expect(pme, mps.info.bond_dim, mps.info.bond_dim)
+        expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
         if site_type == 0:
             expect.zero_dot_algo = True
         expect.iprint = iprint
-        expect.solve(True, mps.center == 0)
+        expect.solve(True, mket.center == 0)
 
         if pdm_type == 1:
             if SymmetryTypes.SZ in bw.symm_type:
@@ -583,6 +599,19 @@ class DMRGDriver:
                 dm = np.concatenate(
                     [dm[None, :, :, 0, 0], dm[None, :, :, 1, 1]], axis=0
                 )
+            elif SymmetryTypes.SU2 in bw.symm_type:
+                dmr = expect.get_1pdm_spatial(self.n_sites)
+                dm = np.array(dmr).copy()
+                dmr.deallocate()
+                if soc:
+                    if SymmetryTypes.SU2 in bw.symm_type:
+                        if hasattr(mbra.info, "targets"):
+                            qsbra = mbra.info.targets[0].twos
+                        else:
+                            qsbra = mbra.info.target.twos
+                        # fix different Wigner–Eckart theorem convention
+                        dm *= np.sqrt(qsbra + 1)
+                    dm = dm / np.sqrt(2)
             else:
                 dmr = expect.get_1pdm(self.n_sites)
                 dm = np.array(dmr).copy()
@@ -621,6 +650,12 @@ class DMRGDriver:
     def get_2pdm(self, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=2, *args, **kwargs)
 
+    def get_trans_1pdm(self, bra, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=1, bra=bra, *args, **kwargs)
+
+    def get_trans_2pdm(self, bra, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=2, bra=bra, *args, **kwargs)
+
     def align_mps_center(self, ket, ref):
         if self.mpi is not None:
             self.mpi.barrier()
@@ -638,6 +673,78 @@ class DMRGDriver:
                 ket.center -= 1
         if self.mpi is not None:
             self.mpi.barrier()
+
+    def adjust_mps(self, ket, dot=1):
+        bw = self.bw
+        if ket.center == 0 and dot == 2:
+            if self.mpi is not None:
+                self.mpi.barrier()
+            if ket.canonical_form[ket.center] in "ST":
+                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+            ket.save_data()
+            forward = True
+            if self.mpi is not None:
+                self.mpi.barrier()
+            ket.load_mutable()
+            ket.info.load_mutable()
+            if self.mpi is not None:
+                self.mpi.barrier()
+
+        ket.dot = dot
+        forward = ket.center == 0
+        if (
+            ket.canonical_form[ket.center] == "L"
+            and ket.center != ket.n_sites - ket.dot
+        ):
+            ket.center += 1
+            forward = True
+        elif (
+            ket.canonical_form[ket.center] == "C"
+            or ket.canonical_form[ket.center] == "M"
+        ) and ket.center != 0:
+            ket.center -= 1
+            forward = False
+        if ket.canonical_form[ket.center] == "M" and not isinstance(
+            ket, bw.bs.MultiMPS
+        ):
+            ket.canonical_form = (
+                ket.canonical_form[: ket.center]
+                + "C"
+                + ket.canonical_form[ket.center + 1 :]
+            )
+        if ket.canonical_form[-1] == "M" and not isinstance(ket, bw.bs.MultiMPS):
+            ket.canonical_form = ket.canonical_form[:-1] + "C"
+        if dot == 1:
+            if ket.canonical_form[0] == "C" and ket.canonical_form[1] == "R":
+                ket.canonical_form = "K" + ket.canonical_form[1:]
+            elif ket.canonical_form[-1] == "C" and ket.canonical_form[-2] == "L":
+                ket.canonical_form = ket.canonical_form[:-1] + "S"
+                ket.center = ket.n_sites - 1
+            if ket.canonical_form[0] == "M" and ket.canonical_form[1] == "R":
+                ket.canonical_form = "J" + ket.canonical_form[1:]
+            elif ket.canonical_form[-1] == "M" and ket.canonical_form[-2] == "L":
+                ket.canonical_form = ket.canonical_form[:-1] + "T"
+                ket.center = ket.n_sites - 1
+
+        ket.save_data()
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return ket, forward
+
+    def split_mps(self, ket, iroot, tag):
+        bw = self.bw
+        if self.mpi is not None:
+            self.mpi.barrier()
+        assert isinstance(ket, bw.bs.MultiMPS)
+        iket = ket.extract(iroot, tag + "@TMP")
+        if self.mpi is not None:
+            self.mpi.barrier()
+        if len(iket.info.targets) == 1:
+            iket = iket.make_single(tag)
+        if self.mpi is not None:
+            self.mpi.barrier()
+        iket = self.adjust_mps(iket)[0]
+        return iket
 
     def multiply(self, bra, mpo, ket, n_sweeps=10, tol=1e-8, bond_dims=None, iprint=0):
         bw = self.bw
@@ -844,6 +951,142 @@ class SOCDMRGDriver(DMRGDriver):
         if self.mpi is not None:
             self.mpi.barrier()
         return ener
+
+    def soc_two_step(self, energies, twoss, pdms_dict, hsomo, iprint=1):
+        au2cm = 219474.631115585274529
+        import numpy as np
+
+        assert len(twoss) == len(energies)
+
+        xnroots = [len(x) for x in energies]
+        eners = np.array(energies).flatten()
+        xtwos = []
+        for ix in range(len(energies)):
+            xtwos += [twoss[ix]] * xnroots[ix]
+
+        pdm0 = pdms_dict[(0, 0)]
+        assert pdm0.ndim == 2 and pdm0.shape[0] == pdm0.shape[1]
+        ncas = pdm0.shape[0]
+
+        pdms = np.zeros((len(eners), len(eners), ncas, ncas))
+        for ist in range(len(eners)):
+            for jst in range(len(eners)):
+                if ist >= jst and abs(xtwos[ist] - xtwos[jst]) <= 2:
+                    pdms[ist, jst] = pdms_dict[(ist, jst)]
+
+        if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+            print("HSO.SHAPE = ", hsomo.shape)
+            print("PDMS.SHAPE = ", pdms.shape)
+        thrds = 29.0  # cm-1
+        n_mstates = 0
+        for ix, iis in enumerate(twoss):
+            n_mstates += (iis + 1) * xnroots[ix]
+        hsiso = np.zeros((n_mstates, n_mstates), dtype=complex)
+        hdiag = np.zeros((n_mstates,), dtype=complex)
+
+        # separate T^1 to T^1_(-1,0,1)
+        def spin_proj(cg, pdm, tjo, tjb, tjk):
+            nmo = pdm.shape[0]
+            ppdm = np.zeros((tjb + 1, tjk + 1, tjo + 1, nmo, nmo))
+            for ibra in range(tjb + 1):
+                for iket in range(tjk + 1):
+                    for iop in range(tjo + 1):
+                        tmb = -tjb + 2 * ibra
+                        tmk = -tjk + 2 * iket
+                        tmo = -tjo + 2 * iop
+                        factor = (-1) ** ((tjb - tmb) // 2) * cg.wigner_3j(
+                            tjb, tjo, tjk, -tmb, tmo, tmk
+                        )
+                        if factor != 0:
+                            ppdm[ibra, iket, iop] = pdm * factor
+            return ppdm
+
+        # from T^1_(-1,0,1) to Tx, Ty, Tz
+        def xyz_proj(ppdm):
+            xpdm = np.zeros(ppdm.shape, dtype=complex)
+            xpdm[:, :, 0] = (0.5 + 0j) * (ppdm[:, :, 0] - ppdm[:, :, 2])
+            xpdm[:, :, 1] = (0.5j + 0) * (ppdm[:, :, 0] + ppdm[:, :, 2])
+            xpdm[:, :, 2] = (np.sqrt(0.5) + 0j) * ppdm[:, :, 1]
+            return xpdm
+
+        cg = self.ghamil.opf.cg
+
+        qls = []
+        imb = 0
+        for ibra in range(len(pdms)):
+            imk = 0
+            tjb = xtwos[ibra]
+            for iket in range(len(pdms)):
+                tjk = xtwos[iket]
+                if ibra >= iket:
+                    pdm = pdms[ibra, iket]
+                    xpdm = xyz_proj(spin_proj(cg, pdm, 2, tjb, tjk))
+                    for ibm in range(xpdm.shape[0]):
+                        for ikm in range(xpdm.shape[1]):
+                            somat = np.einsum("rij,rij->", xpdm[ibm, ikm], hsomo)
+                            hsiso[ibm + imb, ikm + imk] = somat
+                            somat *= au2cm
+                            if iprint and (
+                                self.mpi is None or self.mpi.rank == self.mpi.root
+                            ):
+                                if abs(somat) > thrds:
+                                    print(
+                                        (
+                                            "I1 = %4d (E1 = %15.8f) S1 = %4.1f MS1 = %4.1f "
+                                            + "I2 = %4d (E2 = %15.8f) S2 = %4.1f MS2 = %4.1f Re = %9.3f Im = %9.3f"
+                                        )
+                                        % (
+                                            ibra,
+                                            eners[ibra],
+                                            tjb / 2,
+                                            -tjb / 2 + ibm,
+                                            iket,
+                                            eners[iket],
+                                            tjk / 2,
+                                            -tjk / 2 + ikm,
+                                            somat.real,
+                                            somat.imag,
+                                        )
+                                    )
+                imk += tjk + 1
+            for ibm in range(tjb + 1):
+                qls.append((ibra, eners[ibra], tjb / 2, -tjb / 2 + ibm))
+            hdiag[imb : imb + tjb + 1] = eners[ibra]
+            imb += tjb + 1
+
+        for i in range(len(hsiso)):
+            for j in range(len(hsiso)):
+                if i >= j:
+                    hsiso[j, i] = hsiso[i, j].conj()
+
+        self._hsiso = hsiso * au2cm
+
+        symm_err = np.linalg.norm(np.abs(hsiso - hsiso.T.conj()))
+        if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+            print("SYMM Error (should be small) = ", symm_err)
+        assert symm_err < 1e-10
+        hfull = hsiso + np.diag(hdiag)
+        heig, hvec = np.linalg.eigh(hfull)
+        if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+            print("Total energies including SO-coupling:\n")
+        xhdiag = np.zeros_like(heig)
+
+        for i in range(len(heig)):
+            shvec = np.zeros(len(eners))
+            imb = 0
+            for ibra in range(len(eners)):
+                tjb = xtwos[ibra]
+                shvec[ibra] = np.linalg.norm(hvec[imb : imb + tjb + 1, i]) ** 2
+                imb += tjb + 1
+            iv = np.argmax(np.abs(shvec))
+            xhdiag[i] = eners[iv]
+            if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+                print(
+                    " State %4d Total energy: %15.8f | largest |coeff|**2 %10.6f from I = %4d E = %15.8f S = %4.1f"
+                    % (i, heig[i], shvec[iv], iv, eners[iv], xtwos[iv] / 2)
+                )
+
+        return heig
 
 
 class ExprBuilder:

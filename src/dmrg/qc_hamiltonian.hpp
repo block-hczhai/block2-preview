@@ -659,7 +659,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                   const shared_ptr<FCIDUMP<FL>> &fcidump)
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         // SU2 does not support UHF orbitals
-        assert(!fcidump->uhf);
+        assert(fcidump == nullptr || !fcidump->uhf);
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>(100));
         opf->cg->initialize();
         basis.resize(n_sites);

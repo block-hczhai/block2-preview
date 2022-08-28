@@ -39,7 +39,7 @@ def lowdin(s):
     return np.dot(v / np.sqrt(e), v.T.conj())
 
 
-def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0):
+def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
     part = {}
     for iatom in range(mol.natm):
         part[iatom] = []
@@ -55,12 +55,13 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0):
     for iatom in range(mol.natm):
         partition.append(part[iatom])
     ova = mol.intor_symmetric("cint1e_ovlp_sph")
-    print()
-    print("[pm_loc_kernel]")
-    print(" mocoeff.shape=", mocoeff.shape)
-    print(" tol=", tol)
-    print(" maxcycle=", maxcycle)
-    print(" partition=", len(partition), "\\n", partition)
+    if iprint:
+        print()
+        print("[pm_loc_kernel]")
+        print(" mocoeff.shape=", mocoeff.shape)
+        print(" tol=", tol)
+        print(" maxcycle=", maxcycle)
+        print(" partition=", len(partition), "\\n", partition)
     k = mocoeff.shape[0]
     n = mocoeff.shape[1]
     natom = len(partition)
@@ -103,7 +104,8 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0):
         return np.einsum("iia,iia", pija, pija)
 
     fun = funval(pija)
-    print(" initial funval = ", fun)
+    if iprint:
+        print(" initial funval = ", fun)
     for icycle in range(maxcycle):
         delta = 0.0
         # i>j
@@ -155,17 +157,20 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0):
             pija[:, i, :] = tmp_ip.copy()
             pija[:, j, :] = tmp_jp.copy()
         fun = fun + delta
-        print("icycle=", icycle, "delta=", delta, "fun=", fun)
+        if iprint:
+            print("icycle=", icycle, "delta=", delta, "fun=", fun)
         if delta < tol:
             break
 
     # Check
     ierr = 0
     if delta < tol:
-        print("CONG: PMloc converged!")
+        if iprint:
+            print("CONG: PMloc converged!")
     else:
         ierr = 1
-        print("WARNING: PMloc not converged")
+        if iprint:
+            print("WARNING: PMloc not converged")
     return ierr, u
 
 
@@ -280,8 +285,8 @@ def get_uno(mf, iprint=True):
 
     clmo = c_orbs
     almo = a_orbs
-    ierr, uc = loc(mol, clmo)
-    ierr, ua = loc(mol, almo)
+    uc = loc(mol, clmo, iprint=iprint)[1]
+    ua = loc(mol, almo, iprint=iprint)[1]
     clmo = clmo.dot(uc)
     almo = almo.dot(ua)
 
@@ -314,6 +319,7 @@ def get_uno(mf, iprint=True):
 
     coeff = np.hstack((mo_c, mo_o, mo_v))
     mo_occ = np.hstack((n_c, n_o, n_v))
+    mo_energy = np.hstack((e_c, e_o, e_v))
 
     # Test orthogonality for the localize MOs as before
 
@@ -356,4 +362,156 @@ def get_uno(mf, iprint=True):
             print(text + ftext + " " + gtext)
         texts[iorb] = text + "\\n" + gtext
 
-    return coeff, mo_occ
+    return coeff, mo_occ, mo_energy
+
+
+def select_active_space(mol, coeff, mo_occ, ao_labels, atom_order=None, iprint=1):
+
+    labels = mol.ao_labels(None)
+    selected = []
+    selected_names = []
+    for iorb in range(mol.nao):
+        vec = coeff[:, iorb] ** 2
+        ivs = np.argsort(vec)
+        text = "[%3d] occ =%8.5f | " % (iorb, mo_occ[iorb])
+        ltexts = []
+        for iao in ivs[::-1][:3]:
+            ltexts.append(
+                "(%d-%s-%-8s = %.3f) "
+                % (
+                    labels[iao][0],
+                    labels[iao][1],
+                    labels[iao][2] + labels[iao][3],
+                    vec[iao],
+                )
+            )
+            text += ltexts[-1]
+        if any(("%s" % x) in ltexts[0] for x in ao_labels):
+            if iprint:
+                print(" *", text)
+            selected.append(iorb)
+            selected_names.append(labels[ivs[::-1][0]][0])
+        else:
+            if iprint:
+                print("  ", text)
+
+    if atom_order is not None:
+        idx = list(range(len(selected)))
+        idx.sort(key=lambda ix: (atom_order.index(selected_names[ix]), ix))
+        selected = [selected[ix] for ix in idx]
+
+    return selected
+
+
+def sort_orbitals(
+    mol,
+    coeff,
+    mo_occ,
+    mo_energy,
+    cas_list=None,
+    nactorb=None,
+    nactelec=None,
+    do_loc=False,
+    split_low=0.0,
+    split_high=0.0,
+    iprint=1
+):
+
+    pav = 0.5 * (coeff @ np.diag(mo_occ) @ coeff.T)
+    fav = coeff @ np.diag(mo_energy) @ coeff.T
+    ova = mol.intor_symmetric("cint1e_ovlp_sph")
+
+    def psort(ova, fav, pT, coeff):
+        pTnew = 2.0 * (coeff.T @ ova @ pT @ ova @ coeff)
+        nocc = np.diag(pTnew)
+        index = np.argsort(-nocc)
+        ncoeff = coeff[:, index]
+        nocc = nocc[index]
+        enorb = np.diag(coeff.T @ ova @ fav @ ova @ coeff)
+        enorb = enorb[index]
+        return ncoeff, nocc, enorb
+
+    if cas_list is None:
+        assert nactorb is not None
+        assert nactelec is not None
+        ncore = (mol.nelectron - nactelec) // 2
+        cas_list = list(range(ncore, ncore + nactorb))
+
+    if iprint:
+        print("cas list = ", cas_list)
+
+    if split_low == 0.0 and split_high == 0.0:
+
+        if iprint:
+            print("simple localization")
+
+        actmo = coeff[:, np.array(cas_list, dtype=int)]
+        if do_loc:
+            ua = loc(mol, actmo, iprint=iprint)[1]
+            actmo = actmo.dot(ua)
+        actmo, actocc, acte = psort(ova, fav, pav, actmo)
+
+    else:
+
+        if iprint:
+            print("split localization at", split_low, "~", split_high)
+        assert do_loc
+        assert split_high >= split_low
+        actmo = coeff[:, np.array(cas_list, dtype=int)]
+        actocc = mo_occ[np.array(cas_list, dtype=int)]
+        acte = mo_energy[np.array(cas_list, dtype=int)]
+        if iprint:
+            print("active occ = ", np.sum(actocc, axis=-1), actocc)
+        lidx = actocc <= split_low
+        midx = (actocc > split_low) & (actocc <= split_high)
+        hidx = actocc > split_high
+
+        if len(actmo[:, lidx]) != 0:
+            if iprint:
+                print("low orbs = ", np.array(list(range(len(lidx))))[lidx])
+            ua = loc(mol, actmo[:, lidx], iprint=iprint)[1]
+            actmo[:, lidx] = actmo[:, lidx].dot(ua)
+            actmo[:, lidx], actocc[lidx], acte[lidx] = psort(
+                ova, fav, pav, actmo[:, lidx]
+            )
+
+        if len(actmo[:, midx]) != 0:
+            if iprint:
+                print("mid orbs = ", np.array(list(range(len(midx))))[midx])
+            ua = loc(mol, actmo[:, midx], iprint=iprint)[1]
+            actmo[:, midx] = actmo[:, midx].dot(ua)
+            actmo[:, midx], actocc[midx], acte[midx] = psort(
+                ova, fav, pav, actmo[:, midx]
+            )
+
+        if len(actmo[:, hidx]) != 0:
+            if iprint:
+                print("high orbs = ", np.array(list(range(len(hidx))))[hidx])
+            ua = loc(mol, actmo[:, hidx], iprint=iprint)[1]
+            actmo[:, hidx] = actmo[:, hidx].dot(ua)
+            actmo[:, hidx], actocc[hidx], acte[hidx] = psort(
+                ova, fav, pav, actmo[:, hidx]
+            )
+
+    coeff[:, np.array(sorted(cas_list), dtype=int)] = actmo
+    mo_occ[np.array(sorted(cas_list), dtype=int)] = actocc
+    mo_energy[np.array(sorted(cas_list), dtype=int)] = acte
+
+    # sort_mo from pyscf.mcscf.addons
+
+    cas_list = np.array(sorted(cas_list), dtype=int)
+    mask = np.ones(coeff.shape[1], dtype=bool)
+    mask[cas_list] = False
+    idx = np.where(mask)[0]
+    nactorb = len(cas_list)
+    nactelec = int(np.round(sum(mo_occ[cas_list])) + 0.1)
+    assert (mol.nelectron - nactelec) % 2 == 0
+    ncore = (mol.nelectron - nactelec) // 2
+    if iprint:
+        print("NACTORB = %d NACTELEC = %d NCORE = %d" % (nactorb, nactelec, ncore))
+    coeff = np.hstack(
+        (coeff[:, idx[:ncore]], coeff[:, cas_list], coeff[:, idx[ncore:]])
+    )
+    mo_occ = np.hstack((mo_occ[idx[:ncore]], mo_occ[cas_list], mo_occ[idx[ncore:]]))
+
+    return coeff, mo_occ, mo_energy, nactorb, nactelec
