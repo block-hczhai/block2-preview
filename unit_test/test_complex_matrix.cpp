@@ -52,6 +52,8 @@ TYPED_TEST(TestComplexMatrix, TestIadd) {
         FL scale, cfactor;
         Random::complex_fill<FP>(&scale, 1);
         Random::complex_fill<FP>(&cfactor, 1);
+        Random::complex_fill<FP>(a.data, a.size());
+        Random::complex_fill<FP>(b.data, b.size());
         if (ii)
             scale = 1.0;
         if (jj)

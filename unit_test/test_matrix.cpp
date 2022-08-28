@@ -53,6 +53,8 @@ TYPED_TEST(TestMatrix, TestIadd) {
         FL scale, cfactor;
         Random::fill<FL>(&scale, 1);
         Random::fill<FL>(&cfactor, 1);
+        Random::fill<FL>(a.data, a.size());
+        Random::fill<FL>(b.data, b.size());
         if (ii)
             scale = 1.0;
         if (jj)
