@@ -1288,7 +1288,7 @@ elif pre_run or not no_pre_run:
         mps_n_sites = n_sites // condense_mpo
         icd = 1
         while icd < condense_mpo:
-            basis = CondensedMPO.condense_basis(basis)
+            basis = MPSInfo.condense_basis(basis)
             icd *= 2
         if nroots == 1 and len(targets) == 1 and "use_hybrid_complex" not in dic:
             if dynamic_corr_method is not None:

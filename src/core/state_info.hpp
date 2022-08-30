@@ -546,4 +546,65 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
     }
 };
 
+// Translation between SZ and SGF StateInfo
+template <typename S1, typename S2>
+struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
+    static shared_ptr<StateInfo<S2>>
+    forward(const shared_ptr<StateInfo<S1>> &si) {
+        map<S2, ubond_t> mp;
+        for (int i = 0; i < si->n; i++) {
+            S1 q = si->quanta[i];
+            for (int j = -q.n(); j <= q.n(); j += 2)
+                mp[S2(q.n(), j, q.pg())] += si->n_states[i];
+        }
+        shared_ptr<StateInfo<S2>> so = make_shared<StateInfo<S2>>();
+        so->allocate((int)mp.size());
+        int i = 0;
+        for (auto m : mp) {
+            so->quanta[i] = m.first, so->n_states[i] = m.second;
+            i++;
+        }
+        so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S1>>
+    backward(const shared_ptr<StateInfo<S2>> &si) {
+        map<S1, ubond_t> mp;
+        for (int i = 0; i < si->n; i++) {
+            S2 q = si->quanta[i];
+            mp[S1(q.n(), q.pg())] += si->n_states[i];
+        }
+        shared_ptr<StateInfo<S1>> so = make_shared<StateInfo<S1>>();
+        so->allocate((int)mp.size());
+        int i = 0;
+        for (auto m : mp) {
+            so->quanta[i] = m.first, so->n_states[i] = m.second;
+            i++;
+        }
+        so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S2>>
+    backward_connection(const shared_ptr<StateInfo<S2>> &si,
+                        const shared_ptr<StateInfo<S1>> &bsi) {
+        shared_ptr<StateInfo<S2>> so = make_shared<StateInfo<S2>>();
+        map<S1, vector<S2>> mp;
+        int ii = 0;
+        for (int i = 0; i < si->n; i++) {
+            S2 q = si->quanta[i];
+            mp[S1(q.n(), q.pg())].push_back(q);
+        }
+        so->allocate(si->n);
+        for (int ib = 0; ib < bsi->n; ib++) {
+            vector<S2> &v = mp.at(bsi->quanta[ib]);
+            so->n_states[ib] = ii;
+            memcpy(so->quanta + ii, v.data(), v.size() * sizeof(S2));
+            ii += (int)v.size();
+        }
+        so->reallocate(ii);
+        so->n_states_total = bsi->n;
+        return so;
+    }
+};
+
 } // namespace block2

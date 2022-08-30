@@ -254,7 +254,10 @@ template <typename S> void bind_mps(py::module &m) {
         .def("load_left_dims", &MPSInfo<S>::load_left_dims)
         .def("load_right_dims", &MPSInfo<S>::load_right_dims)
         .def("deep_copy", &MPSInfo<S>::deep_copy)
-        .def("deallocate", &MPSInfo<S>::deallocate);
+        .def("deallocate", &MPSInfo<S>::deallocate)
+        .def_static("condense_basis", &MPSInfo<S>::condense_basis)
+        .def_static("split_basis", &MPSInfo<S>::split_basis)
+        .def("split", &MPSInfo<S>::split);
 
     py::class_<DynamicMPSInfo<S>, shared_ptr<DynamicMPSInfo<S>>, MPSInfo<S>>(
         m, "DynamicMPSInfo")
@@ -1655,8 +1658,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
                       const vector<shared_ptr<StateInfo<S>>> &, bool>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
                       const vector<shared_ptr<StateInfo<S>>> &, bool,
-                      const string &>())
-        .def_static("condense_basis", &CondensedMPO<S, FL>::condense_basis);
+                      const string &>());
 
     py::class_<FusedMPO<S, FL>, shared_ptr<FusedMPO<S, FL>>, MPO<S, FL>>(
         m, "FusedMPO")
@@ -1903,8 +1905,7 @@ void bind_fl_trans_mps(py::module &m, const string &aux_name) {
 }
 
 template <typename S, typename T, typename FL>
-auto bind_fl_trans_mps_spin_specific(py::module &m, const string &aux_name)
-    -> decltype(typename S::is_su2_t(typename T::is_sz_t())) {
+void bind_fl_trans_mps_spin_specific(py::module &m, const string &aux_name) {
 
     m.def(("trans_sparse_tensor_to_" + aux_name).c_str(),
           &TransSparseTensor<S, T, FL>::forward);
@@ -2369,6 +2370,14 @@ bind_fl_expect<SGB, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SGB, double, double, complex<double>>(py::module &m,
                                                      const string &name);
+extern template void bind_trans_mps<SZ, SGF>(py::module &m,
+                                             const string &aux_name);
+extern template void bind_trans_mps<SGF, SZ>(py::module &m,
+                                             const string &aux_name);
+extern template auto
+bind_fl_trans_mps_spin_specific<SZ, SGF, double>(py::module &m,
+                                                 const string &aux_name)
+    -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 extern template auto bind_fl_spin_specific<SGB, double>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
 
@@ -2423,6 +2432,10 @@ bind_fl_linear<SGB, complex<double>, complex<double>>(py::module &m);
 extern template void
 bind_fl_expect<SGB, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
+
+extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
+    py::module &m, const string &aux_name)
+    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 #endif
 
@@ -2609,6 +2622,11 @@ bind_fl_expect<SGB, float, float, complex<float>>(py::module &m,
 extern template auto bind_fl_spin_specific<SGB, float>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
 
+extern template auto
+bind_fl_trans_mps_spin_specific<SZ, SGF, float>(py::module &m,
+                                                const string &aux_name)
+    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+
 extern template void
 bind_fl_trans_mps<SGF, float, double>(py::module &m, const string &aux_name);
 extern template void
@@ -2667,6 +2685,11 @@ bind_fl_linear<SGB, complex<float>, complex<float>>(py::module &m);
 extern template void
 bind_fl_expect<SGB, complex<float>, complex<float>, complex<float>>(
     py::module &m, const string &name);
+
+extern template auto
+bind_fl_trans_mps_spin_specific<SZ, SGF, complex<float>>(py::module &m,
+                                                         const string &aux_name)
+    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 extern template void
 bind_fl_trans_mps<SGF, complex<float>, complex<double>>(py::module &m,

@@ -927,23 +927,101 @@ template <typename S> struct MPSInfo {
         deallocate_right();
         deallocate_left();
     }
+    static vector<shared_ptr<StateInfo<S>>>
+    condense_basis(const vector<shared_ptr<StateInfo<S>>> &orig_basis) {
+        uint16_t n_sites = (uint16_t)(orig_basis.size() / 2);
+        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                *orig_basis[m + m], *orig_basis[m + m + 1], S(S::invalid)));
+        return basis;
+    }
+    static vector<shared_ptr<StateInfo<S>>>
+    split_basis(const vector<shared_ptr<StateInfo<S>>> &orig_basis) {
+        uint16_t n_sites = (uint16_t)(orig_basis.size() * 2);
+        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
+        for (uint16_t m = 0; m < (uint16_t)orig_basis.size(); m++) {
+            shared_ptr<StateInfo<S>> b1 = orig_basis[m];
+            int max_n = 0;
+            for (int q = 0; q < b1->n; q++)
+                if (b1->quanta[q].n() > max_n)
+                    max_n = b1->quanta[q].n();
+            assert((max_n & 1) == 0);
+            for (int q = 0; q < b1->n; q++)
+                if (b1->quanta[q].n() > (max_n >> 1))
+                    b1->n_states[q] = 0;
+            shared_ptr<StateInfo<S>> b2 =
+                make_shared<StateInfo<S>>(b1->deep_copy());
+            for (int q = 0, p = 1; q < b1->n; q++)
+                if (b1->quanta[q].n() == (max_n >> 1)) {
+                    if ((b1->n_states[q] & 1) == 0) {
+                        b1->n_states[q] >>= 1;
+                        b2->n_states[q] >>= 1;
+                    } else {
+                        b1->n_states[q] = (b1->n_states[q] >> 1) + p;
+                        b2->n_states[q] = (b2->n_states[q] >> 1) + (!p);
+                        p = !p;
+                    }
+                }
+            b1->collect();
+            b2->collect();
+            basis[m + m] = b1;
+            basis[m + m + 1] = b2;
+        }
+        return basis;
+    }
+    // split every sites into two sites
+    // assume everything has been loaded
+    shared_ptr<MPSInfo<S>> split() const {
+        int n_sites = this->n_sites * 2;
+        vector<shared_ptr<StateInfo<S>>> basis = split_basis(this->basis);
+        shared_ptr<MPSInfo<S>> so =
+            make_shared<MPSInfo<S>>(n_sites, this->vacuum, this->target, basis);
+        // handle the singlet embedding case
+        so->left_dims_fci[0] = this->left_dims_fci[0];
+        for (int i = 0; i < n_sites; i++)
+            so->left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *so->left_dims_fci[i], *basis[i], S(S::invalid)));
+        so->right_dims_fci[n_sites] = this->right_dims_fci[this->n_sites];
+        for (int i = n_sites - 1; i >= 0; i--)
+            so->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[i], *so->right_dims_fci[i + 1], S(S::invalid)));
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*so->left_dims_fci[i], *so->right_dims_fci[i],
+                                 so->target);
+            StateInfo<S>::filter(*so->right_dims_fci[i], *so->left_dims_fci[i],
+                                 so->target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims_fci[i]->collect();
+        for (int i = 0; i <= this->n_sites; i++) {
+            so->left_dims[i + i] = this->left_dims[i];
+            if (i != this->n_sites)
+                so->left_dims[i + i + 1] =
+                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                        *so->left_dims[i + i], *basis[i + i],
+                        *so->left_dims_fci[i + i]));
+        }
+        for (int i = this->n_sites; i >= 0; i--) {
+            so->right_dims[i + i] = this->right_dims[i];
+            if (i != 0)
+                so->right_dims[i + i - 1] =
+                    make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                        *basis[i + i - 1], *so->right_dims[i + i],
+                        *so->right_dims_fci[i + i - 1]));
+        }
+        so->check_bond_dimensions();
+        so->bond_dim = so->get_max_bond_dimension();
+        so->tag = this->tag;
+        return so;
+    }
 };
 
-template <typename S1, typename S2, typename = void, typename = void>
-struct TransMPSInfo {
-    static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
-                                           S2 target) {
-        return TransMPSInfo<S2, S1>::backward(si, target);
-    }
-    static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
-                                            S1 target) {
-        return TransMPSInfo<S2, S1>::forward(si, target);
-    }
-};
-
-// Translation between SU2 and SZ MPSInfo
-template <typename S1, typename S2>
-struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
+template <typename S1, typename S2> struct TransMPSInfoBase {
     template <typename SX, typename SY>
     static shared_ptr<MPSInfo<SY>> transform(const shared_ptr<MPSInfo<SX>> &si,
                                              SY target) {
@@ -960,13 +1038,13 @@ struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
         for (int i = 0; i < n_sites; i++)
             so->left_dims_fci[i + 1] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
-                    *so->left_dims_fci[i], *basis[i], target));
+                    *so->left_dims_fci[i], *basis[i], SY(SY::invalid)));
         so->right_dims_fci[n_sites] =
             TransStateInfo<SX, SY>::forward(si->right_dims_fci[n_sites]);
         for (int i = n_sites - 1; i >= 0; i--)
             so->right_dims_fci[i] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
-                    *basis[i], *so->right_dims_fci[i + 1], target));
+                    *basis[i], *so->right_dims_fci[i + 1], SY(SY::invalid)));
         for (int i = 0; i <= n_sites; i++) {
             StateInfo<SY>::filter(*so->left_dims_fci[i], *so->right_dims_fci[i],
                                   target);
@@ -988,13 +1066,45 @@ struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
         so->tag = si->tag;
         return so;
     }
+};
+
+template <typename S1, typename S2, typename = void, typename = void>
+struct TransMPSInfo {
     static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
                                            S2 target) {
-        return transform<S1, S2>(si, target);
+        return TransMPSInfo<S2, S1>::backward(si, target);
     }
     static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
                                             S1 target) {
-        return transform<S2, S1>(si, target);
+        return TransMPSInfo<S2, S1>::forward(si, target);
+    }
+};
+
+// Translation between SU2 and SZ MPSInfo
+template <typename S1, typename S2>
+struct TransMPSInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t>
+    : TransMPSInfoBase<S1, S2> {
+    static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
+                                           S2 target) {
+        return TransMPSInfoBase<S1, S2>::template transform<S1, S2>(si, target);
+    }
+    static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
+                                            S1 target) {
+        return TransMPSInfoBase<S1, S2>::template transform<S2, S1>(si, target);
+    }
+};
+
+// Translation between SZ and SGF MPSInfo
+template <typename S1, typename S2>
+struct TransMPSInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t>
+    : TransMPSInfoBase<S1, S2> {
+    static shared_ptr<MPSInfo<S2>> forward(const shared_ptr<MPSInfo<S1>> &si,
+                                           S2 target) {
+        return TransMPSInfoBase<S1, S2>::template transform<S1, S2>(si, target);
+    }
+    static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
+                                            S1 target) {
+        return TransMPSInfoBase<S1, S2>::template transform<S2, S1>(si, target);
     }
 };
 

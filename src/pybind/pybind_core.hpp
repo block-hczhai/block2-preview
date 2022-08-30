@@ -1258,8 +1258,8 @@ void bind_trans_sparse_matrix(py::module &m, const string &aux_name) {
 }
 
 template <typename S, typename T>
-auto bind_trans_state_info_spin_specific(py::module &m, const string &aux_name)
-    -> decltype(typename S::is_su2_t(typename T::is_sz_t())) {
+void bind_trans_state_info_spin_specific(py::module &m,
+                                         const string &aux_name) {
 
     m.def(("trans_connection_state_info_to_" + aux_name).c_str(),
           &TransStateInfo<T, S>::backward_connection);
@@ -3221,6 +3221,15 @@ extern template void bind_fl_parallel<SGB, double>(py::module &m);
 extern template void bind_fl_operator<SGB, double>(py::module &m);
 extern template void bind_fl_hamiltonian<SGB, double>(py::module &m);
 extern template void bind_fl_rule<SGB, double>(py::module &m);
+
+extern template void bind_trans_state_info<SZ, SGF>(py::module &m,
+                                                    const string &aux_name);
+extern template void bind_trans_state_info<SGF, SZ>(py::module &m,
+                                                    const string &aux_name);
+extern template auto
+bind_trans_state_info_spin_specific<SZ, SGF>(py::module &m,
+                                             const string &aux_name)
+    -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 #ifdef _USE_COMPLEX
 extern template void bind_fl_expr<SGF, complex<double>>(py::module &m);

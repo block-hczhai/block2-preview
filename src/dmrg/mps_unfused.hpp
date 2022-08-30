@@ -59,7 +59,7 @@ template <typename S1, typename S2, typename FL, typename = void,
           typename = void>
 struct TransSparseTensor;
 
-// Translation between SU2 and SZ MPSInfo
+// Translation between SU2 and SZ SparseTensor
 // only works for normal nstate = 1 basis
 template <typename S1, typename S2, typename FL>
 struct TransSparseTensor<S1, S2, FL, typename S1::is_su2_t,
@@ -149,6 +149,85 @@ struct TransSparseTensor<S1, S2, FL, typename S1::is_su2_t,
                                     (*x)({i + lsh, 0, j + rsh}) =
                                         (FL)factor * (*r.second)({i, 0, j});
                         }
+            }
+        }
+        shared_ptr<SparseTensor<S2, FL>> rst =
+            make_shared<SparseTensor<S2, FL>>();
+        rst->data.resize(tr_basis->n);
+        for (int i = 0; i < tr_basis->n; i++)
+            rst->data[i] = vector<pair<pair<S2, S2>, shared_ptr<GTensor<FL>>>>(
+                mp[i].cbegin(), mp[i].cend());
+        return rst;
+    }
+};
+
+// Translation between SZ and SGF SparseTensor
+// only works for normal nstate = 1 basis
+template <typename S1, typename S2, typename FL>
+struct TransSparseTensor<S1, S2, FL, typename S1::is_sz_t,
+                         typename S2::is_sg_t> {
+    static shared_ptr<SparseTensor<S2, FL>>
+    forward(const shared_ptr<SparseTensor<S1, FL>> &spt,
+            const shared_ptr<StateInfo<S1>> &basis,
+            const shared_ptr<StateInfo<S1>> &left_dim,
+            const shared_ptr<StateInfo<S1>> &right_dim,
+            const shared_ptr<CG<S1>> &cg, bool left) {
+        assert(basis->n == (int)spt->data.size());
+        shared_ptr<StateInfo<S2>> tr_basis =
+            TransStateInfo<S2, S1>::backward(basis);
+        shared_ptr<StateInfo<S2>> tr_left_dim =
+            TransStateInfo<S2, S1>::backward(left_dim);
+        shared_ptr<StateInfo<S2>> tr_right_dim =
+            TransStateInfo<S2, S1>::backward(right_dim);
+        shared_ptr<StateInfo<S1>> conn_left_dim =
+            TransStateInfo<S2, S1>::backward_connection(left_dim, tr_left_dim);
+        shared_ptr<StateInfo<S1>> conn_right_dim =
+            TransStateInfo<S2, S1>::backward_connection(right_dim,
+                                                        tr_right_dim);
+        vector<map<pair<S2, S2>, shared_ptr<GTensor<FL>>>> mp(tr_basis->n);
+        for (int ip = 0; ip < basis->n; ip++) {
+            S1 mq = basis->quanta[ip];
+            for (auto &r : spt->data[ip]) {
+                S1 lq = r.first.first, rq = r.first.second;
+                S2 mqz(mq.n(), mq.pg());
+                S2 lqz(lq.n(), lq.pg());
+                S2 rqz(rq.n(), rq.pg());
+                int imqz = tr_basis->find_state(mqz);
+                if (!mp[imqz].count(make_pair(lqz, rqz))) {
+                    MKL_INT m =
+                        (MKL_INT)
+                            tr_left_dim->n_states[tr_left_dim->find_state(lqz)];
+                    MKL_INT k =
+                        (MKL_INT)tr_basis->n_states[tr_basis->find_state(mqz)];
+                    MKL_INT n = (MKL_INT)tr_right_dim
+                                    ->n_states[tr_right_dim->find_state(rqz)];
+                    mp[imqz][make_pair(lqz, rqz)] =
+                        make_shared<GTensor<FL>>(m, k, n);
+                }
+                shared_ptr<GTensor<FL>> x = mp[imqz].at(make_pair(lqz, rqz));
+                int il = tr_left_dim->find_state(lqz);
+                int ir = tr_right_dim->find_state(rqz);
+                int klst = conn_left_dim->n_states[il];
+                int krst = conn_right_dim->n_states[ir];
+                int kled = il == tr_left_dim->n - 1
+                               ? conn_left_dim->n
+                               : conn_left_dim->n_states[il + 1];
+                int kred = ir == tr_right_dim->n - 1
+                               ? conn_right_dim->n
+                               : conn_right_dim->n_states[ir + 1];
+                MKL_INT lsh = 0, rsh = 0;
+                for (int ilp = klst;
+                     ilp < kled && conn_left_dim->quanta[ilp] != lq; ilp++)
+                    lsh += left_dim->n_states[left_dim->find_state(
+                        conn_left_dim->quanta[ilp])];
+                for (int irp = krst;
+                     irp < kred && conn_right_dim->quanta[irp] != rq; irp++)
+                    rsh += right_dim->n_states[right_dim->find_state(
+                        conn_right_dim->quanta[irp])];
+                assert(tr_basis->n_states[tr_basis->find_state(mqz)] == 1);
+                for (MKL_INT i = 0; i < r.second->shape[0]; i++)
+                    for (MKL_INT j = 0; j < r.second->shape[2]; j++)
+                        (*x)({i + lsh, 0, j + rsh}) = (*r.second)({i, 0, j});
             }
         }
         shared_ptr<SparseTensor<S2, FL>> rst =
@@ -489,20 +568,16 @@ template <typename S, typename FL> struct UnfusedMPS {
     }
 };
 
+// Translation between SU2 and SZ / SZ and SGF unfused MPS
+// only works for normal nstate = 1 basis
 template <typename S1, typename S2, typename FL, typename = void,
           typename = void>
-struct TransUnfusedMPS;
-
-// Translation between SU2 and SZ unfused MPS
-// only works for normal nstate = 1 basis
-template <typename S1, typename S2, typename FL>
-struct TransUnfusedMPS<S1, S2, FL, typename S1::is_su2_t,
-                       typename S2::is_sz_t> {
+struct TransUnfusedMPS {
     static shared_ptr<UnfusedMPS<S2, FL>>
     forward(const shared_ptr<UnfusedMPS<S1, FL>> &umps, const string &xtag,
             const shared_ptr<CG<S1>> &cg) {
         shared_ptr<UnfusedMPS<S2, FL>> fmps = make_shared<UnfusedMPS<S2, FL>>();
-        assert(umps->info->target.twos() == 0);
+        // assert(umps->info->target.twos() == 0);
         S2 target(umps->info->target.n(), umps->info->target.twos(),
                   umps->info->target.pg());
         umps->info->load_mutable();

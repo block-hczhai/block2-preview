@@ -78,7 +78,7 @@ template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {
                                     ? 'N'
                                     : 'S');
         MPO<S, FL>::sparse_form = new_sparse_form.str();
-        basis = condense_basis(orig_basis);
+        basis = MPSInfo<S>::condense_basis(orig_basis);
         tensors = vector<shared_ptr<OperatorTensor<S, FL>>>(n_sites);
         site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
@@ -403,15 +403,6 @@ template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {
         }
         this->save_schemer();
         this->unload_schemer();
-    }
-    static vector<shared_ptr<StateInfo<S>>>
-    condense_basis(const vector<shared_ptr<StateInfo<S>>> &orig_basis) {
-        uint16_t n_sites = (uint16_t)(orig_basis.size() / 2);
-        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
-        for (uint16_t m = 0; m < n_sites; m++)
-            basis[m] = make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                *orig_basis[m + m], *orig_basis[m + m + 1], S(S::invalid)));
-        return basis;
     }
     static shared_ptr<OpElement<S, FL>>
     infer_expr(const shared_ptr<OpExpr<S>> &expr) {

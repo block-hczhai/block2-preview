@@ -129,6 +129,9 @@ PYBIND11_MODULE(block2, m) {
     py::module m_sgb = m.def_submodule("sgb", "General spin (bosonic).");
     bind_core<SGF, double>(m_sgf, "SGF", "Double");
     bind_core<SGB, double>(m_sgb, "SGB", "Double");
+    bind_trans_state_info<SZ, SGF>(m_sz, "sgf");
+    bind_trans_state_info<SGF, SZ>(m_sgf, "sz");
+    bind_trans_state_info_spin_specific<SZ, SGF>(m_sz, "sgf");
 #ifdef _USE_COMPLEX
     py::module m_sgf_cpx =
         m_cpx.def_submodule("sgf", "General spin (fermionic, complex).");
@@ -235,9 +238,13 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_SG
     bind_dmrg<SGF, double>(m_sgf, "SGF");
     bind_dmrg<SGB, double>(m_sgb, "SGB");
+    bind_trans_mps<SZ, SGF>(m_sz, "sgf");
+    bind_trans_mps<SGF, SZ>(m_sgf, "sz");
+    bind_fl_trans_mps_spin_specific<SZ, SGF, double>(m_sz, "sgf");
 #ifdef _USE_COMPLEX
     bind_dmrg<SGF, complex<double>>(m_sgf_cpx, "SGF");
     bind_dmrg<SGB, complex<double>>(m_sgb_cpx, "SGB");
+    bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(m_sz_cpx, "sgf");
 #endif
 #endif
 
@@ -269,6 +276,7 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_SG
     bind_dmrg<SGF, float>(m_sgf_sp, "SGF");
     bind_dmrg<SGB, float>(m_sgb_sp, "SGB");
+    bind_fl_trans_mps_spin_specific<SZ, SGF, float>(m_sz_sp, "sgf");
 
     bind_fl_trans_mps<SGF, float, double>(m_sgf_sp, "double");
     bind_fl_trans_mps<SGF, double, float>(m_sgf, "float");
@@ -277,6 +285,8 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_COMPLEX
     bind_dmrg<SGF, complex<float>>(m_sgf_cpx_sp, "SGF");
     bind_dmrg<SGB, complex<float>>(m_sgb_cpx_sp, "SGB");
+    bind_fl_trans_mps_spin_specific<SZ, SGF, complex<float>>(m_sz_cpx_sp,
+                                                             "sgf");
 
     bind_fl_trans_mps<SGF, complex<float>, complex<double>>(m_sgf_cpx_sp,
                                                             "double");

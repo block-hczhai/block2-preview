@@ -867,7 +867,15 @@ class DMRGDriver:
         return r
 
     def get_random_mps(
-        self, tag, bond_dim=500, center=0, dot=2, target=None, nroots=1, occs=None
+        self,
+        tag,
+        bond_dim=500,
+        center=0,
+        dot=2,
+        target=None,
+        nroots=1,
+        occs=None,
+        full_fci=True,
     ):
         bw = self.bw
         if target is None:
@@ -884,7 +892,8 @@ class DMRGDriver:
             )
             mps = bw.bs.MultiMPS(self.n_sites, center, dot, nroots)
         mps_info.tag = tag
-        mps_info.set_bond_dimension_full_fci(self.vacuum, self.vacuum)
+        if full_fci:
+            mps_info.set_bond_dimension_full_fci(self.vacuum, self.vacuum)
         if occs is not None:
             mps_info.set_bond_dimension_using_occ(bond_dim, bw.b.VectorDouble(occs))
         else:
