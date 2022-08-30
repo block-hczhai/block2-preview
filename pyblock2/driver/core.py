@@ -342,6 +342,31 @@ class DMRGDriver:
             print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
         return fcidump
 
+    def su2_to_sgf(self):
+        bw = self.bw
+        import numpy as np
+
+        gh1e = np.zeros((self.n_sites * 2,) * 2)
+        gg2e = np.zeros((self.n_sites * 2,) * 4)
+
+        for i in range(self.n_sites * 2):
+            for j in range(i % 2, self.n_sites * 2, 2):
+                gh1e[i, j] = self.h1e[i // 2, j // 2]
+
+        for i in range(self.n_sites * 2):
+            for j in range(i % 2, self.n_sites * 2, 2):
+                for k in range(self.n_sites * 2):
+                    for l in range(k % 2, self.n_sites * 2, 2):
+                        gg2e[i, j, k, l] = self.g2e[i // 2, j // 2, k // 2, l // 2]
+
+        self.h1e = gh1e
+        self.g2e = gg2e
+        self.n_sites = self.n_sites * 2
+        if hasattr(self, "orb_sym"):
+            self.orb_sym = bw.b.VectorUInt8(
+                [self.orb_sym[i // 2] for i in range(self.n_sites)]
+            )
+
     def get_conventional_qc_mpo(self, fcidump):
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
@@ -361,6 +386,12 @@ class DMRGDriver:
         import numpy as np
 
         bw = self.bw
+
+        if SymmetryTypes.SZ in bw.symm_type:
+            if h1e is not None and isinstance(h1e, np.ndarray) and h1e.ndim == 2:
+                h1e = (h1e, h1e)
+            if g2e is not None and isinstance(g2e, np.ndarray) and g2e.ndim == 4:
+                g2e = (g2e, g2e, g2e)
 
         if reorder is not None:
             if isinstance(reorder, np.ndarray):
@@ -454,6 +485,117 @@ class DMRGDriver:
         if self.mpi:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
+
+    def get_spin_square_mpo(self, iprint=1):
+        import numpy as np
+
+        bw = self.bw
+        b = self.expr_builder()
+
+        if SymmetryTypes.SU2 in bw.symm_type:
+            ix2 = np.mgrid[: self.n_sites, : self.n_sites].reshape((2, -1))
+            if self.reorder_idx is not None:
+                ix2 = np.array(self.reorder_idx)[ix2]
+            b.add_terms(
+                "((C+D)2+(C+D)2)0",
+                -np.sqrt(3) / 2 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[0], ix2[1], ix2[1]]).T,
+            )
+        elif SymmetryTypes.SZ in bw.symm_type:
+            ix1 = np.mgrid[: self.n_sites].flatten()
+            ix2 = np.mgrid[: self.n_sites, : self.n_sites].reshape((2, -1))
+            if self.reorder_idx is not None:
+                ix1 = np.array(self.reorder_idx)[ix1]
+                ix2 = np.array(self.reorder_idx)[ix2]
+            b.add_terms("cd", 0.75 * np.ones(ix1.shape[0]), np.array([ix1, ix1]).T)
+            b.add_terms("CD", 0.75 * np.ones(ix1.shape[0]), np.array([ix1, ix1]).T)
+            b.add_terms(
+                "ccdd",
+                0.25 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[1], ix2[1], ix2[0]]).T,
+            )
+            b.add_terms(
+                "cCDd",
+                -0.25 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[1], ix2[1], ix2[0]]).T,
+            )
+            b.add_terms(
+                "CcdD",
+                -0.25 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[1], ix2[1], ix2[0]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                0.25 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[1], ix2[1], ix2[0]]).T,
+            )
+            b.add_terms(
+                "cCDd",
+                -0.5 * np.ones(ix2.shape[1]),
+                np.array([ix2[0], ix2[1], ix2[0], ix2[1]]).T,
+            )
+            b.add_terms(
+                "CcdD",
+                -0.5 * np.ones(ix2.shape[1]),
+                np.array([ix2[1], ix2[0], ix2[1], ix2[0]]).T,
+            )
+        elif SymmetryTypes.SGF in bw.symm_type:
+            ixa1 = np.mgrid[0 : self.n_sites : 2].flatten()
+            ixb1 = np.mgrid[1 : self.n_sites : 2].flatten()
+            ixaa2 = np.mgrid[0 : self.n_sites : 2, 0 : self.n_sites : 2].reshape(
+                (2, -1)
+            )
+            ixab2 = np.mgrid[0 : self.n_sites : 2, 1 : self.n_sites : 2].reshape(
+                (2, -1)
+            )
+            ixba2 = np.mgrid[1 : self.n_sites : 2, 0 : self.n_sites : 2].reshape(
+                (2, -1)
+            )
+            ixbb2 = np.mgrid[1 : self.n_sites : 2, 1 : self.n_sites : 2].reshape(
+                (2, -1)
+            )
+            if self.reorder_idx is not None:
+                ixa1 = np.array(self.reorder_idx)[ixa1]
+                ixb1 = np.array(self.reorder_idx)[ixb1]
+                ixaa2 = np.array(self.reorder_idx)[ixaa2]
+                ixab2 = np.array(self.reorder_idx)[ixab2]
+                ixba2 = np.array(self.reorder_idx)[ixba2]
+                ixbb2 = np.array(self.reorder_idx)[ixbb2]
+            b.add_terms("CD", 0.75 * np.ones(ixa1.shape[0]), np.array([ixa1, ixa1]).T)
+            b.add_terms("CD", 0.75 * np.ones(ixb1.shape[0]), np.array([ixb1, ixb1]).T)
+            b.add_terms(
+                "CCDD",
+                0.25 * np.ones(ixaa2.shape[1]),
+                np.array([ixaa2[0], ixaa2[1], ixaa2[1], ixaa2[0]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                -0.25 * np.ones(ixab2.shape[1]),
+                np.array([ixab2[0], ixab2[1], ixab2[1], ixab2[0]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                -0.25 * np.ones(ixba2.shape[1]),
+                np.array([ixba2[0], ixba2[1], ixba2[1], ixba2[0]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                0.25 * np.ones(ixbb2.shape[1]),
+                np.array([ixbb2[0], ixbb2[1], ixbb2[1], ixbb2[0]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                -0.5 * np.ones(ixab2.shape[1]),
+                np.array([ixab2[0], ixab2[1], ixba2[0], ixba2[1]]).T,
+            )
+            b.add_terms(
+                "CCDD",
+                -0.5 * np.ones(ixba2.shape[1]),
+                np.array([ixab2[1], ixab2[0], ixba2[1], ixba2[0]]).T,
+            )
+
+        bx = b.finalize()
+        return self.get_mpo(bx, iprint)
 
     def orbital_reordering(self, h1e, g2e):
         bw = self.bw
@@ -1133,6 +1275,17 @@ class ExprBuilder:
                 idx.extend(ix)
                 dt.append(arr[ix])
         self.data.indices.append(self.bw.b.VectorUInt16(idx))
+        self.data.data.append(self.bw.VectorFL(dt))
+        return self
+
+    def add_terms(self, expr, arr, idx, cutoff=1e-12):
+        self.data.exprs.append(expr)
+        didx, dt = [], []
+        for ix, v in zip(idx, arr):
+            if abs(v) > cutoff:
+                didx.extend(ix)
+                dt.append(v)
+        self.data.indices.append(self.bw.b.VectorUInt16(didx))
         self.data.data.append(self.bw.VectorFL(dt))
         return self
 
