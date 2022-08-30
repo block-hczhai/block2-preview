@@ -958,10 +958,12 @@ class SOCDMRGDriver(DMRGDriver):
         assert len(twoss) == len(energies)
 
         xnroots = [len(x) for x in energies]
-        eners = np.array(energies).flatten()
+        eners = []
         xtwos = []
         for ix in range(len(energies)):
+            eners += energies[ix]
             xtwos += [twoss[ix]] * xnroots[ix]
+        eners = np.array(eners)
 
         pdm0 = pdms_dict[(0, 0)]
         assert pdm0.ndim == 2 and pdm0.shape[0] == pdm0.shape[1]
