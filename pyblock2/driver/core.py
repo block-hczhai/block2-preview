@@ -382,6 +382,9 @@ class DMRGDriver:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
 
+    def get_identity_mpo(self):
+        return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize())
+
     def get_qc_mpo(self, h1e, g2e, ecore=0, para_type=None, reorder=None, iprint=1):
         import numpy as np
 
@@ -888,17 +891,23 @@ class DMRGDriver:
         iket = self.adjust_mps(iket)[0]
         return iket
 
-    def multiply(self, bra, mpo, ket, n_sweeps=10, tol=1e-8, bond_dims=None, iprint=0):
+    def multiply(self, bra, mpo, ket, n_sweeps=10, tol=1e-8, bond_dims=None,
+                 bra_bond_dims=None, cutoff=1E-24, iprint=0):
         bw = self.bw
+        if bra.info.tag == ket.info.tag:
+            raise RuntimeError("Same tag for bra and ket!!")
         if bond_dims is None:
             bond_dims = [ket.info.bond_dim]
+        if bra_bond_dims is None:
+            bra_bond_dims = [bra.info.bond_dim]
         self.align_mps_center(bra, ket)
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "MULT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.init_environments(iprint >= 3)
-        cps = bw.bs.Linear(me, bw.b.VectorUBond(bond_dims), bw.b.VectorUBond(bond_dims))
+        cps = bw.bs.Linear(me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims))
         cps.iprint = iprint
+        cps.cutoff = cutoff
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
         if self.mpi is not None:
             self.mpi.barrier()
