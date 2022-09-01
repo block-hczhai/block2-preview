@@ -174,7 +174,7 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
     return ierr, u
 
 
-def get_uno(mf, iprint=True):
+def get_uno(mf, do_loc=True, iprint=True):
 
     mol = mf.mol
 
@@ -223,6 +223,13 @@ def get_uno(mf, iprint=True):
     coeff = np.dot(s12inv, coeff)
     diff = coeff.conj().T @ ova @ coeff - np.identity(norb)
     assert np.linalg.norm(diff) < 1e-7
+
+    if not do_loc:
+        mo_occ = eig
+        index = np.argsort(-mo_occ)
+        mo_occ  = mo_occ[index]
+        coeff = coeff[:, index]
+        return coeff, eig
 
     # 3. Search for active space
 
