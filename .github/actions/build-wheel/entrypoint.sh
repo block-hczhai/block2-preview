@@ -23,7 +23,7 @@ PY_EXE=/opt/python/"${PY_VER}"/bin/python3
 sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}'," setup.py
 
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip
-/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
+/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2019 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11
 
 if [ "${PARALLEL}" = "mpi" ]; then
     yum install -y wget openssh-clients openssh-server
@@ -37,7 +37,7 @@ if [ "${PARALLEL}" = "mpi" ]; then
     export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
     /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mpi4py
     sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-    sed -i "s/name='block2'/name='block2-mpi'/g" setup.py
+    sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
     sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmpi", "libopen-pal", "libopen-rte"]): continue' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
     sed -i '/for soname, src_path/a \                if "libmpi.so" in soname: patcher.replace_needed(fn, soname, "libmpi.so")' \
@@ -52,6 +52,7 @@ ${PY_EXE} -c 'import site; x = site.getsitepackages(); x += [xx.replace("site-pa
 sed -i '/rpath_set\[rpath\]/a \    import site\n    for x in set(["../lib" + p.split("lib")[-1] for p in open("/tmp/ptmp").read().strip().split("*")]): rpath_set[rpath.replace("../..", x)] = ""' \
     $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 
+cmake --version
 /opt/python/"${PY_VER}"/bin/pip wheel . -w ./dist --no-deps
 
 find . -type f -iname "*-linux*.whl" -exec sh -c "auditwheel repair '{}' -w \$(dirname '{}') --plat '${PLAT}'" \;

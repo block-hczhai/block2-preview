@@ -29,7 +29,7 @@ Edit the ``setup.py``: ::
 Instal dependencies and build: ::
 
     python3 -m pip install pip build twine --upgrade
-    python3 -m pip install mkl==2019 mkl-include intel-openmp numpy cmake==3.17 pybind11
+    python3 -m pip install mkl==2019 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11
     python3 -m build
 
 Change linux tag and upload: ::
