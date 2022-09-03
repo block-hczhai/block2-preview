@@ -623,6 +623,8 @@ class DMRGDriver:
         dav_type=None,
         cutoff=1e-20,
         dav_max_iter=4000,
+        proj_mpss=None,
+        proj_weights=None,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -642,6 +644,22 @@ class DMRGDriver:
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
+
+        if proj_mpss is not None:
+            assert proj_weights is not None
+            assert len(proj_weights) == len(proj_mpss)
+            dmrg.projection_weights = bw.VectorFP(proj_weights)
+            dmrg.ext_mpss = bw.bs.VectorMPS(proj_mpss)
+            impo = self.get_identity_mpo()
+            for ext_mps in dmrg.ext_mpss:
+                self.align_mps_center(ext_mps, ket)
+                ext_me = bw.bs.MovingEnvironment(
+                    impo, ket, ext_mps, "PJ" + ext_mps.info.tag
+                )
+                ext_me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+                ext_me.init_environments(iprint >= 2)
+                dmrg.ext_mes.append(ext_me)
+
         if dav_type is not None:
             dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbative
@@ -891,8 +909,18 @@ class DMRGDriver:
         iket = self.adjust_mps(iket)[0]
         return iket
 
-    def multiply(self, bra, mpo, ket, n_sweeps=10, tol=1e-8, bond_dims=None,
-                 bra_bond_dims=None, cutoff=1E-24, iprint=0):
+    def multiply(
+        self,
+        bra,
+        mpo,
+        ket,
+        n_sweeps=10,
+        tol=1e-8,
+        bond_dims=None,
+        bra_bond_dims=None,
+        cutoff=1e-24,
+        iprint=0,
+    ):
         bw = self.bw
         if bra.info.tag == ket.info.tag:
             raise RuntimeError("Same tag for bra and ket!!")
@@ -905,7 +933,9 @@ class DMRGDriver:
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.init_environments(iprint >= 3)
-        cps = bw.bs.Linear(me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims))
+        cps = bw.bs.Linear(
+            me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims)
+        )
         cps.iprint = iprint
         cps.cutoff = cutoff
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
