@@ -135,6 +135,18 @@ TYPED_TEST(TestDMRG, Test) {
     shared_ptr<GeneralHamiltonian<S, FL>> gham =
         make_shared<GeneralHamiltonian<S, FL>>(vacuum, norb, orbsym);
 
+    shared_ptr<GeneralFCIDUMP<FL>> igfd =
+        make_shared<GeneralFCIDUMP<FL>>(ElemOpTypes::SU2);
+    igfd->exprs.push_back("");
+    igfd->indices.push_back(vector<uint16_t>());
+    igfd->data.push_back(vector<FL>{(FL)1.0});
+    igfd->const_e = (FL)0.0;
+    igfd = igfd->adjust_order();
+    cout << igfd->data.size() << endl;
+    cout << igfd->data[0].size() << endl;
+    shared_ptr<MPO<S, FL>> impo = make_shared<GeneralMPO<S, FL>>(
+        gham, igfd, MPOAlgorithmTypes::Bipartite, 1E-7, -1);
+
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;

@@ -834,6 +834,8 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                         pex.back().second = '*';
                     pex.push_back(make_pair(-1, x));
                 }
+            if (pex.size() == 0)
+                continue;
             assert(pex.back().first != -1);
             int cnt = 0;
             bool is_heis = false;
