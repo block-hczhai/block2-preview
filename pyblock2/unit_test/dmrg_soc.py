@@ -129,7 +129,7 @@ class TestDMRG:
 
         amfi = "amfi" in soc_type
         x2c = "x2c" in soc_type
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itgsoc.get_rhf_somf_integrals(
+        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itgsoc.get_uhf_somf_integrals(
             mf, ncore, ncas, pg_symm=False, amfi=amfi, x2c1e=x2c, x2c2e=x2c
         )
 
