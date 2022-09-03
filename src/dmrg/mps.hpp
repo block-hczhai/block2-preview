@@ -865,6 +865,7 @@ template <typename S> struct MPSInfo {
                                    get_filename(false, i, dir));
             }
             save_data(dir + "/mps_info.bin");
+            save_data(dir + "/" + tag + "-mps_info.bin");
         }
     }
     void save_mutable() const {

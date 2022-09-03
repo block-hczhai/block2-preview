@@ -439,7 +439,7 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
             for (int i = 0; i < n_sites; i++)
                 if (tensors[i] != nullptr)
                     Parsing::copy_file(get_filename(i), get_filename(i, dir));
-                else if (i == center)
+                else if (i == center || i == center + 1)
                     for (int j = 0; j < nroots; j++)
                         Parsing::copy_file(get_wfn_filename(j),
                                            get_wfn_filename(j, dir));
