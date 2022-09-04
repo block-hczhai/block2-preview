@@ -111,7 +111,9 @@ jobs:
       - name: run test (serial-pytest)
         if: matrix.parallel == 'serial-pytest'
         run: |
-          python -m pip install pyscf pytest
+          python -m pip install pytest
+          python -m pip install 'numpy>=1.13,!=1.16,!=1.17' 'scipy!=1.5.0,!=1.5.1' 'h5py>=2.7'
+          python -m pip install --no-deps 'pyscf==2.1.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test pyblock2/unit_test/*.py
 
