@@ -126,6 +126,7 @@ class DMRGDriver:
             1,
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
+        self.reorder_idx = None
 
     def parallelize_integrals(self, para_type, h1e, g2e, const):
         import numpy as np
@@ -368,6 +369,7 @@ class DMRGDriver:
             )
 
     def get_conventional_qc_mpo(self, fcidump):
+        """This method cannot take care of parallelization!"""
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
         mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.Conventional, "HQC")
@@ -498,7 +500,8 @@ class DMRGDriver:
         if SymmetryTypes.SU2 in bw.symm_type:
             ix2 = np.mgrid[: self.n_sites, : self.n_sites].reshape((2, -1))
             if self.reorder_idx is not None:
-                ix2 = np.array(self.reorder_idx)[ix2]
+                ridx = np.argsort(self.reorder_idx)
+                ix2 = np.array(ridx)[ix2]
             b.add_terms(
                 "((C+D)2+(C+D)2)0",
                 -np.sqrt(3) / 2 * np.ones(ix2.shape[1]),
@@ -508,8 +511,9 @@ class DMRGDriver:
             ix1 = np.mgrid[: self.n_sites].flatten()
             ix2 = np.mgrid[: self.n_sites, : self.n_sites].reshape((2, -1))
             if self.reorder_idx is not None:
-                ix1 = np.array(self.reorder_idx)[ix1]
-                ix2 = np.array(self.reorder_idx)[ix2]
+                ridx = np.argsort(self.reorder_idx)
+                ix1 = np.array(ridx)[ix1]
+                ix2 = np.array(ridx)[ix2]
             b.add_terms("cd", 0.75 * np.ones(ix1.shape[0]), np.array([ix1, ix1]).T)
             b.add_terms("CD", 0.75 * np.ones(ix1.shape[0]), np.array([ix1, ix1]).T)
             b.add_terms(
@@ -558,12 +562,13 @@ class DMRGDriver:
                 (2, -1)
             )
             if self.reorder_idx is not None:
-                ixa1 = np.array(self.reorder_idx)[ixa1]
-                ixb1 = np.array(self.reorder_idx)[ixb1]
-                ixaa2 = np.array(self.reorder_idx)[ixaa2]
-                ixab2 = np.array(self.reorder_idx)[ixab2]
-                ixba2 = np.array(self.reorder_idx)[ixba2]
-                ixbb2 = np.array(self.reorder_idx)[ixbb2]
+                ridx = np.argsort(self.reorder_idx)
+                ixa1 = np.array(ridx)[ixa1]
+                ixb1 = np.array(ridx)[ixb1]
+                ixaa2 = np.array(ridx)[ixaa2]
+                ixab2 = np.array(ridx)[ixab2]
+                ixba2 = np.array(ridx)[ixba2]
+                ixbb2 = np.array(ridx)[ixbb2]
             b.add_terms("CD", 0.75 * np.ones(ixa1.shape[0]), np.array([ixa1, ixa1]).T)
             b.add_terms("CD", 0.75 * np.ones(ixb1.shape[0]), np.array([ixb1, ixb1]).T)
             b.add_terms(
@@ -596,6 +601,9 @@ class DMRGDriver:
                 -0.5 * np.ones(ixba2.shape[1]),
                 np.array([ixab2[1], ixab2[0], ixba2[1], ixba2[0]]).T,
             )
+
+        if self.mpi is not None:
+            b.iscale(1.0 / self.mpi.size)
 
         bx = b.finalize()
         return self.get_mpo(bx, iprint)
@@ -907,6 +915,7 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
         iket = self.adjust_mps(iket)[0]
+        iket.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return iket
 
     def multiply(
@@ -1264,17 +1273,20 @@ class SOCDMRGDriver(DMRGDriver):
 
         for i in range(len(heig)):
             shvec = np.zeros(len(eners))
+            ssq = 0
             imb = 0
             for ibra in range(len(eners)):
                 tjb = xtwos[ibra]
                 shvec[ibra] = np.linalg.norm(hvec[imb : imb + tjb + 1, i]) ** 2
+                ssq += shvec[ibra] * (tjb + 2) * tjb / 4
                 imb += tjb + 1
+            assert abs(np.sum(shvec) - 1) < 1e-7
             iv = np.argmax(np.abs(shvec))
             xhdiag[i] = eners[iv]
             if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
                 print(
-                    " State %4d Total energy: %15.8f | largest |coeff|**2 %10.6f from I = %4d E = %15.8f S = %4.1f"
-                    % (i, heig[i], shvec[iv], iv, eners[iv], xtwos[iv] / 2)
+                    " State %4d Total energy: %15.8f <S^2>: %12.6f | largest |coeff|**2 %10.6f from I = %4d E = %15.8f S = %4.1f"
+                    % (i, heig[i], ssq, shvec[iv], iv, eners[iv], xtwos[iv] / 2)
                 )
 
         return heig
@@ -1326,6 +1338,13 @@ class ExprBuilder:
                 dt.append(v)
         self.data.indices.append(self.bw.b.VectorUInt16(didx))
         self.data.data.append(self.bw.VectorFL(dt))
+        return self
+
+    def iscale(self, d):
+        import numpy as np
+
+        for i, ix in enumerate(self.data.data):
+            self.data.data[i] = self.bw.VectorFL(d * np.array(ix))
         return self
 
     def finalize(self):

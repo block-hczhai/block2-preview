@@ -66,9 +66,13 @@ class TestDMRG:
         if "hybrid" in soc_type:
             assert np.linalg.norm(g2e.imag) < 1e-7
             mpo_cpx = driver.get_qc_mpo(h1e=h1e - h1e.real, g2e=None, ecore=0, iprint=1)
+            # fd = driver.write_fcidump(h1e=np.ascontiguousarray(h1e - h1e.real), g2e=None, ecore=0)
+            # mpo_cpx = driver.get_conventional_qc_mpo(fd)
             driver.set_symm_type(symm_type=SymmetryTypes.SGF, reset_frame=False)
             driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
             mpo = driver.get_qc_mpo(h1e=h1e.real, g2e=g2e.real, ecore=ecore, iprint=1)
+            # fd = driver.write_fcidump(h1e=np.ascontiguousarray(h1e.real), g2e=np.ascontiguousarray(g2e.real), ecore=ecore)
+            # mpo = driver.get_conventional_qc_mpo(fd)
             ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6 * 2)
             energies = driver.hybrid_mpo_dmrg(
                 mpo,
@@ -83,6 +87,8 @@ class TestDMRG:
             )
         else:
             mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
+            # fd = driver.write_fcidump(h1e, g2e, ecore=ecore)
+            # mpo = driver.get_conventional_qc_mpo(fd)
             ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6)
             energies = driver.dmrg(
                 mpo,
