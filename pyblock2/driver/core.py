@@ -833,15 +833,21 @@ class DMRGDriver:
         ket.info.bond_dim = max(ket.info.bond_dim, ket.info.get_max_bond_dimension())
         if ket.center != ref.center:
             if ref.center == 0:
-                ket.center += 1
-                ket.canonical_form = ket.canonical_form[:-1] + "S"
+                if ket.dot == 2:
+                    ket.center += 1
+                    ket.canonical_form = ket.canonical_form[:-1] + "S"
                 while ket.center != 0:
                     ket.move_left(self.ghamil.opf.cg, self.prule)
             else:
                 ket.canonical_form = "K" + ket.canonical_form[1:]
                 while ket.center != ket.n_sites - 1:
                     ket.move_right(self.ghamil.opf.cg, self.prule)
-                ket.center -= 1
+                if ket.dot == 2:
+                    ket.center -= 1
+            if self.mpi is not None:
+                self.mpi.barrier()
+            ket.save_data()
+            ket.info.save_data(self.scratch + "/%s-mps_info.bin" % ket.info.tag)
         if self.mpi is not None:
             self.mpi.barrier()
 
@@ -1037,7 +1043,7 @@ class DMRGDriver:
             mps_info.load_data(self.scratch + "/%s-mps_info.bin" % tag)
         else:
             mps_info.load_data(self.scratch + "/mps_info.bin")
-        mps_info.tag = tag
+        assert mps_info.tag == tag
         mps_info.load_mutable()
         mps_info.bond_dim = max(mps_info.bond_dim, mps_info.get_max_bond_dimension())
         mps = bw.bs.MPS(mps_info) if nroots == 1 else bw.bs.MultiMPS(mps_info)
