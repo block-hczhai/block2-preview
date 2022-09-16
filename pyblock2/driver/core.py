@@ -732,7 +732,7 @@ class DMRGDriver:
 
         self.align_mps_center(mbra, mket)
         hamil = bw.bs.HamiltonianQC(
-            self.vacuum, self.n_sites, self.orb_sym, bw.b.FCIDUMP()
+            self.vacuum, self.n_sites, self.orb_sym, bw.bx.FCIDUMP()
         )
         if pdm_type == 1:
             pmpo = bw.bs.PDM1MPOQC(hamil, 1 if soc else 0)
