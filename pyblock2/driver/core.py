@@ -244,6 +244,7 @@ class DMRGDriver:
         orb_sym=None,
         heis_twos=-1,
         heis_twosz=0,
+        singlet_embedding=True,
     ):
         bw = self.bw
         self.vacuum = bw.SX(0, 0, 0)
@@ -254,7 +255,17 @@ class DMRGDriver:
                 pg_irrep = self.pg_irrep
             else:
                 pg_irrep = 0
-        self.target = bw.SX(n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep)
+        if not SymmetryTypes.SU2 in bw.symm_type:
+            singlet_embedding = False
+        if singlet_embedding:
+            assert heis_twosz == 0
+            self.target = bw.SX(n_elec + spin, 0, pg_irrep)
+            self.left_vacuum = bw.SX(spin, spin, 0)
+        else:
+            self.target = bw.SX(
+                n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
+            )
+            self.left_vacuum = self.vacuum
         self.n_sites = n_sites
         if orb_sym is None:
             self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
@@ -751,6 +762,16 @@ class DMRGDriver:
                 prule = bw.bs.ParallelRulePDM2QC(self.mpi)
             pmpo = bw.bs.ParallelMPO(pmpo, prule)
 
+        if soc:
+            mb_lv = mbra.info.left_dims_fci[0].quanta[0]
+            ml_lv = mket.info.left_dims_fci[0].quanta[0]
+            if mb_lv != ml_lv:
+                raise RuntimeError(
+                    "SOC 1PDM cannot be done with singlet_embedding for mpss"
+                    + " with different spins! Please consider setting "
+                    + "singlet_embedding=False in DMRGDriver.initialize_system(...)."
+                )
+
         pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
         pme.init_environments(iprint >= 2)
         pme.cached_contraction = True
@@ -897,10 +918,14 @@ class DMRGDriver:
             elif ket.canonical_form[-1] == "C" and ket.canonical_form[-2] == "L":
                 ket.canonical_form = ket.canonical_form[:-1] + "S"
                 ket.center = ket.n_sites - 1
+            elif ket.center == ket.n_sites - 2 and ket.canonical_form[-2] == "L":
+                ket.center = ket.n_sites - 1
             if ket.canonical_form[0] == "M" and ket.canonical_form[1] == "R":
                 ket.canonical_form = "J" + ket.canonical_form[1:]
             elif ket.canonical_form[-1] == "M" and ket.canonical_form[-2] == "L":
                 ket.canonical_form = ket.canonical_form[:-1] + "T"
+                ket.center = ket.n_sites - 1
+            elif ket.center == ket.n_sites - 2 and ket.canonical_form[-2] == "L":
                 ket.center = ket.n_sites - 1
 
         ket.save_data()
@@ -1052,6 +1077,26 @@ class DMRGDriver:
         self.fix_restarting_mps(mps)
         return mps
 
+    def mps_change_singlet_embedding(self, mps, tag, forward):
+        cp_mps = mps.deep_copy(tag)
+        while cp_mps.center > 0:
+            cp_mps.move_left(self.ghamil.opf.cg, self.prule)
+        if forward:
+            cp_mps.to_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
+        else:
+            cp_mps.from_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
+        cp_mps.save_data()
+        cp_mps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return cp_mps
+
+    def mps_change_to_singlet_embedding(self, mps, tag):
+        return self.mps_change_singlet_embedding(mps, tag, forward=True)
+
+    def mps_change_from_singlet_embedding(self, mps, tag):
+        return self.mps_change_singlet_embedding(mps, tag, forward=False)
+
     def mps_change_precision(self, mps, tag):
         bw = self.bw
         assert tag != mps.info.tag
@@ -1089,7 +1134,9 @@ class DMRGDriver:
             mps = bw.bs.MultiMPS(self.n_sites, center, dot, nroots)
         mps_info.tag = tag
         if full_fci:
-            mps_info.set_bond_dimension_full_fci(self.vacuum, self.vacuum)
+            mps_info.set_bond_dimension_full_fci(self.left_vacuum, self.vacuum)
+        else:
+            mps_info.set_bond_dimension_fci(self.left_vacuum, self.vacuum)
         if occs is not None:
             mps_info.set_bond_dimension_using_occ(bond_dim, bw.b.VectorDouble(occs))
         else:

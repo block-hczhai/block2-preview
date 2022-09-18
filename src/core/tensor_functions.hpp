@@ -894,6 +894,10 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpProduct<S, FL>> op =
                 dynamic_pointer_cast<OpProduct<S, FL>>(expr);
             assert(op->b != nullptr);
+            // if (lop.count(op->a) == 0)
+            //     cout << "missing op->a : " << *op->a << endl;
+            // if (rop.count(op->b) == 0)
+            //     cout << "missing op->b : " << *op->b << endl;
             assert(lop.count(op->a) != 0 && rop.count(op->b) != 0);
             shared_ptr<SparseMatrix<S, FL>> lmat = lop.at(op->a);
             shared_ptr<SparseMatrix<S, FL>> rmat = rop.at(op->b);

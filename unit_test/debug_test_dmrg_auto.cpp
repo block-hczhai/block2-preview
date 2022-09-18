@@ -77,6 +77,9 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "rescaled const = " << fcidump->e() << endl;
     cout << "INT end .. T = " << t.get_time() << endl;
 
+    const bool singlet_embedding = false;
+    int se_spin = 2;
+
     Random::rand_seed(1234);
 
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
@@ -89,6 +92,9 @@ TYPED_TEST(TestDMRG, Test) {
     uint8_t isym = PointGroup::swap_pg(pg)(fcidump->isym());
     S target(fcidump->n_elec(), fcidump->twos(),
              S::pg_combine(isym, 0, fcidump->k_mod()));
+    if (singlet_embedding)
+        target = S(fcidump->n_elec() + se_spin, 0,
+                   S::pg_combine(isym, 0, fcidump->k_mod()));
     shared_ptr<HamiltonianQC<S, FL>> hamil =
         make_shared<HamiltonianQC<S, FL>>(vacuum, norb, pg_sym, fcidump);
 
@@ -166,6 +172,8 @@ TYPED_TEST(TestDMRG, Test) {
     // cout << mpo->get_blocking_formulas() << endl;
     // abort();
 
+    mpo = make_shared<IdentityAddedMPO<S, FL>>(mpo);
+
     ubond_t bond_dim = 200;
 
     // MPSInfo
@@ -175,6 +183,10 @@ TYPED_TEST(TestDMRG, Test) {
     // CCSD init
     shared_ptr<MPSInfo<S>> mps_info =
         make_shared<MPSInfo<S>>(norb, vacuum, target, mpo->basis);
+    if (singlet_embedding) {
+        S left_vacuum = S(se_spin, se_spin, 0);
+        mps_info->set_bond_dimension_full_fci(left_vacuum, vacuum);
+    }
     // mps_info->set_bond_dimension_full_fci();
     if (occs.size() == 0)
         mps_info->set_bond_dimension(bond_dim);

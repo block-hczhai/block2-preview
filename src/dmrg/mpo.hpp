@@ -1521,7 +1521,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                 }
             if (!found) {
                 x->data.push_back(i_op);
-                y->data.push_back(i_op * i_op);
+                y->data.push_back(m == 0 ? i_op : i_op * i_op);
                 assert(x->get_type() == SymTypes::RVec);
                 x->n = y->n = (int)x->data.size();
                 if (m == 0) {
@@ -1555,7 +1555,10 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                 }
             if (!found) {
                 x->data.push_back(i_op);
-                y->data.push_back(i_op * i_op);
+                y->data.push_back(m == MPO<S, FL>::right_operator_names.size() -
+                                              1
+                                      ? i_op
+                                      : i_op * i_op);
                 assert(x->get_type() == SymTypes::CVec);
                 x->m = y->m = (int)x->data.size();
                 if (m == mpo->n_sites - 1) {

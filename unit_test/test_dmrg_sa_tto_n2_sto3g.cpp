@@ -91,6 +91,7 @@ void TestTTODMRGN2STO3GSA<FL>::test_dmrg(
     shared_ptr<DMRG<S, FL, FL>> dmrg =
         make_shared<DMRG<S, FL, FL>>(me, bdims, noises);
     dmrg->iprint = 2;
+    dmrg->davidson_soft_max_iter = 500;
     dmrg->noise_type = NoiseTypes::ReducedPerturbativeCollected;
     dmrg->trunc_type = dmrg->trunc_type | TruncationTypes::RealDensityMatrix;
     dmrg->cutoff = 1E-20;
