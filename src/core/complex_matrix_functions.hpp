@@ -1318,9 +1318,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             make_shared<VectorAllocator<FP>>();
         MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
         FL *work = d_alloc->complex_allocate(lwork);
-        assert(a.m == l.m && a.n == r.n && l.n == k && r.m == k && s.n == k);
+        assert(a.m == l.m && a.n == r.n && l.n >= k && r.m == k && s.n == k);
         xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n,
-                   l.data, &k, work, &lwork, &info);
+                   l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
         d_alloc->complex_deallocate(work, lwork);
     }

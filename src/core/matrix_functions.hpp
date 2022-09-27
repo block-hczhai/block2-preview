@@ -1206,7 +1206,7 @@ struct GMatrixFunctions<
         MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
         // FL work[lwork];
         FL *work = d_alloc->allocate(lwork);
-        assert(a.m == l.m && a.n == r.n && r.m == k && s.n == k);
+        assert(a.m == l.m && a.n == r.n && l.n >= k && r.m == k && s.n == k);
         xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n,
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);

@@ -705,7 +705,10 @@ template <typename S, typename FL> struct TensorFunctions {
                                            opdq))
                             .at(op->a);
                     int tid = threading->get_thread_id();
-                    rs[tid] += opf->dot_product(lmat, rmat, op->factor);
+                    rs[tid] += (op->conj & 2)
+                                   ? xconj<FL>(opf->dot_product(
+                                         lmat, rmat, xconj<FL>(op->factor)))
+                                   : opf->dot_product(lmat, rmat, op->factor);
                 }
                 FL r = accumulate(rs.begin(), rs.end(), (FL)0.0);
                 threading->activate_normal();
@@ -735,7 +738,11 @@ template <typename S, typename FL> struct TensorFunctions {
                                        opdq))
                         .at(op->a);
                 expectations[k] = make_pair(
-                    names[k], tf->opf->dot_product(lmat, rmat, op->factor));
+                    names[k],
+                    (op->conj & 2)
+                        ? xconj<FL>(tf->opf->dot_product(lmat, rmat,
+                                                         xconj<FL>(op->factor)))
+                        : tf->opf->dot_product(lmat, rmat, op->factor));
             });
         for (auto &vpart : vparts)
             get<3>(vpart)->deallocate();
