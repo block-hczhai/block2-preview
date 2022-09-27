@@ -123,7 +123,8 @@ void TestDMRGN2STO3G<FL>::test_dmrg(
                  << (energy - energies[i][j]) << " T = " << fixed << setw(10)
                  << setprecision(3) << t.get_time() << endl;
 
-            if (abs(energy - energies[i][j]) >= conv && k < 5) {
+            if (abs(energy - energies[i][j]) >= conv &&
+                (k < 5 || (condense && k < 15))) {
                 k++, j--;
                 cout << "!!! RETRY ... " << endl;
                 continue;
