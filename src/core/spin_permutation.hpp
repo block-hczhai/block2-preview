@@ -217,6 +217,10 @@ struct SpinPermTensor {
         return r;
     }
     SpinPermTensor operator+(const SpinPermTensor &other) const {
+        if (data.size() == 1 && data[0].size() == 0)
+            return other;
+        else if (other.data.size() == 1 && other.data[0].size() == 0)
+            return *this;
         assert(data.size() == other.data.size());
         vector<vector<SpinPermTerm>> zd = data;
         for (size_t i = 0; i < zd.size(); i++)
@@ -334,6 +338,27 @@ struct SpinPermRecoupling {
             else
                 ss << c;
         return ss.str();
+    }
+    static int get_target_twos(const string &xstr) {
+        vector<pair<int, char>> pex;
+        pex.reserve(xstr.length());
+        for (char x : xstr)
+            if (x >= '0' && x <= '9') {
+                if (pex.back().first != -1)
+                    pex.back().first = pex.back().first * 10 + (int)(x - '0');
+                else
+                    pex.push_back(make_pair((int)(x - '0'), ' '));
+            } else {
+                if (x == '+' && pex.back().second == ' ')
+                    pex.back().second = '*';
+                pex.push_back(make_pair(-1, x));
+            }
+        if (pex.size() == 0)
+            return 0;
+        else if (pex.back().second != ' ')
+            return 1;
+        else
+            return pex.back().first;
     }
     static int count_cds(const string &x) {
         int ncd = 0;
@@ -557,7 +582,7 @@ struct SpinPermPattern {
     }
     static vector<string> get_unique(const vector<uint8_t> &cds,
                                      const vector<uint16_t> &ref_indices,
-                                     int split_idx = -1,
+                                     int target_twos = 0, int split_idx = -1,
                                      bool ref_split = false) {
         SU2CG cg(100);
         cg.initialize();
@@ -571,7 +596,8 @@ struct SpinPermPattern {
             if (indices[i] != indices[i - 1])
                 ref_split_idx.push_back(i);
         bool heis = cds.size() != 0 && cds[0] == 2;
-        vector<string> pp = SpinPermRecoupling::initialize(nn, 0, heis ? 2 : 1);
+        vector<string> pp =
+            SpinPermRecoupling::initialize(nn, target_twos, heis ? 2 : 1);
         vector<SpinPermTensor> ts(pp.size());
         for (int i = 0; i < (int)pp.size(); i++) {
             if (split_idx != -1 &&
@@ -672,6 +698,7 @@ struct SpinPermScheme {
         cg.initialize();
         vector<uint8_t> cds;
         spin_str = SpinPermRecoupling::split_cds(spin_str, cds);
+        int target_twos = SpinPermRecoupling::get_target_twos(spin_str);
         SpinPermPattern spat(nn);
         vector<double> mptr;
         SpinPermScheme r;
@@ -696,8 +723,8 @@ struct SpinPermScheme {
                         ((uint8_t)xs.data[0][0].ops[j].first &
                          (uint8_t)SpinOperator::S) |
                         (xs.data[0][0].ops[j].first & SpinOperator::C);
-                vector<string> ttp =
-                    SpinPermPattern::get_unique(target_cds, irr, -1, true);
+                vector<string> ttp = SpinPermPattern::get_unique(
+                    target_cds, irr, target_twos, -1, true);
                 vector<T> tts(ttp.size());
                 bool found = false;
                 for (int j = 0; j < tts.size() && !found; j++) {

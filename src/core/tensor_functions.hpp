@@ -969,7 +969,10 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product(x, lop, rop, mat);
+                if (x->get_type() == OpTypes::Prod && x->b == nullptr)
+                    tensor_product(x->get_op(), lop, rop, mat);
+                else
+                    tensor_product(x, lop, rop, mat);
         } break;
         case OpTypes::Zero:
             break;

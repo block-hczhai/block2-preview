@@ -74,6 +74,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         MPO<S, FL>::tensors = mpo->tensors;
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
         MPO<S, FL>::sparse_form = mpo->sparse_form;

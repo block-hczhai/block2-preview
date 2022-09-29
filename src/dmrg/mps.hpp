@@ -1773,7 +1773,7 @@ template <typename S, typename FL> struct MPS {
         if (para_rule == nullptr || para_rule->is_root()) {
             assert(tensors[center]->info->n == 1);
             S lq = tensors[center]->info->quanta[0].get_bra(dqse);
-            S dq(dqse.n() - lq.twos(), lq.twos(), dqse.pg());
+            S dq(dqse.n() - lq.n(), lq.twos(), dqse.pg());
             assert(tensors[center]->info->is_wavefunction);
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
@@ -1803,7 +1803,7 @@ template <typename S, typename FL> struct MPS {
             info->save_left_dims(center);
         } else {
             S lq = tensors[center]->info->quanta[0].get_bra(dqse);
-            S dq(dqse.n() - lq.twos(), lq.twos(), dqse.pg());
+            S dq(dqse.n() - lq.n(), lq.twos(), dqse.pg());
             assert(info->target == dqse);
             info->target = dq;
             info->set_bond_dimension_fci();
@@ -1816,6 +1816,7 @@ template <typename S, typename FL> struct MPS {
     }
     void to_singlet_embedding_wfn(
         const shared_ptr<CG<S>> &cg,
+        S left_vacuum = S(S::invalid),
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(center == 0);
         char orig_canonical_form = canonical_form[center];
@@ -1841,6 +1842,10 @@ template <typename S, typename FL> struct MPS {
                 make_shared<SparseMatrix<S, FL>>(d_alloc);
             S dqse(dq.n() + dq.twos(), 0, dq.pg());
             S lq(dq.twos(), dq.twos(), 0);
+            if (left_vacuum != S(S::invalid)) {
+                assert(left_vacuum.twos() == dq.twos());
+                lq = left_vacuum;
+            }
             StateInfo<S> lsi(lq), rsi(dq);
             rsi.n_states[0] = tensors[center]->info->n_states_ket[0];
             wfn_info->initialize(lsi, rsi, dqse, false, true);

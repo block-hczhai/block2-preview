@@ -92,6 +92,7 @@ struct NPC1MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::schemer = nullptr;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         MPO<S, FL>::site_op_infos = hamil->site_op_infos;
@@ -338,6 +339,7 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::schemer = nullptr;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         MPO<S, FL>::site_op_infos = hamil->site_op_infos;

@@ -40,6 +40,13 @@ class ParallelTypes(IntFlag):
     SIJ = 5
 
 
+class MPOAlgorithmTypes(IntFlag):
+    Bipartite = 0
+    FastBipartite = 1
+    SVD = 2
+    FastSVD = 3
+
+
 class Block2Wrapper:
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
@@ -111,10 +118,10 @@ class DMRGDriver:
             self.mpi = None
             self.prule = None
 
-        self.scratch = scratch
+        self._scratch = scratch
+        self._restart_dir = restart_dir
         self.stack_mem = stack_mem
-        self.restart_dir = restart_dir
-        self.set_symm_type(symm_type)
+        self.symm_type = symm_type
         bw = self.bw
 
         if n_threads is None:
@@ -127,6 +134,35 @@ class DMRGDriver:
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
         self.reorder_idx = None
+
+    @property
+    def symm_type(self):
+        return self._symm_type
+
+    @symm_type.setter
+    def symm_type(self, symm_type):
+        self._symm_type = symm_type
+        self.set_symm_type(symm_type)
+
+    @property
+    def scratch(self):
+        return self._scratch
+
+    @scratch.setter
+    def scratch(self, scratch):
+        self._scratch = scratch
+        self.frame.save_dir = scratch
+        self.frame.mps_dir = scratch
+        self.frame.mpo_dir = scratch
+
+    @property
+    def restart_dir(self):
+        return self._restart_dir
+
+    @restart_dir.setter
+    def restart_dir(self, restart_dir):
+        self._restart_dir = restart_dir
+        self.frame.restart_dir = restart_dir
 
     def parallelize_integrals(self, para_type, h1e, g2e, const):
         import numpy as np
@@ -255,12 +291,12 @@ class DMRGDriver:
                 pg_irrep = self.pg_irrep
             else:
                 pg_irrep = 0
-        if not SymmetryTypes.SU2 in bw.symm_type:
+        if not SymmetryTypes.SU2 in bw.symm_type or heis_twos != -1:
             singlet_embedding = False
         if singlet_embedding:
             assert heis_twosz == 0
-            self.target = bw.SX(n_elec + spin, 0, pg_irrep)
-            self.left_vacuum = bw.SX(spin, spin, 0)
+            self.target = bw.SX(n_elec + spin % 2, 0, pg_irrep)
+            self.left_vacuum = bw.SX(spin % 2, spin, 0)
         else:
             self.target = bw.SX(
                 n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
@@ -491,10 +527,15 @@ class DMRGDriver:
 
         return self.get_mpo(bx, iprint)
 
-    def get_mpo(self, expr, iprint=0):
+    def get_mpo(self, expr, iprint=0, cutoff=1e-14, left_vacuum=None, algo_type=None):
         bw = self.bw
+        if left_vacuum is None:
+            left_vacuum = bw.SX.invalid
+        if algo_type is None:
+            algo_type = MPOAlgorithmTypes.FastBipartite
+        algo_type = getattr(bw.b.MPOAlgorithmTypes, algo_type.name)
         mpo = bw.bs.GeneralMPO(
-            self.ghamil, expr, bw.b.MPOAlgorithmTypes.FastBipartite, 0.0, -1, iprint > 0
+            self.ghamil, expr, algo_type, cutoff, -1, iprint > 0, left_vacuum
         )
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         mpo = bw.bs.IdentityAddedMPO(mpo)
@@ -778,6 +819,7 @@ class DMRGDriver:
         expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
         if site_type == 0:
             expect.zero_dot_algo = True
+        # expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
         expect.iprint = iprint
         expect.solve(True, mket.center == 0)
 
@@ -1077,12 +1119,14 @@ class DMRGDriver:
         self.fix_restarting_mps(mps)
         return mps
 
-    def mps_change_singlet_embedding(self, mps, tag, forward):
+    def mps_change_singlet_embedding(self, mps, tag, forward, left_vacuum=None):
         cp_mps = mps.deep_copy(tag)
         while cp_mps.center > 0:
             cp_mps.move_left(self.ghamil.opf.cg, self.prule)
         if forward:
-            cp_mps.to_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
+            if left_vacuum is None:
+                left_vacuum = self.bw.SX.invalid
+            cp_mps.to_singlet_embedding_wfn(self.ghamil.opf.cg, left_vacuum, self.prule)
         else:
             cp_mps.from_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
         cp_mps.save_data()
@@ -1117,10 +1161,13 @@ class DMRGDriver:
         nroots=1,
         occs=None,
         full_fci=True,
+        left_vacuum=None,
     ):
         bw = self.bw
         if target is None:
             target = self.target
+        if left_vacuum is None:
+            left_vacuum = self.left_vacuum
         if nroots == 1:
             mps_info = bw.brs.MPSInfo(
                 self.n_sites, self.vacuum, target, self.ghamil.basis
@@ -1134,9 +1181,9 @@ class DMRGDriver:
             mps = bw.bs.MultiMPS(self.n_sites, center, dot, nroots)
         mps_info.tag = tag
         if full_fci:
-            mps_info.set_bond_dimension_full_fci(self.left_vacuum, self.vacuum)
+            mps_info.set_bond_dimension_full_fci(left_vacuum, self.vacuum)
         else:
-            mps_info.set_bond_dimension_fci(self.left_vacuum, self.vacuum)
+            mps_info.set_bond_dimension_fci(left_vacuum, self.vacuum)
         if occs is not None:
             mps_info.set_bond_dimension_using_occ(bond_dim, bw.b.VectorDouble(occs))
         else:

@@ -222,11 +222,12 @@ template <typename S, typename FL> struct Partition {
     }
     // Get all possible combination of delta quantum numbers
     // from the matrix of symbolic expressions of operators
+    // op_left_vacuum should be true vacuum when this is for right contract
     static vector<vector<pair<uint8_t, S>>>
     get_uniq_sub_labels(const shared_ptr<Symbolic<S>> &exprs,
                         const shared_ptr<Symbolic<S>> &mat, const vector<S> &sl,
-                        bool partial = false, bool left_only = true,
-                        bool uniq_sorted = true) {
+                        S op_left_vacuum, bool partial = false,
+                        bool left_only = true, bool uniq_sorted = true) {
         vector<vector<pair<uint8_t, S>>> subsl(sl.size());
         if (exprs == nullptr)
             return subsl;
@@ -245,10 +246,10 @@ template <typename S, typename FL> struct Partition {
             case OpTypes::Zero:
                 break;
             case OpTypes::Elem: {
+                // only needed for singlet embedding
                 shared_ptr<OpElement<S, FL>> op =
                     dynamic_pointer_cast<OpElement<S, FL>>(opx);
-                assert(l == op->q_label);
-                S p = l.combine(S(0), -l);
+                S p = l.combine(op_left_vacuum, -op->q_label);
                 assert(p != S(S::invalid));
                 subsl[idx].push_back(make_pair(0, p));
             } break;
@@ -275,6 +276,11 @@ template <typename S, typename FL> struct Partition {
                     if (op->a != nullptr && op->b != nullptr) {
                         bra = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
                         ket = (op->conj & 2) ? op->b->q_label : -op->b->q_label;
+                    } else if (op->b == nullptr &&
+                               op->get_type() == OpTypes::Prod) {
+                        // only needed for singlet embedding
+                        assert(op->conj == 0);
+                        bra = op_left_vacuum, ket = -op->get_op()->q_label;
                     } else {
                         assert(op->get_type() == OpTypes::SumProd);
                         shared_ptr<OpSumProd<S, FL>> spop =
@@ -310,7 +316,7 @@ template <typename S, typename FL> struct Partition {
             }
             if (uniq_sorted) {
                 // needed for iop x iop in me delayed contraction with MPI
-                S p0 = l.combine(S(0), S(0));
+                S p0 = l.combine(op_left_vacuum, S(0));
                 if (p0 != S(S::invalid))
                     subsl[idx].push_back(make_pair((uint8_t)0, p0));
             }

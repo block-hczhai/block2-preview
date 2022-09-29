@@ -564,9 +564,9 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             }
         }
     }
-    static vector<vector<S>>
-    init_string_quanta(const vector<string> &exprs,
-                       const vector<uint16_t> &term_l) {
+    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                const vector<uint16_t> &term_l,
+                                                S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -814,14 +814,15 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         for (auto &p : ops)
             p.second = get_site_string_op(m, p.first);
     }
-    static vector<vector<S>>
-    init_string_quanta(const vector<string> &exprs,
-                       const vector<uint16_t> &term_l) {
+    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                const vector<uint16_t> &term_l,
+                                                S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1, S(0, 0, 0));
             vector<pair<int, char>> pex;
             pex.reserve(exprs[ix].length());
+            bool is_heis = false;
             for (char x : exprs[ix])
                 if (x >= '0' && x <= '9') {
                     if (pex.back().first != -1)
@@ -832,15 +833,28 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 } else {
                     if (x == '+' && pex.back().second == ' ')
                         pex.back().second = '*';
+                    else if (x == 'T')
+                        is_heis = true;
                     pex.push_back(make_pair(-1, x));
                 }
+            const int site_dq = is_heis ? 2 : 1;
             if (pex.size() == 0)
                 continue;
+            else if (pex.size() == 1 && pex.back().first == -1) {
+                // single C/D
+                pex.insert(pex.begin(), make_pair(-1, '('));
+                pex.push_back(make_pair(site_dq, ' '));
+            }
             assert(pex.back().first != -1);
             int cnt = 0;
-            bool is_heis = false;
             // singlet embedding (twos will be set later)
-            r[ix][0].set_n(pex.back().first);
+            if (left_vacuum == S(S::invalid))
+                r[ix][0].set_n(pex.back().first);
+            else {
+                assert(left_vacuum.twos() == pex.back().first);
+                r[ix][0].set_n(left_vacuum.n());
+                r[ix][0].set_pg(left_vacuum.pg());
+            }
             vector<uint16_t> stk;
             for (auto &p : pex) {
                 if (p.second == '(')
@@ -862,7 +876,6 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 else if (p.second == 'T')
                     cnt++, is_heis = true;
             }
-            const int site_dq = is_heis ? 2 : 1;
             if (r[ix].size() >= 2) {
                 r[ix][r[ix].size() - 2].set_twos(site_dq);
                 r[ix][r[ix].size() - 2].set_twos_low(site_dq);
@@ -1068,9 +1081,9 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
             }
         }
     }
-    static vector<vector<S>>
-    init_string_quanta(const vector<string> &exprs,
-                       const vector<uint16_t> &term_l) {
+    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                const vector<uint16_t> &term_l,
+                                                S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -1262,9 +1275,9 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
             }
         }
     }
-    static vector<vector<S>>
-    init_string_quanta(const vector<string> &exprs,
-                       const vector<uint16_t> &term_l) {
+    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                const vector<uint16_t> &term_l,
+                                                S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -1334,7 +1347,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                const shared_ptr<GeneralFCIDUMP<FL>> &afd,
                MPOAlgorithmTypes algo_type, FP cutoff = (FP)0.0,
                int max_bond_dim = -1, bool iprint = true,
-               const string &tag = "HQC")
+               S left_vacuum = S(S::invalid), const string &tag = "HQC")
         : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
         bool rescale = algo_type & MPOAlgorithmTypes::Rescaled;
         bool fast = algo_type & MPOAlgorithmTypes::Fast;
@@ -1381,8 +1394,10 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             n_terms += (LL)afd->data[ix].size();
         }
         vector<vector<S>> quanta_ref =
-            GeneralHamiltonian<S, FL>::init_string_quanta(afd->exprs, term_l);
-        S qh = hamil->vacuum, left_vacuum = hamil->vacuum, actual_qh = qh;
+            GeneralHamiltonian<S, FL>::init_string_quanta(afd->exprs, term_l,
+                                                          left_vacuum);
+        S qh = hamil->vacuum, actual_qh = qh;
+        left_vacuum = hamil->vacuum;
         for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
             if (afd->data[ix].size() != 0) {
                 qh = hamil
@@ -1402,6 +1417,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         shared_ptr<OpExpr<S>> h_op =
             make_shared<OpElement<S, FL>>(OpNames::H, SiteIndex(), qh);
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::left_vacuum = left_vacuum;
         if (iprint) {
             cout << "Build MPO | Nsites = " << setw(5) << n_sites
                  << " | Nterms = " << setw(10) << n_terms
@@ -1729,6 +1745,12 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     for (int i = 0; i < szr; i++)
                         flow.resi[szl + i][szl + szr + 1] = 1;
                     flow.mvc(0, szl, szl, szr, mvcs[iq][0], mvcs[iq][1]);
+                    if (ii == n_sites - 1) {
+                        assert(szr == 1);
+                        mvcs[iq][0].resize(0);
+                        mvcs[iq][1].resize(1);
+                        mvcs[iq][1][0] = 0;
+                    }
                     tsvd += _t2.get_time();
                     // delayed I * O(K^4) term must be of NC type
                     if (delayed_term != -1 && iq == 0) {
@@ -2184,8 +2206,12 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         assert(opx->strings[0]->get_op()->q_label ==
                                opel->q_label);
                     } else {
-                        // for non-singlet Hamiltonian this may not be satisfied
-                        assert(ii != 0 && ii != n_sites - 1);
+                        // for non-singlet Hamiltonian:
+                        // ii != 0 && ii != n_sites - 1 may not be satisfied
+                        // in fact for non singlet mps this is already supported
+                        // since with non-zero left_vac, the left_assign will be
+                        // replaced by left_contract which supports arbitrary
+                        // expressions
                         vector<shared_ptr<OpExpr<S>>> opels;
                         opels.reserve(gmats.size());
                         for (auto &gmat : gmats) {
@@ -2340,12 +2366,26 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             ->q_label) == op.second->info->delta_quantum);
             if (ii == 0) {
                 for (int iop = 0; iop < lop.n; iop++)
-                    if (mat.data[iop]->get_type() != OpTypes::Zero)
-                        assert((dynamic_pointer_cast<OpElement<S, FL>>(lop[iop])
-                                    ->q_label ==
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    mat.data[iop])
-                                    ->q_label));
+                    // singlet embedding
+                    if (mat.data[iop]->get_type() != OpTypes::Zero) {
+                        S sll = dynamic_pointer_cast<OpElement<S, FL>>(lop[iop])
+                                    ->q_label;
+                        if (mat.data[iop]->get_type() == OpTypes::Elem) {
+                            S sl = dynamic_pointer_cast<OpElement<S, FL>>(
+                                       mat.data[iop])
+                                       ->q_label;
+                            assert(sl.combine(sll, left_vacuum) !=
+                                   S(S::invalid));
+                        } else if (mat.data[iop]->get_type() == OpTypes::Sum) {
+                            for (auto &x : dynamic_pointer_cast<OpSum<S, FL>>(
+                                               mat.data[iop])
+                                               ->strings) {
+                                S sl = x->get_op()->q_label;
+                                assert(sl.combine(sll, left_vacuum) !=
+                                       S(S::invalid));
+                            }
+                        }
+                    }
             } else if (ii == n_sites - 1) {
                 for (int iop = 0; iop < rop.m; iop++)
                     if (mat.data[iop]->get_type() != OpTypes::Zero)

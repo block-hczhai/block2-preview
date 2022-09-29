@@ -85,6 +85,7 @@ struct SumMPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 #endif
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);

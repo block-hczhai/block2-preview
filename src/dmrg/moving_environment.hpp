@@ -225,7 +225,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        : envs[i - 1]->left->lmat * mpo->tensors[i - 1]->lmat);
         vector<vector<pair<uint8_t, S>>> subsl =
             Partition<S, FL>::get_uniq_sub_labels(
-                exprs, mpo->left_operator_names[i - 1], sl);
+                exprs, mpo->left_operator_names[i - 1], sl, mpo->left_vacuum);
         Partition<S, FL>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
             mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
@@ -342,7 +342,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                              envs[i + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> subsl =
             Partition<S, FL>::get_uniq_sub_labels(
-                exprs, mpo->right_operator_names[i + dot], sl);
+                exprs, mpo->right_operator_names[i + dot], sl,
+                ket->info->vacuum);
         Partition<S, FL>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
             envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
@@ -448,10 +449,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             envs[i]->left_op_infos.clear();
             envs[i]->left = nullptr;
             frame_<FP>()->activate(1);
-            envs[i - 1]->load_data(true,
-                                   get_left_partition_filename(i - 1, true));
-            if (envs[i - 1]->left != nullptr)
-                frame_<FP>()->load_data(1, get_left_partition_filename(i - 1));
+            if (i - 1 != 0) {
+                envs[i - 1]->load_data(
+                    true, get_left_partition_filename(i - 1, true));
+                if (envs[i - 1]->left != nullptr)
+                    frame_<FP>()->load_data(1,
+                                            get_left_partition_filename(i - 1));
+            }
             left_contract_rotate(i);
         }
         if (rule != nullptr)
@@ -799,7 +803,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (renormalize_ops) {
             frame_<FP>()->activate(1);
             for (int i = 0; i < n_sites; i++) {
-                envs[i]->load_data(true, get_left_partition_filename(i, true));
+                if (i != 0)
+                    envs[i]->load_data(true,
+                                       get_left_partition_filename(i, true));
                 envs[i]->load_data(false,
                                    get_right_partition_filename(i, true));
             }
@@ -954,6 +960,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             para_mps->canonical_form[j] = 'S';
         }
     }
+    virtual bool check_singlet_embedding() const {
+        if (bra->info->vacuum != bra->info->left_dims_fci[0]->quanta[0] ||
+            ket->info->vacuum != ket->info->left_dims_fci[0]->quanta[0] ||
+            mpo->left_vacuum != bra->info->vacuum ||
+            mpo->left_vacuum != ket->info->vacuum) {
+            S dq = mpo->left_vacuum,
+              bq = bra->info->left_dims_fci[0]->quanta[0],
+              kq = ket->info->left_dims_fci[0]->quanta[0];
+            dq.set_n(bq.n() - kq.n());
+            return dq.combine(bq, kq) != S(S::invalid);
+        } else
+            return true;
+    }
     // Generate contracted environment blocks for all center sites
     virtual void init_environments(bool iprint = false) {
         this->iprint = iprint;
@@ -967,7 +986,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
         // singlet embedding
         if (bra->info->vacuum != bra->info->left_dims_fci[0]->quanta[0] ||
-            ket->info->vacuum != ket->info->left_dims_fci[0]->quanta[0]) {
+            ket->info->vacuum != ket->info->left_dims_fci[0]->quanta[0] ||
+            mpo->left_vacuum != bra->info->vacuum ||
+            mpo->left_vacuum != ket->info->vacuum) {
             envs[0]->left = make_shared<OperatorTensor<S, FL>>();
             shared_ptr<VectorAllocator<uint32_t>> i_alloc =
                 make_shared<VectorAllocator<uint32_t>>();
@@ -975,9 +996,15 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 make_shared<VectorAllocator<FP>>();
             shared_ptr<SparseMatrixInfo<S>> xinfo =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
-            S dq = (bra->info->left_dims_fci[0]->quanta[0] -
-                    ket->info->left_dims_fci[0]->quanta[0])[0];
-            assert(dq == S(0));
+            S dq = mpo->left_vacuum,
+              bq = bra->info->left_dims_fci[0]->quanta[0],
+              kq = ket->info->left_dims_fci[0]->quanta[0];
+            if (dq.combine(bq, kq) == S(S::invalid)) {
+                cout << "bra q = " << bq << "mpo q = " << dq << "ket q = " << kq
+                     << endl;
+                throw runtime_error(
+                    "singlet embedding constraint cannot be satisfied!");
+            }
             xinfo->initialize(*bra->info->left_dims_fci[0],
                               *ket->info->left_dims_fci[0], dq, false, false);
             shared_ptr<SparseMatrix<S, FL>> xmat =
@@ -1029,7 +1056,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 para_mps->save_data();
             frame_<FP>()->activate(1);
             for (int i = 0; i < n_sites; i++) {
-                envs[i]->load_data(true, get_left_partition_filename(i, true));
+                if (i != 0)
+                    envs[i]->load_data(true,
+                                       get_left_partition_filename(i, true));
                 envs[i]->load_data(false,
                                    get_right_partition_filename(i, true));
             }
@@ -1062,7 +1091,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         // when conn center can change dynamically,
         // partition info in the middle also needs reloading
         for (int i = a; i <= b - dot; i++) {
-            envs[i]->load_data(true, get_left_partition_filename(i, true));
+            if (i != 0)
+                envs[i]->load_data(true, get_left_partition_filename(i, true));
             envs[i]->load_data(false, get_right_partition_filename(i, true));
         }
         frame_<FP>()->activate(0);
@@ -1100,7 +1130,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                   ? end_site - 2
                                   : mpo->schemer->right_trans_site;
                 frame_<FP>()->reset(1);
-                if (envs[center - 1]->left != nullptr)
+                if (envs[center - 1]->left != nullptr && center - 1 != 0)
                     frame_<FP>()->load_data(
                         1, get_left_partition_filename(center - 1));
                 left_contract_rotate(center);
@@ -1168,7 +1198,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (i > center) {
             if (envs[center]->left != nullptr &&
                 !(cached_info.first == OpCachingTypes::Left &&
-                  cached_info.second == center))
+                  cached_info.second == center) &&
+                center != 0)
                 frame_<FP>()->load_data(1, get_left_partition_filename(center));
             // this will create left partition ++center (new_data_name)
             left_contract_rotate(++center, preserve_data);
@@ -1372,7 +1403,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        : envs[iL]->left->lmat * mpo->tensors[iL]->lmat);
         vector<vector<pair<uint8_t, S>>> lsubsl =
             Partition<S, FL>::get_uniq_sub_labels(
-                lexprs, mpo->left_operator_names[iL], lsl);
+                lexprs, mpo->left_operator_names[iL], lsl, mpo->left_vacuum);
         if (envs[iL]->left != nullptr && iL != 0)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         Partition<S, FL>::init_left_op_infos_notrunc(
@@ -1443,7 +1474,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                              envs[iR - dot + 1]->right->rmat);
         vector<vector<pair<uint8_t, S>>> rsubsl =
             Partition<S, FL>::get_uniq_sub_labels(
-                rexprs, mpo->right_operator_names[iR], rsl);
+                rexprs, mpo->right_operator_names[iR], rsl, ket->info->vacuum);
         if (envs[iR - dot + 1]->right != nullptr)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
@@ -1495,7 +1526,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
               vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
               shared_ptr<OperatorTensor<S, FL>> &new_left) {
         assert(envs[iL]->left != nullptr);
-        frame_<FP>()->load_data(1, get_left_partition_filename(iL));
+        if (iL != 0)
+            frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         frame_<FP>()->activate(0);
         Partition<S, FL>::copy_op_infos(envs[iL]->left_op_infos, left_op_infos);
         if (cached_info.first == OpCachingTypes::LeftCopy &&
@@ -1654,7 +1686,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<EffectiveHamiltonian<S, FL>> efh =
             make_shared<EffectiveHamiltonian<S, FL>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
-                mpo->tf, compute_diag);
+                mpo->left_vacuum, mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;
@@ -1782,7 +1814,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> efh =
             make_shared<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
-                mpo->tf, compute_diag);
+                mpo->left_vacuum, mpo->tf, compute_diag);
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;

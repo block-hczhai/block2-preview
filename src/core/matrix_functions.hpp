@@ -808,7 +808,7 @@ struct GMatrixFunctions<
     static void multiply(const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
                          const GMatrix<FL> &c, FL scale, FL cfactor) {
-        // if assertion failes here, check whether it is the case
+        // if assertion fails here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
         if (!(conja & 1) && !(conjb & 1)) {

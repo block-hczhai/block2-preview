@@ -721,7 +721,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                         Partition<S, FL>::get_uniq_labels({h_eff->hop_mat});
                     vector<vector<pair<uint8_t, S>>> msubsl =
                         Partition<S, FL>::get_uniq_sub_labels(
-                            h_eff->op->mat, h_eff->hop_mat, msl);
+                            h_eff->op->mat, h_eff->hop_mat, msl, h_eff->hop_left_vacuum);
                     diag_info->initialize_diag(
                         cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
                         h_eff->right_op_infos, h_eff->diag->info,

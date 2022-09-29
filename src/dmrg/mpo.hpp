@@ -149,8 +149,10 @@ template <typename S, typename FL> struct MPO {
     mutable double tread = 0;  //!< IO Time cost for reading scratch files.
     mutable double twrite = 0; //!< IO Time cost for writing scratch files.
     shared_ptr<Hamiltonian<S, FL>> hamil =
-        nullptr; //!< Optional field, to prevent early release of Hamiltonian
-                 //!< data causing MPO data invalid
+        nullptr;   //!< Optional field, to prevent early release of Hamiltonian
+                   //!< data causing MPO data invalid
+    S left_vacuum; //!< to support singlet embedding for non-singlet MPO. For
+                   //!< normal MPO this is normal vacuum
     MPO(int n_sites, const string &tag = "H")
         : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'),
           const_e((typename const_fl_type<FL>::FL)0.0), op(nullptr),
@@ -610,6 +612,7 @@ template <typename S, typename FL> struct MPO {
         tag = string(ltag, ' ');
         ifs.read((char *)&tag[0], sizeof(char) * ltag);
         ifs.read((char *)&const_e, sizeof(const_e));
+        ifs.read((char *)&left_vacuum, sizeof(left_vacuum));
         sparse_form = string(n_sites, 'N');
         ifs.read((char *)&sparse_form[0], sizeof(char) * n_sites);
         shared_ptr<CG<S>> cg = make_shared<CG<S>>(200);
@@ -764,6 +767,7 @@ template <typename S, typename FL> struct MPO {
         ofs.write((char *)&ltag, sizeof(ltag));
         ofs.write((char *)&tag[0], sizeof(char) * ltag);
         ofs.write((char *)&const_e, sizeof(const_e));
+        ofs.write((char *)&left_vacuum, sizeof(left_vacuum));
         ofs.write((char *)&sparse_form[0], sizeof(char) * n_sites);
         bool has_op = op != nullptr, has_schemer = schemer != nullptr;
         ofs.write((char *)&has_op, sizeof(has_op));
@@ -966,6 +970,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
         : MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag + "@DIAG" : tag) {
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
@@ -1165,6 +1170,7 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
         MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
@@ -1457,6 +1463,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
+        MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
@@ -1502,6 +1509,8 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         }
         const shared_ptr<OpExpr<S>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        const shared_ptr<OpExpr<S>> i_op_lv = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), mpo->left_vacuum);
         for (size_t m = 0; m < MPO<S, FL>::left_operator_names.size(); m++) {
             bool found = false;
             auto &x = MPO<S, FL>::left_operator_names[m];
@@ -1520,8 +1529,8 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                     break;
                 }
             if (!found) {
-                x->data.push_back(i_op);
-                y->data.push_back(m == 0 ? i_op : i_op * i_op);
+                x->data.push_back(i_op_lv);
+                y->data.push_back(m == 0 ? i_op : i_op_lv * i_op);
                 assert(x->get_type() == SymTypes::RVec);
                 x->n = y->n = (int)x->data.size();
                 if (m == 0) {

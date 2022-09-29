@@ -84,6 +84,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
         }
         MPO<S, FL>::op = make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(),
                                                        delta_quantum);
+        MPO<S, FL>::left_vacuum = vacuum;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
@@ -313,6 +314,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
             make_shared<VectorAllocator<FP>>();
         assert(bra_basis.size() == ket_basis.size());
         MPO<S, FL>::op = i_op;
+        MPO<S, FL>::left_vacuum = vacuum;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         // site operator infos
         site_op_infos.resize(n_sites);
@@ -407,6 +409,7 @@ template <typename S, typename FL> struct IdentityMPO : MPO<S, FL> {
         }
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = i_op;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -476,6 +479,7 @@ template <typename S, typename FL> struct SiteMPO : MPO<S, FL> {
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = op;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -550,6 +554,7 @@ template <typename S, typename FL> struct LocalMPO : MPO<S, FL> {
             hamil->n_sites + n_orbs_big_left - 1 + n_orbs_big_right - 1;
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = h_op;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         assert((uint16_t)ops.size() == n_sites);
         for (auto op : ops)
             assert(op->q_label == ops[0]->q_label);
@@ -708,6 +713,7 @@ struct MPOQC<S, FL, typename S::is_sz_t> : MPO<S, FL> {
 #endif
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -1900,6 +1906,7 @@ struct MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
 #endif
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -2946,6 +2953,7 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
 #endif
         MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         MPO<S, FL>::const_e = hamil->e();
         if (hamil->delayed == DelayedOpNames::None)
             MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);

@@ -80,6 +80,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
     S opdq;
+    // Left vacuum of MPO
+    S hop_left_vacuum;
     // Whether diagonal element of effective H should be computed
     bool compute_diag;
     vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>> wfn_infos;
@@ -91,11 +93,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         const shared_ptr<SparseMatrix<S, FL>> &bra,
         const shared_ptr<SparseMatrix<S, FL>> &ket,
         const shared_ptr<OpElement<S, FL>> &hop,
-        const shared_ptr<SymbolicColumnVector<S>> &hop_mat,
+        const shared_ptr<SymbolicColumnVector<S>> &hop_mat, S hop_left_vacuum,
         const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
-          compute_diag(compute_diag) {
+          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             // for non-hermitian hamiltonian, bra and ket may share the same
@@ -112,7 +114,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl);
+            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                  hop_left_vacuum);
         // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
@@ -184,7 +187,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
             1, vector<shared_ptr<OpExpr<S>>>{pexpr});
         vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, true, trace_right, false)[0];
+            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
         for (size_t j = 0; j < psubsl.size(); j++) {
@@ -475,6 +478,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
                 dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label);
+            if (hop_left_vacuum !=
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label)
+                throw runtime_error(
+                    "non-singlet MPO cannot have constant term!");
             if (para_rule == nullptr || para_rule->is_root()) {
                 if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
                     op->ropt->get_type() == OperatorTensorTypes::Delayed) {
@@ -1025,6 +1032,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
     S opdq;
+    // Left vacuum of MPO
+    S hop_left_vacuum;
     // Whether diagonal element of effective H should be computed
     bool compute_diag;
     vector<unordered_map<
@@ -1038,11 +1047,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &bra,
         const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &ket,
         const shared_ptr<OpElement<S, FL>> &hop,
-        const shared_ptr<SymbolicColumnVector<S>> &hop_mat,
+        const shared_ptr<SymbolicColumnVector<S>> &hop_mat, S hop_left_vacuum,
         const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
-          compute_diag(compute_diag) {
+          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag) {
         // wavefunction
         if (compute_diag) {
             // for non-hermitian hamiltonian, bra and ket may share the same
@@ -1062,7 +1071,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         operator_quanta = msl;
         assert(msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl);
+            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                  hop_left_vacuum);
         // tensor product diagonal
         if (compute_diag) {
             for (int i = 0; i < diag->n; i++) {
@@ -1152,7 +1162,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
             1, vector<shared_ptr<OpExpr<S>>>{pexpr});
         vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, true, trace_right, false)[0];
+            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         for (int i = 0; i < ket[0]->n; i++) {
             S ket_label = ket[0]->infos[i]->delta_quantum;
@@ -1404,6 +1414,10 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             shared_ptr<OpExpr<S>> iop = make_shared<OpElement<S, FL>>(
                 OpNames::I, SiteIndex(),
                 dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label);
+            if (hop_left_vacuum !=
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->q_label)
+                throw runtime_error(
+                    "non-singlet MPO cannot have constant term!");
             if (para_rule == nullptr || para_rule->is_root()) {
                 if (op->lopt->get_type() == OperatorTensorTypes::Delayed ||
                     op->ropt->get_type() == OperatorTensorTypes::Delayed) {

@@ -392,7 +392,8 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
              &MPS<S, FL>::from_singlet_embedding_wfn, py::arg("cg"),
              py::arg("para_rule") = nullptr)
         .def("to_singlet_embedding_wfn", &MPS<S, FL>::to_singlet_embedding_wfn,
-             py::arg("cg"), py::arg("para_rule") = nullptr)
+             py::arg("cg"), py::arg("left_vacuum") = S(S::invalid),
+             py::arg("para_rule") = nullptr)
         .def("move_left", &MPS<S, FL>::move_left, py::arg("cg"),
              py::arg("para_rule") = nullptr)
         .def("move_right", &MPS<S, FL>::move_right, py::arg("cg"),
@@ -557,7 +558,7 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
                       const shared_ptr<SparseMatrix<S, FL>> &,
                       const shared_ptr<SparseMatrix<S, FL>> &,
                       const shared_ptr<OpElement<S, FL>> &,
-                      const shared_ptr<SymbolicColumnVector<S>> &,
+                      const shared_ptr<SymbolicColumnVector<S>> &, S,
                       const shared_ptr<TensorFunctions<S, FL>> &, bool>())
         .def_readwrite("left_op_infos",
                        &EffectiveHamiltonian<S, FL>::left_op_infos)
@@ -641,7 +642,7 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
                       const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &,
                       const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &,
                       const shared_ptr<OpElement<S, FL>> &,
-                      const shared_ptr<SymbolicColumnVector<S>> &,
+                      const shared_ptr<SymbolicColumnVector<S>> &, S,
                       const shared_ptr<TensorFunctions<S, FL>> &, bool>())
         .def_readwrite(
             "left_op_infos",
@@ -756,6 +757,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                  self->right_copy(iR, right_op_infos, new_right);
                  return new_right;
              })
+        .def("check_singlet_embedding",
+             &MovingEnvironment<S, FL, FLS>::check_singlet_embedding)
         .def("init_environments",
              &MovingEnvironment<S, FL, FLS>::init_environments,
              py::arg("iprint") = false,
@@ -1561,6 +1564,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("middle_operator_exprs",
                        &MPO<S, FL>::middle_operator_exprs)
         .def_readwrite("op", &MPO<S, FL>::op)
+        .def_readwrite("left_vacuum", &MPO<S, FL>::left_vacuum)
         .def_readwrite("schemer", &MPO<S, FL>::schemer)
         .def_readwrite("tf", &MPO<S, FL>::tf)
         .def_readwrite("site_op_infos", &MPO<S, FL>::site_op_infos)
@@ -1855,7 +1859,13 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
                       typename GeneralMPO<S, FL>::FP, int, bool,
-                      const string &>(),
+                      S>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
+                      typename GeneralMPO<S, FL>::FP, int, bool,
+                      S, const string &>(),
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>());
 }
@@ -2435,7 +2445,7 @@ bind_fl_expect<SGB, complex<double>, complex<double>, complex<double>>(
 
 extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
     py::module &m, const string &aux_name)
-    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+    -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 #endif
 
@@ -2625,7 +2635,7 @@ extern template auto bind_fl_spin_specific<SGB, float>(py::module &m)
 extern template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, float>(py::module &m,
                                                 const string &aux_name)
-    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+    -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 extern template void
 bind_fl_trans_mps<SGF, float, double>(py::module &m, const string &aux_name);
@@ -2689,7 +2699,7 @@ bind_fl_expect<SGB, complex<float>, complex<float>, complex<float>>(
 extern template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, complex<float>>(py::module &m,
                                                          const string &aux_name)
-    ->decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+    -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 
 extern template void
 bind_fl_trans_mps<SGF, complex<float>, complex<double>>(py::module &m,
