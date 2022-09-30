@@ -50,8 +50,15 @@ enum struct MPOAlgorithmTypes : uint16_t {
     SVD = 2,
     Rescaled = 4,
     Fast = 8,
-    NC = 16,
-    CN = 32,
+    Blocked = 16,
+    NC = 32,
+    CN = 64,
+    BlockedSVD = 16 | 2,
+    FastBlockedSVD = 16 | 8 | 2,
+    BlockedRescaledSVD = 16 | 4 | 2,
+    FastBlockedRescaledSVD = 16 | 8 | 4 | 2,
+    BlockedBipartite = 16 | 1,
+    FastBlockedBipartite = 16 | 8 | 1,
     RescaledSVD = 4 | 2,
     FastSVD = 8 | 2,
     FastRescaledSVD = 8 | 4 | 2,
@@ -68,10 +75,15 @@ inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
 
 inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
     const static string repr[] = {
-        "None", "BIP",     "SVD",     "", "Res", "", "ResSVD",     "", //
-        "Fast", "FastBIP", "FastSVD", "", "",    "", "FastResSVD", "", //
-        "NC",   "",        "",        "", "",    "", "",           "", //
-        "",     "",        "",        "", "",    "", "",           "", "CN"};
+        "None",    "BIP",      "SVD",      "", "Res", "", "RSVD",      "", //
+        "Fast",    "FastBIP",  "FastSVD",  "", "",    "", "FastRSVD",  "", //
+        "Blocked", "BBIP",     "BSVD",     "", "",    "", "BRSVD",     "", //
+        "",        "FastBBIP", "FastBSVD", "", "",    "", "FastBRSVD", "", //
+        "NC",      "",         "",         "", "",    "", "",          "", //
+        "",        "",         "",         "", "",    "", "",          "", //
+        "",        "",         "",         "", "",    "", "",          "", //
+        "",        "",         "",         "", "",    "", "",          "", //
+        "CN"};
     os << repr[(uint16_t)c];
     return os;
 }
@@ -1351,6 +1363,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
         bool rescale = algo_type & MPOAlgorithmTypes::Rescaled;
         bool fast = algo_type & MPOAlgorithmTypes::Fast;
+        bool blocked = algo_type & MPOAlgorithmTypes::Blocked;
         if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
             throw runtime_error(
                 "Max bond dimension can only be used together with SVD!");
@@ -1491,7 +1504,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         // K: n_sites, D: max_bond_dim, L: term_len, N: n_terms
         // using block-structure according to left q number
         // this is the map from left q number to its block index
-        unordered_map<S, int> q_map;
+        // pair(0 = left min 1 = right min, min term_l)
+        map<pair<pair<uint8_t, uint16_t>, S>, int> q_map;
         // for each iq block, a map from hashed repr of string of op in left
         // block to (mpo index, term index (in cur_terms), left block string of
         // op index)
@@ -1553,7 +1567,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         pair<S, S> pq = hamil->get_string_quanta(
                             quanta_ref[ix], afd->exprs[ix],
                             &afd->indices[ix][itt], 0);
-                        q_map[qh.combine(pq.first, -pq.second)] = 0;
+                        q_map[make_pair(make_pair(0, 0),
+                                        qh.combine(pq.first, -pq.second))] = 0;
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
@@ -1613,14 +1628,19 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     S qq = qh.combine(pq.first, -pq.second);
                     // possible error here due to unsymmetrized integral
                     assert(qq != S(S::invalid));
-                    if (q_map.count(qq) == 0) {
-                        q_map[qq] = (int)q_map.size();
+                    pair<uint8_t, uint16_t> pqq =
+                        blocked
+                            ? make_pair((uint8_t)(kmax - k > k),
+                                        min((uint16_t)k, (uint16_t)(kmax - k)))
+                            : make_pair((uint8_t)0, (uint16_t)0);
+                    if (q_map.count(make_pair(pqq, qq)) == 0) {
+                        q_map[make_pair(pqq, qq)] = (int)q_map.size();
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
                         nms.push_back(make_pair(0, 0));
                     }
-                    int iq = q_map.at(qq), il = -1, ir = -1;
+                    int iq = q_map.at(make_pair(pqq, qq)), il = -1, ir = -1;
                     LL &nml = nms[iq].first, &nmr = nms[iq].second;
                     auto &mpl = map_ls[iq];
                     auto &mpr = map_rs[iq];
@@ -1709,7 +1729,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 svds.resize(q_map.size());
             vector<S> qs(q_map.size());
             for (auto &mq : q_map)
-                qs[mq.second] = mq.first;
+                qs[mq.second] = mq.first.second;
             int s_kept_total = 0, nr_total = 0;
             FP res_s_sum = 0, res_factor = 1;
             size_t res_s_count = 0;

@@ -56,15 +56,15 @@ TYPED_TEST(TestDMRG, Test) {
     shared_ptr<FCIDUMP<FL>> fcidump = make_shared<FCIDUMP<FL>>();
     vector<double> occs;
     PGTypes pg = PGTypes::D2H;
-    // string occ_filename = "data/CR2.SVP.OCC";
+    string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
-    // string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
     // string occ_filename = "data/H2O.TZVP.OCC";
-    // occs = read_occ(occ_filename);
+    occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
     // pg = PGTypes::C2V;
     // string filename = "data/HUBBARD-L2.FCIDUMP"; // E = -1.2360679775
-    string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
+    // string filename = "data/N2.STO3G.FCIDUMP"; // E = -107.65412235
     // string filename = "data/HUBBARD-L8.FCIDUMP"; // E = -6.22563376
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     // string filename = "data/H4.STO6G.R1.8.FCIDUMP"; // E = -2.1903842178
@@ -161,7 +161,7 @@ TYPED_TEST(TestDMRG, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
-        gham, gfd, MPOAlgorithmTypes::Bipartite, 1E-7, -1);
+        gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
     // shared_ptr<MPO<S, FL>> mpo =
     //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     // mpo->basis = hamil->basis;

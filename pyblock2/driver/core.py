@@ -41,10 +41,31 @@ class ParallelTypes(IntFlag):
 
 
 class MPOAlgorithmTypes(IntFlag):
-    Bipartite = 0
-    FastBipartite = 1
+    Nothing = 0
+    Bipartite = 1
     SVD = 2
-    FastSVD = 3
+    Rescaled = 4
+    Fast = 8
+    Blocked = 16
+    BlockedSVD = 16 | 2
+    FastBlockedSVD = 16 | 8 | 2
+    BlockedRescaledSVD = 16 | 4 | 2
+    FastBlockedRescaledSVD = 16 | 8 | 4 | 2
+    BlockedBipartite = 16 | 1
+    FastBlockedBipartite = 16 | 8 | 1
+    RescaledSVD = 4 | 2
+    FastSVD = 8 | 2
+    FastRescaledSVD = 8 | 4 | 2
+    FastBipartite = 8 | 1
+    NC = 32
+    CN = 64
+    Conventional = 128
+    ConventionalNC = 128 | 32
+    ConventionalCN = 128 | 64
+    NoTranspose = 256
+    NoTransConventional = 256 | 128
+    NoTransConventionalNC = 256 | 128 | 32
+    NoTransConventionalCN = 256 | 128 | 64
 
 
 class Block2Wrapper:
@@ -415,17 +436,24 @@ class DMRGDriver:
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
-    def get_conventional_qc_mpo(self, fcidump):
+    def get_conventional_qc_mpo(self, fcidump, algo_type=None):
         """This method cannot take care of parallelization!"""
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
-        mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.Conventional, "HQC")
+        if algo_type is not None and MPOAlgorithmTypes.NC in algo_type:
+            mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.NC, "HQC")
+        elif algo_type is not None and MPOAlgorithmTypes.CN in algo_type:
+            mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.CN, "HQC")
+        elif algo_type is None or MPOAlgorithmTypes.Conventional in algo_type:
+            mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.Conventional, "HQC")
+        else:
+            raise RuntimeError("Invalid conventional mpo algo type:", algo_type)
+        if algo_type is not None and MPOAlgorithmTypes.NoTranspose in algo_type:
+            rule = bw.bs.NoTransposeRule(bw.bs.RuleQC())
+        else:
+            rule = bw.bs.RuleQC()
         mpo = bw.bs.SimplifiedMPO(
-            mpo,
-            bw.bs.RuleQC(),
-            True,
-            True,
-            bw.b.OpNamesSet((bw.b.OpNames.R, bw.b.OpNames.RD)),
+            mpo, rule, True, True, bw.b.OpNamesSet((bw.b.OpNames.R, bw.b.OpNames.RD))
         )
         if self.mpi:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
@@ -434,7 +462,17 @@ class DMRGDriver:
     def get_identity_mpo(self):
         return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize())
 
-    def get_qc_mpo(self, h1e, g2e, ecore=0, para_type=None, reorder=None, iprint=1):
+    def get_qc_mpo(
+        self,
+        h1e,
+        g2e,
+        ecore=0,
+        para_type=None,
+        reorder=None,
+        cutoff=1e-14,
+        algo_type=None,
+        iprint=1,
+    ):
         import numpy as np
 
         bw = self.bw
@@ -486,6 +524,10 @@ class DMRGDriver:
         else:
             h1e, g2e, ecore = self.parallelize_integrals(para_type, h1e, g2e, ecore)
 
+        if algo_type is not None and MPOAlgorithmTypes.Conventional in algo_type:
+            fd = self.write_fcidump(h1e, g2e, ecore=ecore)
+            return self.get_conventional_qc_mpo(fd, algo_type=algo_type)
+
         # build Hamiltonian expression
         b = self.expr_builder()
 
@@ -525,7 +567,7 @@ class DMRGDriver:
             else:
                 print("mpo terms = %10d" % sum([len(x) for x in bx.data]))
 
-        return self.get_mpo(bx, iprint)
+        return self.get_mpo(bx, iprint=iprint, cutoff=cutoff, algo_type=algo_type)
 
     def get_mpo(self, expr, iprint=0, cutoff=1e-14, left_vacuum=None, algo_type=None):
         bw = self.bw
