@@ -145,7 +145,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-latest, macos-latest, macos-12 ]
         python: [ '3.6', '3.7', '3.8', '3.9' ]
         manylinux: [ 2010 ]
         plat: [ x86_64, arm64 ]
@@ -153,10 +153,18 @@ jobs:
         exclude:
           - os: macos-latest
             parallel: mpi
+          - os: macos-12
+            parallel: mpi
           - os: macos-latest
+            python: '3.6'
+          - os: macos-12
             python: '3.6'
           - os: ubuntu-latest
             plat: arm64
+          - os: macos-latest
+            plat: arm64
+          - os: macos-12
+            plat: x86_64
       fail-fast: false
 
     steps:
@@ -197,7 +205,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest' && matrix.plat == 'arm64'
         env:
           TAG_STRING: ${{ github.event.ref }}
-          MACOSX_DEPLOYMENT_TARGET: '10.9'
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: |
           brew update
           brew install libomp
@@ -218,7 +226,8 @@ jobs:
           echo ${OMPROOT}
           cmake --version
           python -m pip install wheel delocate
-          export _PYTHON_HOST_PLATFORM="macosx-10.15-arm64"
+          export _PYTHON_HOST_PLATFORM="macosx-12.0-arm64"
+          export SDKROOT=/Applications/Xcode_13.2.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.1.sdk
           export CROSS_COMPILE=1
           export PLAT="arm64"
           python -m pip wheel . -w ./dist --no-deps
