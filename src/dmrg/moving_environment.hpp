@@ -2285,7 +2285,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                      return eigen_values_reduced[a.first].data[a.second] >
                             eigen_values_reduced[b.first].data[b.second];
                  });
-            if (((ubond_t)trunc_type >> 2) == 0) {
+            if (((ubond_t)trunc_type >> 3) == 0) {
                 for (int i = k; i < k_total; i++) {
                     FPS x = eigen_values[ss[i].first].data[ss[i].second];
                     if (x > 0)
@@ -2303,7 +2303,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                ubond_t keep = (ubond_t)trunc_type >> 2;
+                ubond_t keep = (ubond_t)trunc_type >> 3;
                 vector<int> mask(eigen_values.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
@@ -2384,7 +2384,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     return s_reduced[a.first]->data[a.second] >
                            s_reduced[b.first]->data[b.second];
                 });
-            if (((ubond_t)trunc_type >> 2) == 0) {
+            if (((ubond_t)trunc_type >> 3) == 0) {
                 for (int i = k; i < k_total; i++) {
                     FPS x = s[ss[i].first]->data[ss[i].second];
                     if (x > 0)
@@ -2402,7 +2402,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                ubond_t keep = (ubond_t)trunc_type >> 2;
+                ubond_t keep = (ubond_t)trunc_type >> 3;
                 vector<int> mask(s.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
