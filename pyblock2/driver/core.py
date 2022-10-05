@@ -63,9 +63,12 @@ class MPOAlgorithmTypes(IntFlag):
     ConventionalNC = 128 | 32
     ConventionalCN = 128 | 64
     NoTranspose = 256
+    NoRIntermed = 512
     NoTransConventional = 256 | 128
     NoTransConventionalNC = 256 | 128 | 32
     NoTransConventionalCN = 256 | 128 | 64
+    NoRIntermedConventional = 512 | 128
+    NoTransNoRIntermedConventional = 512 | 256 | 128
 
 
 class Block2Wrapper:
@@ -155,6 +158,9 @@ class DMRGDriver:
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
         self.reorder_idx = None
+        self.pg = "c1"
+        self.orb_sym = None
+        self.ghamil = None
 
     @property
     def symm_type(self):
@@ -324,12 +330,13 @@ class DMRGDriver:
             )
             self.left_vacuum = self.vacuum
         self.n_sites = n_sites
+        self.heis_twos = heis_twos
         if orb_sym is None:
             self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
         else:
             self.orb_sym = bw.b.VectorUInt8(orb_sym)
         self.ghamil = bw.bs.GeneralHamiltonian(
-            self.vacuum, self.n_sites, self.orb_sym, heis_twos
+            self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
         )
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, pg="d2h"):
@@ -380,6 +387,7 @@ class DMRGDriver:
         bw = self.bw
         fcidump = bw.bx.FCIDUMP()
         fcidump.read(filename)
+        self.pg = pg
         swap_pg = getattr(bw.b.PointGroup, "swap_" + pg)
         self.orb_sym = bw.b.VectorUInt8(map(swap_pg, fcidump.orb_sym))
         for x in self.orb_sym:
@@ -401,14 +409,15 @@ class DMRGDriver:
         self.const_e = fcidump.const_e
         import numpy as np
 
+        if iprint >= 1:
+            print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
+
         self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape(
             (self.n_sites,) * 2
         )
         self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape(
             (self.n_sites,) * 4
         )
-        if iprint >= 1:
-            print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
         return fcidump
 
     def su2_to_sgf(self):
@@ -452,8 +461,15 @@ class DMRGDriver:
             rule = bw.bs.NoTransposeRule(bw.bs.RuleQC())
         else:
             rule = bw.bs.RuleQC()
+        use_r_intermediates = (
+            algo_type is None or MPOAlgorithmTypes.NoRIntermed not in algo_type
+        )
         mpo = bw.bs.SimplifiedMPO(
-            mpo, rule, True, True, bw.b.OpNamesSet((bw.b.OpNames.R, bw.b.OpNames.RD))
+            mpo,
+            rule,
+            True,
+            use_r_intermediates,
+            bw.b.OpNamesSet((bw.b.OpNames.R, bw.b.OpNames.RD)),
         )
         if self.mpi:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
@@ -470,7 +486,10 @@ class DMRGDriver:
         para_type=None,
         reorder=None,
         cutoff=1e-14,
+        integral_cutoff=1e-14,
         algo_type=None,
+        normal_order_ref=None,
+        symmetrize=True,
         iprint=1,
     ):
         import numpy as np
@@ -482,12 +501,115 @@ class DMRGDriver:
                 h1e = (h1e, h1e)
             if g2e is not None and isinstance(g2e, np.ndarray) and g2e.ndim == 4:
                 g2e = (g2e, g2e, g2e)
+        elif SymmetryTypes.SGF in bw.symm_type:
+            if (
+                h1e is not None
+                and hasattr(self, "n_sites")
+                and len(h1e) * 2 == self.n_sites
+            ):
+                gh1e = np.zeros((len(h1e) * 2,) * 2)
+                gh1e[0::2, 0::2] = gh1e[1::2, 1::2] = h1e
+                h1e = gh1e
+            if (
+                g2e is not None
+                and hasattr(self, "n_sites")
+                and len(g2e) * 2 == self.n_sites
+            ):
+                gg2e = np.zeros((len(g2e) * 2,) * 4)
+                gg2e[0::2, 0::2, 0::2, 0::2] = gg2e[0::2, 0::2, 1::2, 1::2] = g2e
+                gg2e[1::2, 1::2, 0::2, 0::2] = gg2e[1::2, 1::2, 1::2, 1::2] = g2e
+                g2e = gg2e
+
+        if symmetrize and self.orb_sym is not None:
+            x = np.array(self.orb_sym, dtype=int)
+            error = 0
+            if SymmetryTypes.SZ in bw.symm_type:
+                if h1e is not None:
+                    mask = (x[:, None] ^ x[None, :]) != 0
+                    error += sum(np.sum(np.abs(h[mask])) for h in h1e)
+                    h1e[0][mask] = 0
+                    h1e[1][mask] = 0
+                if g2e is not None:
+                    mask = (
+                        x[:, None, None, None]
+                        ^ x[None, :, None, None]
+                        ^ x[None, None, :, None]
+                        ^ x[None, None, None, :]
+                    ) != 0
+                    error += sum(np.sum(np.abs(g[mask])) for g in g2e) * 0.5
+                    error += np.sum(np.abs(g2e[1][mask])) * 0.5
+                    g2e[0][mask] = 0
+                    g2e[1][mask] = 0
+                    g2e[2][mask] = 0
+            else:
+                if h1e is not None:
+                    mask = (x[:, None] ^ x[None, :]) != 0
+                    error += np.sum(np.abs(h1e[mask]))
+                    h1e[mask] = 0
+                if g2e is not None:
+                    mask = (
+                        x[:, None, None, None]
+                        ^ x[None, :, None, None]
+                        ^ x[None, None, :, None]
+                        ^ x[None, None, None, :]
+                    ) != 0
+                    error += np.sum(np.abs(g2e[mask])) * 0.5
+                    g2e[mask] = 0
+            if iprint:
+                print("integral symmetrize error = ", error)
+
+        if integral_cutoff != 0:
+            error = 0
+            if SymmetryTypes.SZ in bw.symm_type:
+                if h1e is not None:
+                    for i in range(2):
+                        mask = np.abs(h1e[i]) < integral_cutoff
+                        error += np.sum(np.abs(h1e[i][mask]))
+                        h1e[i][mask] = 0
+                if g2e is not None:
+                    for i in range(3):
+                        mask = np.abs(g2e[i]) < integral_cutoff
+                        error += np.sum(np.abs(g2e[i][mask])) * (1 if i == 1 else 0.5)
+                        g2e[i][mask] = 0
+            else:
+                if h1e is not None:
+                    mask = np.abs(h1e) < integral_cutoff
+                    error += np.sum(np.abs(h1e[mask]))
+                    h1e[mask] = 0
+                if g2e is not None:
+                    mask = np.abs(g2e) < integral_cutoff
+                    error += np.sum(np.abs(g2e[mask])) * 0.5
+                    g2e[mask] = 0
+            if iprint:
+                print("integral cutoff error = ", np.sqrt(error))
 
         if reorder is not None:
             if isinstance(reorder, np.ndarray):
                 idx = reorder
-            else:
+            elif reorder == "irrep":
+                assert self.orb_sym is not None
+                if self.pg == "d2h":
+                    # D2H
+                    # 0   1   2   3   4   5   6   7   (XOR)
+                    # A1g B1g B2g B3g A1u B1u B2u B3u
+                    # optimal
+                    # A1g B1u B3u B2g B2u B3g B1g A1u
+                    optimal_reorder = [0, 6, 3, 5, 7, 1, 4, 2, 8]
+                elif self.pg == "c2v":
+                    # C2V
+                    # 0  1  2  3  (XOR)
+                    # A1 A2 B1 B2
+                    # optimal
+                    # A1 B1 B2 A2
+                    optimal_reorder = [0, 3, 1, 2, 4]
+                else:
+                    optimal_reorder = [0, 6, 3, 5, 7, 1, 4, 2, 8]
+                orb_opt = [optimal_reorder[x] for x in np.array(self.orb_sym)]
+                idx = np.argsort(orb_opt)
+            elif reorder == "fiedler" or reorder == True:
                 idx = self.orbital_reordering(h1e, g2e)
+            else:
+                raise RuntimeError("Unknown reorder", reorder)
             if iprint:
                 print("reordering = ", idx)
             self.reorder_idx = idx
@@ -501,6 +623,10 @@ class DMRGDriver:
                 g2e = g2e[idx][:, idx][:, :, idx][:, :, :, idx]
             if self.orb_sym is not None:
                 self.orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[idx])
+                if self.ghamil is not None:
+                    self.ghamil = bw.bs.GeneralHamiltonian(
+                        self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
+                    )
         else:
             self.reorder_idx = None
 
@@ -531,25 +657,47 @@ class DMRGDriver:
         # build Hamiltonian expression
         b = self.expr_builder()
 
-        if SymmetryTypes.SU2 in bw.symm_type:
-            if h1e is not None:
-                b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
-            if g2e is not None:
-                b.add_sum_term("((C+(C+D)0)1+D)0", g2e.transpose(0, 2, 3, 1))
-        elif SymmetryTypes.SZ in bw.symm_type:
-            if h1e is not None:
-                b.add_sum_term("cd", h1e[0])
-                b.add_sum_term("CD", h1e[1])
-            if g2e is not None:
-                b.add_sum_term("ccdd", 0.5 * g2e[0].transpose(0, 2, 3, 1))
-                b.add_sum_term("cCDd", 0.5 * g2e[1].transpose(0, 2, 3, 1))
-                b.add_sum_term("CcdD", 0.5 * g2e[1].transpose(2, 0, 1, 3))
-                b.add_sum_term("CCDD", 0.5 * g2e[2].transpose(0, 2, 3, 1))
-        elif SymmetryTypes.SGF in bw.symm_type:
-            if h1e is not None:
-                b.add_sum_term("CD", h1e)
-            if g2e is not None:
-                b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
+        if normal_order_ref is None:
+            if SymmetryTypes.SU2 in bw.symm_type:
+                if h1e is not None:
+                    b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
+                if g2e is not None:
+                    b.add_sum_term("((C+(C+D)0)1+D)0", g2e.transpose(0, 2, 3, 1))
+            elif SymmetryTypes.SZ in bw.symm_type:
+                if h1e is not None:
+                    b.add_sum_term("cd", h1e[0])
+                    b.add_sum_term("CD", h1e[1])
+                if g2e is not None:
+                    b.add_sum_term("ccdd", 0.5 * g2e[0].transpose(0, 2, 3, 1))
+                    b.add_sum_term("cCDd", 0.5 * g2e[1].transpose(0, 2, 3, 1))
+                    b.add_sum_term("CcdD", 0.5 * g2e[1].transpose(2, 0, 1, 3))
+                    b.add_sum_term("CCDD", 0.5 * g2e[2].transpose(0, 2, 3, 1))
+            elif SymmetryTypes.SGF in bw.symm_type:
+                if h1e is not None:
+                    b.add_sum_term("CD", h1e)
+                if g2e is not None:
+                    b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
+        else:
+            if SymmetryTypes.SU2 in bw.symm_type:
+                h1es, g2es, ecore = NormalOrder.make_su2(
+                    h1e, g2e, ecore, normal_order_ref
+                )
+            elif SymmetryTypes.SZ in bw.symm_type:
+                h1es, g2es, ecore = NormalOrder.make_sz(
+                    h1e, g2e, ecore, normal_order_ref
+                )
+            elif SymmetryTypes.SGF in bw.symm_type:
+                h1es, g2es, ecore = NormalOrder.make_sgf(
+                    h1e, g2e, ecore, normal_order_ref
+                )
+
+            for k, v in h1es.items():
+                b.add_sum_term(k, v)
+            for k, v in g2es.items():
+                b.add_sum_term(k, v)
+
+            if iprint:
+                print("normal ordered ecore = ", ecore)
 
         b.add_const(ecore)
         bx = b.finalize()
@@ -1432,6 +1580,217 @@ class SOCDMRGDriver(DMRGDriver):
                 )
 
         return heig
+
+
+class NormalOrder:
+    @staticmethod
+    def def_ix(cidx):
+        import numpy as np
+
+        def ix(x):
+            p = {"I": cidx, "E": ~cidx}
+            if len(x) == 2:
+                return np.outer(p[x[0]], p[x[1]])
+            else:
+                return np.outer(np.outer(np.outer(p[x[0]], p[x[1]]), p[x[2]]), p[x[3]])
+
+        return ix
+
+    @staticmethod
+    def def_gctr(cidx, h1e, g2e):
+        import numpy as np
+
+        def gctr(x):
+            v = g2e if len(x.split("->")[0]) == 4 else h1e
+            for ig, g in enumerate(x.split("->")[0]):
+                if x.split("->")[0].count(g) == 2:
+                    v = v[(slice(None),) * ig + (cidx,)]
+            return np.einsum(x, v, optimize=True)
+
+        return gctr
+
+    @staticmethod
+    def def_gctr_sz(cidx, h1e, g2e):
+        import numpy as np
+
+        def gctr(i, x):
+            v = g2e[i] if len(x.split("->")[0]) == 4 else h1e[i]
+            for ig, g in enumerate(x.split("->")[0]):
+                if x.split("->")[0].count(g) == 2:
+                    v = v[(slice(None),) * ig + (cidx,)]
+            return np.einsum(x, v, optimize=True)
+
+        return gctr
+
+    @staticmethod
+    def make_su2(h1e, g2e, const_e, cidx):
+        import numpy as np
+
+        ix = NormalOrder.def_ix(cidx)
+        gctr = NormalOrder.def_gctr(cidx, h1e, g2e)
+
+        h1es = {k: np.zeros_like(h1e) for k in ("CD", "DC")}
+        g2es = {k: np.zeros_like(g2e) for k in ("CCDD", "CDCD", "DDCC", "DCDC")}
+        const_es = const_e
+
+        const_es += 2.0 * gctr("qq->")
+        const_es += 2.0 * gctr("rrss->")
+        const_es -= 1.0 * gctr("srrs->")
+
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] + gctr("pq->pq"))
+        np.putmask(h1es["CD"], ix("EE"), h1es["CD"] + gctr("pq->pq"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] + gctr("pq->qp"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] + gctr("pq->pq"))
+
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] - 1.0 * gctr("prrs->ps"))
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] + 2.0 * gctr("prss->pr"))
+        np.putmask(h1es["CD"], ix("EE"), h1es["CD"] + 2.0 * gctr("prss->pr"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] - 1.0 * gctr("prrs->sp"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] + 2.0 * gctr("prss->rp"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] + 2.0 * gctr("prss->pr"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] - 1.0 * gctr("srqs->qr"))
+
+        np.putmask(g2es["DCDC"], ix("IEII"), g2es["DCDC"] + 1.0 * gctr("prqs->sprq"))
+        np.putmask(g2es["CCDD"], ix("EEII"), g2es["CCDD"] + 0.5 * gctr("prqs->pqsr"))
+        np.putmask(g2es["CCDD"], ix("EEEI"), g2es["CCDD"] + 0.5 * gctr("prqs->pqsr"))
+        np.putmask(g2es["DCDC"], ix("IEEI"), g2es["DCDC"] + 1.0 * gctr("prqs->sprq"))
+        np.putmask(g2es["CCDD"], ix("EIEE"), g2es["CCDD"] + 1.0 * gctr("prqs->pqsr"))
+        np.putmask(g2es["CCDD"], ix("EEIE"), g2es["CCDD"] + 0.5 * gctr("prqs->pqsr"))
+        np.putmask(g2es["CCDD"], ix("EEEE"), g2es["CCDD"] + 0.5 * gctr("prqs->pqsr"))
+        np.putmask(g2es["DDCC"], ix("IIII"), g2es["DDCC"] + 0.5 * gctr("prqs->rsqp"))
+        np.putmask(g2es["DCDC"], ix("IIEI"), g2es["DCDC"] + 1.0 * gctr("prqs->sprq"))
+        np.putmask(g2es["CCDD"], ix("IIEE"), g2es["CCDD"] + 0.5 * gctr("prqs->pqsr"))
+        np.putmask(g2es["CCDD"], ix("EIEI"), g2es["CCDD"] + 1.0 * gctr("prqs->qprs"))
+
+        h1es = {"(%s+%s)0" % tuple(k): np.sqrt(2) * v for k, v in h1es.items()}
+        g2es = {"((%s+(%s+%s)0)1+%s)0" % tuple(k): 2 * v for k, v in g2es.items()}
+
+        return h1es, g2es, const_es
+
+    @staticmethod
+    def make_sz(h1e, g2e, const_e, cidx):
+        import numpy as np
+
+        g2e = [g2e[0], g2e[1], g2e[1].transpose(2, 3, 0, 1), g2e[2]]
+        ix = NormalOrder.def_ix(cidx)
+        gctr = NormalOrder.def_gctr_sz(cidx, h1e, g2e)
+
+        h1k = [("cd", "dc"), ("CD", "DC")]
+        g2k = [
+            "cddc:cdcd:ccdd:cdcd:ccdd:ddcc:dccd:cddc:cdcd:cdcd:dccd:cdcd:ccdd",
+            "cdDC:cdCD:cCdD:cDCd:cCDd:dDcC:dcCD:CdDc:CdcD:CdcD:DcCd:CDcd:CcdD",
+            "CDdc:CDcd:CcDd:CdcD:CcdD:DdCc:DCcd:cDdC:cDCd:cDCd:dCcD:cdCD:cCDd",
+            "CDDC:CDCD:CCDD:CDCD:CCDD:DDCC:DCCD:CDDC:CDCD:CDCD:DCCD:CDCD:CCDD",
+        ]
+        g2k = [tuple(x.split(":")) for x in g2k]
+
+        h1es = {k: np.zeros_like(h1e[i]) for i in range(2) for k in set(h1k[i])}
+        g2es = {k: np.zeros_like(g2e[i]) for i in range(4) for k in set(g2k[i])}
+        const_es = const_e
+
+        const_es += 1.0 * (gctr(0, "qq->") + gctr(1, "qq->"))
+        const_es += 0.5 * sum(gctr(i, "qqss->") for i in range(4))
+        const_es -= 0.5 * (gctr(0, "sqqs->") + gctr(3, "sqqs->"))
+
+        for i in range(2):
+            cd, dc = h1k[i]
+            np.putmask(h1es[cd], ix("EI"), h1es[cd] + gctr(i, "pq->pq"))
+            np.putmask(h1es[cd], ix("EE"), h1es[cd] + gctr(i, "pq->pq"))
+            np.putmask(h1es[dc], ix("II"), h1es[dc] - gctr(i, "pq->qp"))
+            np.putmask(h1es[cd], ix("IE"), h1es[cd] + gctr(i, "pq->pq"))
+
+        for i in range(2):
+            cd, dc = h1k[i]
+            np.putmask(h1es[cd], ix("EI"), h1es[cd] - 1.0 * gctr(i * 3, "pqqs->ps"))
+            np.putmask(h1es[cd], ix("EI"), h1es[cd] + 1.0 * gctr(i * 3, "pqss->pq"))
+            np.putmask(h1es[cd], ix("EE"), h1es[cd] + 1.0 * gctr(i * 3, "pqss->pq"))
+            np.putmask(h1es[dc], ix("II"), h1es[dc] + 1.0 * gctr(i * 3, "pqqs->sp"))
+            np.putmask(h1es[dc], ix("II"), h1es[dc] - 1.0 * gctr(i * 3, "pqss->qp"))
+            np.putmask(h1es[cd], ix("IE"), h1es[cd] + 1.0 * gctr(i * 3, "pqss->pq"))
+            np.putmask(h1es[cd], ix("IE"), h1es[cd] - 1.0 * gctr(i * 3, "sqrs->rq"))
+            np.putmask(h1es[cd], ix("EE"), h1es[cd] - 1.0 * gctr(i * 3, "sqrs->rq"))
+            np.putmask(h1es[cd], ix("EI"), h1es[cd] + 0.5 * gctr(i + 1, "pqss->pq"))
+            np.putmask(h1es[cd], ix("EE"), h1es[cd] + 0.5 * gctr(i + 1, "pqss->pq"))
+            np.putmask(h1es[dc], ix("II"), h1es[dc] - 0.5 * gctr(i + 1, "pqss->qp"))
+            np.putmask(h1es[cd], ix("IE"), h1es[cd] + 0.5 * gctr(i + 1, "pqss->pq"))
+            np.putmask(h1es[dc], ix("II"), h1es[dc] - 0.5 * gctr(2 - i, "rrqs->sq"))
+            np.putmask(h1es[cd], ix("IE"), h1es[cd] + 0.5 * gctr(2 - i, "rrqs->qs"))
+            np.putmask(h1es[cd], ix("EI"), h1es[cd] + 0.5 * gctr(2 - i, "rrqs->qs"))
+            np.putmask(h1es[cd], ix("EE"), h1es[cd] + 0.5 * gctr(2 - i, "rrqs->qs"))
+
+        for i in range(4):
+            cdDC, cdCD, cCdD, cDCd, cCDd, dDcC, dcCD = g2k[i][:7]
+            CdDc, CdcD, CdcD, DcCd, CDcd, CcdD = g2k[i][7:]
+            np.putmask(g2es[cdDC], ix("EIII"), g2es[cdDC] - 0.5 * gctr(i, "prqs->prsq"))
+            np.putmask(g2es[cCdD], ix("EEII"), g2es[cCdD] - 0.5 * gctr(i, "prqs->pqrs"))
+            np.putmask(g2es[cCdD], ix("EEIE"), g2es[cCdD] - 0.5 * gctr(i, "prqs->pqrs"))
+            np.putmask(g2es[cCdD], ix("EIEE"), g2es[cCdD] - 0.5 * gctr(i, "prqs->pqrs"))
+            np.putmask(g2es[cCDd], ix("EEIE"), g2es[cCDd] + 0.5 * gctr(i, "prqs->pqsr"))
+            np.putmask(g2es[cCdD], ix("EEEE"), g2es[cCdD] - 0.5 * gctr(i, "prqs->pqrs"))
+            np.putmask(g2es[dDcC], ix("IIII"), g2es[dDcC] - 0.5 * gctr(i, "prqs->rspq"))
+            np.putmask(g2es[dcCD], ix("IIIE"), g2es[dcCD] - 0.5 * gctr(i, "prqs->rpqs"))
+            np.putmask(g2es[CdDc], ix("EIII"), g2es[CdDc] + 0.5 * gctr(i, "prqs->qrsp"))
+            np.putmask(g2es[DcCd], ix("IIIE"), g2es[DcCd] + 0.5 * gctr(i, "prqs->spqr"))
+            np.putmask(g2es[cCdD], ix("IIEE"), g2es[cCdD] - 0.5 * gctr(i, "prqs->pqrs"))
+            np.putmask(g2es[CcdD], ix("EIEE"), g2es[CcdD] + 0.5 * gctr(i, "prqs->qprs"))
+
+            eiie = ix("EIIE")
+            if i == 0 or i == 3:
+                np.putmask(g2es[cDCd], eiie, g2es[cDCd] - 1.0 * gctr(i, "prqs->psqr"))
+                np.putmask(g2es[CDcd], eiie, g2es[CDcd] + 1.0 * gctr(i, "prqs->qspr"))
+            else:
+                np.putmask(g2es[cDCd], eiie, g2es[cDCd] - 0.5 * gctr(i, "prqs->psqr"))
+                np.putmask(g2es[CdcD], eiie, g2es[CdcD] - 0.5 * gctr(i, "prqs->qrps"))
+                np.putmask(g2es[CDcd], eiie, g2es[CDcd] + 0.5 * gctr(i, "prqs->qspr"))
+                np.putmask(g2es[cdCD], eiie, g2es[cdCD] + 0.5 * gctr(i, "prqs->prqs"))
+
+        return h1es, g2es, const_es
+
+    @staticmethod
+    def make_sgf(h1e, g2e, const_e, cidx):
+        import numpy as np
+
+        ix = NormalOrder.def_ix(cidx)
+        gctr = NormalOrder.def_gctr(cidx, h1e, g2e)
+
+        h1es = {k: np.zeros_like(h1e) for k in ("CD", "DC")}
+        g2es = {k: np.zeros_like(g2e) for k in ("CDDC", "CCDD", "CDCD", "DDCC", "DCCD")}
+        const_es = const_e
+
+        const_es += 1.0 * gctr("qq->")
+        const_es += 0.5 * gctr("qqss->")
+        const_es -= 0.5 * gctr("sqqs->")
+
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] + gctr("pq->pq"))
+        np.putmask(h1es["CD"], ix("EE"), h1es["CD"] + gctr("pq->pq"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] - gctr("pq->qp"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] + gctr("pq->pq"))
+
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] - 1.0 * gctr("pqqs->ps"))
+        np.putmask(h1es["CD"], ix("EI"), h1es["CD"] + 1.0 * gctr("pqss->pq"))
+        np.putmask(h1es["CD"], ix("EE"), h1es["CD"] + 1.0 * gctr("pqss->pq"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] + 1.0 * gctr("pqqs->sp"))
+        np.putmask(h1es["DC"], ix("II"), h1es["DC"] - 1.0 * gctr("pqss->qp"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] + 1.0 * gctr("pqss->pq"))
+        np.putmask(h1es["CD"], ix("IE"), h1es["CD"] - 1.0 * gctr("sqrs->rq"))
+        np.putmask(h1es["CD"], ix("EE"), h1es["CD"] - 1.0 * gctr("sqrs->rq"))
+
+        np.putmask(g2es["CDDC"], ix("EIII"), g2es["CDDC"] - 0.5 * gctr("pqrs->pqsr"))
+        np.putmask(g2es["CCDD"], ix("EEII"), g2es["CCDD"] - 0.5 * gctr("pqrs->prqs"))
+        np.putmask(g2es["CCDD"], ix("EEIE"), g2es["CCDD"] - 0.5 * gctr("pqrs->prqs"))
+        np.putmask(g2es["CDCD"], ix("EIIE"), g2es["CDCD"] - 1.0 * gctr("pqrs->psrq"))
+        np.putmask(g2es["CCDD"], ix("EIEE"), g2es["CCDD"] - 0.5 * gctr("pqrs->prqs"))
+        np.putmask(g2es["CCDD"], ix("EEIE"), g2es["CCDD"] + 0.5 * gctr("pqrs->prsq"))
+        np.putmask(g2es["CCDD"], ix("EEEE"), g2es["CCDD"] - 0.5 * gctr("pqrs->prqs"))
+        np.putmask(g2es["DDCC"], ix("IIII"), g2es["DDCC"] - 0.5 * gctr("pqrs->qspr"))
+        np.putmask(g2es["DCCD"], ix("IIIE"), g2es["DCCD"] - 0.5 * gctr("pqrs->qprs"))
+        np.putmask(g2es["CDDC"], ix("EIII"), g2es["CDDC"] + 0.5 * gctr("pqrs->rqsp"))
+        np.putmask(g2es["DCCD"], ix("IIIE"), g2es["DCCD"] + 0.5 * gctr("pqrs->sprq"))
+        np.putmask(g2es["CCDD"], ix("IIEE"), g2es["CCDD"] - 0.5 * gctr("pqrs->prqs"))
+        np.putmask(g2es["CDCD"], ix("EIIE"), g2es["CDCD"] + 1.0 * gctr("pqrs->rspq"))
+        np.putmask(g2es["CCDD"], ix("EIEE"), g2es["CCDD"] + 0.5 * gctr("pqrs->rpqs"))
+
+        return h1es, g2es, const_es
 
 
 class ExprBuilder:

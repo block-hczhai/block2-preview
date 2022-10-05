@@ -39,6 +39,8 @@ mpo_algo_names = [
     "NoTransConventional",
     "NoTransConventionalNC",
     "NoTransConventionalCN",
+    "NoRIntermedConventional",
+    "NoTransNoRIntermedConventional",
 ]
 
 
@@ -61,9 +63,6 @@ class TestDMRGMPO:
             mf, ncore, ncas
         )
 
-        h1e[np.abs(h1e) < 1e-7] = 0
-        g2e[np.abs(g2e) < 1e-7] = 0
-
         assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(2, 3, 0, 1)) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
@@ -81,6 +80,7 @@ class TestDMRGMPO:
             h1e=h1e,
             g2e=g2e,
             ecore=ecore,
+            reorder='irrep',
             cutoff=1e-12,
             algo_type=mpo_algo_type,
             iprint=1,
