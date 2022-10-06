@@ -47,6 +47,13 @@ class MPOAlgorithmTypes(IntFlag):
     Rescaled = 4
     Fast = 8
     Blocked = 16
+    Sparse = 32
+    BlockedSparseSVD = 32 | 16 | 2
+    FastBlockedSparseSVD = 32 | 16 | 8 | 2
+    BlockedRescaledSparseSVD = 32 | 16 | 4 | 2
+    FastBlockedRescaledSparseSVD = 32 | 16 | 8 | 4 | 2
+    BlockedSparseBipartite = 32 | 16 | 1
+    FastBlockedSparseBipartite = 32 | 16 | 8 | 1
     BlockedSVD = 16 | 2
     FastBlockedSVD = 16 | 8 | 2
     BlockedRescaledSVD = 16 | 4 | 2
@@ -57,18 +64,18 @@ class MPOAlgorithmTypes(IntFlag):
     FastSVD = 8 | 2
     FastRescaledSVD = 8 | 4 | 2
     FastBipartite = 8 | 1
-    NC = 32
-    CN = 64
-    Conventional = 128
-    ConventionalNC = 128 | 32
-    ConventionalCN = 128 | 64
-    NoTranspose = 256
-    NoRIntermed = 512
-    NoTransConventional = 256 | 128
-    NoTransConventionalNC = 256 | 128 | 32
-    NoTransConventionalCN = 256 | 128 | 64
-    NoRIntermedConventional = 512 | 128
-    NoTransNoRIntermedConventional = 512 | 256 | 128
+    NC = 64
+    CN = 128
+    Conventional = 256
+    ConventionalNC = 256 | 64
+    ConventionalCN = 256 | 128
+    NoTranspose = 512
+    NoRIntermed = 1024
+    NoTransConventional = 512 | 256
+    NoTransConventionalNC = 512 | 256 | 64
+    NoTransConventionalCN = 512 | 256 | 128
+    NoRIntermedConventional = 1024 | 256
+    NoTransNoRIntermedConventional = 1024 | 512 | 256
 
 
 class Block2Wrapper:
@@ -485,11 +492,13 @@ class DMRGDriver:
         ecore=0,
         para_type=None,
         reorder=None,
-        cutoff=1e-14,
-        integral_cutoff=1e-14,
+        cutoff=1e-20,
+        integral_cutoff=1e-20,
+        post_integral_cutoff=1e-20,
         algo_type=None,
         normal_order_ref=None,
         symmetrize=True,
+        sparse_mod=-1,
         iprint=1,
     ):
         import numpy as np
@@ -581,7 +590,7 @@ class DMRGDriver:
                     error += np.sum(np.abs(g2e[mask])) * 0.5
                     g2e[mask] = 0
             if iprint:
-                print("integral cutoff error = ", np.sqrt(error))
+                print("integral cutoff error = ", error)
 
         if reorder is not None:
             if isinstance(reorder, np.ndarray):
@@ -691,6 +700,19 @@ class DMRGDriver:
                     h1e, g2e, ecore, normal_order_ref
                 )
 
+            if post_integral_cutoff != 0:
+                error = 0
+                for k, v in h1es.items():
+                    mask = np.abs(v) < post_integral_cutoff
+                    error += np.sum(np.abs(v[mask]))
+                    h1es[k][mask] = 0
+                for k, v in g2es.items():
+                    mask = np.abs(v) < post_integral_cutoff
+                    error += np.sum(np.abs(v[mask]))
+                    g2es[k][mask] = 0
+                if iprint:
+                    print("post integral cutoff error = ", error)
+
             for k, v in h1es.items():
                 b.add_sum_term(k, v)
             for k, v in g2es.items():
@@ -715,9 +737,9 @@ class DMRGDriver:
             else:
                 print("mpo terms = %10d" % sum([len(x) for x in bx.data]))
 
-        return self.get_mpo(bx, iprint=iprint, cutoff=cutoff, algo_type=algo_type)
+        return self.get_mpo(bx, iprint=iprint, cutoff=cutoff, sparse_mod=sparse_mod, algo_type=algo_type)
 
-    def get_mpo(self, expr, iprint=0, cutoff=1e-14, left_vacuum=None, algo_type=None):
+    def get_mpo(self, expr, iprint=0, cutoff=1e-14, left_vacuum=None, sparse_mod=-1, algo_type=None):
         bw = self.bw
         if left_vacuum is None:
             left_vacuum = bw.SX.invalid
@@ -725,7 +747,7 @@ class DMRGDriver:
             algo_type = MPOAlgorithmTypes.FastBipartite
         algo_type = getattr(bw.b.MPOAlgorithmTypes, algo_type.name)
         mpo = bw.bs.GeneralMPO(
-            self.ghamil, expr, algo_type, cutoff, -1, iprint > 0, left_vacuum
+            self.ghamil, expr, algo_type, cutoff, -1, iprint > 0, left_vacuum, sparse_mod,
         )
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         mpo = bw.bs.IdentityAddedMPO(mpo)

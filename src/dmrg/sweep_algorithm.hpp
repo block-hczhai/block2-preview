@@ -4344,6 +4344,10 @@ struct Expect {
     bool store_bra_spectra = false, store_ket_spectra = false;
     vector<vector<FPS>> sweep_wfn_spectra;
     vector<FPS> wfn_spectra;
+    size_t sweep_cumulative_nflop = 0;
+    size_t sweep_max_eff_ham_size = 0;
+    double tex = 0, teff = 0, tmve = 0, tblk = 0;
+    Timer _t, _t2;
     Expect(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
            ubond_t bra_bond_dim, ubond_t ket_bond_dim)
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
@@ -4502,11 +4506,16 @@ struct Expect {
                 for (auto &mps : mpss)
                     mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i + 1, true);
+                _t.get_time();
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseL, forward, false,
                                 rights.front(), rights.back());
+                teff += _t.get_time();
+                sweep_max_eff_ham_size =
+                    max(sweep_max_eff_ham_size, k_eff->op->get_total_memory());
                 pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
                                     me->para_rule);
+                tex += _t.get_time();
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root())
                     for (int ip = 0; ip < (int)mpss.size(); ip++) {
@@ -4521,11 +4530,16 @@ struct Expect {
                 for (auto &mps : mpss)
                     mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i - 1, true);
+                _t.get_time();
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, false,
                                 lefts.front(), lefts.back());
+                teff += _t.get_time();
+                sweep_max_eff_ham_size =
+                    max(sweep_max_eff_ham_size, k_eff->op->get_total_memory());
                 pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
                                     me->para_rule);
+                tex += _t.get_time();
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root())
                     for (int ip = 0; ip < (int)mpss.size(); ip++) {
@@ -4659,11 +4673,16 @@ struct Expect {
                 prev_wfn->deallocate();
             }
         }
+        _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
             me->bra->tensors[i], me->ket->tensors[i]);
+        teff += _t.get_time();
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
+        tex += _t.get_time();
         h_eff->deallocate();
         FPS bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -4819,11 +4838,16 @@ struct Expect {
                 mps->tensors[i + 1] = nullptr;
             }
         }
+        _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, false, me->bra->tensors[i],
                         me->ket->tensors[i]);
+        teff += _t.get_time();
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
+        tex += _t.get_time();
         h_eff->deallocate();
         vector<shared_ptr<SparseMatrix<S, FLS>>> old_wfns =
             me->bra == me->ket
@@ -4957,12 +4981,17 @@ struct Expect {
                     prev_wfns[0]->deallocate_infos();
             }
         }
+        _t.get_time();
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                               forward, false);
+        teff += _t.get_time();
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
+        tex += _t.get_time();
         h_eff->deallocate();
         FPS bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -5175,10 +5204,15 @@ struct Expect {
                 mps->load_tensor(i);
             mps->tensors[i] = mps->tensors[i + 1] = nullptr;
         }
+        _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             me->multi_eff_ham(FuseTypes::FuseLR, forward, false);
+        teff += _t.get_time();
+        sweep_max_eff_ham_size =
+            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
+        tex += _t.get_time();
         h_eff->deallocate();
         vector<vector<shared_ptr<SparseMatrixGroup<S, FLS>>>> old_wfnss =
             me->bra == me->ket
@@ -5287,7 +5321,9 @@ struct Expect {
     }
     Iteration blocking(int i, bool forward, bool propagate,
                        ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
+        _t2.get_time();
         me->move_to(i);
+        tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<pair<shared_ptr<OpExpr<S>>, FLX>>(), 0, 0, 0, 0);
         if (me->dot == 2) {
@@ -5320,10 +5356,25 @@ struct Expect {
                 sweep_wfn_spectra.resize(bond_update_idx + 1);
             sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
         }
+        tblk += _t2.get_time();
         return it;
     }
     void sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
+        teff = tex = tblk = tmve = 0;
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
+        if (me->para_rule != nullptr) {
+            me->para_rule->comm->tcomm = 0;
+            me->para_rule->comm->tidle = 0;
+            me->para_rule->comm->twait = 0;
+        }
         me->prepare();
+        sweep_cumulative_nflop = 0;
+        sweep_max_eff_ham_size = 0;
+        frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
             for (int it = me->center; it < me->n_sites - me->dot + 1; it++)
@@ -5348,6 +5399,7 @@ struct Expect {
             t.get_time();
             Iteration r =
                 blocking(i, forward, true, bra_bond_dim, ket_bond_dim);
+            sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
                      << t.get_time() << endl;
@@ -5374,11 +5426,64 @@ struct Expect {
             }
             sweep(forward, bra_bond_dim, ket_bond_dim);
             forward = !forward;
-            current.get_time();
+            double tswp = current.get_time();
             if (iprint >= 1)
                 cout << "Time elapsed = " << fixed << setw(10)
                      << setprecision(3) << current.current - start.current
                      << endl;
+            if (iprint >= 2) {
+                cout << fixed << setprecision(3);
+                cout << "Time sweep = " << setw(12) << tswp;
+                cout << " | "
+                     << Parsing::to_size_string(sweep_cumulative_nflop,
+                                                "FLOP/SWP")
+                     << endl;
+                if (me->para_rule != nullptr) {
+                    double tt[3] = {me->para_rule->comm->tcomm,
+                                    me->para_rule->comm->tidle,
+                                    me->para_rule->comm->twait};
+                    me->para_rule->comm->reduce_sum(&tt[0], 3,
+                                                    me->para_rule->comm->root);
+                    tt[0] /= me->para_rule->comm->size;
+                    tt[1] /= me->para_rule->comm->size;
+                    tt[2] /= me->para_rule->comm->size;
+                    cout << " | Tcomm = " << tt[0] << " | Tidle = " << tt[1]
+                         << " | Twait = " << tt[2];
+                    cout << endl;
+                }
+                size_t dmain = frame_<FPS>()->peak_used_memory[0];
+                size_t dseco = frame_<FPS>()->peak_used_memory[1];
+                size_t imain = frame_<FPS>()->peak_used_memory[2];
+                size_t iseco = frame_<FPS>()->peak_used_memory[3];
+                cout << " | Dmem = " << Parsing::to_size_string(dmain + dseco)
+                     << " (" << (dmain * 100 / (dmain + dseco)) << "%)";
+                cout << " | Imem = " << Parsing::to_size_string(imain + iseco)
+                     << " (" << (imain * 100 / (imain + iseco)) << "%)";
+                cout << " | Hmem = "
+                     << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                sizeof(FL));
+                cout << endl;
+                cout << " | Tread = " << frame_<FPS>()->tread
+                     << " | Twrite = " << frame_<FPS>()->twrite
+                     << " | Tfpread = " << frame_<FPS>()->fpread
+                     << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
+                if (frame_<FPS>()->fp_codec != nullptr)
+                    cout << " | data = "
+                         << Parsing::to_size_string(
+                                frame_<FPS>()->fp_codec->ndata * 8)
+                         << " | cpsd = "
+                         << Parsing::to_size_string(
+                                frame_<FPS>()->fp_codec->ncpsd * 8);
+                cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
+                if (me != nullptr)
+                    cout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
+                         << " | Tint = " << me->tint << " | Tmid = " << me->tmid
+                         << " | Tdctr = " << me->tdctr
+                         << " | Tdiag = " << me->tdiag
+                         << " | Tinfo = " << me->tinfo << endl;
+                cout << " | Teff = " << teff << " | Texpt = " << tex
+                     << " | Tblk = " << tblk << " | Tmve = " << tmve << endl;
+            }
             this->forward = forward;
             if (expectations.size() != 0 && expectations[0].size() == 1)
                 return expectations[0][0].second;

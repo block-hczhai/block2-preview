@@ -51,8 +51,15 @@ enum struct MPOAlgorithmTypes : uint16_t {
     Rescaled = 4,
     Fast = 8,
     Blocked = 16,
-    NC = 32,
-    CN = 64,
+    Sparse = 32,
+    NC = 64,
+    CN = 128,
+    BlockedSparseSVD = 32 | 16 | 2,
+    FastBlockedSparseSVD = 32 | 16 | 8 | 2,
+    BlockedRescaledSparseSVD = 32 | 16 | 4 | 2,
+    FastBlockedRescaledSparseSVD = 32 | 16 | 8 | 4 | 2,
+    BlockedSparseBipartite = 32 | 16 | 1,
+    FastBlockedSparseBipartite = 32 | 16 | 8 | 1,
     BlockedSVD = 16 | 2,
     FastBlockedSVD = 16 | 8 | 2,
     BlockedRescaledSVD = 16 | 4 | 2,
@@ -75,14 +82,22 @@ inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
 
 inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
     const static string repr[] = {
-        "None",    "BIP",      "SVD",      "", "Res", "", "RSVD",      "", //
-        "Fast",    "FastBIP",  "FastSVD",  "", "",    "", "FastRSVD",  "", //
-        "Blocked", "BBIP",     "BSVD",     "", "",    "", "BRSVD",     "", //
-        "",        "FastBBIP", "FastBSVD", "", "",    "", "FastBRSVD", "", //
-        "NC",      "",         "",         "", "",    "", "",          "", //
-        "",        "",         "",         "", "",    "", "",          "", //
-        "",        "",         "",         "", "",    "", "",          "", //
-        "",        "",         "",         "", "",    "", "",          "", //
+        "None",    "BIP",       "SVD",       "", "Res", "", "RSVD",       "", //
+        "Fast",    "FastBIP",   "FastSVD",   "", "",    "", "FastRSVD",   "", //
+        "Blocked", "BBIP",      "BSVD",      "", "",    "", "BRSVD",      "", //
+        "",        "FastBBIP",  "FastBSVD",  "", "",    "", "FastBRSVD",  "", //
+        "Sparse",  "SBIP",      "SSVD",      "", "",    "", "RSSVD",      "", //
+        "",        "FastSBIP",  "FastSSVD",  "", "",    "", "FastRSSVD",  "", //
+        "",        "BSBIP",     "BSSVD",     "", "",    "", "BRSSVD",     "", //
+        "",        "FastBSBIP", "FastBSSVD", "", "",    "", "FastBRSSVD", "", //
+        "NC",      "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
+        "",        "",          "",          "", "",    "", "",           "", //
         "CN"};
     os << repr[(uint16_t)c];
     return os;
@@ -1359,11 +1374,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                const shared_ptr<GeneralFCIDUMP<FL>> &afd,
                MPOAlgorithmTypes algo_type, FP cutoff = (FP)0.0,
                int max_bond_dim = -1, bool iprint = true,
-               S left_vacuum = S(S::invalid), const string &tag = "HQC")
+               S left_vacuum = S(S::invalid), int sparse_mod = -1,
+               const string &tag = "HQC")
         : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
         bool rescale = algo_type & MPOAlgorithmTypes::Rescaled;
         bool fast = algo_type & MPOAlgorithmTypes::Fast;
         bool blocked = algo_type & MPOAlgorithmTypes::Blocked;
+        bool sparse = algo_type & MPOAlgorithmTypes::Sparse;
         if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
             throw runtime_error(
                 "Max bond dimension can only be used together with SVD!");
@@ -1504,8 +1521,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         // K: n_sites, D: max_bond_dim, L: term_len, N: n_terms
         // using block-structure according to left q number
         // this is the map from left q number to its block index
-        // pair(0 = left min 1 = right min, min term_l)
-        map<pair<pair<uint8_t, uint16_t>, S>, int> q_map;
+        // pair(0 = left min 1 = right min >= 2 same min, min term_l)
+        map<pair<pair<uint16_t, uint16_t>, S>, int> q_map;
         // for each iq block, a map from hashed repr of string of op in left
         // block to (mpo index, term index (in cur_terms), left block string of
         // op index)
@@ -1518,6 +1535,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         vector<vector<pair<pair<int, int>, FL>>> mats;
         // for each block, the nrow and ncol of the block
         vector<pair<LL, LL>> nms;
+        // range of ip that should be svd/bip separately
+        // only used in sparse mode pair(start, end)
+        vector<vector<int>> sparse_ranges;
         // cache of operator strings
         vector<map<pair<uint16_t, uint16_t>, string>> sub_exprs(
             afd->exprs.size());
@@ -1538,6 +1558,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             mats.clear();
             nms.clear();
             LL delayed_term = -1, part_off = 0;
+            vector<int> ip_sparse(cur_values.size(), ii);
+            for (int isr = 0; isr < (int)sparse_ranges.size(); isr++) {
+                auto &sr = sparse_ranges[isr];
+                for (int j = 0; j < (int)sr.size(); j += 2)
+                    for (int k = sr[j]; k < sr[j + 1]; k++)
+                        ip_sparse[k] = isr;
+            }
             // Part 1: iter over all mpos
             for (int ip = 0; ip < (int)cur_values.size(); ip++) {
                 LL cn = (LL)cur_terms[ip].size(), cnr = cn;
@@ -1628,11 +1655,17 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     S qq = qh.combine(pq.first, -pq.second);
                     // possible error here due to unsymmetrized integral
                     assert(qq != S(S::invalid));
-                    pair<uint8_t, uint16_t> pqq =
-                        blocked
-                            ? make_pair((uint8_t)(kmax - k > k),
-                                        min((uint16_t)k, (uint16_t)(kmax - k)))
-                            : make_pair((uint8_t)0, (uint16_t)0);
+                    pair<uint16_t, uint16_t> pqq =
+                        make_pair((uint16_t)0, (uint16_t)0);
+                    if (blocked)
+                        pqq = make_pair((uint16_t)(kmax - k > k),
+                                        min((uint16_t)k, (uint16_t)(kmax - k)));
+                    if (sparse && kmax - k == k)
+                        pqq = make_pair(
+                            (uint16_t)(2 + (sparse_mod == -1
+                                                ? ip_sparse[ip]
+                                                : ip_sparse[ip] % sparse_mod)),
+                            (uint16_t)k);
                     if (q_map.count(make_pair(pqq, qq)) == 0) {
                         q_map[make_pair(pqq, qq)] = (int)q_map.size();
                         map_ls.emplace_back();
@@ -1728,8 +1761,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             else
                 svds.resize(q_map.size());
             vector<S> qs(q_map.size());
-            for (auto &mq : q_map)
+            vector<int> pqx(q_map.size());
+            for (auto &mq : q_map) {
                 qs[mq.second] = mq.first.second;
+                pqx[mq.second] = mq.first.first.first;
+            }
             int s_kept_total = 0, nr_total = 0;
             FP res_s_sum = 0, res_factor = 1;
             size_t res_s_count = 0;
@@ -1946,6 +1982,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 cout << "Mmpo = " << setw(5) << s_kept_total
                      << " Error = " << scientific << setw(8) << setprecision(2)
                      << discarded_weights[ii];
+                if (sparse)
+                    cout << " IS = " << setw(4) << sparse_ranges.size();
                 cout.flush();
             }
             // Part 3: construct mpo tensor
@@ -2278,6 +2316,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             vector<vector<pair<int, LL>>> new_cur_terms(s_kept_total);
             int isk = 0;
             left_q.resize(s_kept_total);
+            sparse_ranges.clear();
             for (int iq = 0; iq < (int)qs.size(); iq++) {
                 S qq = qs[iq];
                 auto &mpr = map_rs[iq];
@@ -2364,6 +2403,12 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     }
                     if (has_pf)
                         rsc_factor = pf_factor / part_values[delayed_term];
+                }
+                if (pqx[iq] >= 2) {
+                    if (sparse_ranges.size() <= pqx[iq] - 2)
+                        sparse_ranges.resize(pqx[iq] - 1);
+                    sparse_ranges[pqx[iq] - 2].push_back(isk);
+                    sparse_ranges[pqx[iq] - 2].push_back(isk + rszm);
                 }
                 isk += rszm;
             }

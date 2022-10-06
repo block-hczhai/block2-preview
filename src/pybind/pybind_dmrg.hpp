@@ -1863,7 +1863,12 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
                             checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
-                      typename GeneralMPO<S, FL>::FP, int, bool, S,
+                      typename GeneralMPO<S, FL>::FP, int, bool, S, int>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
+                      typename GeneralMPO<S, FL>::FP, int, bool, S, int,
                       const string &>(),
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>());
@@ -2049,8 +2054,19 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Rescaled", MPOAlgorithmTypes::Rescaled)
         .value("Fast", MPOAlgorithmTypes::Fast)
         .value("Blocked", MPOAlgorithmTypes::Blocked)
+        .value("Sparse", MPOAlgorithmTypes::Sparse)
         .value("NC", MPOAlgorithmTypes::NC)
         .value("CN", MPOAlgorithmTypes::CN)
+        .value("BlockedSparseSVD", MPOAlgorithmTypes::BlockedSparseSVD)
+        .value("FastBlockedSparseSVD", MPOAlgorithmTypes::FastBlockedSparseSVD)
+        .value("BlockedRescaledSparseSVD",
+               MPOAlgorithmTypes::BlockedRescaledSparseSVD)
+        .value("FastBlockedRescaledSparseSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledSparseSVD)
+        .value("BlockedSparseBipartite",
+               MPOAlgorithmTypes::BlockedSparseBipartite)
+        .value("FastBlockedSparseBipartite",
+               MPOAlgorithmTypes::FastBlockedSparseBipartite)
         .value("BlockedSVD", MPOAlgorithmTypes::BlockedSVD)
         .value("FastBlockedSVD", MPOAlgorithmTypes::FastBlockedSVD)
         .value("BlockedRescaledSVD", MPOAlgorithmTypes::BlockedRescaledSVD)

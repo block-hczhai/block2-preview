@@ -23,6 +23,12 @@ def system_def(request):
 mpo_algo_names = [
     "Bipartite",
     "SVD",
+    "BlockedSparseSVD",
+    "FastBlockedSparseSVD",
+    "BlockedRescaledSparseSVD",
+    "FastBlockedRescaledSparseSVD",
+    "BlockedSparseBipartite",
+    "FastBlockedSparseBipartite",
     "BlockedSVD",
     "FastBlockedSVD",
     "BlockedRescaledSVD",
