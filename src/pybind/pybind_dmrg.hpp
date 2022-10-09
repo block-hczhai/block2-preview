@@ -1607,6 +1607,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
              py::arg("dot"))
         .def("deallocate", &MPO<S, FL>::deallocate)
         .def("deep_copy", &MPO<S, FL>::deep_copy)
+        .def("build", &MPO<S, FL>::build)
         .def("__neg__",
              [](MPO<S, FL> *self) { return -make_shared<MPO<S, FL>>(*self); })
         .def("__mul__", [](MPO<S, FL> *self,
@@ -1836,6 +1837,18 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("algo_type", &GeneralMPO<S, FL>::algo_type)
         .def_readwrite("discarded_weights",
                        &GeneralMPO<S, FL>::discarded_weights)
+        .def_readwrite("afd", &GeneralMPO<S, FL>::afd)
+        .def_readwrite("cutoff", &GeneralMPO<S, FL>::cutoff)
+        .def_readwrite("max_bond_dim", &GeneralMPO<S, FL>::max_bond_dim)
+        .def_readwrite("iprint", &GeneralMPO<S, FL>::iprint)
+        .def_readwrite("left_vacuum", &GeneralMPO<S, FL>::left_vacuum)
+        .def_readwrite("sum_mpo_mod", &GeneralMPO<S, FL>::sum_mpo_mod)
+        .def_readwrite("compute_accurate_svd_error",
+                       &GeneralMPO<S, FL>::compute_accurate_svd_error)
+        .def_readwrite("csvd_sparsity", &GeneralMPO<S, FL>::csvd_sparsity)
+        .def_readwrite("csvd_eps", &GeneralMPO<S, FL>::csvd_eps)
+        .def_readwrite("csvd_max_iter", &GeneralMPO<S, FL>::csvd_max_iter)
+        .def_readwrite("disjoint_levels", &GeneralMPO<S, FL>::disjoint_levels)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &,
                       MPOAlgorithmTypes>(),
@@ -1853,22 +1866,12 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
                             checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
-                      typename GeneralMPO<S, FL>::FP, int, bool>(),
+                      typename GeneralMPO<S, FL>::FP, int, int>(),
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>())
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
-                      typename GeneralMPO<S, FL>::FP, int, bool, S>(),
-             py::call_guard<checked_ostream_redirect,
-                            checked_estream_redirect>())
-        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
-                      const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
-                      typename GeneralMPO<S, FL>::FP, int, bool, S, int>(),
-             py::call_guard<checked_ostream_redirect,
-                            checked_estream_redirect>())
-        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
-                      const shared_ptr<GeneralFCIDUMP<FL>> &, MPOAlgorithmTypes,
-                      typename GeneralMPO<S, FL>::FP, int, bool, S, int,
+                      typename GeneralMPO<S, FL>::FP, int, int,
                       const string &>(),
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>());
@@ -2054,19 +2057,62 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Rescaled", MPOAlgorithmTypes::Rescaled)
         .value("Fast", MPOAlgorithmTypes::Fast)
         .value("Blocked", MPOAlgorithmTypes::Blocked)
-        .value("Sparse", MPOAlgorithmTypes::Sparse)
+        .value("Sum", MPOAlgorithmTypes::Sum)
+        .value("Constrained", MPOAlgorithmTypes::Constrained)
+        .value("Disjoint", MPOAlgorithmTypes::Disjoint)
         .value("NC", MPOAlgorithmTypes::NC)
         .value("CN", MPOAlgorithmTypes::CN)
-        .value("BlockedSparseSVD", MPOAlgorithmTypes::BlockedSparseSVD)
-        .value("FastBlockedSparseSVD", MPOAlgorithmTypes::FastBlockedSparseSVD)
-        .value("BlockedRescaledSparseSVD",
-               MPOAlgorithmTypes::BlockedRescaledSparseSVD)
-        .value("FastBlockedRescaledSparseSVD",
-               MPOAlgorithmTypes::FastBlockedRescaledSparseSVD)
-        .value("BlockedSparseBipartite",
-               MPOAlgorithmTypes::BlockedSparseBipartite)
-        .value("FastBlockedSparseBipartite",
-               MPOAlgorithmTypes::FastBlockedSparseBipartite)
+        .value("DisjointSVD", MPOAlgorithmTypes::DisjointSVD)
+        .value("BlockedSumDisjointSVD",
+               MPOAlgorithmTypes::BlockedSumDisjointSVD)
+        .value("FastBlockedSumDisjointSVD",
+               MPOAlgorithmTypes::FastBlockedSumDisjointSVD)
+        .value("BlockedRescaledSumDisjointSVD",
+               MPOAlgorithmTypes::BlockedRescaledSumDisjointSVD)
+        .value("FastBlockedRescaledSumDisjointSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledSumDisjointSVD)
+        .value("BlockedDisjointSVD", MPOAlgorithmTypes::BlockedDisjointSVD)
+        .value("FastBlockedDisjointSVD",
+               MPOAlgorithmTypes::FastBlockedDisjointSVD)
+        .value("BlockedRescaledDisjointSVD",
+               MPOAlgorithmTypes::BlockedRescaledDisjointSVD)
+        .value("FastBlockedRescaledDisjointSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledDisjointSVD)
+        .value("RescaledDisjointSVD", MPOAlgorithmTypes::RescaledDisjointSVD)
+        .value("FastDisjointSVD", MPOAlgorithmTypes::FastDisjointSVD)
+        .value("FastRescaledDisjointSVD",
+               MPOAlgorithmTypes::FastRescaledDisjointSVD)
+        .value("ConstrainedSVD", MPOAlgorithmTypes::ConstrainedSVD)
+        .value("BlockedSumConstrainedSVD",
+               MPOAlgorithmTypes::BlockedSumConstrainedSVD)
+        .value("FastBlockedSumConstrainedSVD",
+               MPOAlgorithmTypes::FastBlockedSumConstrainedSVD)
+        .value("BlockedRescaledSumConstrainedSVD",
+               MPOAlgorithmTypes::BlockedRescaledSumConstrainedSVD)
+        .value("FastBlockedRescaledSumConstrainedSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledSumConstrainedSVD)
+        .value("BlockedConstrainedSVD",
+               MPOAlgorithmTypes::BlockedConstrainedSVD)
+        .value("FastBlockedConstrainedSVD",
+               MPOAlgorithmTypes::FastBlockedConstrainedSVD)
+        .value("BlockedRescaledConstrainedSVD",
+               MPOAlgorithmTypes::BlockedRescaledConstrainedSVD)
+        .value("FastBlockedRescaledConstrainedSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledConstrainedSVD)
+        .value("RescaledConstrainedSVD",
+               MPOAlgorithmTypes::RescaledConstrainedSVD)
+        .value("FastConstrainedSVD", MPOAlgorithmTypes::FastConstrainedSVD)
+        .value("FastRescaledConstrainedSVD",
+               MPOAlgorithmTypes::FastRescaledConstrainedSVD)
+        .value("BlockedSumSVD", MPOAlgorithmTypes::BlockedSumSVD)
+        .value("FastBlockedSumSVD", MPOAlgorithmTypes::FastBlockedSumSVD)
+        .value("BlockedRescaledSumSVD",
+               MPOAlgorithmTypes::BlockedRescaledSumSVD)
+        .value("FastBlockedRescaledSumSVD",
+               MPOAlgorithmTypes::FastBlockedRescaledSumSVD)
+        .value("BlockedSumBipartite", MPOAlgorithmTypes::BlockedSumBipartite)
+        .value("FastBlockedSumBipartite",
+               MPOAlgorithmTypes::FastBlockedSumBipartite)
         .value("BlockedSVD", MPOAlgorithmTypes::BlockedSVD)
         .value("FastBlockedSVD", MPOAlgorithmTypes::FastBlockedSVD)
         .value("BlockedRescaledSVD", MPOAlgorithmTypes::BlockedRescaledSVD)

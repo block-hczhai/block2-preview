@@ -47,13 +47,39 @@ class MPOAlgorithmTypes(IntFlag):
     Rescaled = 4
     Fast = 8
     Blocked = 16
-    Sparse = 32
-    BlockedSparseSVD = 32 | 16 | 2
-    FastBlockedSparseSVD = 32 | 16 | 8 | 2
-    BlockedRescaledSparseSVD = 32 | 16 | 4 | 2
-    FastBlockedRescaledSparseSVD = 32 | 16 | 8 | 4 | 2
-    BlockedSparseBipartite = 32 | 16 | 1
-    FastBlockedSparseBipartite = 32 | 16 | 8 | 1
+    Sum = 32
+    Constrained = 64
+    Disjoint = 128
+    DisjointSVD = 128 | 2
+    BlockedSumDisjointSVD = 128 | 32 | 16 | 2
+    FastBlockedSumDisjointSVD = 128 | 32 | 16 | 8 | 2
+    BlockedRescaledSumDisjointSVD = 128 | 32 | 16 | 4 | 2
+    FastBlockedRescaledSumDisjointSVD = 128 | 32 | 16 | 8 | 4 | 2
+    BlockedDisjointSVD = 128 | 16 | 2
+    FastBlockedDisjointSVD = 128 | 16 | 8 | 2
+    BlockedRescaledDisjointSVD = 128 | 16 | 4 | 2
+    FastBlockedRescaledDisjointSVD = 128 | 16 | 8 | 4 | 2
+    RescaledDisjointSVD = 128 | 4 | 2
+    FastDisjointSVD = 128 | 8 | 2
+    FastRescaledDisjointSVD = 128 | 8 | 4 | 2
+    ConstrainedSVD = 64 | 2
+    BlockedSumConstrainedSVD = 64 | 32 | 16 | 2
+    FastBlockedSumConstrainedSVD = 64 | 32 | 16 | 8 | 2
+    BlockedRescaledSumConstrainedSVD = 64 | 32 | 16 | 4 | 2
+    FastBlockedRescaledSumConstrainedSVD = 64 | 32 | 16 | 8 | 4 | 2
+    BlockedConstrainedSVD = 64 | 16 | 2
+    FastBlockedConstrainedSVD = 64 | 16 | 8 | 2
+    BlockedRescaledConstrainedSVD = 64 | 16 | 4 | 2
+    FastBlockedRescaledConstrainedSVD = 64 | 16 | 8 | 4 | 2
+    RescaledConstrainedSVD = 64 | 4 | 2
+    FastConstrainedSVD = 64 | 8 | 2
+    FastRescaledConstrainedSVD = 64 | 8 | 4 | 2
+    BlockedSumSVD = 32 | 16 | 2
+    FastBlockedSumSVD = 32 | 16 | 8 | 2
+    BlockedRescaledSumSVD = 32 | 16 | 4 | 2
+    FastBlockedRescaledSumSVD = 32 | 16 | 8 | 4 | 2
+    BlockedSumBipartite = 32 | 16 | 1
+    FastBlockedSumBipartite = 32 | 16 | 8 | 1
     BlockedSVD = 16 | 2
     FastBlockedSVD = 16 | 8 | 2
     BlockedRescaledSVD = 16 | 4 | 2
@@ -64,18 +90,18 @@ class MPOAlgorithmTypes(IntFlag):
     FastSVD = 8 | 2
     FastRescaledSVD = 8 | 4 | 2
     FastBipartite = 8 | 1
-    NC = 64
-    CN = 128
-    Conventional = 256
-    ConventionalNC = 256 | 64
-    ConventionalCN = 256 | 128
-    NoTranspose = 512
-    NoRIntermed = 1024
-    NoTransConventional = 512 | 256
-    NoTransConventionalNC = 512 | 256 | 64
-    NoTransConventionalCN = 512 | 256 | 128
-    NoRIntermedConventional = 1024 | 256
-    NoTransNoRIntermedConventional = 1024 | 512 | 256
+    NC = 256
+    CN = 512
+    Conventional = 1024
+    ConventionalNC = 1024 | 256
+    ConventionalCN = 1024 | 512
+    NoTranspose = 2048
+    NoRIntermed = 4096
+    NoTransConventional = 2048 | 1024
+    NoTransConventionalNC = 2048 | 1024 | 256
+    NoTransConventionalCN = 2048 | 1024 | 512
+    NoRIntermedConventional = 4096 | 1024
+    NoTransNoRIntermedConventional = 4096 | 2048 | 1024
 
 
 class Block2Wrapper:
@@ -498,7 +524,12 @@ class DMRGDriver:
         algo_type=None,
         normal_order_ref=None,
         symmetrize=True,
-        sparse_mod=-1,
+        sum_mpo_mod=-1,
+        compute_accurate_svd_error=True,
+        csvd_sparsity=0.0,
+        csvd_eps=1e-10,
+        csvd_max_iter=1000,
+        disjoint_levels=None,
         iprint=1,
     ):
         import numpy as np
@@ -737,18 +768,49 @@ class DMRGDriver:
             else:
                 print("mpo terms = %10d" % sum([len(x) for x in bx.data]))
 
-        return self.get_mpo(bx, iprint=iprint, cutoff=cutoff, sparse_mod=sparse_mod, algo_type=algo_type)
+        return self.get_mpo(
+            bx,
+            iprint=iprint,
+            cutoff=cutoff,
+            algo_type=algo_type,
+            sum_mpo_mod=sum_mpo_mod,
+            compute_accurate_svd_error=compute_accurate_svd_error,
+            csvd_sparsity=csvd_sparsity,
+            csvd_eps=csvd_eps,
+            csvd_max_iter=csvd_max_iter,
+            disjoint_levels=disjoint_levels,
+        )
 
-    def get_mpo(self, expr, iprint=0, cutoff=1e-14, left_vacuum=None, sparse_mod=-1, algo_type=None):
+    def get_mpo(
+        self,
+        expr,
+        iprint=0,
+        cutoff=1e-14,
+        left_vacuum=None,
+        algo_type=None,
+        sum_mpo_mod=-1,
+        compute_accurate_svd_error=True,
+        csvd_sparsity=0.0,
+        csvd_eps=1e-10,
+        csvd_max_iter=1000,
+        disjoint_levels=None,
+    ):
         bw = self.bw
         if left_vacuum is None:
             left_vacuum = bw.SX.invalid
         if algo_type is None:
             algo_type = MPOAlgorithmTypes.FastBipartite
         algo_type = getattr(bw.b.MPOAlgorithmTypes, algo_type.name)
-        mpo = bw.bs.GeneralMPO(
-            self.ghamil, expr, algo_type, cutoff, -1, iprint > 0, left_vacuum, sparse_mod,
-        )
+        mpo = bw.bs.GeneralMPO(self.ghamil, expr, algo_type, cutoff, -1, iprint)
+        mpo.left_vacuum = left_vacuum
+        mpo.sum_mpo_mod = sum_mpo_mod
+        mpo.compute_accurate_svd_error = compute_accurate_svd_error
+        mpo.csvd_sparsity = csvd_sparsity
+        mpo.csvd_eps = csvd_eps
+        mpo.csvd_max_iter = csvd_max_iter
+        if disjoint_levels is not None:
+            mpo.disjoint_levels = bw.VectorFP(disjoint_levels)
+        mpo.build()
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         mpo = bw.bs.IdentityAddedMPO(mpo)
         if self.mpi:

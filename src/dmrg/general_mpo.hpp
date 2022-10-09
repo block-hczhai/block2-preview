@@ -51,15 +51,41 @@ enum struct MPOAlgorithmTypes : uint16_t {
     Rescaled = 4,
     Fast = 8,
     Blocked = 16,
-    Sparse = 32,
-    NC = 64,
-    CN = 128,
-    BlockedSparseSVD = 32 | 16 | 2,
-    FastBlockedSparseSVD = 32 | 16 | 8 | 2,
-    BlockedRescaledSparseSVD = 32 | 16 | 4 | 2,
-    FastBlockedRescaledSparseSVD = 32 | 16 | 8 | 4 | 2,
-    BlockedSparseBipartite = 32 | 16 | 1,
-    FastBlockedSparseBipartite = 32 | 16 | 8 | 1,
+    Sum = 32,
+    Constrained = 64,
+    Disjoint = 128,
+    NC = 256,
+    CN = 512,
+    DisjointSVD = 128 | 2,
+    BlockedSumDisjointSVD = 128 | 32 | 16 | 2,
+    FastBlockedSumDisjointSVD = 128 | 32 | 16 | 8 | 2,
+    BlockedRescaledSumDisjointSVD = 128 | 32 | 16 | 4 | 2,
+    FastBlockedRescaledSumDisjointSVD = 128 | 32 | 16 | 8 | 4 | 2,
+    BlockedDisjointSVD = 128 | 16 | 2,
+    FastBlockedDisjointSVD = 128 | 16 | 8 | 2,
+    BlockedRescaledDisjointSVD = 128 | 16 | 4 | 2,
+    FastBlockedRescaledDisjointSVD = 128 | 16 | 8 | 4 | 2,
+    RescaledDisjointSVD = 128 | 4 | 2,
+    FastDisjointSVD = 128 | 8 | 2,
+    FastRescaledDisjointSVD = 128 | 8 | 4 | 2,
+    ConstrainedSVD = 64 | 2,
+    BlockedSumConstrainedSVD = 64 | 32 | 16 | 2,
+    FastBlockedSumConstrainedSVD = 64 | 32 | 16 | 8 | 2,
+    BlockedRescaledSumConstrainedSVD = 64 | 32 | 16 | 4 | 2,
+    FastBlockedRescaledSumConstrainedSVD = 64 | 32 | 16 | 8 | 4 | 2,
+    BlockedConstrainedSVD = 64 | 16 | 2,
+    FastBlockedConstrainedSVD = 64 | 16 | 8 | 2,
+    BlockedRescaledConstrainedSVD = 64 | 16 | 4 | 2,
+    FastBlockedRescaledConstrainedSVD = 64 | 16 | 8 | 4 | 2,
+    RescaledConstrainedSVD = 64 | 4 | 2,
+    FastConstrainedSVD = 64 | 8 | 2,
+    FastRescaledConstrainedSVD = 64 | 8 | 4 | 2,
+    BlockedSumSVD = 32 | 16 | 2,
+    FastBlockedSumSVD = 32 | 16 | 8 | 2,
+    BlockedRescaledSumSVD = 32 | 16 | 4 | 2,
+    FastBlockedRescaledSumSVD = 32 | 16 | 8 | 4 | 2,
+    BlockedSumBipartite = 32 | 16 | 1,
+    FastBlockedSumBipartite = 32 | 16 | 8 | 1,
     BlockedSVD = 16 | 2,
     FastBlockedSVD = 16 | 8 | 2,
     BlockedRescaledSVD = 16 | 4 | 2,
@@ -81,25 +107,42 @@ inline MPOAlgorithmTypes operator|(MPOAlgorithmTypes a, MPOAlgorithmTypes b) {
 }
 
 inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
-    const static string repr[] = {
-        "None",    "BIP",       "SVD",       "", "Res", "", "RSVD",       "", //
-        "Fast",    "FastBIP",   "FastSVD",   "", "",    "", "FastRSVD",   "", //
-        "Blocked", "BBIP",      "BSVD",      "", "",    "", "BRSVD",      "", //
-        "",        "FastBBIP",  "FastBSVD",  "", "",    "", "FastBRSVD",  "", //
-        "Sparse",  "SBIP",      "SSVD",      "", "",    "", "RSSVD",      "", //
-        "",        "FastSBIP",  "FastSSVD",  "", "",    "", "FastRSSVD",  "", //
-        "",        "BSBIP",     "BSSVD",     "", "",    "", "BRSSVD",     "", //
-        "",        "FastBSBIP", "FastBSSVD", "", "",    "", "FastBRSSVD", "", //
-        "NC",      "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "",        "",          "",          "", "",    "", "",           "", //
-        "CN"};
-    os << repr[(uint16_t)c];
+    if (c == MPOAlgorithmTypes::NC)
+        os << "NC";
+    else if (c == MPOAlgorithmTypes::CN)
+        os << "CN";
+    else if (c == MPOAlgorithmTypes::None)
+        os << "None";
+    else if (c == MPOAlgorithmTypes::Rescaled)
+        os << "Res";
+    else if (c == MPOAlgorithmTypes::Fast)
+        os << "Fast";
+    else if (c == MPOAlgorithmTypes::Blocked)
+        os << "Blocked";
+    else if (c == MPOAlgorithmTypes::Sum)
+        os << "Sum";
+    else if (c == MPOAlgorithmTypes::Constrained)
+        os << "Constrained";
+    else if (c == MPOAlgorithmTypes::Disjoint)
+        os << "Disjoint";
+    else {
+        if (c & MPOAlgorithmTypes::Fast)
+            os << "Fast";
+        if (c & MPOAlgorithmTypes::Blocked)
+            os << "Blocked";
+        if (c & MPOAlgorithmTypes::Rescaled)
+            os << "Res";
+        if (c & MPOAlgorithmTypes::Sum)
+            os << "Sum";
+        if (c & MPOAlgorithmTypes::Constrained)
+            os << "Cons";
+        if (c & MPOAlgorithmTypes::Disjoint)
+            os << "Dis";
+        if (c & MPOAlgorithmTypes::Bipartite)
+            os << "BIP";
+        if (c & MPOAlgorithmTypes::SVD)
+            os << "SVD";
+    }
     return os;
 }
 
@@ -1361,6 +1404,17 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     using MPO<S, FL>::basis;
     MPOAlgorithmTypes algo_type;
     vector<FP> discarded_weights;
+    shared_ptr<GeneralFCIDUMP<FL>> afd;
+    FP cutoff;
+    int max_bond_dim;
+    int iprint;
+    S left_vacuum = S(S::invalid);
+    int sum_mpo_mod = -1;
+    bool compute_accurate_svd_error = true;
+    FP csvd_sparsity = (FP)0.0;
+    FP csvd_eps = (FP)1E-10;
+    int csvd_max_iter = 1000;
+    vector<FP> disjoint_levels;
     static inline size_t expr_index_hash(const string &expr,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
@@ -1373,20 +1427,29 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     GeneralMPO(const shared_ptr<GeneralHamiltonian<S, FL>> &hamil,
                const shared_ptr<GeneralFCIDUMP<FL>> &afd,
                MPOAlgorithmTypes algo_type, FP cutoff = (FP)0.0,
-               int max_bond_dim = -1, bool iprint = true,
-               S left_vacuum = S(S::invalid), int sparse_mod = -1,
-               const string &tag = "HQC")
-        : MPO<S, FL>(hamil->n_sites, tag), algo_type(algo_type) {
+               int max_bond_dim = -1, int iprint = 1, const string &tag = "HQC")
+        : MPO<S, FL>(hamil->n_sites, tag), afd(afd), algo_type(algo_type),
+          cutoff(cutoff), max_bond_dim(max_bond_dim), iprint(iprint) {
+        MPO<S, FL>::hamil = hamil;
+    }
+    void build() override {
         bool rescale = algo_type & MPOAlgorithmTypes::Rescaled;
         bool fast = algo_type & MPOAlgorithmTypes::Fast;
         bool blocked = algo_type & MPOAlgorithmTypes::Blocked;
-        bool sparse = algo_type & MPOAlgorithmTypes::Sparse;
+        bool sum_mpo = algo_type & MPOAlgorithmTypes::Sum;
+        bool constrain = algo_type & MPOAlgorithmTypes::Constrained;
+        bool disjoint = algo_type & MPOAlgorithmTypes::Disjoint;
         if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
             throw runtime_error(
                 "Max bond dimension can only be used together with SVD!");
         else if (!(algo_type & MPOAlgorithmTypes::SVD) && rescale)
             throw runtime_error(
                 "Rescaling can only be used together with SVD!");
+        else if (!(algo_type & MPOAlgorithmTypes::SVD) && constrain)
+            throw runtime_error(
+                "Constrained can only be used together with SVD!");
+        else if (!(algo_type & MPOAlgorithmTypes::SVD) && disjoint)
+            throw runtime_error("Disjoint can only be used together with SVD!");
         else if ((algo_type & MPOAlgorithmTypes::NC) &&
                  algo_type != MPOAlgorithmTypes::NC)
             throw runtime_error("Invalid MPO algorithm type with NC!");
@@ -1395,8 +1458,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             throw runtime_error("Invalid MPO algorithm type with CN!");
         else if (algo_type == MPOAlgorithmTypes::None)
             throw runtime_error("Invalid MPO algorithm None!");
+        shared_ptr<GeneralHamiltonian<S, FL>> hamil =
+            dynamic_pointer_cast<GeneralHamiltonian<S, FL>>(MPO<S, FL>::hamil);
         vector<typename S::pg_t> orb_sym = hamil->orb_sym;
-        MPO<S, FL>::hamil = hamil;
         MPO<S, FL>::const_e = afd->e();
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
         n_sites = (int)orb_sym.size();
@@ -1536,14 +1600,17 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         // for each block, the nrow and ncol of the block
         vector<pair<LL, LL>> nms;
         // range of ip that should be svd/bip separately
-        // only used in sparse mode pair(start, end)
+        // only used in sum mode pair(start, end)
         vector<vector<int>> sparse_ranges;
         // cache of operator strings
         vector<map<pair<uint16_t, uint16_t>, string>> sub_exprs(
             afd->exprs.size());
         FL rsc_factor = 1;
         Timer _t, _t2;
-        double tsite, tsvd;
+        double tsite, tsvd, tsite_total = 0, tsvd_total = 0;
+        FP dw_max = 0, error_total = 0;
+        size_t nnz_total = 0, size_total = 0;
+        int bond_max = 0;
         for (int ii = 0; ii < n_sites; ii++) {
             if (iprint) {
                 cout << " Site = " << setw(5) << ii << " / " << setw(5)
@@ -1657,14 +1724,19 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     assert(qq != S(S::invalid));
                     pair<uint16_t, uint16_t> pqq =
                         make_pair((uint16_t)0, (uint16_t)0);
-                    if (blocked)
-                        pqq = make_pair((uint16_t)(kmax - k > k),
+                    if (constrain && kmax - k == k)
+                        pqq = make_pair((uint16_t)2,
                                         min((uint16_t)k, (uint16_t)(kmax - k)));
-                    if (sparse && kmax - k == k)
+                    if (blocked)
+                        pqq =
+                            make_pair(kmax - k == k ? (uint16_t)2
+                                                    : (uint16_t)(kmax - k > k),
+                                      min((uint16_t)k, (uint16_t)(kmax - k)));
+                    if (sum_mpo && kmax - k == k && k != 0)
                         pqq = make_pair(
-                            (uint16_t)(2 + (sparse_mod == -1
+                            (uint16_t)(2 + (sum_mpo_mod == -1
                                                 ? ip_sparse[ip]
-                                                : ip_sparse[ip] % sparse_mod)),
+                                                : ip_sparse[ip] % sum_mpo_mod)),
                             (uint16_t)k);
                     if (q_map.count(make_pair(pqq, qq)) == 0) {
                         q_map[make_pair(pqq, qq)] = (int)q_map.size();
@@ -1861,13 +1933,25 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].second[0] = 1;
                         svds[iq].first[0][0] = 1;
                         threading->activate_global_mkl();
-                        GMatrixFunctions<FL>::svd(
-                            GMatrix<FL>(mat.data(), szl, szr),
-                            GMatrix<FL>(svds[iq].first[0].data() + 1 + szm, szl,
-                                        szm),
-                            GMatrix<FP>(svds[iq].second.data() + 1, 1, szm - 1),
-                            GMatrix<FL>(svds[iq].first[1].data() + szr, szm - 1,
-                                        szr));
+                        if (pqx[iq] < 2 && disjoint)
+                            IterativeMatrixFunctions<FL>::disjoint_svd(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data() + 1 + szm,
+                                            szl, szm),
+                                GMatrix<FP>(svds[iq].second.data() + 1, 1,
+                                            szm - 1),
+                                GMatrix<FL>(svds[iq].first[1].data() + szr,
+                                            szm - 1, szr),
+                                disjoint_levels, false);
+                        else
+                            GMatrixFunctions<FL>::svd(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data() + 1 + szm,
+                                            szl, szm),
+                                GMatrix<FP>(svds[iq].second.data() + 1, 1,
+                                            szm - 1),
+                                GMatrix<FL>(svds[iq].first[1].data() + szr,
+                                            szm - 1, szr));
                         threading->activate_normal();
                         szl++;
                     } else {
@@ -1877,11 +1961,20 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         // cout << "mat = " << GMatrix<FL>(mat.data(), szl, szr)
                         // << endl;
                         threading->activate_global_mkl();
-                        GMatrixFunctions<FL>::svd(
-                            GMatrix<FL>(mat.data(), szl, szr),
-                            GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
-                            GMatrix<FP>(svds[iq].second.data(), 1, szm),
-                            GMatrix<FL>(svds[iq].first[1].data(), szm, szr));
+                        if (pqx[iq] < 2 && disjoint)
+                            IterativeMatrixFunctions<FL>::disjoint_svd(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
+                                GMatrix<FP>(svds[iq].second.data(), 1, szm),
+                                GMatrix<FL>(svds[iq].first[1].data(), szm, szr),
+                                disjoint_levels, false);
+                        else
+                            GMatrixFunctions<FL>::svd(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
+                                GMatrix<FP>(svds[iq].second.data(), 1, szm),
+                                GMatrix<FL>(svds[iq].first[1].data(), szm,
+                                            szr));
                         threading->activate_normal();
                         // cout << "l = " <<
                         // GMatrix<FL>(svds[iq].first[0].data(), szl, szm) <<
@@ -1941,8 +2034,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         if (svds[iq].second[i] > sqrt(cutoff))
                             s_kept++;
                         else
-                            discarded_weights[ii] +=
-                                svds[iq].second[i] * svds[iq].second[i];
+                            discarded_weights[ii] += svds[iq].second[i] *
+                                                     svds[iq].second[i] *
+                                                     res_factor * res_factor;
                     svds[iq].second.resize(s_kept);
                     s_kept_total += s_kept;
                 }
@@ -1978,13 +2072,110 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     }
                 }
             }
+            if (constrain) {
+                for (auto &mq : q_map) {
+                    int s_kept = 0;
+                    int iq = mq.second;
+                    auto &nm = nms[iq];
+                    auto &matvs = mats[iq];
+                    if (pqx[iq] < 2)
+                        continue;
+                    int szl = nm.first, szr = nm.second;
+                    int szm = min(szl, szr);
+                    int rank = svds[iq].second.size();
+                    if ((szl == 1 && szr == 1) || rank == 0)
+                        continue;
+                    vector<FL> mat((size_t)szl * szr, 0);
+                    if (delayed_term != -1 && iq == 0) {
+                        szm = min(szl - 1, szr) + 1;
+                        for (auto &lrv : matvs)
+                            if (lrv.first.first != 0)
+                                mat[(lrv.first.first - 1) * szr +
+                                    lrv.first.second] += lrv.second;
+                        szl--;
+                        threading->activate_global_mkl();
+                        IterativeMatrixFunctions<FL>::constrained_svd(
+                            GMatrix<FL>(mat.data(), szl, szr), rank,
+                            GMatrix<FL>(svds[iq].first[0].data() + 1 + szm, szl,
+                                        szm),
+                            GMatrix<FP>(svds[iq].second.data() + 1, 1,
+                                        rank - 1),
+                            GMatrix<FL>(svds[iq].first[1].data() + szr,
+                                        rank - 1, szr),
+                            csvd_sparsity, csvd_sparsity, csvd_max_iter,
+                            csvd_max_iter, csvd_eps, csvd_eps, iprint >= 2);
+                        threading->activate_normal();
+                        szl++;
+                    } else {
+                        for (auto &lrv : matvs)
+                            mat[lrv.first.first * szr + lrv.first.second] +=
+                                lrv.second;
+                        threading->activate_global_mkl();
+                        IterativeMatrixFunctions<FL>::constrained_svd(
+                            GMatrix<FL>(mat.data(), szl, szr), rank,
+                            GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
+                            GMatrix<FP>(svds[iq].second.data(), 1, rank),
+                            GMatrix<FL>(svds[iq].first[1].data(), rank, szr),
+                            csvd_sparsity, csvd_sparsity, csvd_max_iter,
+                            csvd_max_iter, csvd_eps, csvd_eps, iprint >= 2);
+                        threading->activate_normal();
+                    }
+                    if (rescale)
+                        for (int i = 0; i < rank; i++)
+                            svds[iq].second[i] /= res_factor;
+                }
+            }
+            FP accurate_svd_error = (FP)0.0;
+            if (compute_accurate_svd_error &&
+                (algo_type & MPOAlgorithmTypes::SVD)) {
+                for (auto &mq : q_map) {
+                    int iq = mq.second;
+                    auto &nm = nms[iq];
+                    auto &matvs = mats[iq];
+                    int szl = nm.first, szr = nm.second, szm = min(szl, szr);
+                    if (delayed_term != -1 && iq == 0)
+                        szm = min(szl - 1, szr) + 1;
+                    int s_kept = svds[iq].second.size();
+                    vector<FL> smat, stmp;
+                    smat.reserve((size_t)szl * szr);
+                    stmp.reserve((size_t)s_kept * szr);
+                    memset(smat.data(), 0, sizeof(FL) * s_kept * s_kept);
+                    for (int i = 0; i < s_kept; i++)
+                        smat[(size_t)i * s_kept + i] =
+                            svds[iq].second[i] * res_factor;
+                    threading->activate_global_mkl();
+                    GMatrixFunctions<FL>::multiply(
+                        GMatrix<FL>(smat.data(), s_kept, s_kept), false,
+                        GMatrix<FL>(svds[iq].first[1].data(), s_kept, szr),
+                        false, GMatrix<FL>(stmp.data(), s_kept, szr), (FL)1.0,
+                        (FL)0.0);
+                    GMatrixFunctions<FL>::multiply(
+                        GMatrix<FL>(svds[iq].first[0].data(), szl, szm), false,
+                        GMatrix<FL>(stmp.data(), s_kept, szr), false,
+                        GMatrix<FL>(smat.data(), szl, szr), (FL)1.0, (FL)0.0);
+                    for (auto &lrv : matvs)
+                        smat[lrv.first.first * szr + lrv.first.second] -=
+                            lrv.second;
+                    FP xnorm = GMatrixFunctions<FL>::norm(
+                        GMatrix<FL>(smat.data(), szl, szr));
+                    accurate_svd_error += xnorm * xnorm;
+                    threading->activate_normal();
+                }
+            }
             if (iprint) {
                 cout << "Mmpo = " << setw(5) << s_kept_total
-                     << " Error = " << scientific << setw(8) << setprecision(2)
+                     << " DW = " << scientific << setw(8) << setprecision(2)
                      << discarded_weights[ii];
-                if (sparse)
+                if (compute_accurate_svd_error &&
+                    (algo_type & MPOAlgorithmTypes::SVD))
+                    cout << " Error = " << scientific << setw(8)
+                         << setprecision(2) << sqrt(accurate_svd_error);
+                if (sum_mpo)
                     cout << " IS = " << setw(4) << sparse_ranges.size();
                 cout.flush();
+                bond_max = max(bond_max, s_kept_total);
+                dw_max = max(dw_max, discarded_weights[ii]);
+                error_total += accurate_svd_error;
             }
             // Part 3: construct mpo tensor
             shared_ptr<OperatorTensor<S, FL>> opt = tensors[ii];
@@ -2177,6 +2368,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 ppir += szm;
             }
             assert(ppir == s_kept_total);
+            if (iprint) {
+                cout << " NNZ = " << setw(8) << mat.nnz() << " SPT = " << fixed
+                     << setprecision(4) << setw(6)
+                     << (double)(mat.size() - mat.nnz()) / mat.size();
+                cout.flush();
+                nnz_total += mat.nnz();
+                size_total += mat.size();
+            }
             // Part 4: evaluate sum expressions
             shared_ptr<VectorAllocator<FP>> d_alloc =
                 make_shared<VectorAllocator<FP>>();
@@ -2493,6 +2692,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 else if (algo_type & MPOAlgorithmTypes::Bipartite)
                     cout << fixed << setprecision(3) << " Tmvc = " << tsvd;
                 cout << " T = " << tsite << endl;
+                tsite_total += tsite;
+                tsvd_total += tsvd;
             }
         }
         if (n_terms != 0) {
@@ -2503,6 +2704,26 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             LL it = cur_terms[0][0].second;
             assert(it != -1);
             assert(term_i[ix][it] == term_l[ix]);
+        }
+        if (iprint) {
+            cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
+                 << tsite_total << fixed << setprecision(3);
+            if (algo_type & MPOAlgorithmTypes::SVD)
+                cout << " Tsvd-total = " << tsvd_total;
+            else if (algo_type & MPOAlgorithmTypes::Bipartite)
+                cout << " Tmvc-total = " << tsvd_total;
+            cout << " MPO bond dimension = " << setw(5) << bond_max;
+            cout << " MaxDW = " << scientific << setw(8) << setprecision(2)
+                 << dw_max;
+            if (compute_accurate_svd_error &&
+                (algo_type & MPOAlgorithmTypes::SVD))
+                cout << " Total error = " << scientific << setw(8)
+                     << setprecision(2) << sqrt(error_total);
+            cout << endl;
+            cout << "NNZ = " << setw(12) << nnz_total;
+            cout << " SIZE = " << setw(12) << size_total;
+            cout << " SPT = " << fixed << setprecision(4) << setw(6)
+                 << (double)(size_total - nnz_total) / size_total << endl;
         }
     }
     virtual ~GeneralMPO() = default;

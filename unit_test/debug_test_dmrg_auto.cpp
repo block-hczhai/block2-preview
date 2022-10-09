@@ -109,18 +109,18 @@ TYPED_TEST(TestDMRG, Test) {
     ifd->indices.push_back(vector<uint16_t>{});
     ifd->data.push_back(vector<FL>{1.0});
 
-    cout << *ifd << endl;
+    // cout << *ifd << endl;
 
     ifd = ifd->adjust_order();
 
-    cout << *ifd << endl;
+    // cout << *ifd << endl;
 
     cout << SpinPermPattern(3).to_str() << endl;
     cout << SpinPermPattern(2).to_str() << endl;
     cout << SpinPermPattern(1).to_str() << endl;
     cout << SpinPermPattern(0).to_str() << endl;
 
-    cout << SpinPermScheme::initialize_su2(2, "(T+T)0").to_str() << endl;
+    // cout << SpinPermScheme::initialize_su2(2, "(T+T)0").to_str() << endl;
 
     fcidump->symmetrize(orbsym);
     shared_ptr<GeneralFCIDUMP<FL>> gfd =
@@ -128,12 +128,12 @@ TYPED_TEST(TestDMRG, Test) {
 
     // cout << *gfd << endl;
 
-    vector<shared_ptr<SpinPermScheme>> psch(gfd->exprs.size());
-    for (size_t ix = 0; ix < gfd->exprs.size(); ix++) {
-        psch[ix] = make_shared<SpinPermScheme>(gfd->exprs[ix], true);
-        cout << "=== " << ix << " ===" << endl;
-        cout << psch[ix]->to_str() << endl;
-    }
+    // vector<shared_ptr<SpinPermScheme>> psch(gfd->exprs.size());
+    // for (size_t ix = 0; ix < gfd->exprs.size(); ix++) {
+    //     psch[ix] = make_shared<SpinPermScheme>(gfd->exprs[ix], true);
+    //     cout << "=== " << ix << " ===" << endl;
+    //     cout << psch[ix]->to_str() << endl;
+    // }
 
     gfd = gfd->adjust_order();
 
@@ -156,12 +156,14 @@ TYPED_TEST(TestDMRG, Test) {
     cout << igfd->data[0].size() << endl;
     shared_ptr<MPO<S, FL>> impo = make_shared<GeneralMPO<S, FL>>(
         gham, igfd, MPOAlgorithmTypes::Bipartite, 1E-7, -1);
+    impo->build();
 
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+    mpo->build();
     // shared_ptr<MPO<S, FL>> mpo =
     //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     // mpo->basis = hamil->basis;

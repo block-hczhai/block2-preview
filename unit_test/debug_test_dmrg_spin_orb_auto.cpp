@@ -119,6 +119,7 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-14, -1);
+    mpo->build();
     // shared_ptr<MPO<S, FL>> mpo =
     //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     // mpo->basis = hamil->basis;

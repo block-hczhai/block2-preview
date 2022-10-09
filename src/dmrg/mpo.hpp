@@ -158,6 +158,7 @@ template <typename S, typename FL> struct MPO {
           const_e((typename const_fl_type<FL>::FL)0.0), op(nullptr),
           schemer(nullptr), tf(nullptr) {}
     virtual ~MPO() = default;
+    virtual void build() {}
     virtual AncillaTypes get_ancilla_type() const { return AncillaTypes::None; }
     virtual ParallelTypes get_parallel_type() const {
         return ParallelTypes::Serial;

@@ -121,7 +121,7 @@ struct Flow {
     }
 };
 
-// min cost max flow (SAP & SPFA)
+// Min cost max flow (SAP & SPFA)
 struct CostFlow {
     typedef unordered_map<int, pair<int, int>>::const_iterator mci;
     vector<unordered_map<int, pair<int, int>>> resi;
@@ -218,6 +218,41 @@ struct CostFlow {
             pre[n] = flow;
         }
         return pre[n + 1] != -1;
+    }
+};
+
+// Disjoint Set Union
+struct DSU {
+    int n;
+    vector<int> parex, rankx;
+    unordered_map<int, vector<int>> roots;
+    DSU(int n) : n(n) {
+        parex.resize(n), rankx.resize(n);
+        for (int i = 0; i < n; i++)
+            parex[i] = i, rankx[i] = 0;
+    }
+    ~DSU() {}
+    int findx(int x) {
+        if (parex[x] != x)
+            parex[x] = findx(parex[x]);
+        return parex[x];
+    }
+    void unionx(int x, int y) {
+        x = findx(x);
+        y = findx(y);
+        if (x == y)
+            return;
+        else if (rankx[x] < rankx[y])
+            parex[x] = y;
+        else if (rankx[x] > rankx[y])
+            parex[y] = x;
+        else
+            parex[y] = x, rankx[x]++;
+    }
+    void post() {
+        roots.clear();
+        for (int i = 0; i < n; i++)
+            roots[findx(i)].push_back(i);
     }
 };
 

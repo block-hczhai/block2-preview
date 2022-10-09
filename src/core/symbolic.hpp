@@ -48,6 +48,8 @@ template <typename S> struct Symbolic {
         return data[0];
     }
     virtual shared_ptr<Symbolic<S>> copy() const = 0;
+    size_t nnz() const { return data.size(); }
+    size_t size() const { return (size_t)m * n; }
 };
 
 // Row vector of symbols

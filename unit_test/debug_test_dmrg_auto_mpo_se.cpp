@@ -69,7 +69,8 @@ TYPED_TEST(TestDMRG, Test) {
     // string filename = "data/HUBBARD-L16.FCIDUMP"; // E = -12.96671541
     // string filename = "data/H4.STO6G.R1.8.FCIDUMP"; // E = -2.1903842178
 
-    string filename = "../my_test/test_partial_mpo/FCIDUMP"; // E = -107.65412235
+    string filename =
+        "../my_test/test_partial_mpo/FCIDUMP"; // E = -107.65412235
 
     Timer t;
     t.get_time();
@@ -152,6 +153,7 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+    mpo->build();
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -299,6 +301,7 @@ TYPED_TEST(TestDMRG, Test) {
 
         shared_ptr<MPO<S, FL>> pmpo = make_shared<GeneralMPO<S, FL>>(
             gham, bfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+        pmpo->build();
         pmpo = make_shared<SimplifiedMPO<S, FL>>(
             pmpo, make_shared<RuleQC<S, FL>>(), false, false);
         pmpo = make_shared<IdentityAddedMPO<S, FL>>(pmpo);

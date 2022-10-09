@@ -22,8 +22,8 @@ template <typename FL> class TestDMRG : public ::testing::Test {
         // threading_() = make_shared<Threading>(ThreadingTypes::BatchedGEMM |
         // ThreadingTypes::Global, 8, 8);
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4,
-            4, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
+            1);
         // threading_() =
         // make_shared<Threading>(ThreadingTypes::OperatorQuantaBatchedGEMM |
         // ThreadingTypes::Global, 16, 16, 16, 16);
@@ -219,6 +219,7 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastSVD, 0, -1, true);
+    mpo->build();
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -239,6 +240,7 @@ TYPED_TEST(TestDMRG, Test) {
     cout << *ifd << endl;
     shared_ptr<MPO<S, FL>> impo = make_shared<GeneralMPO<S, FL>>(
         gham, ifd, MPOAlgorithmTypes::SVD, 0.0, -1);
+    impo->build();
     impo = make_shared<SimplifiedMPO<S, FL>>(impo, make_shared<Rule<S, FL>>(),
                                              false, false);
     impo = make_shared<IdentityAddedMPO<S, FL>>(impo);

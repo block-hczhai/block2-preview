@@ -1171,6 +1171,76 @@ TYPED_TEST(TestComplexMatrix, TestSVD) {
     }
 }
 
+TYPED_TEST(TestComplexMatrix, TestDisjointSVD) {
+    using FL = TypeParam;
+    typedef typename GMatrix<FL>::FP FP;
+    const int sz = is_same<FP, double>::value ? 200 : 75;
+    const FP thrd = is_same<FP, double>::value ? 1E-12 : 1E-3;
+    const FP thrd2 = is_same<FP, double>::value ? 0 : 1E-3;
+    for (int i = 0; i < this->n_tests; i++) {
+        MKL_INT m = Random::rand_int(1, sz);
+        MKL_INT n = Random::rand_int(1, sz);
+        MKL_INT k = min(m, n);
+        size_t nnz = (size_t)(0.07 * m * n);
+        shared_ptr<GTensor<FL>> a =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, n});
+        shared_ptr<GTensor<FL>> l =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, k});
+        shared_ptr<GTensor<FP>> s =
+            make_shared<GTensor<FP>>(vector<MKL_INT>{k});
+        shared_ptr<GTensor<FL>> r =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{k, n});
+        shared_ptr<GTensor<FL>> aa =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, n});
+        shared_ptr<GTensor<FL>> kk =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{k, k});
+        shared_ptr<GTensor<FL>> ll =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{m, m});
+        shared_ptr<GTensor<FL>> rr =
+            make_shared<GTensor<FL>>(vector<MKL_INT>{n, n});
+        a->clear();
+        for (size_t i = 0; i < nnz; i++)
+            Random::complex_fill<FP>(
+                &a->data[Random::rand_int(0, (int)a->size())], 1);
+        GMatrixFunctions<FL>::copy(aa->ref(), a->ref());
+        vector<FP> levels{0.6, 0.3};
+        levels.resize(Random::rand_int(0, (int)levels.size() + 1));
+        IterativeMatrixFunctions<FL>::disjoint_svd(
+            a->ref(), l->ref(), s->ref().flip_dims(), r->ref(), levels);
+        if (levels.size() == 0) {
+            GMatrixFunctions<FL>::multiply(l->ref(), 3, l->ref(), false,
+                                           kk->ref(), 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                kk->ref(), IdentityMatrix(k), thrd, thrd2));
+            GMatrixFunctions<FL>::multiply(r->ref(), false, r->ref(), 3,
+                                           kk->ref(), 1.0, 0.0);
+            ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                kk->ref(), IdentityMatrix(k), thrd, thrd2));
+            if (m <= n) {
+                GMatrixFunctions<FL>::multiply(l->ref(), false, l->ref(), 3,
+                                               ll->ref(), 1.0, 0.0);
+                ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                    ll->ref(), IdentityMatrix(m), thrd, thrd2));
+            }
+            if (n <= m) {
+                GMatrixFunctions<FL>::multiply(r->ref(), 3, r->ref(), false,
+                                               rr->ref(), 1.0, 0.0);
+                ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
+                    rr->ref(), IdentityMatrix(n), thrd, thrd2));
+            }
+        }
+        GMatrix<FL> x(r->data.data(), 1, n);
+        for (MKL_INT i = 0; i < k; i++) {
+            ASSERT_GE((*s)({i}), 0.0);
+            GMatrixFunctions<FL>::iscale(x.shift_ptr(i * n), (*s)({i}));
+        }
+        GMatrixFunctions<FL>::multiply(l->ref(), false, r->ref(), false,
+                                       a->ref(), 1.0, 0.0);
+        ASSERT_TRUE(
+            GMatrixFunctions<FP>::all_close(aa->ref(), a->ref(), thrd, thrd2));
+    }
+}
+
 TYPED_TEST(TestComplexMatrix, TestQR) {
     using FL = TypeParam;
     typedef typename GMatrix<FL>::FP FP;

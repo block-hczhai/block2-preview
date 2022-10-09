@@ -695,7 +695,7 @@ struct GMatrixFunctions<
                 xgemm<FL>("n", "n", &inc, &n, &inc, &scale, &one, &inc, b.data,
                           &inc, &cfactor, a.data, &inc);
         } else {
-            assert(a.m == b.n && a.n == b.m);
+            assert(a.m == b.n && a.n >= b.m);
             for (MKL_INT k = 0, inc = 1; k < b.n; k++)
                 xgemm<FL>("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n,
                           &one, &inc, &cfactor, &a(k, 0), &a.n);

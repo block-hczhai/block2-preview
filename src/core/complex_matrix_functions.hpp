@@ -1318,8 +1318,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             make_shared<VectorAllocator<FP>>();
         MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
         FL *work = d_alloc->complex_allocate(lwork);
-        assert(a.m == l.m && a.n == r.n && l.n >= k && r.m == k && s.n == k);
-        xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n,
+        assert(a.m == l.m && a.n <= r.n && l.n >= k && r.m == k && s.n == k);
+        xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &r.n,
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
         d_alloc->complex_deallocate(work, lwork);
@@ -1419,7 +1419,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     // a += b.T
     static void transpose(const GMatrix<FL> &a, const GMatrix<FL> &b,
                           FL scale = 1.0, FL cfactor = 1.0) {
-        assert(a.m == b.n && a.n == b.m);
+        assert(a.m == b.n && a.n >= b.m);
         const FL one = 1.0;
         for (MKL_INT k = 0, inc = 1; k < b.n; k++)
             xgemm<FL>("t", "n", &b.m, &inc, &inc, &scale, &b(0, k), &b.n, &one,

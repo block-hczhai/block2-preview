@@ -362,6 +362,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
             gfd = gfd->adjust_order();
             mpo = make_shared<GeneralMPO<S, FL>>(gham, gfd, mpo_algo_type,
                                                  mpo_cutoff, mpo_max_bond_dim);
+            mpo->build();
         } else
             mpo =
                 make_shared<MPOQC<S, FL>>(hamil, qc_type, "HQC", trans_center);

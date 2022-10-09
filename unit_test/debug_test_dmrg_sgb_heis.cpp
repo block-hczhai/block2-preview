@@ -73,13 +73,12 @@ TYPED_TEST(TestDMRG, Test) {
     gfd->indices.resize(3);
     gfd->data.resize(3);
     for (int ix = 0; ix < 3; ix++)
-        for (int i = 0; i < n_sites - 1; i+=2) {
+        for (int i = 0; i < n_sites - 1; i += 2) {
             gfd->indices[ix].push_back(i);
             gfd->indices[ix].push_back(i + 1);
             gfd->data[ix].push_back(ix == 2 ? 1.0 : 0.5);
         }
     gfd = gfd->adjust_order();
-    
 
     shared_ptr<GeneralHamiltonian<S, FL>> gham =
         make_shared<GeneralHamiltonian<S, FL>>(
@@ -90,6 +89,7 @@ TYPED_TEST(TestDMRG, Test) {
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-14, -1);
+    mpo->build();
     mpo = make_shared<SimplifiedMPO<S, FL>>(
         mpo, make_shared<RuleQC<S, FL>>(), true, true,
         OpNamesSet({OpNames::R, OpNames::RD}));

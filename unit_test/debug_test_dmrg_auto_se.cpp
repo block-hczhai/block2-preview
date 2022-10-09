@@ -156,12 +156,14 @@ TYPED_TEST(TestDMRG, Test) {
     cout << igfd->data[0].size() << endl;
     shared_ptr<MPO<S, FL>> impo = make_shared<GeneralMPO<S, FL>>(
         gham, igfd, MPOAlgorithmTypes::Bipartite, 1E-7, -1);
+    impo->build();
 
     t.get_time();
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::Bipartite, 1E-7, -1);
+    mpo->build();
     // shared_ptr<MPO<S, FL>> mpo =
     //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);
     // mpo->basis = hamil->basis;

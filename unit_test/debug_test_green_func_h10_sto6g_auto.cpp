@@ -59,6 +59,7 @@ void TestRTEGreenFunctionH10STO6G<FL>::test_dmrg(
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+    mpo->build();
     cout << "MPO end .. T = " << t.get_time() << endl;
 
     // MPO simplification
@@ -110,13 +111,14 @@ void TestRTEGreenFunctionH10STO6G<FL>::test_dmrg(
     cout << "LMPO start" << endl;
     shared_ptr<MPO<S, FL>> lmpo = make_shared<GeneralMPO<S, FL>>(
         gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+    lmpo->build();
     cout << "LMPO end .. T = " << t.get_time() << endl;
 
     // LMPO simplification (no transpose)
     cout << "LMPO simplification start" << endl;
     // lmpo = make_shared<SimplifiedMPO<S, FL>>(
-    //     lmpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S, FL>>()),
-    //     true);
+    //     lmpo, make_shared<NoTransposeRule<S, FL>>(make_shared<RuleQC<S,
+    //     FL>>()), true);
     cout << "LMPO simplification end .. T = " << t.get_time() << endl;
 
     ubond_t ket_bond_dim = 500, bra_bond_dim = 750;

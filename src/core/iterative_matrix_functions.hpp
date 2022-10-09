@@ -21,6 +21,7 @@
 #pragma once
 
 #include "complex_matrix_functions.hpp"
+#include "flow.hpp"
 #include "matrix_functions.hpp"
 #include "threading.hpp"
 #include <algorithm>
@@ -3006,6 +3007,477 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             pcomm->broadcast(&out, 1, pcomm->root);
         }
         return out;
+    }
+
+    // Constrained SVD (SVD with contraints on sparsity)
+    // not tested for complex
+    // Guillemot V, et al. (2019) PLoS ONE 14: e0211463.
+    static void constrained_svd(GMatrix<FL> x, MKL_INT rank, GMatrix<FL> l,
+                                GMatrix<FP> s, GMatrix<FL> r, FP au = (FP)0.0,
+                                FP av = (FP)0.0, int max_iter_pi = 1000,
+                                int max_iter_pocs = 1000, FP eps_pi = (FP)1E-10,
+                                FP eps_pocs = (FP)1E-10, bool iprint = false) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<VectorAllocator<MKL_INT>> i_alloc =
+            make_shared<VectorAllocator<MKL_INT>>();
+        FP *rwork = d_alloc->allocate(3 * max(x.m, x.n) + 2);
+        MKL_INT *iwork = i_alloc->allocate(2 * max(x.m, x.n));
+        // rwork = xn + 2 (xn + 1)
+        // iwork = xn + xn
+        const auto proj12 = [&rwork, &iwork](GMatrix<FL> x, FP a) {
+            assert(x.m == 1);
+            FP norm2_x = norm(x);
+            if (norm2_x < 1E-32)
+                return;
+            MKL_INT xn = x.n;
+            FP sum_x = 0;
+            FP *p = rwork;
+            for (MKL_INT i = 0; i < xn; i++)
+                sum_x += (p[i] = abs(x.data[i]));
+            if (sum_x <= a * norm2_x) {
+                iscale(x, (FP)1.0 / norm2_x);
+                return;
+            }
+            sort(p, p + xn, greater<FP>());
+            MKL_INT *pl = iwork, *pr = iwork + xn;
+            pl[0] = 0, pr[xn - 1] = xn - 1;
+            for (MKL_INT i = 1; i < xn; i++)
+                pl[i] = p[i] == p[i - 1] ? pl[i - 1] : i;
+            for (MKL_INT i = xn - 2; i >= 0; i--)
+                pr[i] = p[i] == p[i + 1] ? pr[i + 1] : i;
+            FP *psum = rwork + xn, *psum2 = rwork + xn + xn + 1;
+            psum[0] = 0, psum2[0] = 0;
+            for (MKL_INT i = 0; i < xn; i++) {
+                psum[i + 1] = psum[i] + p[i];
+                psum2[i + 1] = psum2[i] + p[i] * p[i];
+            }
+            MKL_INT ia = pr[0] + 1, ib = p[xn - 1] == (FP)0.0 ? pl[xn - 1] : xn;
+            while (ia + 1 < ib) {
+                const MKL_INT im = (ia + ib) / 2, k = pr[im] + 1;
+                const FP psi =
+                    (psum[k] - k * p[im]) /
+                    sqrt(psum2[k] - 2 * p[im] * psum[k] + k * p[im] * p[im]);
+                psi > a ? (ib = im) : (ia = im);
+            }
+            const MKL_INT kf = pr[ia] + 1;
+            const FP psif =
+                (psum[kf] - kf * p[ia]) /
+                sqrt(psum2[kf] - 2 * p[ia] * psum[kf] + kf * p[ia] * p[ia]);
+            const FP tau = max(
+                p[ia] - (a * sqrt((kf - psif * psif) / (kf - a * a)) - psif) *
+                            (psum[kf] - kf * p[ia]) / (psif * kf),
+                (FP)0.0);
+            for (MKL_INT i = 0; i < xn; i++) {
+                const FP rx = abs(x.data[i]);
+                x.data[i] = rx <= tau ? (FL)0 : x.data[i] / rx * (rx - tau);
+            }
+            iscale(x, (FP)1.0 / norm(x));
+        };
+        // work = xn * 2
+        // rwork = xn + 2 (xn + 1)
+        // iwork = xn + xn
+        const auto proj12orth = [&proj12](GMatrix<FL> x, FP a, GMatrix<FL> m,
+                                          int itermax, FP eps, FL *work) {
+            assert(m.n == x.n);
+            FL *xold = work, *xnew = work + x.n;
+            copy(GMatrix<FL>(xold, 1, x.n), x);
+            int it = 0;
+            for (; it < itermax; it++) {
+                copy(GMatrix<FL>(xnew, 1, x.n), GMatrix<FL>(xold, 1, x.n));
+                multiply(m, false, GMatrix<FL>(xold, x.n, 1), false,
+                         GMatrix<FL>(x.data, m.m, 1), (FL)1.0, (FL)0.0);
+                multiply(m, 3, GMatrix<FL>(x.data, m.m, 1), false,
+                         GMatrix<FL>(xnew, x.n, 1), (FL)-1.0, (FL)1.0);
+                proj12(GMatrix<FL>(xnew, 1, x.n), a);
+                iadd(GMatrix<FL>(xold, 1, x.n), GMatrix<FL>(xnew, 1, x.n),
+                     (FL)-1.0);
+                FP diff_norm = norm(GMatrix<FL>(xold, 1, x.n));
+                swap(xold, xnew);
+                if (diff_norm < eps)
+                    break;
+            }
+            if (it == itermax)
+                cout << "IterativeMatrixFunctions::constrained_svd: itermax = "
+                     << itermax << " reached in proj12orth!" << endl;
+            copy(x, GMatrix<FL>(xold, 1, x.n));
+        };
+        if (au == (FP)0.0)
+            au = (FP)1.4;
+        if (av == (FP)0.0)
+            av = (FP)1.4;
+        shared_ptr<VectorAllocator<FL>> c_alloc =
+            make_shared<VectorAllocator<FL>>();
+        size_t lwork1 = (size_t)x.m * x.n + (size_t)x.m * min(x.m, x.n) +
+                        (size_t)min(x.m, x.n) * x.n;
+        size_t lwork2 =
+            (size_t)(rank + 1) * (x.n + x.m) + 2 * (size_t)max(x.m, x.n);
+        size_t lwork3 = (size_t)rank * (x.n + x.m + x.m);
+        FL *work = c_alloc->allocate(max(max(lwork1, lwork2), lwork3));
+        GMatrix<FL> rsvd(work, min(x.m, x.n), x.n);
+        GMatrix<FP> ssvd(rwork, 1, min(x.m, x.n));
+        GMatrix<FL> xsvd(rsvd.data + rsvd.size(), x.m, x.n);
+        GMatrix<FL> lsvd(xsvd.data + xsvd.size(), x.m, min(x.m, x.n));
+        copy(xsvd, x);
+        GMatrixFunctions<FL>::svd(xsvd, lsvd, ssvd, rsvd);
+        GMatrix<FL> v(rsvd.data, rank, x.n);
+        GMatrix<FL> u(v.data + v.size(), rank, x.m);
+        FL *ppwork = u.data + u.size();
+        FL *pwork = ppwork + x.m + x.n;
+        GMatrixFunctions<FL>::transpose(GMatrix<FL>(u.data, min(x.m, x.n), x.m),
+                                        lsvd, (FL)1.0, (FL)0.0);
+        GMatrixFunctions<FL>::conjugate(GMatrix<FL>(u.data, rank, x.m));
+        if (iprint)
+            cout << endl;
+        for (MKL_INT ir = 0; ir < rank; ir++) {
+            FL *uold = u.data + ir * x.m, *unew = ppwork;
+            FL *vold = v.data + ir * x.n, *vnew = ppwork + x.m;
+            GMatrix<FL> uorth(u.data, ir, x.m), vorth(v.data, ir, x.n);
+            int it = 0;
+            FP diff_u = 0, diff_v = 0;
+            for (; it < max_iter_pi; it++) {
+                check_signal_()();
+                multiply(x, 3, GMatrix<FL>(uold, x.m, 1), false,
+                         GMatrix<FL>(vnew, x.n, 1), (FL)1.0, (FL)0.0);
+                if (ir == 0)
+                    proj12(GMatrix<FL>(vnew, 1, x.n), av);
+                else
+                    proj12orth(GMatrix<FL>(vnew, 1, x.n), av, vorth,
+                               max_iter_pocs, eps_pocs, pwork);
+                multiply(x, false, GMatrix<FL>(vnew, x.n, 1), false,
+                         GMatrix<FL>(unew, x.m, 1), (FL)1.0, (FL)0.0);
+                if (ir == 0)
+                    proj12(GMatrix<FL>(unew, 1, x.m), au);
+                else
+                    proj12orth(GMatrix<FL>(unew, 1, x.m), au, uorth,
+                               max_iter_pocs, eps_pocs, pwork);
+                iadd(GMatrix<FL>(uold, 1, x.m), GMatrix<FL>(unew, 1, x.m),
+                     (FL)-1.0);
+                iadd(GMatrix<FL>(vold, 1, x.n), GMatrix<FL>(vnew, 1, x.n),
+                     (FL)-1.0);
+                diff_u = norm(GMatrix<FL>(uold, 1, x.m));
+                diff_v = norm(GMatrix<FL>(vold, 1, x.n));
+                swap(uold, unew);
+                swap(vold, vnew);
+                if (diff_u < eps_pi && diff_v < eps_pi)
+                    break;
+            }
+            if (iprint)
+                cout << "ir = " << setw(4) << ir << " niter = " << setw(5) << it
+                     << " diff_u = " << scientific << setprecision(2) << setw(9)
+                     << diff_u << " diff_v = " << scientific << setprecision(2)
+                     << setw(9) << diff_v << endl;
+            if (it == max_iter_pi)
+                cout << "IterativeMatrixFunctions::constrained_svd: itermax = "
+                     << max_iter_pi << " reached in power iteration!" << endl;
+            if (uold != u.data + ir * x.m)
+                copy(GMatrix<FL>(u.data + ir * x.m, 1, x.m),
+                     GMatrix<FL>(uold, 1, x.m));
+            if (vold != v.data + ir * x.n)
+                copy(GMatrix<FL>(v.data + ir * x.n, 1, x.n),
+                     GMatrix<FL>(vold, 1, x.n));
+        }
+        for (MKL_INT ir = 0; ir < rank; ir++) {
+            iwork[ir] = ir;
+            multiply(x, false, GMatrix<FL>(v.data + ir * x.n, x.n, 1), false,
+                     GMatrix<FL>(ppwork, x.m, 1), (FL)1.0, (FL)0.0);
+            multiply(GMatrix<FL>(u.data + ir * x.m, x.m, 1), 3,
+                     GMatrix<FL>(ppwork, x.m, 1), false,
+                     GMatrix<FL>(pwork, 1, 1), (FL)1.0, (FL)0.0);
+            rwork[ir] = xreal<FL>(pwork[0]);
+        }
+        sort(iwork, iwork + rank,
+             [&rwork](MKL_INT i, MKL_INT j) { return rwork[i] > rwork[j]; });
+        for (MKL_INT ir = 0; ir < rank; ir++) {
+            s.data[ir] = rwork[iwork[ir]];
+            copy(GMatrix<FL>(r.data + ir * x.n, 1, x.n),
+                 GMatrix<FL>(v.data + iwork[ir] * x.n, 1, x.n));
+            copy(GMatrix<FL>(ppwork + ir * x.m, 1, x.m),
+                 GMatrix<FL>(u.data + iwork[ir] * x.m, 1, x.m));
+        }
+        GMatrixFunctions<FL>::conjugate(GMatrix<FL>(ppwork, rank, x.m));
+        GMatrixFunctions<FL>::transpose(GMatrix<FL>(l.data, x.m, l.n),
+                                        GMatrix<FL>(ppwork, rank, x.m), (FL)1.0,
+                                        (FL)0.0);
+        c_alloc->deallocate(work, max(max(lwork1, lwork2), lwork3));
+        d_alloc->deallocate(rwork, 3 * max(x.m, x.n) + 2);
+        i_alloc->deallocate(iwork, 2 * max(x.m, x.n));
+    }
+
+    // Disjoint SVD (SVD with block-diagonal sparsity preserved)
+    // the block-diagonal can have arbitrarily index permutation
+    static void disjoint_svd(GMatrix<FL> x, GMatrix<FL> l, GMatrix<FP> s,
+                             GMatrix<FL> r, vector<FP> levels = vector<FP>(),
+                             bool ensure_ortho = true) {
+        // cout << "x = " << x << endl;
+        sort(levels.begin(), levels.end(), greater<FP>());
+        vector<DSU> dsus(levels.size() + 1, DSU(x.m + x.n));
+        vector<pair<MKL_INT, MKL_INT>> acc_idxs;
+        vector<size_t> acc_div;
+        acc_idxs.reserve(x.size());
+        // find connected elements at each level
+        for (size_t il = 0; il < levels.size(); il++) {
+            if (il == 0) {
+                for (MKL_INT ii = 0; ii < x.m; ii++)
+                    for (MKL_INT jj = 0; jj < x.n; jj++)
+                        if (abs(x(ii, jj)) > levels[il])
+                            dsus[il].unionx(ii, jj + x.m),
+                                acc_idxs.push_back(make_pair(ii, jj));
+            } else {
+                for (MKL_INT ii = 0; ii < x.m; ii++)
+                    for (MKL_INT jj = 0; jj < x.n; jj++)
+                        if (abs(x(ii, jj)) > levels[il] &&
+                            abs(x(ii, jj)) <= levels[il - 1])
+                            dsus[il].unionx(ii, jj + x.m),
+                                acc_idxs.push_back(make_pair(ii, jj));
+            }
+            dsus[il].post();
+            acc_div.push_back(acc_idxs.size());
+        }
+        // the default level
+        if (levels.size() == 0) {
+            for (MKL_INT ii = 0; ii < x.m; ii++)
+                for (MKL_INT jj = 0; jj < x.n; jj++)
+                    if (abs(x(ii, jj)) != 0)
+                        dsus.back().unionx(ii, jj + x.m),
+                            acc_idxs.push_back(make_pair(ii, jj));
+        } else {
+            for (MKL_INT ii = 0; ii < x.m; ii++)
+                for (MKL_INT jj = 0; jj < x.n; jj++)
+                    if (abs(x(ii, jj)) != 0 && abs(x(ii, jj)) <= levels.back())
+                        dsus.back().unionx(ii, jj + x.m),
+                            acc_idxs.push_back(make_pair(ii, jj));
+        }
+        dsus.back().post();
+        vector<MKL_INT> sub_k(levels.size() + 1, 0);
+        for (size_t il = 0; il < dsus.size(); il++) {
+            MKL_INT &xk = sub_k[il], grt = 0;
+            for (auto &r : dsus[il].roots)
+                if (r.second.size() > 1) {
+                    MKL_INT xl = 0, xr = 0;
+                    for (auto &t : r.second)
+                        t < x.m ? xl++ : xr++;
+                    xk += min(xl, xr);
+                    grt++;
+                }
+            // cout << "il = " << il << " grt = " << grt << endl;
+        }
+        // number of singular values may exceed the maximal number
+        // when needed, remove some levels to avoid this
+        for (;;) {
+            MKL_INT k = 0;
+            for (auto &r : sub_k)
+                k += r;
+            if (k <= min(x.m, x.n))
+                break;
+            assert(sub_k.size() > 1);
+            DSU &dsua = dsus[dsus.size() - 2], &dsub = dsus.back();
+            for (auto &r : dsub.roots)
+                if (r.second.size() > 1)
+                    for (size_t it = 1; it < r.second.size(); it++)
+                        dsua.unionx(r.second[0], r.second[it]);
+            dsus.pop_back();
+            dsus.back().post();
+            sub_k.pop_back();
+            acc_div.pop_back();
+            MKL_INT &xk = sub_k.back();
+            xk = 0;
+            for (auto &r : dsus.back().roots)
+                if (r.second.size() > 1) {
+                    MKL_INT xl = 0, xr = 0;
+                    for (auto &t : r.second)
+                        t < x.m ? xl++ : xr++;
+                    xk += min(xl, xr);
+                }
+        }
+        acc_div.push_back(acc_idxs.size());
+        vector<pair<MKL_INT, MKL_INT>> rmap(x.m), cmap(x.n);
+        vector<MKL_INT> irmap(x.m), icmap(x.n);
+        MKL_INT acc_k = 0;
+        shared_ptr<VectorAllocator<FL>> c_alloc =
+            make_shared<VectorAllocator<FL>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        size_t lwork = (size_t)max(x.m * x.m, x.n * x.n) +
+                       (size_t)(x.m + x.n) * min(x.m, x.n) * 2;
+        FL *xwork = c_alloc->allocate(lwork);
+        FL *xlwork = xwork + (size_t)max(x.m * x.m, x.n * x.n);
+        FL *xrwork = xlwork + (size_t)x.m * min(x.m, x.n);
+        FL *gwork = xrwork + (size_t)x.n * min(x.m, x.n);
+        FP *swork = d_alloc->allocate(max(x.m, x.n) + min(x.m, x.n));
+        size_t iacc = 0;
+        GMatrix<FL> glmat(gwork, x.m, min(x.m, x.n));
+        GMatrix<FL> grmat(gwork + glmat.size(), min(x.m, x.n), x.n);
+        GMatrix<FP> gsmat(swork + max(x.m, x.n), 1, min(x.m, x.n));
+        glmat.clear();
+        grmat.clear();
+        gsmat.clear();
+        MKL_INT gxk = 0;
+        // loop over levels
+        for (size_t il = 0; il < sub_k.size(); il++) {
+            MKL_INT gxl = 0, gxr = 0, grt = 0;
+            memset(rmap.data(), -1, sizeof(MKL_INT) * x.m);
+            memset(cmap.data(), -1, sizeof(MKL_INT) * x.n);
+            vector<GMatrix<FL>> xmats, lmats, rmats;
+            vector<GMatrix<FP>> smats;
+            size_t ixw = 0, ilw = 0, irw = 0, isw = 0;
+            // loop over disjoint blocks
+            for (auto &r : dsus[il].roots)
+                if (r.second.size() > 1) {
+                    MKL_INT xl = 0, xr = 0;
+                    for (auto &t : r.second)
+                        if (t < x.m)
+                            rmap[t] = make_pair(grt, xl++);
+                        else
+                            cmap[t - x.m] = make_pair(grt, xr++);
+                    MKL_INT xk = min(xl, xr);
+                    xmats.push_back(GMatrix<FL>(xwork + ixw, xl, xr));
+                    ixw += xmats.back().size();
+                    lmats.push_back(GMatrix<FL>(xlwork + ilw, xl, xk));
+                    ilw += lmats.back().size();
+                    rmats.push_back(GMatrix<FL>(xrwork + irw, xk, xr));
+                    irw += rmats.back().size();
+                    smats.push_back(GMatrix<FP>(swork + isw, 1, xk));
+                    isw += smats.back().size();
+                    gxl += xl, gxr += xr;
+                    grt++;
+                }
+            // do svd
+            memset(xwork, 0, sizeof(FL) * ixw);
+            for (; iacc < acc_div[il]; iacc++) {
+                MKL_INT &ir = acc_idxs[iacc].first, &ic = acc_idxs[iacc].second;
+                assert(rmap[ir].first == cmap[ic].first);
+                xmats[rmap[ir].first](rmap[ir].second, cmap[ic].second) =
+                    x(ir, ic);
+            }
+            for (MKL_INT ig = 0; ig < grt; ig++) {
+                // cout << "x = " << xmats[ig] << endl;
+                GMatrixFunctions<FL>::svd(xmats[ig], lmats[ig], smats[ig],
+                                          rmats[ig]);
+                // cout << "l = " << lmats[ig] << endl;
+                // cout << "s = " << smats[ig] << endl;
+                // cout << "r = " << rmats[ig] << endl;
+            }
+            // fill original matrices
+            grt = 0;
+            for (auto &r : dsus[il].roots)
+                if (r.second.size() > 1) {
+                    MKL_INT xl = 0, xr = 0;
+                    for (auto &t : r.second)
+                        if (t < x.m)
+                            irmap[xl++] = t;
+                        else
+                            icmap[xr++] = t - x.m;
+                    for (MKL_INT ii = 0; ii < lmats[grt].m; ii++) {
+                        // cout << "ii = " << ii << " " << irmap[ii] << endl;
+                        GMatrixFunctions<FL>::copy(
+                            GMatrix<FL>(&glmat(irmap[ii], gxk), 1,
+                                        lmats[grt].n),
+                            GMatrix<FL>(&lmats[grt](ii, 0), 1, lmats[grt].n));
+                    }
+                    GMatrixFunctions<FP>::copy(
+                        GMatrix<FP>(&gsmat(0, gxk), 1, smats[grt].n),
+                        smats[grt]);
+                    for (MKL_INT jj = 0; jj < rmats[grt].n; jj++)
+                        xcopy<FL>(&rmats[grt].m, &rmats[grt](0, jj),
+                                  &rmats[grt].n, &grmat(gxk, icmap[jj]),
+                                  &grmat.n);
+                    // cout << "grt = " << grt << " gxk = " << gxk
+                    //      << " gl = " << glmat << endl;
+                    grt++;
+                    gxk += min(xl, xr);
+                }
+        }
+        // cout << "gl = " << glmat << endl;
+        // cout << "gs = " << gsmat << endl;
+        // cout << "gr = " << grmat << endl;
+        assert(gxk <= min(x.m, x.n));
+        l.clear(), r.clear(), s.clear();
+        vector<MKL_INT> iwork(max(x.m, x.n));
+        if (ensure_ortho) {
+            // for rows and columns with all zeros
+            const FL zx = (FL)-1.0, zz = (FL)0.0;
+            GMatrix<FL> gtlmat(xwork, x.m, x.m);
+            GMatrix<FL> gtrmat(xwork, x.n, x.n);
+            gtlmat.clear();
+            for (MKL_INT ir = 0; ir < gtlmat.n; ir++) {
+                gtlmat(ir, ir) = (FL)1.0;
+                for (MKL_INT ix = 0; ix < gxk; ix++) {
+                    FL r;
+                    const MKL_INT inc = 1;
+                    xgemm<FL>("n", "c", &inc, &inc, &x.m, &zx, &gtlmat(0, ir),
+                              &gtlmat.n, &glmat(0, ix), &glmat.n, &zz, &r,
+                              &inc);
+                    xaxpy<FL>(&x.m, &r, &glmat(0, ix), &glmat.n, &gtlmat(0, ir),
+                              &gtlmat.n);
+                }
+                swork[ir] = xnrm2<FL>(&x.m, &gtlmat(0, ir), &gtlmat.n);
+            }
+            for (MKL_INT ir = 0; ir < gtlmat.n; ir++)
+                iwork[ir] = ir;
+            sort(
+                iwork.begin(), iwork.begin() + gtlmat.n,
+                [&swork](MKL_INT i, MKL_INT j) { return swork[i] > swork[j]; });
+            for (MKL_INT ir = gxk; ir < min(x.m, x.n); ir++) {
+                xcopy<FL>(&x.m, &gtlmat(0, iwork[ir - gxk]), &gtlmat.n,
+                          &l(0, ir), &l.n);
+                for (MKL_INT il = gxk; il < ir; il++) {
+                    FL r;
+                    const MKL_INT inc = 1;
+                    xgemm<FL>("n", "c", &inc, &inc, &x.m, &zx, &l(0, ir), &l.n,
+                              &l(0, il), &l.n, &zz, &r, &inc);
+                    xaxpy<FL>(&x.m, &r, &l(0, il), &l.n, &l(0, ir), &l.n);
+                }
+                const FL sx = (FP)1.0 / xnrm2<FL>(&x.m, &l(0, ir), &l.n);
+                xscal<FL>(&x.m, &sx, &l(0, ir), &l.n);
+            }
+            gtrmat.clear();
+            for (MKL_INT ir = 0; ir < gtrmat.m; ir++) {
+                gtrmat(ir, ir) = (FL)1.0;
+                for (MKL_INT ix = 0; ix < gxk; ix++)
+                    iadd(
+                        GMatrix<FL>(&gtrmat(ir, 0), 1, gtrmat.n),
+                        GMatrix<FL>(&grmat(ix, 0), 1, grmat.n),
+                        -complex_dot(GMatrix<FL>(&grmat(ix, 0), 1, grmat.n),
+                                     GMatrix<FL>(&gtrmat(ir, 0), 1, gtrmat.n)));
+                swork[ir] = norm(GMatrix<FL>(&gtrmat(ir, 0), 1, gtrmat.n));
+            }
+            for (MKL_INT ir = 0; ir < gtrmat.m; ir++)
+                iwork[ir] = ir;
+            sort(
+                iwork.begin(), iwork.begin() + gtrmat.m,
+                [&swork](MKL_INT i, MKL_INT j) { return swork[i] > swork[j]; });
+            for (MKL_INT ir = gxk; ir < min(x.m, x.n); ir++) {
+                copy(GMatrix<FL>(&r(ir, 0), 1, r.n),
+                     GMatrix<FL>(&gtrmat(iwork[ir - gxk], 0), 1, gtrmat.n));
+                for (MKL_INT il = gxk; il < ir; il++) {
+                    iadd(GMatrix<FL>(&r(ir, 0), 1, r.n),
+                         GMatrix<FL>(&r(il, 0), 1, r.n),
+                         -complex_dot(GMatrix<FL>(&r(il, 0), 1, r.n),
+                                      GMatrix<FL>(&r(ir, 0), 1, r.n)));
+                }
+                const FL sx = (FP)1.0 / norm(GMatrix<FL>(&r(ir, 0), 1, r.n));
+                iscale(GMatrix<FL>(&r(ir, 0), 1, r.n), sx);
+            }
+        }
+        // fill non-zeros
+        for (MKL_INT ir = 0; ir < gxk; ir++)
+            iwork[ir] = ir;
+        sort(iwork.begin(), iwork.begin() + gxk,
+             [&gsmat](MKL_INT i, MKL_INT j) {
+                 return gsmat.data[i] > gsmat.data[j];
+             });
+        for (MKL_INT ir = 0; ir < gxk; ir++) {
+            s.data[ir] = gsmat.data[iwork[ir]];
+            copy(GMatrix<FL>(r.data + ir * r.n, 1, r.n),
+                 GMatrix<FL>(grmat.data + iwork[ir] * x.n, 1, x.n));
+            xcopy<FL>(&x.m, &glmat(0, iwork[ir]), &glmat.n, &l(0, ir), &l.n);
+        }
+        // cout << l << endl;
+        // cout << s << endl;
+        // cout << r << endl;
+        c_alloc->deallocate(xwork, lwork);
+        d_alloc->deallocate(swork, max(x.m, x.n) + min(x.m, x.n));
     }
 };
 
