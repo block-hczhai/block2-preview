@@ -24,10 +24,10 @@ mpo_algo_names = [
     "Bipartite",
     "SVD",
     "DisjointSVD",
-    "BlockedSumDisjointSVD",
-    "FastBlockedSumDisjointSVD",
-    "BlockedRescaledSumDisjointSVD",
-    "FastBlockedRescaledSumDisjointSVD",
+    # "BlockedSumDisjointSVD",
+    # "FastBlockedSumDisjointSVD",
+    # "BlockedRescaledSumDisjointSVD",
+    # "FastBlockedRescaledSumDisjointSVD",
     "BlockedDisjointSVD",
     "FastBlockedDisjointSVD",
     "BlockedRescaledDisjointSVD",
@@ -101,7 +101,7 @@ class TestDMRGMPO:
             reorder='irrep',
             cutoff=1e-12,
             algo_type=mpo_algo_type,
-            iprint=1,
+            iprint=2,
         )
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)
         bond_dims = [250] * 8

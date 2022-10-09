@@ -1849,6 +1849,10 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("csvd_eps", &GeneralMPO<S, FL>::csvd_eps)
         .def_readwrite("csvd_max_iter", &GeneralMPO<S, FL>::csvd_max_iter)
         .def_readwrite("disjoint_levels", &GeneralMPO<S, FL>::disjoint_levels)
+        .def_readwrite("disjoint_all_blocks",
+                       &GeneralMPO<S, FL>::disjoint_all_blocks)
+        .def_readwrite("disjoint_multiplier",
+                       &GeneralMPO<S, FL>::disjoint_multiplier)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &,
                       MPOAlgorithmTypes>(),

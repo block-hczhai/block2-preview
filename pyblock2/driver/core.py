@@ -530,6 +530,8 @@ class DMRGDriver:
         csvd_eps=1e-10,
         csvd_max_iter=1000,
         disjoint_levels=None,
+        disjoint_all_blocks=False,
+        disjoint_multiplier=1.0,
         iprint=1,
     ):
         import numpy as np
@@ -779,6 +781,8 @@ class DMRGDriver:
             csvd_eps=csvd_eps,
             csvd_max_iter=csvd_max_iter,
             disjoint_levels=disjoint_levels,
+            disjoint_all_blocks=disjoint_all_blocks,
+            disjoint_multiplier=disjoint_multiplier,
         )
 
     def get_mpo(
@@ -794,6 +798,8 @@ class DMRGDriver:
         csvd_eps=1e-10,
         csvd_max_iter=1000,
         disjoint_levels=None,
+        disjoint_all_blocks=False,
+        disjoint_multiplier=1.0,
     ):
         bw = self.bw
         if left_vacuum is None:
@@ -810,6 +816,8 @@ class DMRGDriver:
         mpo.csvd_max_iter = csvd_max_iter
         if disjoint_levels is not None:
             mpo.disjoint_levels = bw.VectorFP(disjoint_levels)
+        mpo.disjoint_all_blocks = disjoint_all_blocks
+        mpo.disjoint_multiplier = disjoint_multiplier
         mpo.build()
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         mpo = bw.bs.IdentityAddedMPO(mpo)

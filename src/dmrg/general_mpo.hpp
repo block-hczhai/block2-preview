@@ -1415,6 +1415,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     FP csvd_eps = (FP)1E-10;
     int csvd_max_iter = 1000;
     vector<FP> disjoint_levels;
+    bool disjoint_all_blocks = false;
+    FP disjoint_multiplier = (FP)1.0;
     static inline size_t expr_index_hash(const string &expr,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
@@ -1439,6 +1441,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         bool sum_mpo = algo_type & MPOAlgorithmTypes::Sum;
         bool constrain = algo_type & MPOAlgorithmTypes::Constrained;
         bool disjoint = algo_type & MPOAlgorithmTypes::Disjoint;
+        if (!disjoint)
+            disjoint_multiplier = (FP)1.0;
         if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
             throw runtime_error(
                 "Max bond dimension can only be used together with SVD!");
@@ -1632,6 +1636,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     for (int k = sr[j]; k < sr[j + 1]; k++)
                         ip_sparse[k] = isr;
             }
+            FP eff_disjoint_multiplier =
+                ii == n_sites - 1 ? (FP)1.0 : disjoint_multiplier;
             // Part 1: iter over all mpos
             for (int ip = 0; ip < (int)cur_values.size(); ip++) {
                 LL cn = (LL)cur_terms[ip].size(), cnr = cn;
@@ -1854,10 +1860,12 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 else if (algo_type & MPOAlgorithmTypes::CN)
                     szm = ii == 0 ? szl : szr;
                 else // bipartitie / SVD
-                    szm = min(szl, szr);
+                    szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                 if (!(algo_type & MPOAlgorithmTypes::Bipartite)) {
                     if (delayed_term != -1 && iq == 0)
-                        szm = min(szl - 1, szr) + 1;
+                        szm =
+                            (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
+                            1;
                     svds[iq].first[0].resize((size_t)szm * szl);
                     svds[iq].second.resize(szm);
                     svds[iq].first[1].resize((size_t)szm * szr);
@@ -1933,7 +1941,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].second[0] = 1;
                         svds[iq].first[0][0] = 1;
                         threading->activate_global_mkl();
-                        if (pqx[iq] < 2 && disjoint)
+                        if ((pqx[iq] >= 2 || disjoint_all_blocks) && disjoint)
                             IterativeMatrixFunctions<FL>::disjoint_svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
                                 GMatrix<FL>(svds[iq].first[0].data() + 1 + szm,
@@ -1942,7 +1950,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                             szm - 1),
                                 GMatrix<FL>(svds[iq].first[1].data() + szr,
                                             szm - 1, szr),
-                                disjoint_levels, false);
+                                disjoint_levels, false, iprint >= 2);
                         else
                             GMatrixFunctions<FL>::svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
@@ -1961,13 +1969,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         // cout << "mat = " << GMatrix<FL>(mat.data(), szl, szr)
                         // << endl;
                         threading->activate_global_mkl();
-                        if (pqx[iq] < 2 && disjoint)
+                        if ((pqx[iq] >= 2 || disjoint_all_blocks) && disjoint)
                             IterativeMatrixFunctions<FL>::disjoint_svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
                                 GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
                                 GMatrix<FP>(svds[iq].second.data(), 1, szm),
                                 GMatrix<FL>(svds[iq].first[1].data(), szm, szr),
-                                disjoint_levels, false);
+                                disjoint_levels, false, iprint >= 2);
                         else
                             GMatrixFunctions<FL>::svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
@@ -2025,9 +2033,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     int iq = mq.second;
                     auto &nm = nms[iq];
                     int szl = nm.first, szr = nm.second;
-                    int szm = min(szl, szr);
+                    int szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     if (delayed_term != -1 && iq == 0)
-                        szm = min(szl - 1, szr) + 1;
+                        szm =
+                            (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
+                            1;
                     for (int i = 0; i < szm; i++)
                         svds[iq].second[i] /= res_factor;
                     for (int i = 0; i < szm; i++)
@@ -2081,13 +2091,15 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     if (pqx[iq] < 2)
                         continue;
                     int szl = nm.first, szr = nm.second;
-                    int szm = min(szl, szr);
+                    int szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     int rank = svds[iq].second.size();
                     if ((szl == 1 && szr == 1) || rank == 0)
                         continue;
                     vector<FL> mat((size_t)szl * szr, 0);
                     if (delayed_term != -1 && iq == 0) {
-                        szm = min(szl - 1, szr) + 1;
+                        szm =
+                            (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
+                            1;
                         for (auto &lrv : matvs)
                             if (lrv.first.first != 0)
                                 mat[(lrv.first.first - 1) * szr +
@@ -2132,12 +2144,16 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     int iq = mq.second;
                     auto &nm = nms[iq];
                     auto &matvs = mats[iq];
-                    int szl = nm.first, szr = nm.second, szm = min(szl, szr);
+                    int szl = nm.first, szr = nm.second,
+                        szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     if (delayed_term != -1 && iq == 0)
-                        szm = min(szl - 1, szr) + 1;
+                        szm =
+                            (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
+                            1;
                     int s_kept = svds[iq].second.size();
                     vector<FL> smat, stmp;
-                    smat.reserve((size_t)szl * szr);
+                    smat.reserve(
+                        max((size_t)szl * szr, (size_t)s_kept * s_kept));
                     stmp.reserve((size_t)s_kept * szr);
                     memset(smat.data(), 0, sizeof(FL) * s_kept * s_kept);
                     for (int i = 0; i < s_kept; i++)
@@ -2256,9 +2272,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 else if (algo_type & MPOAlgorithmTypes::Bipartite)
                     szm = (int)mvcs[iq][0].size() + (int)mvcs[iq][1].size();
                 else { // SVD
-                    szm = min(szl, szr);
+                    szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     if (delayed_term != -1 && iq == 0)
-                        szm = min(szl - 1, szr) + 1;
+                        szm =
+                            (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
+                            1;
                 }
                 vector<shared_ptr<OpElement<S, FL>>> site_mp(szl);
                 for (auto &vls : mpl)

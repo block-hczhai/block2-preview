@@ -162,7 +162,12 @@ TYPED_TEST(TestDMRG, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
-        gham, gfd, MPOAlgorithmTypes::FastBipartite, 1E-7, -1);
+        gham, gfd, MPOAlgorithmTypes::FastBlockedSumDisjointSVD, 1E-7, -1);
+    // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_all_blocks = true;
+    // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_multiplier = 4.0;
+    // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_levels.push_back(1E-3);
+    // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_levels.push_back(1E-4);
+    // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_levels.push_back(1E-5);
     mpo->build();
     // shared_ptr<MPO<S, FL>> mpo =
     //     make_shared<MPOQC<S, FL>>(hamil, QCTypes::Conventional);

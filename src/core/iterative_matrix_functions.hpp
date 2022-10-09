@@ -3208,7 +3208,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     // the block-diagonal can have arbitrarily index permutation
     static void disjoint_svd(GMatrix<FL> x, GMatrix<FL> l, GMatrix<FP> s,
                              GMatrix<FL> r, vector<FP> levels = vector<FP>(),
-                             bool ensure_ortho = true) {
+                             bool ensure_ortho = true, bool iprint = false) {
+        if (x.m == 0 || x.n == 0)
+            return;
         // cout << "x = " << x << endl;
         sort(levels.begin(), levels.end(), greater<FP>());
         vector<DSU> dsus(levels.size() + 1, DSU(x.m + x.n));
@@ -3264,11 +3266,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
         // number of singular values may exceed the maximal number
         // when needed, remove some levels to avoid this
+        MKL_INT ssk = s.n;
+        assert(ssk >= min(x.m, x.n));
         for (;;) {
             MKL_INT k = 0;
             for (auto &r : sub_k)
                 k += r;
-            if (k <= min(x.m, x.n))
+            if (k <= ssk)
                 break;
             assert(sub_k.size() > 1);
             DSU &dsua = dsus[dsus.size() - 2], &dsub = dsus.back();
@@ -3298,17 +3302,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             make_shared<VectorAllocator<FL>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        size_t lwork = (size_t)max(x.m * x.m, x.n * x.n) +
-                       (size_t)(x.m + x.n) * min(x.m, x.n) * 2;
+        size_t lwork =
+            (size_t)max(x.m * x.m, x.n * x.n) + (size_t)(x.m + x.n) * ssk * 2;
         FL *xwork = c_alloc->allocate(lwork);
         FL *xlwork = xwork + (size_t)max(x.m * x.m, x.n * x.n);
-        FL *xrwork = xlwork + (size_t)x.m * min(x.m, x.n);
-        FL *gwork = xrwork + (size_t)x.n * min(x.m, x.n);
-        FP *swork = d_alloc->allocate(max(x.m, x.n) + min(x.m, x.n));
+        FL *xrwork = xlwork + (size_t)x.m * ssk;
+        FL *gwork = xrwork + (size_t)x.n * ssk;
+        FP *swork = d_alloc->allocate(max(x.m, x.n) + ssk);
         size_t iacc = 0;
-        GMatrix<FL> glmat(gwork, x.m, min(x.m, x.n));
-        GMatrix<FL> grmat(gwork + glmat.size(), min(x.m, x.n), x.n);
-        GMatrix<FP> gsmat(swork + max(x.m, x.n), 1, min(x.m, x.n));
+        GMatrix<FL> glmat(gwork, x.m, ssk);
+        GMatrix<FL> grmat(gwork + glmat.size(), ssk, x.n);
+        GMatrix<FP> gsmat(swork + max(x.m, x.n), 1, ssk);
         glmat.clear();
         grmat.clear();
         gsmat.clear();
@@ -3391,7 +3395,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         // cout << "gl = " << glmat << endl;
         // cout << "gs = " << gsmat << endl;
         // cout << "gr = " << grmat << endl;
-        assert(gxk <= min(x.m, x.n));
+        assert(gxk <= ssk);
         l.clear(), r.clear(), s.clear();
         vector<MKL_INT> iwork(max(x.m, x.n));
         if (ensure_ortho) {
@@ -3477,7 +3481,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         // cout << s << endl;
         // cout << r << endl;
         c_alloc->deallocate(xwork, lwork);
-        d_alloc->deallocate(swork, max(x.m, x.n) + min(x.m, x.n));
+        d_alloc->deallocate(swork, max(x.m, x.n) + ssk);
     }
 };
 
