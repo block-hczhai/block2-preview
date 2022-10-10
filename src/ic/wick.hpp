@@ -273,6 +273,19 @@ struct WickPermutation {
         }
         return r;
     }
+    static vector<WickPermutation> all(int n) {
+        size_t nr = 1;
+        vector<int16_t> x(n);
+        for (int i = 0; i < n; i++)
+            x[i] = (int16_t)i, nr *= (i + 1);
+        vector<WickPermutation> r(nr);
+        size_t ir = 0;
+        r[ir++] = WickPermutation(x, false);
+        while (next_permutation(x.begin(), x.end()))
+            r[ir++] = WickPermutation(x, false);
+        assert(ir == nr);
+        return r;
+    }
 };
 
 struct WickTensor {
@@ -581,6 +594,56 @@ struct WickTensor {
             ss << to_str(perms[i])
                << (i == (int)perms.size() - 1 ? "" : " == ");
         return ss.str();
+    }
+    static map<string, string> get_index_map(const vector<WickIndex> &idxa,
+                                             const vector<WickIndex> &idxb) {
+        map<string, string> r;
+        if (idxa.size() != idxb.size())
+            return r;
+        map<WickIndexTypes, pair<vector<uint16_t>, vector<uint16_t>>> mp;
+        for (int i = 0; i < (int)idxa.size(); i++)
+            mp[idxa[i].types].first.push_back(i);
+        for (int i = 0; i < (int)idxb.size(); i++)
+            mp[idxb[i].types].second.push_back(i);
+        bool ok = true;
+        for (auto &x : mp) {
+            if (x.second.first.size() != x.second.second.size()) {
+                ok = false;
+                r.clear();
+                break;
+            }
+            for (int j = 0; j < (int)x.second.first.size(); j++)
+                r[idxa[x.second.first[j]].name] = idxb[x.second.second[j]].name;
+        }
+        return r;
+    }
+    static vector<map<string, string>>
+    get_all_index_permutations(const vector<WickIndex> &indices) {
+        map<WickIndexTypes, pair<vector<uint16_t>, vector<WickPermutation>>> mp;
+        for (int i = 0; i < (int)indices.size(); i++)
+            mp[indices[i].types].first.push_back(i);
+        size_t np = 1;
+        for (auto &x : mp) {
+            x.second.second = WickPermutation::all((int)x.second.first.size());
+            np *= x.second.second.size();
+        }
+        map<string, string> mx;
+        for (auto &x : indices)
+            mx[x.name] = x.name;
+        vector<map<string, string>> r(np, mx);
+        for (size_t ip = 0; ip < np; ip++) {
+            map<string, string> &mt = r[ip];
+            size_t jp = ip;
+            for (auto &x : mp) {
+                WickPermutation &wp =
+                    x.second.second[jp % x.second.second.size()];
+                jp /= x.second.second.size();
+                for (int j = 0; j < (int)x.second.first.size(); j++)
+                    mt[indices[x.second.first[j]].name] =
+                        indices[x.second.first[wp.data[j]]].name;
+            }
+        }
+        return r;
     }
 };
 

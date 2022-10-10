@@ -139,6 +139,7 @@ PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>>);
 PYBIND11_MAKE_OPAQUE(map<string, string>);
+PYBIND11_MAKE_OPAQUE(vector<map<string, string>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
 // SZK
 PYBIND11_MAKE_OPAQUE(vector<SZK>);
@@ -1419,6 +1420,7 @@ template <typename S = void> void bind_data(py::module &m) {
                 (*mp)[item.first.cast<string>()] = item.second.cast<string>();
             return mp.release();
         }));
+    py::bind_vector<vector<map<string, string>>>(m, "VectorMapStrStr");
     py::bind_vector<vector<pair<string, string>>>(m, "VectorPStrStr");
 }
 
@@ -2265,10 +2267,95 @@ template <typename FL> void bind_matrix(py::module &m) {
 
     py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions");
 
-    py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions");
+    py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions")
+        .def_static(
+            "constrained_svd",
+            [](py::array_t<FL> &x, MKL_INT rank, FL au, FL av, int max_iter_pi,
+               int max_iter_pocs, FL eps_pi, FL eps_pocs, bool iprint) {
+                GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
+                py::array_t<FL> l(vector<ssize_t>{x.shape()[0], (ssize_t)rank});
+                py::array_t<FL> s(vector<ssize_t>{(ssize_t)rank});
+                py::array_t<FL> r(vector<ssize_t>{(ssize_t)rank, x.shape()[1]});
+                GMatrix<FL> xl(l.mutable_data(), l.shape()[0], l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
+                GMatrix<FL> xr(r.mutable_data(), r.shape()[0], r.shape()[1]);
+                IterativeMatrixFunctions<FL>::constrained_svd(
+                    xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
+                    eps_pi, eps_pocs, iprint);
+                return make_tuple(l, s, r);
+            },
+            py::arg("x"), py::arg("rank"), py::arg("au") = (FL)0.0,
+            py::arg("av") = (FL)0.0, py::arg("max_iter_pi") = 1000,
+            py::arg("max_iter_pocs") = 1000, py::arg("eps_pi") = (FL)1E-10,
+            py::arg("eps_pocs") = (FL)1E-10, py::arg("iprint") = false)
+        .def_static(
+            "disjoint_svd",
+            [](py::array_t<FL> &x, py::array_t<FL> &levels) {
+                GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
+                ssize_t k = min(x.shape()[0], x.shape()[1]);
+                py::array_t<FL> l(vector<ssize_t>{x.shape()[0], k});
+                py::array_t<FL> s(vector<ssize_t>{k});
+                py::array_t<FL> r(vector<ssize_t>{k, x.shape()[1]});
+                GMatrix<FL> xl(l.mutable_data(), l.shape()[0], l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
+                GMatrix<FL> xr(r.mutable_data(), r.shape()[0], r.shape()[1]);
+                vector<FL> xlevels(levels.data(),
+                                   levels.data() + levels.size());
+                IterativeMatrixFunctions<FL>::disjoint_svd(xx, xl, xs, xr,
+                                                           xlevels);
+                return make_tuple(l, s, r);
+            },
+            py::arg("x"), py::arg("levels") = py::array_t<FL>(0));
 
     py::class_<IterativeMatrixFunctions<complex<FL>>>(
-        m, "ComplexIterativeMatrixFunctions");
+        m, "ComplexIterativeMatrixFunctions")
+        .def_static(
+            "constrained_svd",
+            [](py::array_t<complex<FL>> &x, MKL_INT rank, FL au, FL av,
+               int max_iter_pi, int max_iter_pocs, FL eps_pi, FL eps_pocs,
+               bool iprint) {
+                GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
+                                        x.shape()[1]);
+                py::array_t<complex<FL>> l(
+                    vector<ssize_t>{x.shape()[0], (ssize_t)rank});
+                py::array_t<FL> s(vector<ssize_t>{(ssize_t)rank});
+                py::array_t<complex<FL>> r(
+                    vector<ssize_t>{(ssize_t)rank, x.shape()[1]});
+                GMatrix<complex<FL>> xl(l.mutable_data(), l.shape()[0],
+                                        l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
+                GMatrix<complex<FL>> xr(r.mutable_data(), r.shape()[0],
+                                        r.shape()[1]);
+                IterativeMatrixFunctions<complex<FL>>::constrained_svd(
+                    xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
+                    eps_pi, eps_pocs, iprint);
+                return make_tuple(l, s, r);
+            },
+            py::arg("x"), py::arg("rank"), py::arg("au") = (FL)0.0,
+            py::arg("av") = (FL)0.0, py::arg("max_iter_pi") = 1000,
+            py::arg("max_iter_pocs") = 1000, py::arg("eps_pi") = (FL)1E-10,
+            py::arg("eps_pocs") = (FL)1E-10, py::arg("iprint") = false)
+        .def_static(
+            "disjoint_svd",
+            [](py::array_t<complex<FL>> &x, py::array_t<FL> &levels) {
+                GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
+                                        x.shape()[1]);
+                ssize_t k = min(x.shape()[0], x.shape()[1]);
+                py::array_t<complex<FL>> l(vector<ssize_t>{x.shape()[0], k});
+                py::array_t<FL> s(vector<ssize_t>{k});
+                py::array_t<complex<FL>> r(vector<ssize_t>{k, x.shape()[1]});
+                GMatrix<complex<FL>> xl(l.mutable_data(), l.shape()[0],
+                                        l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
+                GMatrix<complex<FL>> xr(r.mutable_data(), r.shape()[0],
+                                        r.shape()[1]);
+                vector<FL> xlevels(levels.data(),
+                                   levels.data() + levels.size());
+                IterativeMatrixFunctions<complex<FL>>::disjoint_svd(
+                    xx, xl, xs, xr, xlevels);
+                return make_tuple(l, s, r);
+            },
+            py::arg("x"), py::arg("levels") = py::array_t<FL>(0));
 }
 
 template <typename S = void> void bind_post_matrix(py::module &m) {

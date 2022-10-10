@@ -336,6 +336,7 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def_static("qc_chem", &WickPermutation::qc_chem)
         .def_static("qc_phys", &WickPermutation::qc_phys)
         .def_static("four_anti", &WickPermutation::four_anti)
+        .def_static("all", &WickPermutation::all)
         .def_static("pair_symmetric", &WickPermutation::pair_symmetric,
                     py::arg("n"), py::arg("hermitian") = false);
 
@@ -400,7 +401,10 @@ template <typename S = void> void bind_wick(py::module &m) {
                  self->sort(factor);
                  return factor;
              })
-        .def("get_permutation_rules", &WickTensor::get_permutation_rules);
+        .def("get_permutation_rules", &WickTensor::get_permutation_rules)
+        .def_static("get_index_map", &WickTensor::get_index_map)
+        .def_static("get_all_index_permutations",
+                    &WickTensor::get_all_index_permutations);
 
     py::bind_vector<vector<WickTensor>>(m, "VectorWickTensor");
 
