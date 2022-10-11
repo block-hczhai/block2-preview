@@ -2272,7 +2272,8 @@ template <typename FL> void bind_matrix(py::module &m) {
         .def_static(
             "constrained_svd",
             [](py::array_t<FL> &x, MKL_INT rank, FL au, FL av, int max_iter_pi,
-               int max_iter_pocs, FL eps_pi, FL eps_pocs, bool iprint) {
+               int max_iter_pocs, FL eps_pi, FL eps_pocs, bool iprint)
+                -> tuple<py::array_t<FL>, py::array_t<FL>, py::array_t<FL>> {
                 GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
                 py::array_t<FL> l(vector<ssize_t>{x.shape()[0], (ssize_t)rank});
                 py::array_t<FL> s(vector<ssize_t>{(ssize_t)rank});
@@ -2291,7 +2292,8 @@ template <typename FL> void bind_matrix(py::module &m) {
             py::arg("eps_pocs") = (FL)1E-10, py::arg("iprint") = false)
         .def_static(
             "disjoint_svd",
-            [](py::array_t<FL> &x, py::array_t<FL> &levels) {
+            [](py::array_t<FL> &x, py::array_t<FL> &levels)
+                -> tuple<py::array_t<FL>, py::array_t<FL>, py::array_t<FL>> {
                 GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
                 ssize_t k = min(x.shape()[0], x.shape()[1]);
                 py::array_t<FL> l(vector<ssize_t>{x.shape()[0], k});
@@ -2314,7 +2316,8 @@ template <typename FL> void bind_matrix(py::module &m) {
             "constrained_svd",
             [](py::array_t<complex<FL>> &x, MKL_INT rank, FL au, FL av,
                int max_iter_pi, int max_iter_pocs, FL eps_pi, FL eps_pocs,
-               bool iprint) {
+               bool iprint) -> tuple<py::array_t<complex<FL>>, py::array_t<FL>,
+                                     py::array_t<complex<FL>>> {
                 GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
                                         x.shape()[1]);
                 py::array_t<complex<FL>> l(
@@ -2338,7 +2341,9 @@ template <typename FL> void bind_matrix(py::module &m) {
             py::arg("eps_pocs") = (FL)1E-10, py::arg("iprint") = false)
         .def_static(
             "disjoint_svd",
-            [](py::array_t<complex<FL>> &x, py::array_t<FL> &levels) {
+            [](py::array_t<complex<FL>> &x, py::array_t<FL> &levels)
+                -> tuple<py::array_t<complex<FL>>, py::array_t<FL>,
+                         py::array_t<complex<FL>>> {
                 GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
                                         x.shape()[1]);
                 ssize_t k = min(x.shape()[0], x.shape()[1]);

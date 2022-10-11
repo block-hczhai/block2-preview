@@ -1358,7 +1358,7 @@ TYPED_TEST(TestMatrix, TestDisjointSVD) {
         levels.resize(Random::rand_int(0, (int)levels.size() + 1));
         IterativeMatrixFunctions<FL>::disjoint_svd(
             a->ref(), l->ref(), s->ref().flip_dims(), r->ref(), levels);
-        if (levels.size() == 0 && is_same<FP, double>::value) {
+        if (levels.size() == 0 && is_same<FL, double>::value) {
             GMatrixFunctions<FL>::multiply(l->ref(), true, l->ref(), false,
                                            kk->ref(), 1.0, 0.0);
             ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
