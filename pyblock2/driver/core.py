@@ -1296,7 +1296,7 @@ class DMRGDriver:
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "MULT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
-        me.init_environments(iprint >= 3)
+        me.init_environments(iprint >= 2)
         cps = bw.bs.Linear(
             me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims)
         )

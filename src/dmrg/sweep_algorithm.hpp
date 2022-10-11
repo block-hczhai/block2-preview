@@ -1805,7 +1805,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                     << fixed << t.get_time() << endl;
+                     << t.get_time() << endl;
             sweep_energies.push_back(r.energies);
             sweep_discarded_weights.push_back(r.error);
             sweep_quanta.push_back(r.quanta);
@@ -2363,13 +2363,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                          << " | Tmporead = " << me->mpo->tread
                          << " | Tasync = " << frame_<FPS>()->tasync << endl;
                     if (frame_<FPS>()->fp_codec != nullptr)
-                        sout << " | data = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ndata * 8)
-                             << " | cpsd = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ncpsd * 8)
-                             << endl;
+                        sout
+                            << " | data = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
+                            << " | cpsd = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ncpsd * sizeof(FPS))
+                            << endl;
                     sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr
@@ -3958,7 +3959,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             sweep_cumulative_nflop += r.nflop;
             if (iprint >= 2)
                 cout << r << " T = " << setw(4) << fixed << setprecision(2)
-                     << fixed << t.get_time() << endl;
+                     << t.get_time() << endl;
             sweep_targets.push_back(r.targets);
             sweep_discarded_weights.push_back(r.error);
             if (frame_<FPS>()->restart_dir_optimal_mps != "" ||
@@ -4241,12 +4242,14 @@ template <typename S, typename FL, typename FLS> struct Linear {
                          << " | Tfpread = " << frame_<FPS>()->fpread
                          << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
                     if (frame_<FPS>()->fp_codec != nullptr)
-                        cout << " | data = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ndata * 8)
-                             << " | cpsd = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ncpsd * 8);
+                        cout
+                            << " | data = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
+                            << " | cpsd = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ncpsd *
+                                   sizeof(FPS));
                     cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                     if (lme != nullptr)
                         cout << " | Trot = " << lme->trot
@@ -5470,10 +5473,10 @@ struct Expect {
                 if (frame_<FPS>()->fp_codec != nullptr)
                     cout << " | data = "
                          << Parsing::to_size_string(
-                                frame_<FPS>()->fp_codec->ndata * 8)
+                                frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
                          << " | cpsd = "
                          << Parsing::to_size_string(
-                                frame_<FPS>()->fp_codec->ncpsd * 8);
+                                frame_<FPS>()->fp_codec->ncpsd * sizeof(FPS));
                 cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                 if (me != nullptr)
                     cout << " | Trot = " << me->trot << " | Tctr = " << me->tctr

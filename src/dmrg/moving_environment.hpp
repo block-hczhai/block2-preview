@@ -170,7 +170,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     bool cached_contraction = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
            tinfo = 0;
-    Timer _t, _t2;
+    Timer _t, _t2, _t3;
     bool iprint = false;
     bool save_partition_info = false;
     OpNamesSet delayed_contraction = OpNamesSet();
@@ -205,7 +205,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     virtual ~MovingEnvironment() = default;
     // Contract and renormalize left block by one site
     // new site = i - 1
-    void left_contract_rotate(int i, bool preserve_data = false) {
+    // return <intmed memory, rotated renormalized op memory>
+    pair<size_t, size_t> left_contract_rotate(int i,
+                                              bool preserve_data = false) {
         mpo->load_left_operators(i - 1);
         mpo->load_tensor(i - 1);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
@@ -280,6 +282,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
         mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
+        size_t blocking_mem = new_left->get_total_memory();
+        size_t renormal_mem = envs[i]->left->get_total_memory();
         if (!frame_<FP>()->use_main_stack)
             new_left->deallocate();
         trot += _t.get_time();
@@ -317,10 +321,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             envs[i]->save_data(true, get_left_partition_filename(i, true));
             frame_<FP>()->activate(0);
         }
+        return make_pair(blocking_mem, renormal_mem);
     }
     // Contract and renormalize right block by one site
     // new site = i + dot
-    void right_contract_rotate(int i, bool preserve_data = false) {
+    // return <intmed memory, rotated renormalized op memory>
+    pair<size_t, size_t> right_contract_rotate(int i,
+                                               bool preserve_data = false) {
         mpo->load_right_operators(i + dot);
         mpo->load_tensor(i + dot);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
@@ -400,6 +407,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
         mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
+        size_t blocking_mem = new_right->get_total_memory();
+        size_t renormal_mem = envs[i]->right->get_total_memory();
         if (!frame_<FP>()->use_main_stack)
             new_right->deallocate();
         trot += _t.get_time();
@@ -440,6 +449,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             envs[i]->save_data(false, get_right_partition_filename(i, true));
             frame_<FP>()->activate(0);
         }
+        return make_pair(blocking_mem, renormal_mem);
     }
     void left_contract_rotate_unordered(
         int i, const shared_ptr<ParallelRule<S>> &rule = nullptr) {
@@ -978,6 +988,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         this->iprint = iprint;
         envs.clear();
         envs.resize(n_sites);
+        frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
+            0;
+        frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
+        if (frame_<FPS>()->fp_codec != nullptr)
+            frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
+        if (iprint)
+            cout << "Environment initialization | Nsites = " << setw(5)
+                 << n_sites << " | Center = " << setw(5) << center << endl;
         for (int i = 0; i < n_sites; i++) {
             envs[i] = make_shared<Partition<S, FL>>(nullptr, nullptr,
                                                     mpo->tensors[i]);
@@ -1067,17 +1085,66 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             para_mps->disable_parallel_writing();
         } else if (bra->info->get_warm_up_type() == WarmUpTypes::None &&
                    ket->info->get_warm_up_type() == WarmUpTypes::None) {
+            _t3.get_time();
+            pair<size_t, size_t> max_pbr = make_pair(0, 0);
             for (int i = 1; i <= center; i++) {
                 check_signal_()();
-                if (iprint)
-                    cout << "init .. L = " << i << endl;
-                left_contract_rotate(i);
+                if (iprint) {
+                    cout << " INIT-L --> Site = " << setw(4) << i << " .. ";
+                    cout.flush();
+                }
+                _t2.get_time();
+                pair<size_t, size_t> pbr = left_contract_rotate(i);
+                if (max_pbr.first + max_pbr.second <= pbr.first + pbr.second)
+                    max_pbr.first = pbr.first, max_pbr.second = pbr.second;
+                if (iprint) {
+                    cout << " Bmem = " << setw(7)
+                         << Parsing::to_size_string(pbr.first * sizeof(FL));
+                    cout << " Rmem = " << setw(7)
+                         << Parsing::to_size_string(pbr.second * sizeof(FL));
+                    cout << " T = " << setw(4) << fixed << setprecision(2)
+                         << _t2.get_time() << endl;
+                }
             }
             for (int i = n_sites - dot - 1; i >= center; i--) {
                 check_signal_()();
-                if (iprint)
-                    cout << "init .. R = " << i << endl;
-                right_contract_rotate(i);
+                if (iprint) {
+                    cout << " INIT-R <-- Site = " << setw(4) << i << " .. ";
+                    cout.flush();
+                }
+                _t2.get_time();
+                pair<size_t, size_t> pbr = right_contract_rotate(i);
+                if (max_pbr.first + max_pbr.second <= pbr.first + pbr.second)
+                    max_pbr.first = pbr.first, max_pbr.second = pbr.second;
+                if (iprint) {
+                    cout << " Bmem = " << setw(7)
+                         << Parsing::to_size_string(pbr.first * sizeof(FL));
+                    cout << " Rmem = " << setw(7)
+                         << Parsing::to_size_string(pbr.second * sizeof(FL));
+                    cout << " T = " << setw(4) << fixed << setprecision(2)
+                         << _t2.get_time() << endl;
+                }
+            }
+            if (iprint) {
+                cout << fixed << setprecision(3);
+                cout << "Time init sweep = " << setw(12) << _t3.get_time();
+                cout << " | MaxBmem = " << setw(7)
+                     << Parsing::to_size_string(max_pbr.first * sizeof(FL));
+                cout << " | MaxRmem = " << setw(7)
+                     << Parsing::to_size_string(max_pbr.second * sizeof(FL))
+                     << endl;
+                cout << " | Tread = " << frame_<FPS>()->tread
+                     << " | Twrite = " << frame_<FPS>()->twrite
+                     << " | Tfpread = " << frame_<FPS>()->fpread
+                     << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
+                if (frame_<FPS>()->fp_codec != nullptr)
+                    cout << " | data = "
+                         << Parsing::to_size_string(
+                                frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
+                         << " | cpsd = "
+                         << Parsing::to_size_string(
+                                frame_<FPS>()->fp_codec->ncpsd * sizeof(FPS));
+                cout << " | Tasync = " << frame_<FPS>()->tasync << endl << endl;
             }
         }
         frame_<FP>()->reset(1);

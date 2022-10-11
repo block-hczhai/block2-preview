@@ -1019,6 +1019,7 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
         .def_readwrite("rmat", &OperatorTensor<S, FL>::rmat)
         .def_readwrite("ops", &OperatorTensor<S, FL>::ops)
         .def("get_type", &OperatorTensor<S, FL>::get_type)
+        .def("get_total_memory", &OperatorTensor<S, FL>::get_total_memory)
         .def("reallocate", &OperatorTensor<S, FL>::reallocate, py::arg("clean"))
         .def("deallocate", &OperatorTensor<S, FL>::deallocate)
         .def("copy", &OperatorTensor<S, FL>::copy)

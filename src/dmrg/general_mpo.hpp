@@ -1525,6 +1525,20 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             if (algo_type & MPOAlgorithmTypes::SVD)
                 cout << " | Max bond dimension = " << setw(5) << max_bond_dim;
             cout << endl;
+            if (sum_mpo != -1)
+                cout << " | SumMPO : Mod = " << setw(5) << sum_mpo_mod;
+            if (disjoint) {
+                cout << " | Disjoint : All blocks = "
+                     << (disjoint_all_blocks ? "T" : "F");
+                cout << " Multiplier = " << setw(5) << fixed << setprecision(2)
+                     << disjoint_multiplier;
+                cout << " Levels =";
+                for (auto &dl : disjoint_levels)
+                    cout << " " << scientific << setw(8) << setprecision(2)
+                         << dl;
+            }
+            if (sum_mpo != -1 || disjoint)
+                cout << endl;
         }
         // index of current terms
         // in future, cur_terms should have an extra level
@@ -2186,8 +2200,6 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     (algo_type & MPOAlgorithmTypes::SVD))
                     cout << " Error = " << scientific << setw(8)
                          << setprecision(2) << sqrt(accurate_svd_error);
-                if (sum_mpo)
-                    cout << " IS = " << setw(4) << sparse_ranges.size();
                 cout.flush();
                 bond_max = max(bond_max, s_kept_total);
                 dw_max = max(dw_max, discarded_weights[ii]);
@@ -2741,7 +2753,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             cout << "NNZ = " << setw(12) << nnz_total;
             cout << " SIZE = " << setw(12) << size_total;
             cout << " SPT = " << fixed << setprecision(4) << setw(6)
-                 << (double)(size_total - nnz_total) / size_total << endl;
+                 << (double)(size_total - nnz_total) / size_total << endl
+                 << endl;
         }
     }
     virtual ~GeneralMPO() = default;

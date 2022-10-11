@@ -49,6 +49,13 @@ template <typename S, typename FL> struct OperatorTensor {
     virtual OperatorTensorTypes get_type() const {
         return OperatorTensorTypes::Normal;
     }
+    virtual size_t get_total_memory() const {
+        size_t r = 0;
+        for (auto it = ops.cbegin(); it != ops.cend(); it++)
+            if (it->second != nullptr && it->second->data != nullptr)
+                r += it->second->total_memory;
+        return r;
+    }
     virtual void reallocate(bool clean) {
         for (auto &p : ops)
             p.second->reallocate(clean ? 0 : p.second->total_memory);
@@ -197,13 +204,7 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
     OperatorTensorTypes get_type() const override {
         return OperatorTensorTypes::Delayed;
     }
-    void reallocate(bool clean) override {
-        for (auto &p : lopt->ops)
-            p.second->reallocate(clean ? 0 : p.second->total_memory);
-        for (auto &p : ropt->ops)
-            p.second->reallocate(clean ? 0 : p.second->total_memory);
-    }
-    size_t get_total_memory() const {
+    size_t get_total_memory() const override {
         size_t r = 0;
         for (auto it = ropt->ops.cbegin(); it != ropt->ops.cend(); it++)
             if (it->second->data != nullptr)
@@ -212,6 +213,12 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
             if (it->second->data != nullptr)
                 r += it->second->total_memory;
         return r;
+    }
+    void reallocate(bool clean) override {
+        for (auto &p : lopt->ops)
+            p.second->reallocate(clean ? 0 : p.second->total_memory);
+        for (auto &p : ropt->ops)
+            p.second->reallocate(clean ? 0 : p.second->total_memory);
     }
     void deallocate() override {
         // do not free contracted operators for future reuse in rotation

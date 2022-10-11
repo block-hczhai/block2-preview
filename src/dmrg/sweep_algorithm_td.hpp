@@ -2087,12 +2087,14 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                          << " | Tfpread = " << frame_<FPS>()->fpread
                          << " | Tfpwrite = " << frame_<FPS>()->fpwrite;
                     if (frame_<FPS>()->fp_codec != nullptr)
-                        cout << " | data = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ndata * 8)
-                             << " | cpsd = "
-                             << Parsing::to_size_string(
-                                    frame_<FPS>()->fp_codec->ncpsd * 8);
+                        cout
+                            << " | data = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
+                            << " | cpsd = "
+                            << Parsing::to_size_string(
+                                   frame_<FPS>()->fp_codec->ncpsd *
+                                   sizeof(FPS));
                     cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                 }
                 if (isw == n_sub_sweeps - 1) {
