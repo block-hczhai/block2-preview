@@ -967,6 +967,7 @@ class DMRGDriver:
         dav_max_iter=4000,
         proj_mpss=None,
         proj_weights=None,
+        store_wfn_spectra=True,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -1008,6 +1009,7 @@ class DMRGDriver:
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
         dmrg.davidson_max_iter = dav_max_iter + 100
         dmrg.davidson_soft_max_iter = dav_max_iter
+        dmrg.store_wfn_spectra = store_wfn_spectra
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
@@ -1030,6 +1032,16 @@ class DMRGDriver:
         dws = np.array(self._dmrg.discarded_weights)
         bond_dims = np.array(self._dmrg.bond_dims)[: len(energies)]
         return bond_dims, dws, energies
+
+    def get_bipartite_entanglement(self):
+        import numpy as np
+
+        bip_ent = np.zeros(len(self._dmrg.sweep_wfn_spectra), dtype=np.float64)
+        for ix, x in enumerate(self._dmrg.sweep_wfn_spectra):
+            ldsq = np.array(x, dtype=np.float128) ** 2
+            ldsq = ldsq[ldsq != 0]
+            bip_ent[ix] = float(np.sum(-ldsq * np.log(ldsq)))
+        return bip_ent
 
     def get_npdm(self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0):
         bw = self.bw

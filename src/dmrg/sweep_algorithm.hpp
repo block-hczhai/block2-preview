@@ -1742,11 +1742,12 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                                     davidson_conv_thrd);
         }
         if (store_wfn_spectra) {
-            const int bond_update_idx =
-                me->dot == 1 && !forward && i > 0 ? i - 1 : i;
-            if (sweep_wfn_spectra.size() <= bond_update_idx)
-                sweep_wfn_spectra.resize(bond_update_idx + 1);
-            sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+            const int bond_update_idx = me->dot == 1 && !forward ? i - 1 : i;
+            if (bond_update_idx >= 0) {
+                if (sweep_wfn_spectra.size() <= bond_update_idx)
+                    sweep_wfn_spectra.resize(bond_update_idx + 1);
+                sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+            }
         }
         tblk += _t2.get_time();
         return it;
@@ -3896,11 +3897,12 @@ template <typename S, typename FL, typename FLS> struct Linear {
             it = update_one_dot(i, forward, bra_bond_dim, ket_bond_dim, noise,
                                 linear_conv_thrd);
         if (store_bra_spectra || store_ket_spectra) {
-            const int bond_update_idx =
-                rme->dot == 1 && !forward && i > 0 ? i - 1 : i;
-            if (sweep_wfn_spectra.size() <= bond_update_idx)
-                sweep_wfn_spectra.resize(bond_update_idx + 1);
-            sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+            const int bond_update_idx = rme->dot == 1 && !forward ? i - 1 : i;
+            if (bond_update_idx >= 0) {
+                if (sweep_wfn_spectra.size() <= bond_update_idx)
+                    sweep_wfn_spectra.resize(bond_update_idx + 1);
+                sweep_wfn_spectra[bond_update_idx] = wfn_spectra;
+            }
         }
         tblk += _t2.get_time();
         return it;

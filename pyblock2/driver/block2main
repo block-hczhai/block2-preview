@@ -2274,6 +2274,13 @@ if not pre_run:
             if store_wfn_spectra:
                 np.save(scratch + "/sweep_wfn_spectra.npy",
                         np.array([np.array(x) for x in dmrg.sweep_wfn_spectra], dtype=object))
+                bip_ent = np.zeros(len(dmrg.sweep_wfn_spectra), dtype=np.float64)
+                for ix, x in enumerate(dmrg.sweep_wfn_spectra):
+                    ldsq = np.array(x, dtype=np.float128) ** 2
+                    ldsq = ldsq[ldsq != 0]
+                    bip_ent[ix] = float(np.sum(-ldsq * np.log(ldsq)))
+                np.save(scratch + "/sweep_wfn_entropy.npy", bip_ent)
+                _print('WFN BIP Entanglement = ', ''.join(["%10.5f" % x for x in bip_ent]))
             if "extrapolation" in dic:
                 ext_eners = []
                 ext_dws = []
