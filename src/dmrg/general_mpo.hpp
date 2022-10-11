@@ -1532,10 +1532,12 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                      << (disjoint_all_blocks ? "T" : "F");
                 cout << " Multiplier = " << setw(5) << fixed << setprecision(2)
                      << disjoint_multiplier;
-                cout << " Levels =";
-                for (auto &dl : disjoint_levels)
-                    cout << " " << scientific << setw(8) << setprecision(2)
-                         << dl;
+                if (disjoint_levels.size() > 0) {
+                    cout << " Levels =";
+                    for (auto &dl : disjoint_levels)
+                        cout << " " << scientific << setw(8) << setprecision(2)
+                             << dl;
+                }
             }
             if (sum_mpo != -1 || disjoint)
                 cout << endl;
@@ -2174,15 +2176,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         smat[(size_t)i * s_kept + i] =
                             svds[iq].second[i] * res_factor;
                     threading->activate_global_mkl();
-                    GMatrixFunctions<FL>::multiply(
-                        GMatrix<FL>(smat.data(), s_kept, s_kept), false,
-                        GMatrix<FL>(svds[iq].first[1].data(), s_kept, szr),
-                        false, GMatrix<FL>(stmp.data(), s_kept, szr), (FL)1.0,
-                        (FL)0.0);
-                    GMatrixFunctions<FL>::multiply(
-                        GMatrix<FL>(svds[iq].first[0].data(), szl, szm), false,
-                        GMatrix<FL>(stmp.data(), s_kept, szr), false,
-                        GMatrix<FL>(smat.data(), szl, szr), (FL)1.0, (FL)0.0);
+                    if (s_kept > 0) {
+                        GMatrixFunctions<FL>::multiply(
+                            GMatrix<FL>(smat.data(), s_kept, s_kept), false,
+                            GMatrix<FL>(svds[iq].first[1].data(), s_kept, szr),
+                            false, GMatrix<FL>(stmp.data(), s_kept, szr),
+                            (FL)1.0, (FL)0.0);
+                        GMatrixFunctions<FL>::multiply(
+                            GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
+                            false, GMatrix<FL>(stmp.data(), s_kept, szr), false,
+                            GMatrix<FL>(smat.data(), szl, szr), (FL)1.0,
+                            (FL)0.0);
+                    }
                     for (auto &lrv : matvs)
                         smat[lrv.first.first * szr + lrv.first.second] -=
                             lrv.second;

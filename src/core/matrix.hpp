@@ -54,6 +54,9 @@ template <> struct GMatrix<float> {
     float *data;
     GMatrix(float *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
     float &operator()(MKL_INT i, MKL_INT j) const {
+#ifdef _AGGRESSIVE_DEBUG
+        assert((size_t)i * n + j < (size_t)m * n);
+#endif
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
@@ -95,6 +98,9 @@ template <> struct GMatrix<double> {
     double *data;
     GMatrix(double *data, MKL_INT m, MKL_INT n) : data(data), m(m), n(n) {}
     double &operator()(MKL_INT i, MKL_INT j) const {
+#ifdef _AGGRESSIVE_DEBUG
+        assert((size_t)i * n + j < (size_t)m * n);
+#endif
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
@@ -202,6 +208,9 @@ template <> struct GMatrix<complex<float>> {
     GMatrix(complex<float> *data, MKL_INT m, MKL_INT n)
         : data(data), m(m), n(n) {}
     complex<float> &operator()(MKL_INT i, MKL_INT j) const {
+#ifdef _AGGRESSIVE_DEBUG
+        assert((size_t)i * n + j < (size_t)m * n);
+#endif
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }
@@ -246,6 +255,9 @@ template <> struct GMatrix<complex<double>> {
     GMatrix(complex<double> *data, MKL_INT m, MKL_INT n)
         : data(data), m(m), n(n) {}
     complex<double> &operator()(MKL_INT i, MKL_INT j) const {
+#ifdef _AGGRESSIVE_DEBUG
+        assert((size_t)i * n + j < (size_t)m * n);
+#endif
         return *(data + (size_t)i * n + j);
     }
     size_t size() const { return (size_t)m * n; }

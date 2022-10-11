@@ -3397,7 +3397,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         // cout << "gr = " << grmat << endl;
         assert(gxk <= ssk);
         l.clear(), r.clear(), s.clear();
-        vector<MKL_INT> iwork(max(x.m, x.n));
+        vector<MKL_INT> iwork(max(max(x.m, x.n), gxk));
         if (ensure_ortho) {
             // for rows and columns with all zeros
             const FL zx = (FL)-1.0, zz = (FL)0.0;
