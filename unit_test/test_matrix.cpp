@@ -1327,8 +1327,8 @@ TYPED_TEST(TestMatrix, TestSVD) {
 TYPED_TEST(TestMatrix, TestDisjointSVD) {
     using FL = TypeParam;
     const int sz = is_same<FL, double>::value ? 200 : 75;
-    const FL thrd = is_same<FL, double>::value ? 1E-12 : 1E-3;
-    const FL thrd2 = is_same<FL, double>::value ? 0 : 1E-3;
+    const FL thrd = is_same<FL, double>::value ? 1E-11 : 1E-3;
+    const FL thrd2 = is_same<FL, double>::value ? 1E-11 : 1E-3;
     for (int i = 0; i < this->n_tests; i++) {
         MKL_INT m = Random::rand_int(1, sz);
         MKL_INT n = Random::rand_int(1, sz);
@@ -1358,7 +1358,7 @@ TYPED_TEST(TestMatrix, TestDisjointSVD) {
         levels.resize(Random::rand_int(0, (int)levels.size() + 1));
         IterativeMatrixFunctions<FL>::disjoint_svd(
             a->ref(), l->ref(), s->ref().flip_dims(), r->ref(), levels);
-        if (levels.size() == 0) {
+        if (levels.size() == 0 && is_same<FP, double>::value) {
             GMatrixFunctions<FL>::multiply(l->ref(), true, l->ref(), false,
                                            kk->ref(), 1.0, 0.0);
             ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
