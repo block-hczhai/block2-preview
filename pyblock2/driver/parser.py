@@ -471,8 +471,8 @@ def get_schedule(dic):
         raise ValueError(
             "maxM %d cannot be smaller than startM %d" % (max_m, start_m))
     sch_type = dic.get("schedule", "")
-    sweep_tol = float(dic.get("sweep_tol", 0))
-    if sweep_tol == 0:
+    sweep_tol = float(dic.get("sweep_tol", -1))
+    if sweep_tol == -1:
         dic["sweep_tol"] = "1E-5"
         sweep_tol = 1E-5
     schedule = []
@@ -508,9 +508,9 @@ def get_schedule(dic):
                 schedule.append([isweep, def_m[i], def_tol[i], def_noise[i]])
                 isweep += def_iter[i]
         if "single_prec" in dic:
-            schedule.append([schedule[-1][0] + 8, max_m, sweep_tol / 2.0, 0.0])
+            schedule.append([schedule[-1][0] + 8, max_m, 5E-6 if sweep_tol == 0 else sweep_tol / 2.0, 0.0])
         else:
-            schedule.append([schedule[-1][0] + 8, max_m, sweep_tol / 10, 0.0])
+            schedule.append([schedule[-1][0] + 8, max_m, 1E-9 if sweep_tol == 0 else sweep_tol / 10, 0.0])
         last_iter = schedule[-1][0]
         if "twodot" not in dic and "onedot" not in dic and "twodot_to_onedot" not in dic:
             dic["twodot_to_onedot"] = str(last_iter + 2)
