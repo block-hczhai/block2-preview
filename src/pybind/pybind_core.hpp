@@ -766,13 +766,13 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
              [](SparseMatrix<S, FL> *self, ubond_t bond_dim) {
                  shared_ptr<SparseMatrix<S, FL>> left, right;
                  self->left_split(left, right, bond_dim);
-                 return make_tuple(left, right);
+                 return std::make_tuple(left, right);
              })
         .def("right_split",
              [](SparseMatrix<S, FL> *self, ubond_t bond_dim) {
                  shared_ptr<SparseMatrix<S, FL>> left, right;
                  self->right_split(left, right, bond_dim);
-                 return make_tuple(left, right);
+                 return std::make_tuple(left, right);
              })
         .def("pseudo_inverse", &SparseMatrix<S, FL>::pseudo_inverse,
              py::arg("bond_dim"), py::arg("svd_eps") = 1E-4,
@@ -784,7 +784,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
                 vector<shared_ptr<GTensor<FL>>> l, r;
                 vector<shared_ptr<GTensor<typename SparseMatrix<S, FL>::FP>>> s;
                 self->left_svd(qs, l, s, r);
-                return make_tuple(qs, l, s, r);
+                return std::make_tuple(qs, l, s, r);
             })
         .def(
             "right_svd",
@@ -793,7 +793,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
                 vector<shared_ptr<GTensor<FL>>> l, r;
                 vector<shared_ptr<GTensor<typename SparseMatrix<S, FL>::FP>>> s;
                 self->right_svd(qs, l, s, r);
-                return make_tuple(qs, l, s, r);
+                return std::make_tuple(qs, l, s, r);
             })
         .def("left_canonicalize", &SparseMatrix<S, FL>::left_canonicalize,
              py::arg("rmat"))
@@ -952,7 +952,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
                  vector<shared_ptr<GTensor<typename GMatrix<FL>::FP>>> s;
                  vector<vector<shared_ptr<GTensor<FL>>>> l;
                  self->left_svd(qs, l, s, r);
-                 return make_tuple(qs, l, s, r);
+                 return std::make_tuple(qs, l, s, r);
              })
         .def("right_svd",
              [](SparseMatrixGroup<S, FL> *self) {
@@ -961,7 +961,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
                  vector<shared_ptr<GTensor<typename GMatrix<FL>::FP>>> s;
                  vector<vector<shared_ptr<GTensor<FL>>>> r;
                  self->right_svd(qs, l, s, r);
-                 return make_tuple(qs, l, s, r);
+                 return std::make_tuple(qs, l, s, r);
              })
         .def("__getitem__", [](SparseMatrixGroup<S, FL> *self, int idx) {
             return (*self)[idx];
@@ -2284,7 +2284,7 @@ template <typename FL> void bind_matrix(py::module &m) {
                 IterativeMatrixFunctions<FL>::constrained_svd(
                     xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
                     eps_pi, eps_pocs, iprint);
-                return make_tuple(l, s, r);
+                return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("rank"), py::arg("au") = (FL)0.0,
             py::arg("av") = (FL)0.0, py::arg("max_iter_pi") = 1000,
@@ -2306,7 +2306,7 @@ template <typename FL> void bind_matrix(py::module &m) {
                                    levels.data() + levels.size());
                 IterativeMatrixFunctions<FL>::disjoint_svd(xx, xl, xs, xr,
                                                            xlevels);
-                return make_tuple(l, s, r);
+                return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("levels") = py::array_t<FL>(0));
 
@@ -2333,7 +2333,7 @@ template <typename FL> void bind_matrix(py::module &m) {
                 IterativeMatrixFunctions<complex<FL>>::constrained_svd(
                     xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
                     eps_pi, eps_pocs, iprint);
-                return make_tuple(l, s, r);
+                return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("rank"), py::arg("au") = (FL)0.0,
             py::arg("av") = (FL)0.0, py::arg("max_iter_pi") = 1000,
@@ -2359,7 +2359,7 @@ template <typename FL> void bind_matrix(py::module &m) {
                                    levels.data() + levels.size());
                 IterativeMatrixFunctions<complex<FL>>::disjoint_svd(
                     xx, xl, xs, xr, xlevels);
-                return make_tuple(l, s, r);
+                return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("levels") = py::array_t<FL>(0));
 }
