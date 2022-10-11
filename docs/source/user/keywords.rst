@@ -423,12 +423,15 @@ schedule
     If this is the case, the site-dependent MPS bond dimension truncation will be used.
 
 store_wfn_spectra
-    Optional with no associated value. If given, the singular values at each left-right partition during the last sweep
+    Optional with no associated value. If given, the singular values at each left-right partition during the last DMRG sweep
     will be stored as ``sweep_wfn_spectra.npy`` after convergence. Only works with DMRG type calculation.
     The stored array is a numpy array of 1 dimensional numpy array.
     The inner arrays normally do not have all the same length.
     For spin-adapted, each singular values correspond to a multiplet.
     So for non-singlet, the wavefunction spectra have different interpretation between SU2 and SZ.
+    Additionally, when this keyword is given, the bipartite entanglement of the MPS will be computed, as
+    :math:`S_k = - \sum_i \Lambda_i^2 \log \Lambda_i^2` where :math:`\Lambda_i` are all singular values found at site k.
+    The bipartite entanglement will be printed and stored as ``sweep_wfn_entropy.npy`` as a 1 dimensional numpy array.
 
 extrapolation
     Optional. Should only be used for standard DMRG calculation with the reverse schedule.
