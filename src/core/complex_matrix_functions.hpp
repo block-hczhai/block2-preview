@@ -768,12 +768,12 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         assert(a.m == a.n && w.n == a.n);
         MKL_INT lwork = -1, info;
         FL twork;
+        FP *rwork = d_alloc->allocate(a.m * 2);
         xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, w.data,
-                  nullptr, &a.n, lv.data, &a.n, &twork, &lwork, nullptr, &info);
+                  nullptr, &a.n, lv.data, &a.n, &twork, &lwork, rwork, &info);
         assert(info == 0);
         lwork = (MKL_INT)xreal<FL>(twork);
         FL *work = d_alloc->complex_allocate(lwork);
-        FP *rwork = d_alloc->allocate(a.m * 2);
         FL *vr = d_alloc->complex_allocate(a.m * a.n);
         xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, w.data, vr,
                   &a.n, lv.data, &a.n, work, &lwork, rwork, &info);
@@ -783,8 +783,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         if (lv.data != 0)
             conjugate(lv);
         d_alloc->complex_deallocate(vr, a.m * a.n);
-        d_alloc->deallocate(rwork, a.m * 2);
         d_alloc->complex_deallocate(work, lwork);
+        d_alloc->deallocate(rwork, a.m * 2);
     }
     static void eig(const GMatrix<FL> &a, const GDiagonalMatrix<FP> &wr,
                     const GDiagonalMatrix<FP> &wi, const GMatrix<FL> &lv) {
@@ -1477,19 +1477,19 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         const FP scale = -1.0;
         MKL_INT lwork = -1, n = a.m * a.n, incx = 2, info;
         FL twork;
-        xheev<FL>("V", "U", &a.n, a.data, &a.n, w.data, &twork, &lwork, nullptr,
+        FP *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
+        xheev<FL>("V", "U", &a.n, a.data, &a.n, w.data, &twork, &lwork, rwork,
                   &info);
         assert(info == 0);
         lwork = (MKL_INT)xreal<FL>(twork);
         FL *work = d_alloc->complex_allocate(lwork);
-        FP *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
         xheev<FL>("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, rwork,
                   &info);
         assert((size_t)a.m * a.n == n);
         xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
         assert(info == 0);
-        d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
         d_alloc->complex_deallocate(work, lwork);
+        d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
     }
     // z = r / aa
     static void cg_precondition(const GMatrix<FL> &z, const GMatrix<FL> &r,
