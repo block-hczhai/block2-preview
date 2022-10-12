@@ -478,10 +478,12 @@ class DMRGDriver:
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
-    def get_conventional_qc_mpo(self, fcidump, algo_type=None):
+    def get_conventional_qc_mpo(self, fcidump, algo_type=None, iprint=1):
         """This method cannot take care of parallelization!"""
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
+        import time
+        tt = time.perf_counter()
         if algo_type is not None and MPOAlgorithmTypes.NC in algo_type:
             mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.NC, "HQC")
         elif algo_type is not None and MPOAlgorithmTypes.CN in algo_type:
@@ -497,6 +499,12 @@ class DMRGDriver:
         use_r_intermediates = (
             algo_type is None or MPOAlgorithmTypes.NoRIntermed not in algo_type
         )
+
+        if iprint:
+            nnz, sz, bdim = mpo.get_summary()
+            print('Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f'
+                % (time.perf_counter() - tt, algo_type.name, bdim, nnz, sz, (1.0 * sz - nnz) / sz))
+
         mpo = bw.bs.SimplifiedMPO(
             mpo,
             rule,
@@ -694,7 +702,7 @@ class DMRGDriver:
 
         if algo_type is not None and MPOAlgorithmTypes.Conventional in algo_type:
             fd = self.write_fcidump(h1e, g2e, ecore=ecore)
-            return self.get_conventional_qc_mpo(fd, algo_type=algo_type)
+            return self.get_conventional_qc_mpo(fd, algo_type=algo_type, iprint=iprint)
 
         # build Hamiltonian expression
         b = self.expr_builder()

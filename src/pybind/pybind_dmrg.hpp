@@ -1576,6 +1576,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("tag", &MPO<S, FL>::tag)
         .def_readwrite("tread", &MPO<S, FL>::tread)
         .def_readwrite("twrite", &MPO<S, FL>::twrite)
+        .def("get_summary", &MPO<S, FL>::get_summary)
         .def("get_filename", &MPO<S, FL>::get_filename)
         .def("load_left_operators", &MPO<S, FL>::load_left_operators)
         .def("save_left_operators", &MPO<S, FL>::save_left_operators)

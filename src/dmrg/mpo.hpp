@@ -282,6 +282,18 @@ template <typename S, typename FL> struct MPO {
             if (tensors[m] != nullptr)
                 tensors[m]->deallocate();
     }
+    // nnz, size, bond dimension
+    tuple<size_t, size_t, int> get_summary() const {
+        size_t lnnz = 0, lsz = 0, rnnz = 0, rsz = 0;
+        int bdim = 0;
+        for (int ii = 0; ii < n_sites; ii++) {
+            shared_ptr<OperatorTensor<S, FL>> opt = tensors[ii];
+            lnnz += opt->lmat->nnz(), rnnz += opt->rmat->nnz();
+            lsz += opt->lmat->size(), rsz += opt->rmat->size();
+            bdim = max(max(bdim, (int)opt->lmat->n), (int)opt->lmat->m);
+        }
+        return make_tuple(max(lnnz, rnnz), max(lsz, rsz), bdim);
+    }
     string get_filename(int i, int ixtag, const string &dir = "") const {
         const static string xtag[] = {"TENSOR", "LEFT.OP", "RIGHT.OP",
                                       "MIDDLE.OP"};
