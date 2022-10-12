@@ -23,7 +23,7 @@ PY_EXE=/opt/python/"${PY_VER}"/bin/python3
 sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}'," setup.py
 
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip
-/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2019 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11
+/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11
 
 if [ "${PARALLEL}" = "mpi" ]; then
     yum install -y wget openssh-clients openssh-server

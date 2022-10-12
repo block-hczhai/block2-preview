@@ -336,3 +336,11 @@ Note that flags ``-Wl,-rpath -Wl,/../lib -L/.../lib`` should not be used.
 
 A special case is when both the "so.1" (2021 MKL) and "so" (2019 ML) are used. We need to make sure the ``block2.so``
 library is linked to only pure "so.1" or only pure "so".
+
+[2022-10-11]
+
+**Error:** ::
+
+    svd dead loop, with full CPU usage. CPU has avx512.
+
+**Solution:** Update MKL from 2019 to 2021.4 or 2022.1.
