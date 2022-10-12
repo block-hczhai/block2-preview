@@ -733,6 +733,14 @@ class DMRGDriver:
                     h1e, g2e, ecore, normal_order_ref
                 )
 
+            if self.mpi is not None:
+                ec_arr = np.array([ecore], dtype=float)
+                self.mpi.reduce_sum(ec_arr, self.mpi.root)
+                if self.mpi.rank == self.mpi.root:
+                    ecore = ec_arr[0]
+                else:
+                    ecore = 0.0
+
             if post_integral_cutoff != 0:
                 error = 0
                 for k, v in h1es.items():

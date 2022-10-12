@@ -1142,6 +1142,26 @@ template <typename S> void bind_parallel(py::module &m) {
         .def("get_parallel_type", &ParallelCommunicator<S>::get_parallel_type)
         .def("barrier", &ParallelCommunicator<S>::barrier)
         .def("split", &ParallelCommunicator<S>::split)
+        .def("reduce_sum",
+             [](ParallelCommunicator<S> *self, py::array_t<double> arr,
+                int owner) {
+                 self->reduce_sum(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("reduce_sum",
+             [](ParallelCommunicator<S> *self, py::array_t<float> arr,
+                int owner) {
+                 self->reduce_sum(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("reduce_sum",
+             [](ParallelCommunicator<S> *self, py::array_t<complex<double>> arr,
+                int owner) {
+                 self->reduce_sum(arr.mutable_data(), arr.size(), owner);
+             })
+        .def("reduce_sum",
+             [](ParallelCommunicator<S> *self, py::array_t<complex<float>> arr,
+                int owner) {
+                 self->reduce_sum(arr.mutable_data(), arr.size(), owner);
+             })
         .def("broadcast",
              [](ParallelCommunicator<S> *self, py::array_t<double> arr,
                 int owner) {
