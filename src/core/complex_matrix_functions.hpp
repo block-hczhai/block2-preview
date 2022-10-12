@@ -766,7 +766,12 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         assert(a.m == a.n && w.n == a.n);
-        MKL_INT lwork = 34 * a.n, info;
+        MKL_INT lwork = -1, info;
+        FL twork;
+        xgeev<FL>("V", lv.data == 0 ? "N" : "V", &a.n, a.data, &a.n, w.data,
+                  nullptr, &a.n, lv.data, &a.n, &twork, &lwork, nullptr, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)xreal<FL>(twork);
         FL *work = d_alloc->complex_allocate(lwork);
         FP *rwork = d_alloc->allocate(a.m * 2);
         FL *vr = d_alloc->complex_allocate(a.m * a.n);
@@ -1316,9 +1321,14 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                     const GMatrix<FP> &s, const GMatrix<FL> &r) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
-        FL *work = d_alloc->complex_allocate(lwork);
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = -1;
+        FL twork;
         assert(a.m == l.m && a.n <= r.n && l.n >= k && r.m == k && s.n == k);
+        xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &r.n,
+                   l.data, &l.n, &twork, &lwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)xreal<FL>(twork);
+        FL *work = d_alloc->complex_allocate(lwork);
         xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &r.n,
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
@@ -1465,7 +1475,12 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             make_shared<VectorAllocator<FP>>();
         assert(a.m == a.n && w.n == a.n);
         const FP scale = -1.0;
-        MKL_INT lwork = 34 * a.n, n = a.m * a.n, incx = 2, info;
+        MKL_INT lwork = -1, n = a.m * a.n, incx = 2, info;
+        FL twork;
+        xheev<FL>("V", "U", &a.n, a.data, &a.n, w.data, &twork, &lwork, nullptr,
+                  &info);
+        assert(info == 0);
+        lwork = (MKL_INT)xreal<FL>(twork);
         FL *work = d_alloc->complex_allocate(lwork);
         FP *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
         xheev<FL>("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, rwork,

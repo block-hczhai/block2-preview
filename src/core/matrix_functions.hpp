@@ -1203,10 +1203,15 @@ struct GMatrixFunctions<
                     const GMatrix<FL> &s, const GMatrix<FL> &r) {
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
-        MKL_INT k = min(a.m, a.n), info = 0, lwork = 34 * max(a.m, a.n);
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = -1;
+        FL twork;
+        assert(a.m == l.m && a.n == r.n && l.n >= k && r.m == k && s.n == k);
+        xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n,
+                   l.data, &l.n, &twork, &lwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)twork;
         // FL work[lwork];
         FL *work = d_alloc->allocate(lwork);
-        assert(a.m == l.m && a.n == r.n && l.n >= k && r.m == k && s.n == k);
         xgesvd<FL>("S", "S", &a.n, &a.m, a.data, &a.n, s.data, r.data, &a.n,
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
@@ -1348,7 +1353,11 @@ struct GMatrixFunctions<
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         assert(a.m == a.n && w.n == a.n);
-        MKL_INT lwork = 97 * a.n, info;
+        MKL_INT lwork = -1, info;
+        FL twork;
+        xsyev<FL>("V", "U", &a.n, a.data, &a.n, w.data, &twork, &lwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)twork;
         // FL work[lwork];
         FL *work = d_alloc->allocate(lwork);
         xsyev<FL>("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
@@ -1365,7 +1374,13 @@ struct GMatrixFunctions<
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         assert(a.m == a.n && wr.n == a.n && wi.n == a.n);
-        MKL_INT lwork = 34 * a.n, info;
+        MKL_INT lwork = -1, info;
+        FL twork;
+        xgeev<FL>("V", lv.data == nullptr ? "N" : "V", &a.n, a.data, &a.n,
+                  wr.data, nullptr, &a.n, lv.data, &a.n, &twork, &lwork,
+                  wi.data, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)twork;
         FL *work = d_alloc->allocate(lwork);
         FL *vr = d_alloc->allocate(a.m * a.n);
         xgeev<FL>("V", lv.data == nullptr ? "N" : "V", &a.n, a.data, &a.n,
