@@ -39,9 +39,11 @@ template <typename FL> class TestDMRG : public ::testing::Test {
 };
 
 #ifdef _USE_SINGLE_PREC
-typedef ::testing::Types<float> TestFL;
+// typedef ::testing::Types<float> TestFL;
+typedef ::testing::Types<double> TestFL;
 #elif _USE_COMPLEX
-typedef ::testing::Types<complex<double>> TestFL;
+// typedef ::testing::Types<complex<double>> TestFL;
+typedef ::testing::Types<double> TestFL;
 #else
 typedef ::testing::Types<double> TestFL;
 #endif
@@ -59,6 +61,7 @@ TYPED_TEST(TestDMRG, Test) {
     string occ_filename = "data/CR2.SVP.OCC";
     // string occ_filename = "data/CR2.SVP.HF"; // E(HF) = -2085.53318786766
     string filename = "data/CR2.SVP.FCIDUMP"; // E = -2086.504520308260
+    // string filename = "../my_test/main_test/data/FEMOCO.FCIDUMP";
     // string occ_filename = "data/H2O.TZVP.OCC";
     occs = read_occ(occ_filename);
     // string filename = "data/H2O.TZVP.FCIDUMP"; // E = -76.31676
@@ -162,7 +165,7 @@ TYPED_TEST(TestDMRG, Test) {
     // MPO construction
     cout << "MPO start" << endl;
     shared_ptr<MPO<S, FL>> mpo = make_shared<GeneralMPO<S, FL>>(
-        gham, gfd, MPOAlgorithmTypes::FastBlockedSumDisjointSVD, 1E-7, -1);
+        gham, gfd, MPOAlgorithmTypes::SVD, 1E-12, -1);
     // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_all_blocks = true;
     // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_multiplier = 4.0;
     // dynamic_pointer_cast<GeneralMPO<S, FL>>(mpo)->disjoint_levels.push_back(1E-3);

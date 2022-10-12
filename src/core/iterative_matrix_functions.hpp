@@ -3302,10 +3302,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             make_shared<VectorAllocator<FL>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        size_t lwork =
-            (size_t)max(x.m * x.m, x.n * x.n) + (size_t)(x.m + x.n) * ssk * 2;
+        size_t lwork = (size_t)x.m * x.n + (size_t)(x.m + x.n) * ssk * 2;
         FL *xwork = c_alloc->allocate(lwork);
-        FL *xlwork = xwork + (size_t)max(x.m * x.m, x.n * x.n);
+        FL *xlwork = xwork + (size_t)x.m * x.n;
         FL *xrwork = xlwork + (size_t)x.m * ssk;
         FL *gwork = xrwork + (size_t)x.n * ssk;
         FP *swork = d_alloc->allocate(max(x.m, x.n) + ssk);
@@ -3348,6 +3347,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
             // do svd
             memset(xwork, 0, sizeof(FL) * ixw);
+            assert(ixw <= (size_t)x.m * x.n);
             for (; iacc < acc_div[il]; iacc++) {
                 MKL_INT &ir = acc_idxs[iacc].first, &ic = acc_idxs[iacc].second;
                 assert(rmap[ir].first == cmap[ic].first);
@@ -3401,8 +3401,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (ensure_ortho) {
             // for rows and columns with all zeros
             const FL zx = (FL)-1.0, zz = (FL)0.0;
-            GMatrix<FL> gtlmat(xwork, x.m, x.m);
-            GMatrix<FL> gtrmat(xwork, x.n, x.n);
+            FL *xxwork =
+                c_alloc->allocate(max((size_t)x.m * x.m, (size_t)x.n * x.n));
+            GMatrix<FL> gtlmat(xxwork, x.m, x.m);
+            GMatrix<FL> gtrmat(xxwork, x.n, x.n);
             gtlmat.clear();
             for (MKL_INT ir = 0; ir < gtlmat.n; ir++) {
                 gtlmat(ir, ir) = (FL)1.0;
@@ -3463,6 +3465,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 const FL sx = (FP)1.0 / norm(GMatrix<FL>(&r(ir, 0), 1, r.n));
                 iscale(GMatrix<FL>(&r(ir, 0), 1, r.n), sx);
             }
+            c_alloc->deallocate(xxwork,
+                                max((size_t)x.m * x.m, (size_t)x.n * x.n));
         }
         // fill non-zeros
         for (MKL_INT ir = 0; ir < gxk; ir++)

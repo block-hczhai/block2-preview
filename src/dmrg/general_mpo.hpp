@@ -1951,7 +1951,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                 svds[iq].first[1][lrv.first.second] +=
                                     lrv.second;
                             else
-                                mat[(lrv.first.first - 1) * szr +
+                                mat[(size_t)(lrv.first.first - 1) * szr +
                                     lrv.first.second] += lrv.second;
                         szl--;
                         svds[iq].second[0] = 1;
@@ -1980,8 +1980,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         szl++;
                     } else {
                         for (auto &lrv : matvs)
-                            mat[lrv.first.first * szr + lrv.first.second] +=
-                                lrv.second;
+                            mat[(size_t)lrv.first.first * szr +
+                                lrv.first.second] += lrv.second;
                         // cout << "mat = " << GMatrix<FL>(mat.data(), szl, szr)
                         // << endl;
                         threading->activate_global_mkl();
@@ -2118,7 +2118,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             1;
                         for (auto &lrv : matvs)
                             if (lrv.first.first != 0)
-                                mat[(lrv.first.first - 1) * szr +
+                                mat[(size_t)(lrv.first.first - 1) * szr +
                                     lrv.first.second] += lrv.second;
                         szl--;
                         threading->activate_global_mkl();
@@ -2136,8 +2136,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         szl++;
                     } else {
                         for (auto &lrv : matvs)
-                            mat[lrv.first.first * szr + lrv.first.second] +=
-                                lrv.second;
+                            mat[(size_t)lrv.first.first * szr +
+                                lrv.first.second] += lrv.second;
                         threading->activate_global_mkl();
                         IterativeMatrixFunctions<FL>::constrained_svd(
                             GMatrix<FL>(mat.data(), szl, szr), rank,
@@ -2189,8 +2189,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             (FL)0.0);
                     }
                     for (auto &lrv : matvs)
-                        smat[lrv.first.first * szr + lrv.first.second] -=
-                            lrv.second;
+                        smat[(size_t)lrv.first.first * szr +
+                             lrv.first.second] -= lrv.second;
                     FP xnorm = GMatrixFunctions<FL>::norm(
                         GMatrix<FL>(smat.data(), szl, szr));
                     accurate_svd_error += xnorm * xnorm;
