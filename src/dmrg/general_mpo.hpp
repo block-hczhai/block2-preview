@@ -1525,7 +1525,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             if (algo_type & MPOAlgorithmTypes::SVD)
                 cout << " | Max bond dimension = " << setw(5) << max_bond_dim;
             cout << endl;
-            if (sum_mpo != -1)
+            if (sum_mpo)
                 cout << " | SumMPO : Mod = " << setw(5) << sum_mpo_mod;
             if (disjoint) {
                 cout << " | Disjoint : All blocks = "
@@ -1539,7 +1539,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                              << dl;
                 }
             }
-            if (sum_mpo != -1 || disjoint)
+            if (sum_mpo || disjoint)
                 cout << endl;
         }
         // index of current terms
