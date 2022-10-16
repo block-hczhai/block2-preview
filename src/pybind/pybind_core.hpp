@@ -1744,6 +1744,12 @@ template <typename S = void> void bind_io(py::module &m) {
                  return factors;
              })
         .def_static("miller_rabin", &Prime::miller_rabin)
+        .def_static("power", &Prime::power)
+        .def_static("sqrt", &Prime::sqrt)
+        .def_static("gcd", &Prime::gcd)
+        .def_static("inv", &Prime::inv)
+        .def_static("quick_multiply", &Prime::quick_multiply)
+        .def_static("quick_power", &Prime::quick_power)
         .def("is_prime", &Prime::is_prime);
 
     py::class_<Combinatorics, shared_ptr<Combinatorics>>(m, "Combinatorics")

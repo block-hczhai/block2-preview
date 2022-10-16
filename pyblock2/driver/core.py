@@ -38,6 +38,16 @@ class ParallelTypes(IntFlag):
     SI = 3
     SJ = 4
     SIJ = 5
+    SKL = 6
+    UIJ = 7  # unified middle same/diff
+    UKL = 8  # unified middle same/diff
+    UIJM2 = 9
+    UKLM2 = 10
+    UIJM4 = 11
+    UKLM4 = 12
+    MixUIJUKL = 1000  # not a good strategy
+    MixUKLUIJ = 1001  # not a good strategy
+    MixUIJSI = 1002
 
 
 class MPOAlgorithmTypes(IntFlag):
@@ -224,11 +234,62 @@ class DMRGDriver:
         self._restart_dir = restart_dir
         self.frame.restart_dir = restart_dir
 
-    def parallelize_integrals(self, para_type, h1e, g2e, const):
+    def divide_nprocs(self, n):
+        """almost evenly divide n procs to two levels.
+        Faster than a pure sqrt method when n >= 20000000."""
+        bw = self.bw
+        fcts = bw.b.Prime().factors(n)
+        px = []
+        for p, x in fcts:
+            px += [p] * x
+        if len(px) == 1:
+            return 1, n
+        elif len(px) == 2:
+            return px[0], px[1]
+        elif px[-1] >= n // px[-1]:
+            return n // px[-1], px[-1]
+        else:
+            nx = bw.b.Prime.sqrt(n)
+            for p in range(nx, 0, -1):
+                if n % p == 0:
+                    return p, n // p
+
+    def parallelize_integrals(self, para_type, h1e, g2e, const, msize=None, mrank=None):
         import numpy as np
 
         if para_type == ParallelTypes.Nothing or self.mpi is None:
             return h1e, g2e, const
+
+        if msize is None:
+            msize = self.mpi.size
+        if mrank is None:
+            mrank = self.mpi.rank
+
+        # not a good strategy
+        if para_type in [
+            ParallelTypes.MixUIJUKL,
+            ParallelTypes.MixUKLUIJ,
+            ParallelTypes.MixUIJSI,
+        ]:
+            pt_high = {
+                ParallelTypes.MixUIJUKL: ParallelTypes.UIJ,
+                ParallelTypes.MixUKLUIJ: ParallelTypes.UKL,
+                ParallelTypes.MixUIJSI: ParallelTypes.UIJ,
+            }[para_type]
+            pt_low = {
+                ParallelTypes.MixUIJUKL: ParallelTypes.UKL,
+                ParallelTypes.MixUKLUIJ: ParallelTypes.UIJ,
+                ParallelTypes.MixUIJSI: ParallelTypes.SI,
+            }[para_type]
+            na, nb = self.divide_nprocs(msize)
+            ra, rb = mrank // nb, mrank % nb
+            h1e, g2e, const = self.parallelize_integrals(
+                pt_high, h1e, g2e, const, msize=na, mrank=ra
+            )
+            return self.parallelize_integrals(
+                pt_low, h1e, g2e, const, msize=nb, mrank=rb
+            )
+
         if h1e is not None:
             ixs = np.mgrid[tuple(slice(x) for x in h1e.shape)].reshape((h1e.ndim, -1)).T
             sixs = np.sort(ixs, axis=1)
@@ -240,50 +301,104 @@ class DMRGDriver:
 
         if para_type == ParallelTypes.I:
             if h1e is not None:
-                mask1 = ixs[:, 0] % self.mpi.size == self.mpi.rank
+                mask1 = ixs[:, 0] % msize == mrank
             if g2e is not None:
-                mask2 = gixs[:, 0] % self.mpi.size == self.mpi.rank
+                mask2 = gixs[:, 0] % msize == mrank
         elif para_type == ParallelTypes.SI:
             if h1e is not None:
-                mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
+                mask1 = sixs[:, 0] % msize == mrank
             if g2e is not None:
-                mask2 = gsixs[:, 0] % self.mpi.size == self.mpi.rank
+                mask2 = gsixs[:, 0] % msize == mrank
         elif para_type == ParallelTypes.J:
             if h1e is not None:
-                mask1 = ixs[:, 1] % self.mpi.size == self.mpi.rank
+                mask1 = ixs[:, 1] % msize == mrank
             if g2e is not None:
-                mask2 = gixs[:, 1] % self.mpi.size == self.mpi.rank
+                mask2 = gixs[:, 1] % msize == mrank
         elif para_type == ParallelTypes.SJ:
             if h1e is not None:
-                mask1 = sixs[:, 1] % self.mpi.size == self.mpi.rank
+                mask1 = sixs[:, 1] % msize == mrank
             if g2e is not None:
-                mask2 = gsixs[:, 1] % self.mpi.size == self.mpi.rank
+                mask2 = gsixs[:, 1] % msize == mrank
         elif para_type == ParallelTypes.SIJ:
             if h1e is not None:
-                mask1 = sixs[:, 0] % self.mpi.size == self.mpi.rank
+                mask1 = sixs[:, 0] % msize == mrank
             if g2e is not None:
-                mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (
-                    gsixs[:, 1] % self.mpi.size == self.mpi.rank
-                )
+                mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (gsixs[:, 1] % msize == mrank)
                 mask2b = (
                     (gsixs[:, 1] != gsixs[:, 2])
                     & (gsixs[:, 0] <= gsixs[:, 1])
                     & (
-                        (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0])
-                        % self.mpi.size
-                        == self.mpi.rank
+                        (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0]) % msize
+                        == mrank
                     )
                 )
                 mask2c = (
                     (gsixs[:, 1] != gsixs[:, 2])
                     & (gsixs[:, 0] > gsixs[:, 1])
                     & (
-                        (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1])
-                        % self.mpi.size
-                        == self.mpi.rank
+                        (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1]) % msize
+                        == mrank
                     )
                 )
                 mask2 = mask2a | mask2b | mask2c
+        elif para_type == ParallelTypes.SKL:
+            if h1e is not None:
+                mask1 = sixs[:, 1] % msize == mrank
+            if g2e is not None:
+                mask2a = (gsixs[:, 1] == gsixs[:, 2]) & (gsixs[:, 1] % msize == mrank)
+                mask2b = (
+                    (gsixs[:, 1] != gsixs[:, 2])
+                    & (gsixs[:, 2] <= gsixs[:, 3])
+                    & (
+                        (gsixs[:, 3] * (gsixs[:, 3] + 1) // 2 + gsixs[:, 2]) % msize
+                        == mrank
+                    )
+                )
+                mask2c = (
+                    (gsixs[:, 1] != gsixs[:, 2])
+                    & (gsixs[:, 2] > gsixs[:, 3])
+                    & (
+                        (gsixs[:, 2] * (gsixs[:, 2] + 1) // 2 + gsixs[:, 3]) % msize
+                        == mrank
+                    )
+                )
+                mask2 = mask2a | mask2b | mask2c
+        elif para_type in [ParallelTypes.UIJ, ParallelTypes.UIJM2, ParallelTypes.UIJM4]:
+            ptm = {
+                ParallelTypes.UIJ: 1,
+                ParallelTypes.UIJM2: 2,
+                ParallelTypes.UIJM4: 4,
+            }[para_type]
+            if h1e is not None:
+                mask1 = sixs[:, 0] // ptm % msize == mrank
+            if g2e is not None:
+                mask2a = (gsixs[:, 0] <= gsixs[:, 1]) & (
+                    (gsixs[:, 1] * (gsixs[:, 1] + 1) // 2 + gsixs[:, 0]) // ptm % msize
+                    == mrank
+                )
+                mask2b = (gsixs[:, 0] > gsixs[:, 1]) & (
+                    (gsixs[:, 0] * (gsixs[:, 0] + 1) // 2 + gsixs[:, 1]) // ptm % msize
+                    == mrank
+                )
+                mask2 = mask2a | mask2b
+        elif para_type in [ParallelTypes.UKL, ParallelTypes.UKLM2, ParallelTypes.UKLM4]:
+            ptm = {
+                ParallelTypes.UKL: 1,
+                ParallelTypes.UKLM2: 2,
+                ParallelTypes.UKLM4: 4,
+            }[para_type]
+            if h1e is not None:
+                mask1 = sixs[:, 1] // ptm % msize == mrank
+            if g2e is not None:
+                mask2a = (gsixs[:, 2] <= gsixs[:, 3]) & (
+                    (gsixs[:, 3] * (gsixs[:, 3] + 1) // 2 + gsixs[:, 2]) // ptm % msize
+                    == mrank
+                )
+                mask2b = (gsixs[:, 2] > gsixs[:, 3]) & (
+                    (gsixs[:, 2] * (gsixs[:, 2] + 1) // 2 + gsixs[:, 3]) // ptm % msize
+                    == mrank
+                )
+                mask2 = mask2a | mask2b
         if h1e is not None:
             h1e[~mask1.reshape(h1e.shape)] = 0.0
         if g2e is not None:
@@ -483,6 +598,7 @@ class DMRGDriver:
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
         import time
+
         tt = time.perf_counter()
         if algo_type is not None and MPOAlgorithmTypes.NC in algo_type:
             mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.NC, "HQC")
@@ -502,8 +618,22 @@ class DMRGDriver:
 
         if iprint:
             nnz, sz, bdim = mpo.get_summary()
-            print('Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f'
-                % (time.perf_counter() - tt, algo_type.name, bdim, nnz, sz, (1.0 * sz - nnz) / sz))
+            if self.mpi is not None:
+                self.mpi.barrier()
+            print(
+                "Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f"
+                % (
+                    time.perf_counter() - tt,
+                    algo_type.name,
+                    bdim,
+                    nnz,
+                    sz,
+                    (1.0 * sz - nnz) / sz,
+                ),
+                flush=True,
+            )
+            if self.mpi is not None:
+                self.mpi.barrier()
 
         mpo = bw.bs.SimplifiedMPO(
             mpo,
@@ -818,6 +948,9 @@ class DMRGDriver:
         disjoint_multiplier=1.0,
     ):
         bw = self.bw
+        import time
+
+        tt = time.perf_counter()
         if left_vacuum is None:
             left_vacuum = bw.SX.invalid
         if algo_type is None:
@@ -835,6 +968,27 @@ class DMRGDriver:
         mpo.disjoint_all_blocks = disjoint_all_blocks
         mpo.disjoint_multiplier = disjoint_multiplier
         mpo.build()
+
+        if iprint:
+            nnz, sz, bdim = mpo.get_summary()
+            if self.mpi is not None:
+                self.mpi.barrier()
+            print(
+                "Rank = %5d Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f"
+                % (
+                    self.mpi.rank,
+                    time.perf_counter() - tt,
+                    algo_type.name,
+                    bdim,
+                    nnz,
+                    sz,
+                    (1.0 * sz - nnz) / sz,
+                ),
+                flush=True,
+            )
+            if self.mpi is not None:
+                self.mpi.barrier()
+
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         mpo = bw.bs.IdentityAddedMPO(mpo)
         if self.mpi:
