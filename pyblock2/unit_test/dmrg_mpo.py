@@ -66,9 +66,16 @@ mpo_algo_names = [
 def mpo_algo_type(request):
     return request.param
 
+@pytest.fixture(scope="module", params=[True, False])
+def block_max_length(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=[True, False])
+def disjoint_all_blocks(request):
+    return request.param
 
 class TestDMRGMPO:
-    def test_rhf(self, tmp_path, system_def, mpo_algo_type):
+    def test_rhf(self, tmp_path, system_def, mpo_algo_type, block_max_length, disjoint_all_blocks):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -94,6 +101,13 @@ class TestDMRGMPO:
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
         )
         mpo_algo_type = getattr(MPOAlgorithmTypes, mpo_algo_type)
+
+        if MPOAlgorithmTypes.Disjoint not in mpo_algo_type and disjoint_all_blocks:
+            pytest.skip()
+
+        if MPOAlgorithmTypes.Conventional in mpo_algo_type and block_max_length:
+            pytest.skip()
+
         mpo = driver.get_qc_mpo(
             h1e=h1e,
             g2e=g2e,
@@ -101,6 +115,8 @@ class TestDMRGMPO:
             reorder='irrep',
             cutoff=1e-12,
             algo_type=mpo_algo_type,
+            block_max_length=block_max_length,
+            disjoint_all_blocks=disjoint_all_blocks,
             iprint=2,
         )
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)

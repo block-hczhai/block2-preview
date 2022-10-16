@@ -1417,6 +1417,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     vector<FP> disjoint_levels;
     bool disjoint_all_blocks = false;
     FP disjoint_multiplier = (FP)1.0;
+    bool block_max_length = false; // separate 1e/2e terms
     static inline size_t expr_index_hash(const string &expr,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
@@ -1525,6 +1526,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             if (algo_type & MPOAlgorithmTypes::SVD)
                 cout << " | Max bond dimension = " << setw(5) << max_bond_dim;
             cout << endl;
+            if (block_max_length)
+                cout << " | BlockMaxLen = T";
             if (sum_mpo)
                 cout << " | SumMPO : Mod = " << setw(5) << sum_mpo_mod;
             if (disjoint) {
@@ -1539,7 +1542,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                              << dl;
                 }
             }
-            if (sum_mpo || disjoint)
+            if (block_max_length || sum_mpo || disjoint)
                 cout << endl;
         }
         // index of current terms
@@ -1605,8 +1608,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         // K: n_sites, D: max_bond_dim, L: term_len, N: n_terms
         // using block-structure according to left q number
         // this is the map from left q number to its block index
-        // pair(0 = left min 1 = right min >= 2 same min, min term_l)
-        map<pair<pair<uint16_t, uint16_t>, S>, int> q_map;
+        // pair(0 = left min 1 = right min >= 2 same min, (min term_l, max l))
+        map<pair<pair<uint16_t, pair<uint16_t, uint16_t>>, S>, int> q_map;
         // for each iq block, a map from hashed repr of string of op in left
         // block to (mpo index, term index (in cur_terms), left block string of
         // op index)
@@ -1683,7 +1686,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         pair<S, S> pq = hamil->get_string_quanta(
                             quanta_ref[ix], afd->exprs[ix],
                             &afd->indices[ix][itt], 0);
-                        q_map[make_pair(make_pair(0, 0),
+                        q_map[make_pair(make_pair(0, make_pair(0, 0)),
                                         qh.combine(pq.first, -pq.second))] = 0;
                         map_ls.emplace_back();
                         map_rs.emplace_back();
@@ -1760,14 +1763,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                                 ? ip_sparse[ip]
                                                 : ip_sparse[ip] % sum_mpo_mod)),
                             (uint16_t)k);
-                    if (q_map.count(make_pair(pqq, qq)) == 0) {
-                        q_map[make_pair(pqq, qq)] = (int)q_map.size();
+                    pair<uint16_t, pair<uint16_t, uint16_t>> ppqq = make_pair(
+                        pqq.first, make_pair(pqq.second, (uint16_t)0));
+                    if (block_max_length && ii != n_sites - 1)
+                        ppqq.second.second = (uint16_t)kmax;
+                    if (q_map.count(make_pair(ppqq, qq)) == 0) {
+                        q_map[make_pair(ppqq, qq)] = (int)q_map.size();
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
                         nms.push_back(make_pair(0, 0));
                     }
-                    int iq = q_map.at(make_pair(pqq, qq)), il = -1, ir = -1;
+                    int iq = q_map.at(make_pair(ppqq, qq)), il = -1, ir = -1;
                     LL &nml = nms[iq].first, &nmr = nms[iq].second;
                     auto &mpl = map_ls[iq];
                     auto &mpr = map_rs[iq];

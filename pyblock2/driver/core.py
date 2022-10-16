@@ -621,8 +621,9 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             print(
-                "Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f"
+                "Rank = %5d Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f"
                 % (
+                    self.mpi.rank if self.mpi is not None else 0,
                     time.perf_counter() - tt,
                     algo_type.name,
                     bdim,
@@ -670,6 +671,7 @@ class DMRGDriver:
         disjoint_levels=None,
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
+        block_max_length=False,
         iprint=1,
     ):
         import numpy as np
@@ -929,6 +931,7 @@ class DMRGDriver:
             disjoint_levels=disjoint_levels,
             disjoint_all_blocks=disjoint_all_blocks,
             disjoint_multiplier=disjoint_multiplier,
+            block_max_length=block_max_length,
         )
 
     def get_mpo(
@@ -946,6 +949,7 @@ class DMRGDriver:
         disjoint_levels=None,
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
+        block_max_length=False,
     ):
         bw = self.bw
         import time
@@ -967,6 +971,7 @@ class DMRGDriver:
             mpo.disjoint_levels = bw.VectorFP(disjoint_levels)
         mpo.disjoint_all_blocks = disjoint_all_blocks
         mpo.disjoint_multiplier = disjoint_multiplier
+        mpo.block_max_length = block_max_length
         mpo.build()
 
         if iprint:
@@ -976,7 +981,7 @@ class DMRGDriver:
             print(
                 "Rank = %5d Ttotal = %10.3f MPO method = %s bond dimension = %7d NNZ = %12d SIZE = %12d SPT = %6.4f"
                 % (
-                    self.mpi.rank,
+                    self.mpi.rank if self.mpi is not None else 0,
                     time.perf_counter() - tt,
                     algo_type.name,
                     bdim,
