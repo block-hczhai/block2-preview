@@ -66,12 +66,13 @@ jobs:
           make
           make install
           brew update
-          brew install libomp
+          # brew install libomp
 
-      - name: build test (serial-pytest, linux)
+      - name: build test (serial-pytest)
         if: matrix.parallel == 'serial-pytest'
         env:
           MKLROOT: ~/.local
+          MACOSX_DEPLOYMENT_TARGET: '10.9'
         run: |
           mkdir build
           cd build
@@ -180,7 +181,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '10.9'
         run: |
           brew update
-          brew install libomp
+          # brew install libomp
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
@@ -200,7 +201,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: |
           brew update
-          brew install libomp
+          # brew install libomp
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
