@@ -2178,7 +2178,7 @@ if not pre_run:
             assert proj_weights is not None
             proj_weights = VectorFP([float(x) for x in proj_weights.split()])
             if len(proj_weights) == 1:
-                proj_weights = VectorFP([float(x) for x in proj_weights.split()] * len(proj_tags))
+                proj_weights = VectorFP(list(proj_weights) * len(proj_tags))
             assert len(proj_weights) == len(proj_tags)
             ext_mpss = []
             for ipj in range(len(proj_weights)):
