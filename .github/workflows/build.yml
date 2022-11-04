@@ -67,6 +67,7 @@ jobs:
           make install
           brew update
           brew install libomp
+          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
 
       - name: build test (serial-pytest)
         if: matrix.parallel == 'serial-pytest'
