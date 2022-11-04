@@ -66,7 +66,7 @@ jobs:
           make
           make install
           brew update
-          # brew install libomp
+          brew install libomp
 
       - name: build test (serial-pytest)
         if: matrix.parallel == 'serial-pytest'
