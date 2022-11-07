@@ -182,7 +182,8 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '10.9'
         run: |
           brew update
-          # brew install libomp
+          brew install libomp
+          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
@@ -202,7 +203,8 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: |
           brew update
-          # brew install libomp
+          brew install libomp
+          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
