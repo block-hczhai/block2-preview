@@ -47,6 +47,11 @@ One can install ``block2`` using ``pip``:
 
 * One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``, but its dependence on mpi library can sometimes be difficult to deal with. Some guidance for resolving environment problems can be found in issue [#7](https://github.com/block-hczhai/block2-preview/issues/7) and [here](https://block2.readthedocs.io/en/latest/user/installation.html#installation-with-anaconda).
 
+* To install the most recent development version, use:
+
+      pip install block2 --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+      pip install block2-mpi --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+
 To run a DMRG calculation, please use the following command:
 
     block2main dmrg.conf > dmrg.out
