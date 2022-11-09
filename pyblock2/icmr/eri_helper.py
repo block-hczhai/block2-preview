@@ -102,6 +102,8 @@ def init_eris(mc, mo_coeff=None, mrci=False):
         # adapted from pyscf.mrpt.nevpt2.py _trans
         eris.known = ['ppaa', 'papa', 'pacv', 'cvcv']
         nwav = nmo - ncore # w = a + v
+        if mc._scf._eri is None:
+            mc._scf._eri = mc._scf.mol.intor('int2e', aosym='s8')
         pwxx = ao2mo.incore.half_e1(mc._scf._eri,
             (mo_coeff[:, :nocc], mo_coeff[:, ncore:]), compact=False)
         pwxx = pwxx.reshape((nocc, nwav, -1))
