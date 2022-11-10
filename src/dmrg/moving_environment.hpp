@@ -53,7 +53,8 @@ enum struct TruncationTypes : ubond_t {
     Reduced = 1,
     ReducedInversed = 2,
     RealDensityMatrix = 4,
-    KeepOne = 8,
+    SpectraWithMultiplicity = 8,
+    KeepOne = 16,
 };
 
 enum struct OpCachingTypes : ubond_t {
@@ -2328,16 +2329,28 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             eigen_values_reduced[i] = wr;
         }
         threading->activate_normal();
-        int k_total = 0;
-        for (int i = 0; i < dm->info->n; i++)
+        int k_total = 0, k_total_multi = 0;
+        for (int i = 0; i < dm->info->n; i++) {
             k_total += eigen_values[i].n;
+            k_total_multi +=
+                eigen_values[i].n * dm->info->quanta[i].multiplicity();
+        }
         if (store_wfn_spectra) {
+            bool with_multi =
+                trunc_type & TruncationTypes::SpectraWithMultiplicity;
             wfn_spectra.clear();
-            wfn_spectra.reserve(k_total);
+            wfn_spectra.reserve(with_multi ? k_total_multi : k_total);
             for (int i = 0; i < dm->info->n; i++)
-                for (int j = 0; j < eigen_values[i].n; j++)
-                    wfn_spectra.push_back(
-                        sqrt(max((FPS)0, eigen_values[i].data[j])));
+                if (with_multi) {
+                    for (int p = 0; p < dm->info->quanta[i].multiplicity(); p++)
+                        for (int j = 0; j < eigen_values[i].n; j++)
+                            wfn_spectra.push_back(
+                                sqrt(max((FPS)0, eigen_values[i].data[j])));
+                } else {
+                    for (int j = 0; j < eigen_values[i].n; j++)
+                        wfn_spectra.push_back(
+                            sqrt(max((FPS)0, eigen_values[i].data[j])));
+                }
         }
         FPS error = 0.0;
         ss.reserve(k_total);
@@ -2352,7 +2365,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                      return eigen_values_reduced[a.first].data[a.second] >
                             eigen_values_reduced[b.first].data[b.second];
                  });
-            if (((ubond_t)trunc_type >> 3) == 0) {
+            if (((ubond_t)trunc_type / (ubond_t)TruncationTypes::KeepOne) ==
+                0) {
                 for (int i = k; i < k_total; i++) {
                     FPS x = eigen_values[ss[i].first].data[ss[i].second];
                     if (x > 0)
@@ -2370,7 +2384,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                ubond_t keep = (ubond_t)trunc_type >> 3;
+                ubond_t keep =
+                    (ubond_t)trunc_type / (ubond_t)TruncationTypes::KeepOne;
                 vector<int> mask(eigen_values.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;
@@ -2417,7 +2432,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         vector<FPS> &wfn_spectra, TruncationTypes trunc_type) {
         vector<shared_ptr<GTensor<FPS>>> s_reduced;
         cutoff = sqrt(cutoff);
-        int k_total = 0;
+        int k_total = 0, k_total_multi = 0;
         for (int i = 0; i < (int)s.size(); i++) {
             shared_ptr<GTensor<FPS>> wr =
                 make_shared<GTensor<FPS>>(s[i]->shape);
@@ -2430,13 +2445,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                               sqrt(qs[i].multiplicity()));
             s_reduced.push_back(wr);
             k_total += wr->shape[0];
+            k_total_multi += wr->shape[0] * qs[i].multiplicity();
         }
         if (store_wfn_spectra) {
+            bool with_multi =
+                trunc_type & TruncationTypes::SpectraWithMultiplicity;
             wfn_spectra.clear();
-            wfn_spectra.reserve(k_total);
+            wfn_spectra.reserve(with_multi ? k_total_multi : k_total);
             for (int i = 0; i < (int)s.size(); i++)
-                wfn_spectra.insert(wfn_spectra.end(), s[i]->data.begin(),
-                                   s[i]->data.end());
+                if (with_multi)
+                    for (int p = 0; p < qs[i].multiplicity(); p++)
+                        wfn_spectra.insert(wfn_spectra.end(),
+                                           s[i]->data.begin(),
+                                           s[i]->data.end());
+                else
+                    wfn_spectra.insert(wfn_spectra.end(), s[i]->data.begin(),
+                                       s[i]->data.end());
         }
         FPS error = 0.0;
         ss.reserve(k_total);
@@ -2451,7 +2475,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     return s_reduced[a.first]->data[a.second] >
                            s_reduced[b.first]->data[b.second];
                 });
-            if (((ubond_t)trunc_type >> 3) == 0) {
+            if (((ubond_t)trunc_type / (ubond_t)TruncationTypes::KeepOne) ==
+                0) {
                 for (int i = k; i < k_total; i++) {
                     FPS x = s[ss[i].first]->data[ss[i].second];
                     if (x > 0)
@@ -2469,7 +2494,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (k < k_total)
                     ss.resize(k);
             } else {
-                ubond_t keep = (ubond_t)trunc_type >> 3;
+                ubond_t keep =
+                    (ubond_t)trunc_type / (ubond_t)TruncationTypes::KeepOne;
                 vector<int> mask(s.size(), 0), smask(k_total, 0);
                 for (int i = 0; i < k_total; i++) {
                     mask[ss[i].first]++;

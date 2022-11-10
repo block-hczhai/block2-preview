@@ -1143,6 +1143,7 @@ class DMRGDriver:
         proj_mpss=None,
         proj_weights=None,
         store_wfn_spectra=True,
+        spectra_with_multiplicity=False,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -1188,6 +1189,10 @@ class DMRGDriver:
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
+        if spectra_with_multiplicity:
+            dmrg.trunc_type = (
+                dmrg.trunc_type | bw.b.TruncationTypes.SpectraWithMultiplicity
+            )
         self._dmrg = dmrg
         if n_sweeps == -1:
             return None
