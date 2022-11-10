@@ -1252,7 +1252,8 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
         b->allocate(twos + 1);
         for (int i = 0, tm = -twos; tm < twos + 1; i++, tm += 2)
-            b->quanta[i] = S(tm, 0), b->n_states[i] = 1;
+            b->quanta[i] = S(tm, tm == twos ? orb_sym[m] : 0),
+            b->n_states[i] = 1;
         b->sort_states();
         return b;
     }
@@ -1265,8 +1266,11 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         for (uint16_t m = 0; m < n_sites; m++) {
             map<S, shared_ptr<SparseMatrixInfo<S>>> info;
             info[vacuum] = nullptr;
-            for (int n = -max_n; n <= max_n; n++)
+            for (int n = -max_n; n <= max_n; n++) {
+                info[S(n, orb_sym[m])] = nullptr;
+                info[S(n, S::pg_inv(orb_sym[m]))] = nullptr;
                 info[S(n, 0)] = nullptr;
+            }
             for (auto &p : info) {
                 p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
                 p.second->initialize(*basis[m], *basis[m], p.first,
@@ -1276,7 +1280,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                 info.begin(), info.end());
         }
         for (uint16_t m = 0; m < n_sites; m++) {
-            const typename S::pg_t ipg = 0;
+            const typename S::pg_t ipg = orb_sym[m];
             if (this->op_prims.count(ipg) == 0)
                 this->op_prims[ipg] =
                     unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
@@ -1287,24 +1291,25 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
             op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims[""]->allocate(find_site_op_info(m, S(0, 0)));
             for (int tm = -twos; tm < twos + 1; tm += 2)
-                (*op_prims[""])[S(tm, 0)](0, 0) = 1.0;
+                (*op_prims[""])[S(tm, tm == twos ? ipg : 0)](0, 0) = 1.0;
 
             op_prims["P"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["P"]->allocate(find_site_op_info(m, S(2, 0)));
+            op_prims["P"]->allocate(find_site_op_info(m, S(2, ipg)));
             for (int tm = -twos; tm < twos - 1; tm += 2)
-                (*op_prims["P"])[S(tm, 0)](0, 0) =
+                (*op_prims["P"])[S(tm, tm == twos ? ipg : 0)](0, 0) =
                     sqrt((twos - tm) * (twos + tm + 2) / 4);
 
             op_prims["M"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["M"]->allocate(find_site_op_info(m, S(-2, 0)));
+            op_prims["M"]->allocate(find_site_op_info(m, S(-2, S::pg_inv(ipg))));
             for (int tm = -twos + 2; tm < twos + 1; tm += 2)
-                (*op_prims["M"])[S(tm, 0)](0, 0) =
+                (*op_prims["M"])[S(tm, tm == twos ? ipg : 0)](0, 0) =
                     sqrt((twos + tm) * (twos - tm + 2) / 4);
 
             op_prims["Z"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims["Z"]->allocate(find_site_op_info(m, S(0, 0)));
             for (int tm = -twos; tm < twos + 1; tm += 2)
-                (*op_prims["Z"])[S(tm, 0)](0, 0) = (FL)tm / (FL)2.0;
+                (*op_prims["Z"])[S(tm, tm == twos ? ipg : 0)](0, 0) =
+                    (FL)tm / (FL)2.0;
         }
         // site norm operators
         const string stx[4] = {"", "P", "M", "Z"};
@@ -1372,6 +1377,17 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
     pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
                                  const uint16_t *idxs, uint16_t k) const {
         S l = ref[k], r = ref.back() - l;
+        for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
+            typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (expr[j] == 'Z')
+                continue;
+            else if (expr[j] == 'M')
+                ipg = S::pg_inv(ipg);
+            if (j < k)
+                l.set_pg(S::pg_mul(l.pg(), ipg));
+            else
+                r.set_pg(S::pg_mul(r.pg(), ipg));
+        }
         return make_pair(l, r);
     }
     static string get_sub_expr(const string &expr, int i, int j) {

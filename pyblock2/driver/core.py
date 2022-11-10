@@ -461,6 +461,8 @@ class DMRGDriver:
         self.vacuum = bw.SX(0, 0, 0)
         if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
             n_elec = n_sites * heis_twos
+        elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
+            n_elec = 2 * n_elec - n_sites
         if pg_irrep is None:
             if hasattr(self, "pg_irrep"):
                 pg_irrep = self.pg_irrep
@@ -683,7 +685,7 @@ class DMRGDriver:
                 h1e = (h1e, h1e)
             if g2e is not None and isinstance(g2e, np.ndarray) and g2e.ndim == 4:
                 g2e = (g2e, g2e, g2e)
-        elif SymmetryTypes.SGF in bw.symm_type:
+        elif SymmetryTypes.SGF in bw.symm_type or SymmetryTypes.SGB in bw.symm_type:
             if (
                 h1e is not None
                 and hasattr(self, "n_sites")
@@ -859,6 +861,10 @@ class DMRGDriver:
                     b.add_sum_term("CD", h1e)
                 if g2e is not None:
                     b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
+            elif SymmetryTypes.SGB in bw.symm_type:
+                h_terms = FermionTransform.jordan_wigner(h1e, g2e)
+                for k, (x, v) in h_terms.items():
+                    b.add_term(k, x, v)
         else:
             if SymmetryTypes.SU2 in bw.symm_type:
                 h1es, g2es, ecore = NormalOrder.make_su2(
@@ -903,7 +909,7 @@ class DMRGDriver:
                 print("normal ordered ecore = ", ecore)
 
         b.add_const(ecore)
-        bx = b.finalize()
+        bx = b.finalize(adjust_order=SymmetryTypes.SGB not in bw.symm_type)
 
         if iprint:
             if self.mpi is not None:
@@ -2096,9 +2102,17 @@ class ExprBuilder:
         return self
 
     def add_term(self, expr, idx, val):
+        import numpy as np
+
         self.data.exprs.append(expr)
         self.data.indices.append(self.bw.b.VectorUInt16(idx))
-        self.data.data.append(self.bw.VectorFL([val]))
+        if (
+            not isinstance(val, list)
+            and not isinstance(val, tuple)
+            and not isinstance(val, np.ndarray)
+        ):
+            val = [val]
+        self.data.data.append(self.bw.VectorFL(val))
         return self
 
     def add_sum_term(self, expr, arr, cutoff=1e-12):
@@ -2132,6 +2146,70 @@ class ExprBuilder:
             self.data.data[i] = self.bw.VectorFL(d * np.array(ix))
         return self
 
-    def finalize(self):
-        self.data = self.data.adjust_order()
+    def finalize(self, adjust_order=True, merge=True):
+        if adjust_order:
+            self.data = self.data.adjust_order(merge=merge)
+        elif merge:
+            self.data.merge_terms()
         return self.data
+
+
+class FermionTransform:
+    @staticmethod
+    def jordan_wigner(h1e, g2e):
+        import numpy as np
+
+        # sort indices to ascending order, adjusting fermion sign
+        if h1e is not None:
+            hixs = np.mgrid[tuple(slice(x) for x in h1e.shape)].reshape((h1e.ndim, -1))
+            hop = np.array([0, 1] * h1e.size, dtype="<i1").reshape((-1, h1e.ndim))
+            h1e = h1e.reshape((-1,)).copy()
+            i, j = hixs
+            h1e[i > j] *= -1
+            hop[i > j] = hop[i > j, ::-1]
+            hixs[:, i > j] = hixs[::-1, i > j]
+
+        if g2e is not None:
+            gixs = np.mgrid[tuple(slice(x) for x in g2e.shape)].reshape((g2e.ndim, -1))
+            gop = np.array([0, 0, 1, 1] * g2e.size, dtype="<i1").reshape((-1, g2e.ndim))
+            g2e = (g2e.transpose(0, 2, 3, 1) * 0.5).reshape((-1,)).copy()
+            for x in [0, 1, 2, 0, 1, 0]:
+                i, j = gixs[x], gixs[x + 1]
+                g2e[i > j] *= -1
+                gop[i > j, x : x + 2] = gop[i > j, x : x + 2][:, ::-1]
+                gixs[x : x + 2, i > j] = gixs[x : x + 2, i > j][::-1]
+
+        h_terms = {}
+
+        if h1e is not None:
+            for v, (xi, xj), (i, j) in zip(h1e, hop, hixs.T):
+                if v == 0:
+                    continue
+                ex = "PM"[xi] + "Z" * (j - i) + "PM"[xj]
+                if ex not in h_terms:
+                    h_terms[ex] = [[], []]
+                h_terms[ex][0].extend([i, *range(i, j), j])
+                h_terms[ex][1].append(v)
+
+        if g2e is not None:
+            for v, (xi, xj, xk, xl), (i, j, k, l) in zip(g2e, gop, gixs.T):
+                if v == 0:
+                    continue
+                ex = (
+                    "PM"[xi]
+                    + "Z" * (j - i)
+                    + "PM"[xj]
+                    + "PM"[xk]
+                    + "Z" * (l - k)
+                    + "PM"[xl]
+                )
+                if ex not in h_terms:
+                    h_terms[ex] = [[], []]
+                h_terms[ex][0].extend([i, *range(i, j), j, k, *range(k, l), l])
+                h_terms[ex][1].append(v)
+
+        for k, xv in h_terms.items():
+            xv[0] = np.array(xv[0])
+            xv[1] = np.array(xv[1]) * 2 ** k.count("Z")
+
+        return h_terms
