@@ -1229,6 +1229,78 @@ class DMRGDriver:
             bip_ent[ix] = float(np.sum(-ldsq * np.log(ldsq)))
         return bip_ent
 
+    def get_n_orb_rdm_mpos(self, orb_type=1, ij_symm=True, iprint=0):
+        bw = self.bw
+        if SymmetryTypes.SU2 in bw.symm_type:
+            return NotImplemented
+        elif SymmetryTypes.SZ in bw.symm_type:
+            if orb_type == 1:
+                h_terms = OrbitalEntropy.get_one_orb_rdm_h_terms(self.n_sites)
+            else:
+                h_terms = OrbitalEntropy.get_two_orb_rdm_h_terms(
+                    self.n_sites, ij_symm=ij_symm
+                )
+            mpos = {}
+            for ih, htss in h_terms.items():
+                if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+                    print("%d-ORB RDM MPO site = %r" % (orb_type, ih))
+                i_mpos = []
+                for hts in htss:
+                    b = self.expr_builder()
+                    for k, (x, v) in hts.items():
+                        b.add_term(k, x, v)
+                    if self.mpi is not None:
+                        b.iscale(1.0 / self.mpi.size)
+                    mpo = self.get_mpo(
+                        b.finalize(adjust_order=False), 1 if iprint >= 2 else 0
+                    )
+                    i_mpos.append(mpo)
+                mpos[ih] = i_mpos
+        else:
+            return NotImplemented
+
+        return mpos
+
+    def get_orbital_entropies(self, ket, orb_type=1, ij_symm=True, iprint=0):
+        bw = self.bw
+        import numpy as np
+
+        mpos = self.get_n_orb_rdm_mpos(
+            orb_type=orb_type, ij_symm=ij_symm, iprint=iprint
+        )
+        ents = np.zeros((self.n_sites,) * orb_type)
+        mket = ket.deep_copy(ket.info.tag + "@ORB-ENT-TMP")
+        for ih, i_mpos in mpos.items():
+            if iprint and (self.mpi is None or self.mpi.rank == self.mpi.root):
+                print("%d-ORB RDM EXPECT site = %r" % (orb_type, ih))
+            x = []
+            for mpo in i_mpos:
+                x.append(self.expectation(mket, mpo, mket, iprint=iprint))
+            ld = np.array(x)
+            if SymmetryTypes.SU2 in bw.symm_type:
+                return NotImplemented
+            elif SymmetryTypes.SZ in bw.symm_type:
+                if orb_type == 1:
+                    assert len(ld) == 4
+                elif orb_type == 2:
+                    ld = OrbitalEntropy.get_two_orb_rdm_eigvals(ld)
+            else:
+                return NotImplemented
+            ld = ld[ld != 0]
+            ent = float(np.sum(-ld * np.log(ld)))
+            ents[ih] = ent
+        if orb_type == 2 and ij_symm:
+            for ih in mpos:
+                ents[ih[::-1]] = ents[ih]
+        return ents
+
+    def get_orbital_interaction_matrix(self, ket, iprint=0):
+        import numpy as np
+
+        s1 = self.get_orbital_entropies(ket, orb_type=1, iprint=iprint)
+        s2 = self.get_orbital_entropies(ket, orb_type=2, iprint=iprint)
+        return 0.5 * (s1[:, None] + s1[None, :] - s2) * (1 - np.identity(len(s1)))
+
     def get_npdm(self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0):
         bw = self.bw
         import numpy as np
@@ -2213,3 +2285,119 @@ class FermionTransform:
             xv[1] = np.array(xv[1]) * 2 ** k.count("Z")
 
         return h_terms
+
+
+class OrbitalEntropy:
+    # Table 4. J. Chem. Theory Comput. 2013, 9, 2959-2973
+    ops = "1-n-N+nN:D-nD:d-Nd:Dd:C-nC:N-nN:Cd:-Nd:c-Nc:Dc:n-nN:nD:Cc:-Nc:nC:nN".split(
+        ":"
+    )
+
+    @staticmethod
+    def parse_expr(x):
+        x = x.replace("+", "\n+").replace("-", "\n-")
+        x = x.replace("n", "cd").replace("N", "CD")
+        x = [k for k in x.split("\n") if k != ""]
+        if not x[0].startswith("+") and not x[0].startswith("-"):
+            x[0] = "+" + x[0]
+        for ik, k in enumerate(x):
+            if k[1:] == "1":
+                x[ik] = k[0]
+        return x
+
+    @staticmethod
+    def get_one_orb_rdm_h_terms(n_sites):
+        h_terms = {}
+        for i in range(n_sites):
+            ih_terms = []
+            for ix in [0, 5, 10, 15]:
+                xh_terms = {}
+                for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix]):
+                    xh_terms[x[1:]] = ([i] * len(x[1:]), 1.0 if x[0] == "+" else -1.0)
+                ih_terms.append(xh_terms)
+            h_terms[(i,)] = ih_terms
+        return h_terms
+
+    @staticmethod
+    def get_two_orb_rdm_h_terms(n_sites, ij_symm=True, block_symm=True):
+        h_terms = {}
+        # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
+        if block_symm:
+            ts = (
+                "1/1 1/6 2/5 6/1 1/11 3/9 11/1 6/6 1/16 2/15 -3/14 -4/13 6/11 7/10 "
+                + "-8/9 11/6 12/5 16/1 11/11 6/16 8/14 16/6 11/16 12/15 16/11 16/16"
+            )
+        else:
+            ts = (
+                "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
+                + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+                + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
+            )
+        ts = [[int(v) for v in u.split("/")] for u in ts.split()]
+        tsm = (
+            "1/1 1/6 6/1 1/11 11/1 6/6 1/16 6/11 11/6 16/1 "
+            + "11/11 6/16 16/6 11/16 16/11 16/16"
+        )
+        tsm = [[int(v) for v in u.split("/")] for u in tsm.split()]
+        for i in range(n_sites):
+            for j in range(n_sites):
+                if ij_symm and j > i:
+                    continue
+                ih_terms = []
+                for ix, iy in ts if i != j else tsm:
+                    ff = -1 if ix < 0 else 1
+                    ix = abs(ix)
+                    xh_terms = {}
+                    for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix - 1]):
+                        for y in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[iy - 1]):
+                            f = ff if x[0] == y[0] else -ff
+                            if i <= j:
+                                k = x[1:] + y[1:]
+                                v = ([i] * len(x[1:]) + [j] * len(y[1:]), f)
+                            else:
+                                if len(x) % 2 == 0 and len(y) % 2 == 0:
+                                    f *= -1.0
+                                k = y[1:] + x[1:]
+                                v = ([j] * len(y[1:]) + [i] * len(x[1:]), f)
+                            if k in xh_terms:
+                                xh_terms[k][0].extend(v[0])
+                                xh_terms[k][1].append(v[1])
+                            else:
+                                xh_terms[k] = (v[0], [v[1]])
+                    ih_terms.append(xh_terms)
+                h_terms[(i, j)] = ih_terms
+        return h_terms
+
+    @staticmethod
+    def get_two_orb_rdm_eigvals(ld):
+        import numpy as np
+
+        if len(ld) == 16:
+            return ld
+        elif len(ld) == 26:
+            lx = np.zeros((16,), dtype=ld.dtype)
+            ix, ip = 0, 0
+            for d in [1, 2, 2, 1, 4, 1, 2, 2, 1]:
+                if d == 1:
+                    lx[ix] = ld[ip]
+                else:
+                    dd = np.zeros((d, d))
+                    dd[np.triu_indices(d)] = ld[ip : ip + d * (d + 1) // 2]
+                    lx[ix : ix + d] = np.linalg.eigvalsh(dd, UPLO="U")
+                ix += d
+                ip += d * (d + 1) // 2
+            assert ix == len(lx) and ip == len(ld)
+        elif len(ld) == 36:
+            lx = np.zeros((16,), dtype=ld.dtype)
+            ix, ip = 0, 0
+            for d in [1, 2, 2, 1, 4, 1, 2, 2, 1]:
+                if d == 1:
+                    lx[ix] = ld[ip]
+                else:
+                    lx[ix : ix + d] = np.linalg.eigvalsh(
+                        ld[ip : ip + d * d].reshape(d, d)
+                    )
+                ix += d
+                ip += d * d
+            assert ix == len(lx) and ip == len(ld)
+        return lx
