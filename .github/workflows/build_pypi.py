@@ -18,6 +18,7 @@ for d in json.loads(urlopen(main_url).read()):
         if "-" not in name:
             continue
         package_name = name.split("-")[0]
+        package_name = package_name.replace("_", "-")
         if package_name not in data:
             data[package_name] = {}
         data[package_name][name] = download_url
