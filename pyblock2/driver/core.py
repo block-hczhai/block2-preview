@@ -1687,11 +1687,15 @@ class DMRGDriver:
             self.mpi.barrier()
         return cp_mps
 
-    def mps_change_to_singlet_embedding(self, mps, tag):
-        return self.mps_change_singlet_embedding(mps, tag, forward=True)
+    def mps_change_to_singlet_embedding(self, mps, tag, left_vacuum=None):
+        return self.mps_change_singlet_embedding(
+            mps, tag, forward=True, left_vacuum=left_vacuum
+        )
 
-    def mps_change_from_singlet_embedding(self, mps, tag):
-        return self.mps_change_singlet_embedding(mps, tag, forward=False)
+    def mps_change_from_singlet_embedding(self, mps, tag, left_vacuum=None):
+        return self.mps_change_singlet_embedding(
+            mps, tag, forward=False, left_vacuum=left_vacuum
+        )
 
     def mps_change_precision(self, mps, tag):
         bw = self.bw

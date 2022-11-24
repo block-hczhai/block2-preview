@@ -1840,12 +1840,12 @@ template <typename S, typename FL> struct MPS {
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             shared_ptr<SparseMatrix<S, FL>> wfn =
                 make_shared<SparseMatrix<S, FL>>(d_alloc);
-            S dqse(dq.n() + dq.twos(), 0, dq.pg());
             S lq(dq.twos(), dq.twos(), 0);
             if (left_vacuum != S(S::invalid)) {
                 assert(left_vacuum.twos() == dq.twos());
                 lq = left_vacuum;
             }
+            S dqse(dq.n() + lq.n(), 0, dq.pg());
             StateInfo<S> lsi(lq), rsi(dq);
             rsi.n_states[0] = tensors[center]->info->n_states_ket[0];
             wfn_info->initialize(lsi, rsi, dqse, false, true);
