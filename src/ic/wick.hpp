@@ -1318,7 +1318,9 @@ struct WickExpr {
             last = index + 1;
             index = tex_expr.find_first_of("\n\r", last);
         }
-        if (tex_expr.length() > last)
+        if (tex_expr.length() > last &&
+            tex_expr.substr(last, tex_expr.length() - last) !=
+                string(tex_expr.length() - last, ' '))
             terms.push_back(WickString::parse(
                 tex_expr.substr(last, tex_expr.length() - last), idx_map,
                 perm_map));

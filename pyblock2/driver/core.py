@@ -114,6 +114,16 @@ class MPOAlgorithmTypes(IntFlag):
     NoTransNoRIntermedConventional = 4096 | 2048 | 1024
 
 
+class STTypes(IntFlag):
+    H = 1
+    HT = 2
+    HT2T2 = 4
+    HT1T2 = 8
+    H_HT = 1 | 2
+    H_HT_HT2T2 = 1 | 2 | 4
+    H_HT_HTT = 1 | 2 | 4 | 8
+
+
 class Block2Wrapper:
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
@@ -128,7 +138,9 @@ class Block2Wrapper:
         if SymmetryTypes.CPX in symm_type and not has_cpx:
             raise RuntimeError("block2 needs to be compiled with '-DUSE_COMPLEX=ON'!")
         elif SymmetryTypes.SP in symm_type and not has_sp:
-            raise RuntimeError("block2 needs to be compiled with '-DUSE_SINGLE_PREC=ON'!")
+            raise RuntimeError(
+                "block2 needs to be compiled with '-DUSE_SINGLE_PREC=ON'!"
+            )
         elif SymmetryTypes.SGF in symm_type and not has_sgf:
             raise RuntimeError("block2 needs to be compiled with '-DUSE_SG=ON'!")
         elif SymmetryTypes.SGB in symm_type and not has_sgb:
@@ -609,7 +621,7 @@ class DMRGDriver:
             self.orb_sym = bw.b.VectorUInt8(
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
-    
+
     def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, iprint=1):
         bw = self.bw
         import numpy as np
@@ -1775,8 +1787,13 @@ class DMRGDriver:
             else:
                 casci_ncas = self.n_sites - casci_ncore - casci_nvirt
                 mps_info = bw.brs.CASCIMPSInfo(
-                    self.n_sites, self.vacuum, target, self.ghamil.basis,
-                    casci_ncore, casci_ncas, casci_nvirt
+                    self.n_sites,
+                    self.vacuum,
+                    target,
+                    self.ghamil.basis,
+                    casci_ncore,
+                    casci_ncas,
+                    casci_nvirt,
                 )
             mps = bw.bs.MPS(self.n_sites, center, dot)
         else:
@@ -2458,3 +2475,396 @@ class OrbitalEntropy:
                 ip += d * d
             assert ix == len(lx) and ip == len(ld)
         return lx
+
+
+class SimilarityTransform:
+    @staticmethod
+    def make_sz(
+        h1e,
+        g2e,
+        ecore,
+        t1,
+        t2,
+        scratch,
+        n_elec,
+        ncore=0,
+        ncas=-1,
+        st_type=STTypes.H_HT_HT2T2,
+        iprint=1,
+    ):
+        import block2 as b
+        import numpy as np
+        import os
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.InactiveAlpha] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.InactiveBeta] = b.WickIndex.parse_set("PQRSIJKLMNO")
+        idx_map[b.WickIndexTypes.ExternalAlpha] = b.WickIndex.parse_set("pqrsabcdefg")
+        idx_map[b.WickIndexTypes.ExternalBeta] = b.WickIndex.parse_set("PQRSABCDEFG")
+
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("vaa", 4)] = b.WickPermutation.qc_chem()
+        perm_map[("vbb", 4)] = b.WickPermutation.qc_chem()
+        perm_map[("vab", 4)] = b.WickPermutation.qc_chem()[1:]
+        perm_map[("ta", 2)] = b.WickPermutation.non_symmetric()
+        perm_map[("tb", 2)] = b.WickPermutation.non_symmetric()
+        perm_map[("taa", 4)] = b.WickPermutation.four_anti()
+        perm_map[("tbb", 4)] = b.WickPermutation.four_anti()
+        perm_map[("tab", 4)] = b.WickPermutation.pair_symmetric(2, False)
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+
+        h1 = P("SUM <pq> ha[pq] C[p] D[q]\n + SUM <PQ> hb[PQ] C[P] D[Q]")
+        h2 = P(
+            """
+            0.5 SUM <prqs> vaa[prqs] C[p] C[q] D[s] D[r]
+            0.5 SUM <prQS> vab[prQS] C[p] C[Q] D[S] D[r]
+            0.5 SUM <PRqs> vab[qsPR] C[P] C[q] D[s] D[R]
+            0.5 SUM <PRQS> vbb[PRQS] C[P] C[Q] D[S] D[R]
+            """
+        )
+        tt1 = P("SUM <ai> ta[ia] C[a] D[i]\n + SUM <AI> tb[IA] C[A] D[I]")
+        # this def is consistent with pyscf init t amps
+        tt2 = P(
+            """
+            0.25 SUM <aibj> taa[ijab] C[a] C[b] D[j] D[i]
+            0.50 SUM <aiBJ> tab[iJaB] C[a] C[B] D[J] D[i]
+            0.50 SUM <AIbj> tab[jIbA] C[A] C[b] D[j] D[I]
+            0.25 SUM <AIBJ> tbb[IJAB] C[A] C[B] D[J] D[I]
+            """
+        )
+
+        h = (h1 + h2).expand().simplify()
+        tt = (tt1 + tt2).expand().simplify()
+
+        eq = P("")
+        if STTypes.H in st_type:
+            eq = eq + h
+        if STTypes.HT in st_type:
+            eq = eq + (h ^ tt)
+        if STTypes.HT1T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt1) ^ tt1) + ((h ^ tt2) ^ tt1)
+        if STTypes.HT2T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt2) ^ tt2)
+
+        eq = eq.expand(6).simplify()
+
+        if iprint:
+            print("ST Hamiltonian = ")
+            print("NTERMS = %5d" % len(eq.terms))
+            if iprint >= 2:
+                print(eq)
+
+        if not os.path.isdir(scratch):
+            os.makedirs(scratch)
+
+        ha, hb = h1e
+        vaa, vab, vbb = g2e
+        t1a, t1b = t1
+        t2aa, t2ab, t2bb = t2
+
+        nocca, nvira = t1a.shape
+        noccb, nvirb = t1b.shape
+        cidxa = np.array([True] * nocca + [False] * nvira)
+        cidxb = np.array([True] * noccb + [False] * nvirb)
+
+        tensor_d = {
+            "ha": ha,
+            "hb": hb,
+            "vaa": vaa,
+            "vab": vab,
+            "vbb": vbb,
+            "ta": t1a,
+            "tb": t1b,
+            "taa": t2aa,
+            "tab": t2ab,
+            "tbb": t2bb,
+        }
+
+        cas_mask = np.array([False] * len(cidxa))
+        n_elec -= ncore * 2
+        if ncas == -1:
+            ncas = len(cidxa) - ncore
+        cas_mask[ncore : ncore + ncas] = True
+
+        ccidxa = cidxa & cas_mask
+        ccidxb = cidxb & cas_mask
+        vcidxa = (~cidxa) & cas_mask
+        vcidxb = (~cidxb) & cas_mask
+        icasa = cas_mask[cidxa]
+        icasb = cas_mask[cidxb]
+        vcasa = cas_mask[~cidxa]
+        vcasb = cas_mask[~cidxb]
+        xicasa = cidxa[cas_mask]
+        xicasb = cidxb[cas_mask]
+        xvcasa = (~cidxa)[cas_mask]
+        xvcasb = (~cidxb)[cas_mask]
+        h_terms = {}
+
+        def ix(x):
+            p = {"i": xicasa, "e": xvcasa, "I": xicasb, "E": xvcasb}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((ncas,) * len(x))
+
+        is_alpha = lambda x: (x & b.WickIndexTypes.Alpha) != b.WickIndexTypes.Nothing
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        def tx(x, ix, rx, in_cas):
+            for ig, (ii, rr) in enumerate(zip(ix, rx)):
+                idx = (slice(None),) * ig
+                if is_alpha(ii.types):
+                    if in_cas:
+                        if rr:
+                            idx += (icasa if is_inactive(ii.types) else vcasa,)
+                    elif rr:
+                        idx += (ccidxa if is_inactive(ii.types) else vcidxa,)
+                    else:
+                        idx += (cidxa if is_inactive(ii.types) else ~cidxa,)
+                else:
+                    if in_cas:
+                        if rr:
+                            idx += (icasb if is_inactive(ii.types) else vcasb,)
+                    elif rr:
+                        idx += (ccidxb if is_inactive(ii.types) else vcidxb,)
+                    else:
+                        idx += (cidxb if is_inactive(ii.types) else ~cidxb,)
+                x = x[idx]
+            return x
+
+        e_terms = {}
+
+        for term in eq.terms:
+            expr = ""
+            for t in term.tensors:
+                if t.type != b.WickTensorTypes.Tensor:
+                    if t.type == b.WickTensorTypes.CreationOperator:
+                        expr += "c" if is_alpha(t.indices[0].types) else "C"
+                    elif t.type == b.WickTensorTypes.DestroyOperator:
+                        expr += "d" if is_alpha(t.indices[0].types) else "D"
+            if expr not in e_terms:
+                e_terms[expr] = []
+            e_terms[expr].append(term)
+
+        xiter = 0
+        for expr, terms in e_terms.items():
+            if expr != "":
+                h_terms[expr] = scratch + "/ST-DMRG." + expr + ".npy"
+                dtx = np.zeros((ncas,) * len(expr), dtype=t1a.dtype)
+            for term in terms:
+                tensors = []
+                opidx = []
+                result = ""
+                mask = ""
+                f = term.factor
+                for t in term.tensors:
+                    if t.type != b.WickTensorTypes.Tensor:
+                        if is_inactive(t.indices[0].types):
+                            mask += "i" if is_alpha(t.indices[0].types) else "I"
+                        else:
+                            mask += "e" if is_alpha(t.indices[0].types) else "E"
+                        result += t.indices[0].name
+                for t in term.tensors:
+                    if t.type == b.WickTensorTypes.Tensor:
+                        cmask = [it.name in result for it in t.indices]
+                        tensors.append(
+                            tx(tensor_d[t.name], t.indices, cmask, t.name[0] == "t")
+                        )
+                        opidx.append("".join([i.name for i in t.indices]))
+                np_str = ",".join(opidx) + "->" + result
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(expr) == 0:
+                    ecore += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+                if iprint >= 2:
+                    print(
+                        "%4d / %4d --" % (xiter, len(eq.terms)), expr, np_str, mask, f
+                    )
+                xiter += 1
+            if expr != "":
+                np.save(h_terms[expr], dtx)
+                dtx = None
+
+        if iprint:
+            print("ECORE = %20.15f" % ecore)
+
+        return h_terms, ecore, ncas, n_elec
+
+    @staticmethod
+    def make_sgf(
+        h1e,
+        g2e,
+        ecore,
+        t1,
+        t2,
+        scratch,
+        n_elec,
+        ncore=0,
+        ncas=-1,
+        st_type=STTypes.H_HT_HT2T2,
+        iprint=1,
+    ):
+        import block2 as b
+        import numpy as np
+        import os
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.Inactive] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.External] = b.WickIndex.parse_set("pqrsabcdefg")
+
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("v", 4)] = b.WickPermutation.four_anti()
+        perm_map[("t", 2)] = b.WickPermutation.non_symmetric()
+        perm_map[("tt", 4)] = b.WickPermutation.four_anti()
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+
+        h1 = P("SUM <pq> h[pq] C[p] D[q]")
+        h2 = 0.25 * P("SUM <pqrs> v[pqrs] C[p] C[q] D[s] D[r]")
+        tt1 = P("SUM <ai> t[ia] C[a] D[i]")
+        tt2 = 0.25 * P("SUM <abij> tt[ijab] C[a] C[b] D[j] D[i]")
+
+        h = (h1 + h2).expand().simplify()
+        tt = (tt1 + tt2).expand().simplify()
+
+        eq = P("")
+        if STTypes.H in st_type:
+            eq = eq + h
+        if STTypes.HT in st_type:
+            eq = eq + (h ^ tt)
+        if STTypes.HT1T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt1) ^ tt1) + ((h ^ tt2) ^ tt1)
+        if STTypes.HT2T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt2) ^ tt2)
+
+        eq = eq.expand(6).simplify()
+
+        if iprint:
+            print("ST Hamiltonian = ")
+            print("NTERMS = %5d" % len(eq.terms))
+            if iprint >= 2:
+                print(eq)
+
+        if not os.path.isdir(scratch):
+            os.makedirs(scratch)
+
+        nocc, nvir = t1.shape
+        cidx = np.array([True] * nocc + [False] * nvir)
+
+        g2e = g2e.transpose(0, 2, 1, 3) - g2e.transpose(0, 2, 3, 1)
+
+        tensor_d = {
+            "h": h1e,
+            "v": g2e,
+            "t": t1,
+            "tt": t2
+        }
+
+        cas_mask = np.array([False] * len(cidx))
+        n_elec -= ncore
+        if ncas == -1:
+            ncas = len(cidx) - ncore
+        cas_mask[ncore : ncore + ncas] = True
+
+        ccidx = cidx & cas_mask
+        vcidx = (~cidx) & cas_mask
+        icas = cas_mask[cidx]
+        vcas = cas_mask[~cidx]
+        xicas = cidx[cas_mask]
+        xvcas = (~cidx)[cas_mask]
+        h_terms = {}
+
+        def ix(x):
+            p = {"I": xicas, "E": xvcas}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((ncas,) * len(x))
+
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        def tx(x, ix, rx, in_cas):
+            for ig, (ii, rr) in enumerate(zip(ix, rx)):
+                idx = (slice(None),) * ig
+                if in_cas:
+                    if rr:
+                        idx += (icas if is_inactive(ii.types) else vcas,)
+                elif rr:
+                    idx += (ccidx if is_inactive(ii.types) else vcidx,)
+                else:
+                    idx += (cidx if is_inactive(ii.types) else ~cidx,)
+                x = x[idx]
+            return x
+
+        e_terms = {}
+
+        for term in eq.terms:
+            expr = ""
+            for t in term.tensors:
+                if t.type != b.WickTensorTypes.Tensor:
+                    if t.type == b.WickTensorTypes.CreationOperator:
+                        expr += "C"
+                    elif t.type == b.WickTensorTypes.DestroyOperator:
+                        expr += "D"
+            if expr not in e_terms:
+                e_terms[expr] = []
+            e_terms[expr].append(term)
+
+        xiter = 0
+        for expr, terms in e_terms.items():
+            if expr != "":
+                h_terms[expr] = scratch + "/ST-DMRG." + expr + ".npy"
+                dtx = np.zeros((ncas,) * len(expr), dtype=t1.dtype)
+            for term in terms:
+                tensors = []
+                opidx = []
+                result = ""
+                mask = ""
+                f = term.factor
+                for t in term.tensors:
+                    if t.type != b.WickTensorTypes.Tensor:
+                        if is_inactive(t.indices[0].types):
+                            mask += "I"
+                        else:
+                            mask += "E"
+                        result += t.indices[0].name
+                for t in term.tensors:
+                    if t.type == b.WickTensorTypes.Tensor:
+                        cmask = [it.name in result for it in t.indices]
+                        tensors.append(
+                            tx(tensor_d[t.name], t.indices, cmask, t.name[0] == "t")
+                        )
+                        opidx.append("".join([i.name for i in t.indices]))
+                np_str = ",".join(opidx) + "->" + result
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(expr) == 0:
+                    ecore += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+                if iprint >= 2:
+                    print(
+                        "%4d / %4d --" % (xiter, len(eq.terms)), expr, np_str, mask, f
+                    )
+                xiter += 1
+            if expr != "":
+                np.save(h_terms[expr], dtx)
+                dtx = None
+
+        if iprint:
+            print("ECORE = %20.15f" % ecore)
+
+        return h_terms, ecore, ncas, n_elec
