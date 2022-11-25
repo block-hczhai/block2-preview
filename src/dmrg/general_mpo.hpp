@@ -268,6 +268,7 @@ template <typename FL> struct GeneralFCIDUMP {
         }
         return r;
     }
+    // array must have the min strides == 1
     void add_sum_term(const FL *vals, size_t len, const vector<int> &shape,
                       const vector<size_t> &strides, FP cutoff = (FP)0.0) {
         int ntg = threading->activate_global();

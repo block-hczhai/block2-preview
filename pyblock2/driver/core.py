@@ -2263,7 +2263,7 @@ class ExprBuilder:
 
         self.data.exprs.append(expr)
         if fast:
-            self.data.add_sum_term(arr, cutoff)
+            self.data.add_sum_term(np.ascontiguousarray(arr), cutoff)
         else:
             idx, dt = [], []
             for ix in np.ndindex(*arr.shape):
