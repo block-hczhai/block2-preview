@@ -1608,7 +1608,9 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
              py::arg("dot"))
         .def("deallocate", &MPO<S, FL>::deallocate)
         .def("deep_copy", &MPO<S, FL>::deep_copy)
-        .def("build", &MPO<S, FL>::build)
+        .def("build", &MPO<S, FL>::build,
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
         .def("__neg__",
              [](MPO<S, FL> *self) { return -make_shared<MPO<S, FL>>(*self); })
         .def("__mul__", [](MPO<S, FL> *self,
@@ -1791,6 +1793,17 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
         .def_readwrite("data", &GeneralFCIDUMP<FL>::data)
         .def_readwrite("elem_type", &GeneralFCIDUMP<FL>::elem_type)
         .def_readwrite("order_adjusted", &GeneralFCIDUMP<FL>::order_adjusted)
+        .def("add_sum_term",
+             [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
+                typename GeneralFCIDUMP<FL>::FP cutoff) {
+                 vector<int> shape(v.ndim());
+                 vector<size_t> strides(v.ndim());
+                 for (int i = 0; i < v.ndim(); i++)
+                     shape[i] = v.shape()[i],
+                     strides[i] = v.strides()[i] / sizeof(FL);
+                 self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
+                                    cutoff);
+             })
         .def_static("initialize_from_qc",
                     &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
                     py::arg("elem_type"),

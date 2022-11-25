@@ -71,9 +71,16 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         ncas = mo_a.shape[1] - ncore
 
     if pg_symm and mol.symmetry:
-        orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2)
-        orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
-        orb_sym = orb_sym[ncore : ncore + ncas]
+        orb_syma = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2)
+        orb_syma = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_syma]
+        orb_syma = orb_syma[ncore : ncore + ncas]
+        orb_symb = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_b, tol=1e-2)
+        orb_symb = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_symb]
+        orb_symb = orb_symb[ncore : ncore + ncas]
+        if orb_syma == orb_symb:
+            orb_sym = orb_syma
+        else:
+            orb_sym = (orb_syma, orb_symb)
     else:
         orb_sym = [0] * ncas
 

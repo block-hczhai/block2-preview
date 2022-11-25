@@ -268,6 +268,40 @@ template <typename FL> struct GeneralFCIDUMP {
         }
         return r;
     }
+    void add_sum_term(const FL *vals, size_t len, const vector<int> &shape,
+                      const vector<size_t> &strides, FP cutoff = (FP)0.0) {
+        int ntg = threading->activate_global();
+        vector<size_t> lens(ntg + 1, 0);
+        const size_t plen = len / ntg + !!(len % ntg);
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
+                lens[tid] += (abs(vals[i]) > cutoff);
+        }
+        lens[ntg] = accumulate(&lens[0], &lens[ntg], (size_t)0);
+        indices.push_back(vector<uint16_t>(lens[ntg] * shape.size()));
+        data.push_back(vector<FL>(lens[ntg]));
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            size_t istart = 0;
+            for (int i = 0; i < tid; i++)
+                istart += lens[i];
+            for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
+                if (abs(vals[i]) > cutoff) {
+                    for (int j = 0; j < (int)shape.size(); j++)
+                        indices.back()[istart * shape.size() + j] =
+                            i / strides[j] % shape[j];
+                    data.back()[istart] = vals[i];
+                    istart++;
+                }
+            for (int i = 0; i < tid + 1; i++)
+                istart -= lens[i];
+            assert(istart == 0);
+        }
+        threading->activate_normal();
+    }
     struct vector_uint16_hasher {
         size_t operator()(const vector<uint16_t> &x) const {
             size_t r = x.size();
@@ -494,9 +528,18 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     // Sparse matrix representation for normal site operators
     vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
         site_norm_ops;
+    struct pair_hasher {
+        size_t
+        operator()(const pair<typename S::pg_t, typename S::pg_t> &x) const {
+            size_t r = x.first;
+            r ^= x.second + 0x9e3779b9 + (r << 6) + (r >> 2);
+            return r;
+        }
+    };
     // Primitives for sparse matrix representation for normal site operators
-    unordered_map<typename S::pg_t,
-                  unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+    unordered_map<pair<typename S::pg_t, typename S::pg_t>,
+                  unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>,
+                  pair_hasher>
         op_prims;
     const static int max_n = 10, max_s = 10;
     GeneralHamiltonian()
@@ -518,7 +561,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
     }
     virtual ~GeneralHamiltonian() = default;
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
-        return SiteBasis<S>::get(orb_sym[m]);
+        // alpha and beta orbitals can have different pg symmetries
+        return orb_sym.size() != n_sites * 2
+                   ? SiteBasis<S>::get(orb_sym[m])
+                   : SiteBasis<S>::get(orb_sym[m], orb_sym[m + n_sites]);
     }
     void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -535,6 +581,11 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                 for (int s = -max_s_odd; s <= max_s_odd; s += 2) {
                     info[S(n, s, orb_sym[m])] = nullptr;
                     info[S(n, s, S::pg_inv(orb_sym[m]))] = nullptr;
+                    if (orb_sym.size() == n_sites * 2) {
+                        info[S(n, s, orb_sym[m + n_sites])] = nullptr;
+                        info[S(n, s, S::pg_inv(orb_sym[m + n_sites]))] =
+                            nullptr;
+                    }
                 }
             for (int n = -max_n_even; n <= max_n_even; n += 2)
                 for (int s = -max_s_even; s <= max_s_even; s += 2) {
@@ -548,6 +599,36 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                     info[S(n, s,
                            S::pg_mul(S::pg_inv(orb_sym[m]),
                                      S::pg_inv(orb_sym[m])))] = nullptr;
+                    if (orb_sym.size() == n_sites * 2) {
+                        info[S(n, s,
+                               S::pg_mul(orb_sym[m], orb_sym[m + n_sites]))] =
+                            nullptr;
+                        info[S(n, s,
+                               S::pg_mul(orb_sym[m],
+                                         S::pg_inv(orb_sym[m + n_sites])))] =
+                            nullptr;
+                        info[S(n, s,
+                               S::pg_mul(S::pg_inv(orb_sym[m]),
+                                         orb_sym[m + n_sites]))] = nullptr;
+                        info[S(n, s,
+                               S::pg_mul(S::pg_inv(orb_sym[m]),
+                                         S::pg_inv(orb_sym[m + n_sites])))] =
+                            nullptr;
+                        info[S(n, s,
+                               S::pg_mul(orb_sym[m + n_sites],
+                                         orb_sym[m + n_sites]))] = nullptr;
+                        info[S(n, s,
+                               S::pg_mul(orb_sym[m + n_sites],
+                                         S::pg_inv(orb_sym[m + n_sites])))] =
+                            nullptr;
+                        info[S(n, s,
+                               S::pg_mul(S::pg_inv(orb_sym[m + n_sites]),
+                                         orb_sym[m + n_sites]))] = nullptr;
+                        info[S(n, s,
+                               S::pg_mul(S::pg_inv(orb_sym[m + n_sites]),
+                                         S::pg_inv(orb_sym[m + n_sites])))] =
+                            nullptr;
+                    }
                 }
             for (auto &p : info) {
                 p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
@@ -558,7 +639,11 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                 info.begin(), info.end());
         }
         for (uint16_t m = 0; m < n_sites; m++) {
-            const typename S::pg_t ipg = orb_sym[m];
+            typename S::pg_t ipga = orb_sym[m], ipgb = ipga;
+            if (orb_sym.size() == n_sites * 2)
+                ipgb = orb_sym[m + n_sites];
+            pair<typename S::pg_t, typename S::pg_t> ipg =
+                make_pair(ipga, ipgb);
             if (this->op_prims.count(ipg) == 0)
                 this->op_prims[ipg] =
                     unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
@@ -569,42 +654,48 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims[""]->allocate(find_site_op_info(m, S(0, 0, 0)));
             (*op_prims[""])[S(0, 0, 0)](0, 0) = 1.0;
-            (*op_prims[""])[S(1, -1, ipg)](0, 0) = 1.0;
-            (*op_prims[""])[S(1, 1, ipg)](0, 0) = 1.0;
-            (*op_prims[""])[S(2, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+            (*op_prims[""])[S(1, 1, ipga)](0, 0) = 1.0;
+            (*op_prims[""])[S(1, -1, ipgb)](0, 0) = 1.0;
+            (*op_prims[""])[S(2, 0, S::pg_mul(ipga, ipgb))](0, 0) = 1.0;
 
             op_prims["c"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["c"]->allocate(find_site_op_info(m, S(1, 1, ipg)));
+            op_prims["c"]->allocate(find_site_op_info(m, S(1, 1, ipga)));
             (*op_prims["c"])[S(0, 0, 0)](0, 0) = 1.0;
-            (*op_prims["c"])[S(1, -1, ipg)](0, 0) = 1.0;
+            (*op_prims["c"])[S(1, -1, ipgb)](0, 0) = 1.0;
 
             op_prims["d"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims["d"]->allocate(
-                find_site_op_info(m, S(-1, -1, S::pg_inv(ipg))));
-            (*op_prims["d"])[S(1, 1, ipg)](0, 0) = 1.0;
-            (*op_prims["d"])[S(2, 0, S::pg_mul(ipg, ipg))](0, 0) = 1.0;
+                find_site_op_info(m, S(-1, -1, S::pg_inv(ipga))));
+            (*op_prims["d"])[S(1, 1, ipga)](0, 0) = 1.0;
+            (*op_prims["d"])[S(2, 0, S::pg_mul(ipga, ipgb))](0, 0) = 1.0;
 
             op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["C"]->allocate(find_site_op_info(m, S(1, -1, ipg)));
+            op_prims["C"]->allocate(find_site_op_info(m, S(1, -1, ipgb)));
             (*op_prims["C"])[S(0, 0, 0)](0, 0) = 1.0;
-            (*op_prims["C"])[S(1, 1, ipg)](0, 0) = -1.0;
+            (*op_prims["C"])[S(1, 1, ipga)](0, 0) = -1.0;
 
             op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
             op_prims["D"]->allocate(
-                find_site_op_info(m, S(-1, 1, S::pg_inv(ipg))));
-            (*op_prims["D"])[S(1, -1, ipg)](0, 0) = 1.0;
-            (*op_prims["D"])[S(2, 0, S::pg_mul(ipg, ipg))](0, 0) = -1.0;
+                find_site_op_info(m, S(-1, 1, S::pg_inv(ipgb))));
+            (*op_prims["D"])[S(1, -1, ipgb)](0, 0) = 1.0;
+            (*op_prims["D"])[S(2, 0, S::pg_mul(ipga, ipgb))](0, 0) = -1.0;
         }
         // site norm operators
         const string stx[5] = {"", "c", "C", "d", "D"};
-        for (uint16_t m = 0; m < n_sites; m++)
+        for (uint16_t m = 0; m < n_sites; m++) {
+            typename S::pg_t ipga = orb_sym[m], ipgb = ipga;
+            if (orb_sym.size() == n_sites * 2)
+                ipgb = orb_sym[m + n_sites];
+            pair<typename S::pg_t, typename S::pg_t> ipg =
+                make_pair(ipga, ipgb);
             for (auto t : stx) {
                 site_norm_ops[m][t] = make_shared<SparseMatrix<S, FL>>(nullptr);
                 site_norm_ops[m][t]->allocate(
-                    find_site_op_info(
-                        m, op_prims.at(orb_sym[m])[t]->info->delta_quantum),
-                    op_prims.at(orb_sym[m])[t]->data);
+                    find_site_op_info(m,
+                                      op_prims.at(ipg)[t]->info->delta_quantum),
+                    op_prims.at(ipg)[t]->data);
             }
+        }
     }
     void get_site_string_ops(
         uint16_t m,
@@ -666,6 +757,9 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         S l = ref[k], r = ref.back() - l;
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
             typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (orb_sym.size() == n_sites * 2 &&
+                (expr[j] == 'C' || expr[j] == 'D'))
+                ipg = orb_sym[idxs[j] + n_sites];
             if (expr[j] == 'd' || expr[j] == 'D')
                 ipg = S::pg_inv(ipg);
             if (j < k)
@@ -1300,7 +1394,8 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                     sqrt((twos - tm) * (twos + tm + 2) / 4);
 
             op_prims["M"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
-            op_prims["M"]->allocate(find_site_op_info(m, S(-2, S::pg_inv(ipg))));
+            op_prims["M"]->allocate(
+                find_site_op_info(m, S(-2, S::pg_inv(ipg))));
             for (int tm = -twos + 2; tm < twos + 1; tm += 2)
                 (*op_prims["M"])[S(tm, tm == twos ? ipg : 0)](0, 0) =
                     sqrt((twos + tm) * (twos - tm + 2) / 4);
@@ -1481,10 +1576,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             throw runtime_error("Invalid MPO algorithm None!");
         shared_ptr<GeneralHamiltonian<S, FL>> hamil =
             dynamic_pointer_cast<GeneralHamiltonian<S, FL>>(MPO<S, FL>::hamil);
-        vector<typename S::pg_t> orb_sym = hamil->orb_sym;
         MPO<S, FL>::const_e = afd->e();
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
-        n_sites = (int)orb_sym.size();
+        n_sites = (int)hamil->n_sites;
         MPO<S, FL>::site_op_infos = hamil->site_op_infos;
         basis = hamil->basis;
         left_operator_names.resize(n_sites, nullptr);

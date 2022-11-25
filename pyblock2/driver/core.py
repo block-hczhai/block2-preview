@@ -123,6 +123,16 @@ class Block2Wrapper:
         has_cpx = hasattr(b, "cpx")
         has_sp = hasattr(b, "sp")
         has_spcpx = has_sp and hasattr(b.sp, "cpx")
+        has_sgf = hasattr(b, "sgf")
+        has_sgb = hasattr(b, "sgb")
+        if SymmetryTypes.CPX in symm_type and not has_cpx:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_COMPLEX=ON'!")
+        elif SymmetryTypes.SP in symm_type and not has_sp:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SINGLE_PREC=ON'!")
+        elif SymmetryTypes.SGF in symm_type and not has_sgf:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SG=ON'!")
+        elif SymmetryTypes.SGB in symm_type and not has_sgb:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SG=ON'!")
         if SymmetryTypes.SPCPX in symm_type:
             self.VectorFL = b.VectorComplexFloat
             self.VectorFP = b.VectorFloat
@@ -458,6 +468,8 @@ class DMRGDriver:
         singlet_embedding=True,
     ):
         bw = self.bw
+        import numpy as np
+
         self.vacuum = bw.SX(0, 0, 0)
         if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
             n_elec = n_sites * heis_twos
@@ -484,7 +496,10 @@ class DMRGDriver:
         if orb_sym is None:
             self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
         else:
-            self.orb_sym = bw.b.VectorUInt8(orb_sym)
+            if np.array(orb_sym).ndim == 2:
+                self.orb_sym = bw.b.VectorUInt8(list(orb_sym[0]) + list(orb_sym[1]))
+            else:
+                self.orb_sym = bw.b.VectorUInt8(orb_sym)
         self.ghamil = bw.bs.GeneralHamiltonian(
             self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
         )
@@ -594,6 +609,67 @@ class DMRGDriver:
             self.orb_sym = bw.b.VectorUInt8(
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
+    
+    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, iprint=1):
+        bw = self.bw
+        import numpy as np
+
+        x = np.array(orb_sym, dtype=int)
+        error = 0
+        if SymmetryTypes.SZ in bw.symm_type:
+            if h1e is not None:
+                if x.ndim == 1:
+                    mask = (x[:, None] ^ x[None, :]) != 0
+                    error += sum(np.sum(np.abs(h[mask])) for h in h1e)
+                    h1e[0][mask] = 0
+                    h1e[1][mask] = 0
+                else:
+                    for i in range(len(h1e)):
+                        mask = (x[i][:, None] ^ x[i][None, :]) != 0
+                        error += np.sum(np.abs(h1e[i][mask]))
+                        h1e[i][mask] = 0
+            if g2e is not None:
+                if x.ndim == 1:
+                    mask = (
+                        x[:, None, None, None]
+                        ^ x[None, :, None, None]
+                        ^ x[None, None, :, None]
+                        ^ x[None, None, None, :]
+                    ) != 0
+                    error += sum(np.sum(np.abs(g[mask])) for g in g2e) * 0.5
+                    error += np.sum(np.abs(g2e[1][mask])) * 0.5
+                    g2e[0][mask] = 0
+                    g2e[1][mask] = 0
+                    g2e[2][mask] = 0
+                else:
+                    js = [[0, 0, 0, 0], [0, 0, 1, 1], [1, 1, 1, 1]]
+                    for i in range(len(g2e)):
+                        mask = (
+                            x[js[i][0]][:, None, None, None]
+                            ^ x[js[i][1]][None, :, None, None]
+                            ^ x[js[i][2]][None, None, :, None]
+                            ^ x[js[i][3]][None, None, None, :]
+                        ) != 0
+                        error += np.sum(np.abs(g2e[i][mask])) * 0.5
+                        if i == 1:
+                            error += np.sum(np.abs(g2e[i][mask])) * 0.5
+                        g2e[i][mask] = 0
+        else:
+            if h1e is not None:
+                mask = (x[:, None] ^ x[None, :]) != 0
+                error += np.sum(np.abs(h1e[mask]))
+                h1e[mask] = 0
+            if g2e is not None:
+                mask = (
+                    x[:, None, None, None]
+                    ^ x[None, :, None, None]
+                    ^ x[None, None, :, None]
+                    ^ x[None, None, None, :]
+                ) != 0
+                error += np.sum(np.abs(g2e[mask])) * 0.5
+                g2e[mask] = 0
+        if iprint:
+            print("integral symmetrize error = ", error)
 
     def get_conventional_qc_mpo(self, fcidump, algo_type=None, iprint=1):
         """This method cannot take care of parallelization!"""
@@ -705,42 +781,7 @@ class DMRGDriver:
                 g2e = gg2e
 
         if symmetrize and self.orb_sym is not None:
-            x = np.array(self.orb_sym, dtype=int)
-            error = 0
-            if SymmetryTypes.SZ in bw.symm_type:
-                if h1e is not None:
-                    mask = (x[:, None] ^ x[None, :]) != 0
-                    error += sum(np.sum(np.abs(h[mask])) for h in h1e)
-                    h1e[0][mask] = 0
-                    h1e[1][mask] = 0
-                if g2e is not None:
-                    mask = (
-                        x[:, None, None, None]
-                        ^ x[None, :, None, None]
-                        ^ x[None, None, :, None]
-                        ^ x[None, None, None, :]
-                    ) != 0
-                    error += sum(np.sum(np.abs(g[mask])) for g in g2e) * 0.5
-                    error += np.sum(np.abs(g2e[1][mask])) * 0.5
-                    g2e[0][mask] = 0
-                    g2e[1][mask] = 0
-                    g2e[2][mask] = 0
-            else:
-                if h1e is not None:
-                    mask = (x[:, None] ^ x[None, :]) != 0
-                    error += np.sum(np.abs(h1e[mask]))
-                    h1e[mask] = 0
-                if g2e is not None:
-                    mask = (
-                        x[:, None, None, None]
-                        ^ x[None, :, None, None]
-                        ^ x[None, None, :, None]
-                        ^ x[None, None, None, :]
-                    ) != 0
-                    error += np.sum(np.abs(g2e[mask])) * 0.5
-                    g2e[mask] = 0
-            if iprint:
-                print("integral symmetrize error = ", error)
+            self.integral_symmetrize(self.orb_sym, h1e=h1e, g2e=g2e, iprint=iprint)
 
         if integral_cutoff != 0:
             error = 0
@@ -1718,6 +1759,8 @@ class DMRGDriver:
         occs=None,
         full_fci=True,
         left_vacuum=None,
+        casci_ncore=0,
+        casci_nvirt=0,
     ):
         bw = self.bw
         if target is None:
@@ -1725,9 +1768,16 @@ class DMRGDriver:
         if left_vacuum is None:
             left_vacuum = self.left_vacuum
         if nroots == 1:
-            mps_info = bw.brs.MPSInfo(
-                self.n_sites, self.vacuum, target, self.ghamil.basis
-            )
+            if casci_ncore == 0 and casci_nvirt == 0:
+                mps_info = bw.brs.MPSInfo(
+                    self.n_sites, self.vacuum, target, self.ghamil.basis
+                )
+            else:
+                casci_ncas = self.n_sites - casci_ncore - casci_nvirt
+                mps_info = bw.brs.CASCIMPSInfo(
+                    self.n_sites, self.vacuum, target, self.ghamil.basis,
+                    casci_ncore, casci_ncas, casci_nvirt
+                )
             mps = bw.bs.MPS(self.n_sites, center, dot)
         else:
             targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
@@ -2191,17 +2241,20 @@ class ExprBuilder:
         self.data.data.append(self.bw.VectorFL(val))
         return self
 
-    def add_sum_term(self, expr, arr, cutoff=1e-12):
+    def add_sum_term(self, expr, arr, cutoff=1e-12, fast=True):
         import numpy as np
 
         self.data.exprs.append(expr)
-        idx, dt = [], []
-        for ix in np.ndindex(*arr.shape):
-            if abs(arr[ix]) > cutoff:
-                idx.extend(ix)
-                dt.append(arr[ix])
-        self.data.indices.append(self.bw.b.VectorUInt16(idx))
-        self.data.data.append(self.bw.VectorFL(dt))
+        if fast:
+            self.data.add_sum_term(arr, cutoff)
+        else:
+            idx, dt = [], []
+            for ix in np.ndindex(*arr.shape):
+                if abs(arr[ix]) > cutoff:
+                    idx.extend(ix)
+                    dt.append(arr[ix])
+            self.data.indices.append(self.bw.b.VectorUInt16(idx))
+            self.data.data.append(self.bw.VectorFL(dt))
         return self
 
     def add_terms(self, expr, arr, idx, cutoff=1e-12):

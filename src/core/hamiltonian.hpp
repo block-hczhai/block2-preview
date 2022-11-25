@@ -66,13 +66,15 @@ inline uint32_t operator&(DelayedOpNames a, DelayedOpNames b) {
 template <typename S, typename = void> struct SiteBasis;
 
 template <typename S> struct SiteBasis<S, typename S::is_sz_t> {
-    static shared_ptr<StateInfo<S>> get(int isym) {
+    static shared_ptr<StateInfo<S>> get(int isyma, int isymb = -1) {
+        if (isymb == -1)
+            isymb = isyma;
         shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
         b->allocate(4);
         b->quanta[0] = S(0, 0, 0);
-        b->quanta[1] = S(1, 1, isym);
-        b->quanta[2] = S(1, -1, isym);
-        b->quanta[3] = S(2, 0, S::pg_mul(isym, isym));
+        b->quanta[1] = S(1, 1, isyma);
+        b->quanta[2] = S(1, -1, isymb);
+        b->quanta[3] = S(2, 0, S::pg_mul(isyma, isymb));
         b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] = 1;
         b->sort_states();
         return b;
