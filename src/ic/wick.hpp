@@ -243,11 +243,15 @@ struct WickPermutation {
     static vector<WickPermutation> pair_anti_symmetric(int n) {
         vector<WickPermutation> r(max(n - 1, 0) * 2);
         vector<int16_t> x(n * 2);
+        for (int i = 0; i < n + n; i++)
+            x[i] = i;
         for (int i = 1; i < n; i++) {
             for (int j = 0; j < n; j++)
                 x[j] = j == 0 ? i : (j == i ? 0 : j);
             r[i - 1] = WickPermutation(x, true);
         }
+        for (int i = 0; i < n + n; i++)
+            x[i] = i;
         for (int i = 1; i < n; i++) {
             for (int j = 0; j < n; j++)
                 x[j + n] = j == 0 ? i + n : (j == i ? n : j + n);
@@ -757,7 +761,8 @@ struct WickString {
         set<WickIndex> orig_idxs = used_indices();
         r[0].tensors.clear();
         for (auto &wt : tensors) {
-            if (!defs.count(wt.name)) {
+            if (!defs.count(wt.name) ||
+                defs.at(wt.name).first.indices.size() != wt.indices.size()) {
                 for (auto &rr : r)
                     rr.tensors.push_back(wt);
             } else {

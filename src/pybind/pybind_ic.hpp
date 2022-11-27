@@ -336,6 +336,8 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def_static("qc_chem", &WickPermutation::qc_chem)
         .def_static("qc_phys", &WickPermutation::qc_phys)
         .def_static("four_anti", &WickPermutation::four_anti)
+        .def_static("pair_anti_symmetric",
+                    &WickPermutation::pair_anti_symmetric)
         .def_static("all", &WickPermutation::all)
         .def_static("pair_symmetric", &WickPermutation::pair_symmetric,
                     py::arg("n"), py::arg("hermitian") = false);

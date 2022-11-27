@@ -18,13 +18,14 @@
 #
 
 """
-CCSD in general orbitals with equations derived on the fly.
+CCSD and CCSD(T) in general orbitals with equations derived on the fly.
 need internal contraction module of block2.
 """
 
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
+    from block2 import MapStrPWickTensorExpr
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
@@ -40,13 +41,19 @@ def init_parsers():
     perm_map = MapPStrIntVectorWickPermutation()
     perm_map[("v", 4)] = WickPermutation.four_anti()
     perm_map[("t", 2)] = WickPermutation.non_symmetric()
-    perm_map[("t", 4)] = WickPermutation.four_anti()
+    perm_map[("t", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("t", 6)] = WickPermutation.pair_anti_symmetric(3)
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
     pt = lambda x: WickTensor.parse(x, idx_map, perm_map)
-    return p, pt
+    def px(x):
+        defs = MapStrPWickTensorExpr()
+        name = x.split("=")[0].split("[")[0].strip()
+        defs[name] = WickExpr.parse_def(x, idx_map, perm_map)
+        return defs
+    return p, pt, px
 
-P, PT = init_parsers() # parsers
+P, PT, PX = init_parsers() # parsers
 NR = lambda x: x.expand(-1, True).simplify() # normal order
 FC = lambda x: x.expand(0).simplify() # fully contracted
 Z = P("") # zero
@@ -61,8 +68,10 @@ h1 = P("SUM <pq> h[pq] C[p] D[q]")
 h2 = 0.25 * P("SUM <pqrs> v[pqrs] C[p] C[q] D[s] D[r]")
 t1 = P("SUM <ai> t[ia] C[a] D[i]")
 t2 = 0.25 * P("SUM <abij> t[ijab] C[a] C[b] D[j] D[i]")
+t3 = (1.0 / 36.0) * P("SUM <abcijk> t[ijkabc] C[a] C[b] C[c] D[k] D[j] D[i]")
 ex1 = P("C[i] D[a]")
 ex2 = P("C[i] C[j] D[b] D[a]")
+ex3 = P("C[i] C[j] C[k] D[c] D[b] D[a]")
 
 h = NR(h1 + h2)
 t = NR(t1 + t2)
@@ -74,6 +83,11 @@ t2_eq = FC(ex2 * HBar(h, t, 4))
 # add diag fock term to lhs and rhs of the equation
 t1_eq = t1_eq + P("h[ii]\n - h[aa]") * P("t[ia]")
 t2_eq = t2_eq + P("h[ii]\n + h[jj]\n - h[aa]\n - h[bb]") * P("t[ijab]")
+
+# non-iterative perturbative triples
+pt3_eq = FC(ex3 * (h + (h ^ NR(t1 + t2 + t3))))
+pt3_eq = FC(pt3_eq.substitute(PX("t[ijkabc] = 0")))
+pt3_en_eq = FC(t.conjugate() * (h ^ t3))
 
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E",  WickIndexTypes.Inactive: "I"}
@@ -97,6 +111,8 @@ def fix_eri_permutations(eq):
 
 fix_eri_permutations(t1_eq)
 fix_eri_permutations(t2_eq)
+fix_eri_permutations(pt3_eq)
+fix_eri_permutations(pt3_en_eq)
 
 from pyscf.cc import gccsd
 
@@ -145,11 +161,54 @@ def wick_update_amps(cc, t1, t2, eris):
     t2new /= eijab
     return t1new, t2new
 
+def wick_ccsd_t(cc, t1=None, t2=None, eris=None, return_t3=False):
+    if t1 is None: t1 = cc.t1
+    if t2 is None: t2 = cc.t2
+    if eris is None: eris = cc.ao2mo(cc.mo_coeff)
+    assert isinstance(eris, gccsd._PhysicistsERIs)
+    assert cc.level_shift == 0
+    nocc, nvir = t1.shape
+
+    # t3 amps
+    t3 = np.zeros((nocc, ) * 3 + (nvir, ) * 3)
+    amps_eq = pt3_eq.to_einsum(PT("t3[ijkabc]"))
+    exec(amps_eq, globals(), {
+        "vIIII": np.array(eris.oooo),
+        "vIIIE": np.array(eris.ooov),
+        "vIIEE": np.array(eris.oovv),
+        "vIEEI": np.array(eris.ovvo),
+        "vIEIE": np.array(eris.ovov),
+        "vIEEE": np.array(eris.ovvv),
+        "vEEEE": np.array(eris.vvvv),
+        "tIIEE": t2,
+        "t3": t3,
+    })
+    fii, faa = np.diag(eris.fock)[:nocc], np.diag(eris.fock)[nocc:]
+    eia = fii[:, None] - faa[None, :]
+    eiiaa = eia[:, None, :, None] + eia[None, :, None, :]
+    eiiiaaa = eiiaa[:, :, None, :, :, None] + eia[None, None, :, None, None, :]
+    t3 /= eiiiaaa
+
+    # energy correction
+    e_t = np.array(0.0)
+    exec(pt3_en_eq.to_einsum(PT("E")), globals(), {
+        "hIE": eris.fock[:nocc, nocc:],
+        "vIIEE": np.array(eris.oovv),
+        "vIIIE": np.array(eris.ooov),
+        "vIEEE": np.array(eris.ovvv),
+        "tIE": t1,
+        "tIIEE": t2,
+        "tIIIEEE": t3,
+        "E": e_t
+    })
+    return (e_t, t3) if return_t3 else e_t
+
 class WickGCCSD(gccsd.GCCSD):
     def __init__(self, mf, **kwargs):
         gccsd.GCCSD.__init__(self, mf, **kwargs)
     energy = wick_energy
     update_amps = wick_update_amps
+    ccsd_t = wick_ccsd_t
 
 GCCSD = WickGCCSD
 
@@ -159,4 +218,8 @@ if __name__ == "__main__":
     mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.GHF(mol).run(conv_tol=1E-14)
     ccsd = gccsd.GCCSD(mf).run()
+    e_t = ccsd.ccsd_t()
+    print('E(T) = ', e_t)
     wccsd = WickGCCSD(mf).run()
+    we_t = wccsd.ccsd_t()
+    print('E(T) = ', we_t)

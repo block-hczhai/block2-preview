@@ -42,7 +42,7 @@ def init_parsers():
     perm_map[("v", 4)] = WickPermutation.four_anti()
     perm_map[("t", 2)] = WickPermutation.non_symmetric()
     perm_map[("t", 4)] = WickPermutation.four_anti()
-    # perm_map[("t", 6)] = WickPermutation.pair_anti_symmetric(3)
+    perm_map[("t", 6)] = WickPermutation.pair_anti_symmetric(3)
     # perm_map[("t", 8)] = WickPermutation.pair_anti_symmetric(4)
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
@@ -423,9 +423,18 @@ if __name__ == "__main__":
 
     from pyscf import gto, scf
 
-    mol = gto.M(atom="O 0 0 0; H 0 1 0; H 0 0 1", basis="sto3g", verbose=4)
+    mol = gto.M(atom="O 0 0 0; H 0 1 0; H 0 0 1", basis="cc-pvdz", verbose=4)
     mf = scf.GHF(mol).run(conv_tol=1e-14)
     ccsd = gccsd.GCCSD(mf).run()
     wccsd = GCCSD(mf).run()
     wccsd = GCCSDT(mf).run()
     # wccsd = GCCSDTQ(mf).run()
+
+    # 1...   3.880 sec
+    # 2...  15.781 sec
+    # 3... 102.674 sec
+    # pvdz basis / 204 sec per iter
+    # E(HF)     = -76.0167894720743
+    # E(GCCSD)  = -76.23486336279412
+    # E(T)(ref) =  -0.003466431834820524
+    # E(GCCSDT) = -76.2385041072569

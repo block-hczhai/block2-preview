@@ -18,13 +18,14 @@
 #
 
 """
-UCCSD in spatial orbitals with equations derived on the fly.
+UHF/CCSD and UHF/CCSD(T) in spatial orbitals with equations derived on the fly.
 need internal contraction module of block2.
 """
 
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation, VectorInt16
+    from block2 import VectorWickPermutation, MapStrPWickTensorExpr
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
@@ -46,15 +47,28 @@ def init_parsers():
     perm_map[("vba", 4)] = WickPermutation.qc_chem()[1:]
     perm_map[("ta", 2)] = WickPermutation.non_symmetric()
     perm_map[("tb", 2)] = WickPermutation.non_symmetric()
-    perm_map[("taa", 4)] = WickPermutation.four_anti()
-    perm_map[("tbb", 4)] = WickPermutation.four_anti()
-    perm_map[("tab", 4)] = WickPermutation.pair_symmetric(2, False)
+    perm_map[("taa", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("tbb", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("tab", 4)] = WickPermutation.non_symmetric()
+    perm_01 = WickPermutation.pair_anti_symmetric(3)[0::2]
+    perm_02 = WickPermutation.pair_anti_symmetric(3)[1::2]
+    perm_12 = VectorWickPermutation([x * y * x for x, y in zip(perm_01, perm_02)])
+    perm_map[("taaa", 6)] = WickPermutation.pair_anti_symmetric(3)
+    perm_map[("taab", 6)] = perm_01
+    perm_map[("tabb", 6)] = perm_12
+    perm_map[("tbbb", 6)] = WickPermutation.pair_anti_symmetric(3)
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
     pt = lambda x: WickTensor.parse(x, idx_map, perm_map)
-    return p, pt
+    def px(*xs):
+        defs = MapStrPWickTensorExpr()
+        for x in xs:
+            name = x.split("=")[0].split("[")[0].strip()
+            defs[name] = WickExpr.parse_def(x, idx_map, perm_map)
+        return defs
+    return p, pt, px
 
-P, PT = init_parsers() # parsers
+P, PT, PX = init_parsers() # parsers
 NR = lambda x: x.expand(-1, True).simplify() # normal order
 FC = lambda x: x.expand(0).simplify() # fully contracted
 Z = P("") # zero
@@ -80,12 +94,30 @@ t2 = P("""
     0.50 SUM <AIbj> tab[jIbA] C[A] C[b] D[j] D[I]
     0.25 SUM <AIBJ> tbb[IJAB] C[A] C[B] D[J] D[I]
 """)
+t3 = (1.0 / 36.0) * P("""
+    SUM <abcijk> taaa[ijkabc] C[a] C[b] C[c] D[k] D[j] D[i]
+    SUM <abCijK> taab[ijKabC] C[a] C[b] C[C] D[K] D[j] D[i]
+    SUM <aBciJk> taab[ikJacB] C[a] C[B] C[c] D[k] D[J] D[i]
+    SUM <aBCiJK> tabb[iJKaBC] C[a] C[B] C[C] D[K] D[J] D[i]
+    SUM <AbcIjk> taab[jkIbcA] C[A] C[b] C[c] D[k] D[j] D[I]
+    SUM <AbCIjK> tabb[jIKbAC] C[A] C[b] C[C] D[K] D[j] D[I]
+    SUM <ABcIJk> tabb[kIJcAB] C[A] C[B] C[c] D[k] D[J] D[I]
+    SUM <ABCIJK> tbbb[IJKABC] C[A] C[B] C[C] D[K] D[J] D[I]
+""")
 ex1a = P("C[i] D[a]")
 ex1b = P("C[I] D[A]")
 ex2aa = P("C[i] C[j] D[b] D[a]")
 ex2bb = P("C[I] C[J] D[B] D[A]")
 ex2ab = P("C[i] C[J] D[B] D[a]")
 ex2ba = P("C[I] C[j] D[b] D[A]")
+ex3aaa = 1.0 * P("C[i] C[j] C[k] D[c] D[b] D[a]")
+ex3aab = 3.0 * P("C[i] C[j] C[K] D[C] D[b] D[a]")
+ex3aba = 3.0 * P("C[i] C[J] C[k] D[c] D[B] D[a]")
+ex3abb = 3.0 * P("C[i] C[J] C[K] D[C] D[B] D[a]")
+ex3baa = 3.0 * P("C[I] C[j] C[k] D[c] D[b] D[A]")
+ex3bab = 3.0 * P("C[I] C[j] C[K] D[C] D[b] D[A]")
+ex3bba = 3.0 * P("C[I] C[J] C[k] D[c] D[B] D[A]")
+ex3bbb = 1.0 * P("C[I] C[J] C[K] D[C] D[B] D[A]")
 
 h = NR(h1 + h2)
 t = NR(t1 + t2)
@@ -109,6 +141,17 @@ t2aa_eq = t2aa_eq + P("ha[ii]\n + ha[jj]\n - ha[aa]\n - ha[bb]") * P("taa[ijab]"
 t2bb_eq = t2bb_eq + P("hb[II]\n + hb[JJ]\n - hb[AA]\n - hb[BB]") * P("tbb[IJAB]")
 t2ab_eq = t2ab_eq + P("ha[ii]\n + hb[JJ]\n - ha[aa]\n - hb[BB]") * P("tab[iJaB]")
 t2ba_eq = t2ba_eq + P("hb[II]\n + ha[jj]\n - hb[AA]\n - ha[bb]") * P("tab[jIbA]")
+
+# non-iterative perturbative triples
+pt3_eqs = []
+ht123 = NR((h + (h ^ NR(t1 + t2 + t3))).expand(6))
+for ex3 in [ex3aaa, ex3aab, ex3aba, ex3abb, ex3baa, ex3bab, ex3bba, ex3bbb]:
+    pt3_eq = FC(FC(ex3 * ht123).substitute(PX(
+        "taaa[ijkabc] = 0", "taab[ijKabC] = 0",
+        "tabb[iJKaBC] = 0", "tbbb[IJKABC] = 0",
+    )))
+    pt3_eqs.append(pt3_eq)
+pt3_en_eq = FC(t.conjugate() * NR((h ^ t3).expand(4)))
 
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.ExternalAlpha: "v",  WickIndexTypes.InactiveAlpha: "o",
@@ -142,7 +185,9 @@ def fix_eri_permutations(eq):
                                 break
                     assert found
 
-for eq in [en_eq, t1a_eq, t1b_eq, t2aa_eq, t2bb_eq, t2ab_eq, t2ba_eq]:
+for eq in [en_eq, t1a_eq, t1b_eq, t2aa_eq, t2bb_eq, t2ab_eq, t2ba_eq, pt3_en_eq]:
+    fix_eri_permutations(eq)
+for eq in pt3_eqs:
     fix_eri_permutations(eq)
 
 from pyscf import ao2mo
@@ -254,11 +299,132 @@ def wick_update_amps(cc, t1, t2, eris):
     t2new = t2aanew, t2abnew, t2bbnew
     return t1new, t2new
 
+def wick_ccsd_t(cc, t1=None, t2=None, eris=None, return_t3=False):
+    if t1 is None: t1 = cc.t1
+    if t2 is None: t2 = cc.t2
+    if eris is None: eris = cc.ao2mo(cc.mo_coeff)
+    assert isinstance(eris, uccsd._ChemistsERIs)
+    assert cc.level_shift == 0
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb, nvira, nvirb = t2ab.shape
+
+    # t3 amps
+    t3aaa = np.zeros((nocca, ) * 3 + (nvira, ) * 3)
+    t3aab = np.zeros((nocca, ) * 2 + (noccb, ) + (nvira, ) * 2 + (nvirb, ))
+    t3abb = np.zeros((nocca, ) + (noccb, ) * 2 + (nvira, ) + (nvirb, ) * 2)
+    t3bbb = np.zeros((noccb, ) * 3 + (nvirb, ) * 3)
+
+    eqaaa, eqaab, eqaba, eqabb, eqbaa, eqbab, eqbba, eqbbb = pt3_eqs
+    amps_eq = "".join([
+        eqaaa.to_einsum(PT("taaa[ijkabc]")), eqaab.to_einsum(PT("taab[ijKabC]")),
+        eqaba.to_einsum(PT("taab[ikJacB]")), eqabb.to_einsum(PT("tabb[iJKaBC]")),
+        eqbaa.to_einsum(PT("taab[jkIbcA]")), eqbab.to_einsum(PT("tabb[jIKbAC]")),
+        eqbba.to_einsum(PT("tabb[kIJcAB]")), eqbbb.to_einsum(PT("tbbb[IJKABC]")),
+    ])
+    eris_vvVV = np.zeros((nvira**2, nvirb**2), dtype=np.asarray(eris.vvVV).dtype)
+    vtrila = np.tril_indices(nvira)
+    vtrilb = np.tril_indices(nvirb)
+    eris_vvVV[(vtrila[0]*nvira+vtrila[1])[:, None], vtrilb[0]*nvirb+vtrilb[1]] = np.asarray(eris.vvVV)
+    eris_vvVV[(vtrila[1]*nvira+vtrila[0])[:, None], vtrilb[1]*nvirb+vtrilb[0]] = np.asarray(eris.vvVV)
+    eris_vvVV[(vtrila[0]*nvira+vtrila[1])[:, None], vtrilb[1]*nvirb+vtrilb[0]] = np.asarray(eris.vvVV)
+    eris_vvVV[(vtrila[1]*nvira+vtrila[0])[:, None], vtrilb[0]*nvirb+vtrilb[1]] = np.asarray(eris.vvVV)
+    eris_vvVV = eris_vvVV.reshape(nvira, nvira, nvirb, nvirb)
+    exec(amps_eq, globals(), {
+        "haie": eris.focka[:nocca, nocca:],
+        "haei": eris.focka[nocca:, :nocca],
+        "haee": eris.focka[nocca:, nocca:],
+        "haii": eris.focka[:nocca, :nocca],
+        "hbIE": eris.fockb[:noccb, noccb:],
+        "hbEI": eris.fockb[noccb:, :noccb],
+        "hbEE": eris.fockb[noccb:, noccb:],
+        "hbII": eris.fockb[:noccb, :noccb],
+        "vaaiiii": np.asarray(eris.oooo),
+        "vaaieii": np.asarray(eris.ovoo),
+        "vaaieie": np.asarray(eris.ovov),
+        "vaaiiee": np.asarray(eris.oovv),
+        "vaaieei": np.asarray(eris.ovvo),
+        "vaaieee": eris.get_ovvv(slice(None)),
+        "vaaeeee": ao2mo.restore(1, np.asarray(eris.vvvv), nvira),
+        "vbbIIII": np.asarray(eris.OOOO),
+        "vbbIEII": np.asarray(eris.OVOO),
+        "vbbIEIE": np.asarray(eris.OVOV),
+        "vbbIIEE": np.asarray(eris.OOVV),
+        "vbbIEEI": np.asarray(eris.OVVO),
+        "vbbIEEE": eris.get_OVVV(slice(None)),
+        "vbbEEEE": ao2mo.restore(1, np.asarray(eris.VVVV), nvirb),
+        "vabiiII": np.asarray(eris.ooOO),
+        "vabieII": np.asarray(eris.ovOO),
+        "vabieIE": np.asarray(eris.ovOV),
+        "vabiiEE": np.asarray(eris.ooVV),
+        "vabieEI": np.asarray(eris.ovVO),
+        "vabieEE": eris.get_ovVV(slice(None)),
+        "vabeeEE": eris_vvVV,
+        "vbaIEii": np.asarray(eris.OVoo),
+        "vbaIIee": np.asarray(eris.OOvv),
+        "vbaIEei": np.asarray(eris.OVvo),
+        "vbaIEee": eris.get_OVvv(slice(None)),
+        "taaiiee": t2aa,
+        "tabiIeE": t2ab,
+        "tbbIIEE": t2bb,
+        "taaa": t3aaa,
+        "taab": t3aab,
+        "tabb": t3abb,
+        "tbbb": t3bbb,
+    })
+    faii, faee = np.diag(eris.focka)[:nocca], np.diag(eris.focka)[nocca:]
+    fbii, fbee = np.diag(eris.fockb)[:noccb], np.diag(eris.fockb)[noccb:]
+    eaia = faii[:, None] - faee[None, :]
+    ebia = fbii[:, None] - fbee[None, :]
+    eaaijab = eaia[:, None, :, None] + eaia[None, :, None, :]
+    ebbijab = ebia[:, None, :, None] + ebia[None, :, None, :]
+    eabijab = eaia[:, None, :, None] + ebia[None, :, None, :]
+    eaaaijkabc = eaaijab[:, :, None, :, :, None] + eaia[None, None, :, None, None, :]
+    eaabijkabc = eaaijab[:, :, None, :, :, None] + ebia[None, None, :, None, None, :]
+    eabbijkabc = eabijab[:, :, None, :, :, None] + ebia[None, None, :, None, None, :]
+    ebbbijkabc = ebbijab[:, :, None, :, :, None] + ebia[None, None, :, None, None, :]
+    t3aaa /= eaaaijkabc
+    t3aab /= eaabijkabc + eaabijkabc + eaabijkabc
+    t3abb /= eabbijkabc + eabbijkabc + eabbijkabc
+    t3bbb /= ebbbijkabc
+    t3 = t3aaa, t3aab, t3abb, t3bbb
+
+    # energy correction
+    e_t = np.array(0.0)
+    exec(pt3_en_eq.to_einsum(PT("E")), globals(), {
+        "haie": eris.focka[:nocca, nocca:],
+        "hbIE": eris.fockb[:noccb, noccb:],
+        "vaaieii": np.asarray(eris.ovoo),
+        "vaaieie": np.asarray(eris.ovov),
+        "vaaieee": eris.get_ovvv(slice(None)),
+        "vabieII": np.asarray(eris.ovOO),
+        "vabieIE": np.asarray(eris.ovOV),
+        "vabieEE": eris.get_ovVV(slice(None)),
+        "vbaIEei": np.asarray(eris.OVvo),
+        "vbaIEee": eris.get_OVvv(slice(None)),
+        "vbaIEii": np.asarray(eris.OVoo),
+        "vbbIEIE": np.asarray(eris.OVOV),
+        "vbbIEEE": eris.get_OVVV(slice(None)),
+        "vbbIEII": np.asarray(eris.OVOO),
+        "taie": t1a,
+        "tbIE": t1b,
+        "taaiiee": t2aa,
+        "tabiIeE": t2ab,
+        "tbbIIEE": t2bb,
+        "taaaiiieee": t3aaa,
+        "taabiiIeeE": t3aab,
+        "tabbiIIeEE": t3abb,
+        "tbbbIIIEEE": t3bbb,
+        "E": e_t
+    })
+    return (e_t, t3) if return_t3 else e_t
+
 class WickUCCSD(uccsd.UCCSD):
     def __init__(self, mf, **kwargs):
         uccsd.UCCSD.__init__(self, mf, **kwargs)
     energy = wick_energy
     update_amps = wick_update_amps
+    ccsd_t = wick_ccsd_t
 
 UCCSD = WickUCCSD
 
@@ -268,4 +434,8 @@ if __name__ == "__main__":
     mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.UHF(mol).run(conv_tol=1E-14)
     ccsd = uccsd.UCCSD(mf).run()
+    e_t = ccsd.ccsd_t()
+    print('E(T) = ', e_t)
     wccsd = WickUCCSD(mf).run()
+    we_t = wccsd.ccsd_t()
+    print('E(T) = ', we_t)
