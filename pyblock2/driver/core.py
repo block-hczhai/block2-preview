@@ -119,9 +119,17 @@ class STTypes(IntFlag):
     HT = 2
     HT2T2 = 4
     HT1T2 = 8
+    HT1T3 = 16
+    HT2T3 = 32
     H_HT = 1 | 2
     H_HT_HT2T2 = 1 | 2 | 4
     H_HT_HTT = 1 | 2 | 4 | 8
+    H_HT_HTT_HT1T3 = 1 | 2 | 4 | 8 | 16
+    H_HT_HTT_HT2T3 = 1 | 2 | 4 | 8 | 32
+    H_HT_HTT_HT3 = 1 | 2 | 4 | 8 | 16 | 32
+    H_HT_HT2T2_HT1T3 = 1 | 2 | 4 | 16
+    H_HT_HT2T2_HT2T3 = 1 | 2 | 4 | 32
+    H_HT_HT2T2_HT3 = 1 | 2 | 4 | 16 | 32
 
 
 class Block2Wrapper:
@@ -2707,6 +2715,7 @@ class SimilarityTransform:
         t2,
         scratch,
         n_elec,
+        t3=None,
         ncore=0,
         ncas=-1,
         st_type=STTypes.H_HT_HT2T2,
@@ -2727,7 +2736,8 @@ class SimilarityTransform:
         perm_map = b.MapPStrIntVectorWickPermutation()
         perm_map[("v", 4)] = b.WickPermutation.four_anti()
         perm_map[("t", 2)] = b.WickPermutation.non_symmetric()
-        perm_map[("tt", 4)] = b.WickPermutation.four_anti()
+        perm_map[("tt", 4)] = b.WickPermutation.pair_anti_symmetric(2)
+        perm_map[("ttt", 6)] = b.WickPermutation.pair_anti_symmetric(3)
 
         P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
 
@@ -2735,6 +2745,7 @@ class SimilarityTransform:
         h2 = 0.25 * P("SUM <pqrs> v[pqrs] C[p] C[q] D[s] D[r]")
         tt1 = P("SUM <ai> t[ia] C[a] D[i]")
         tt2 = 0.25 * P("SUM <abij> tt[ijab] C[a] C[b] D[j] D[i]")
+        tt3 = (1.0 / 36.0) * P("SUM <abcijk> ttt[ijkabc] C[a] C[b] C[c] D[k] D[j] D[i]")
 
         h = (h1 + h2).expand().simplify()
         tt = (tt1 + tt2).expand().simplify()
@@ -2748,14 +2759,12 @@ class SimilarityTransform:
             eq = eq + 0.5 * ((h ^ tt1) ^ tt1) + ((h ^ tt2) ^ tt1)
         if STTypes.HT2T2 in st_type:
             eq = eq + 0.5 * ((h ^ tt2) ^ tt2)
+        if STTypes.HT1T3 in st_type:
+            eq = eq + ((h ^ tt3) ^ tt1)
+        if STTypes.HT2T3 in st_type:
+            eq = eq + ((h ^ tt3) ^ tt2)
 
         eq = eq.expand(6).simplify()
-
-        if iprint:
-            print("ST Hamiltonian = ")
-            print("NTERMS = %5d" % len(eq.terms))
-            if iprint >= 2:
-                print(eq)
 
         if not os.path.isdir(scratch):
             os.makedirs(scratch)
@@ -2765,18 +2774,23 @@ class SimilarityTransform:
 
         g2e = g2e.transpose(0, 2, 1, 3) - g2e.transpose(0, 2, 3, 1)
 
-        tensor_d = {
-            "h": h1e,
-            "v": g2e,
-            "t": t1,
-            "tt": t2
-        }
+        tensor_d = {"h": h1e, "v": g2e, "t": t1, "tt": t2, "ttt": t3}
 
         cas_mask = np.array([False] * len(cidx))
         n_elec -= ncore
         if ncas == -1:
             ncas = len(cidx) - ncore
         cas_mask[ncore : ncore + ncas] = True
+
+        if iprint:
+            print(
+                "(%do, %de) -> CAS(%do, %de)"
+                % (len(cidx), n_elec + ncore, ncas, n_elec)
+            )
+            print("ST Hamiltonian = ")
+            print("NTERMS = %5d" % len(eq.terms))
+            if iprint >= 2:
+                print(eq)
 
         ccidx = cidx & cas_mask
         vcidx = (~cidx) & cas_mask
@@ -2856,9 +2870,8 @@ class SimilarityTransform:
                 else:
                     dtx[ix(mask)] += ts.flatten()
                 if iprint >= 2:
-                    print(
-                        "%4d / %4d --" % (xiter, len(eq.terms)), expr, np_str, mask, f
-                    )
+                    xr = ("%20.15f" % ecore) if expr == "" else expr
+                    print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
                 xiter += 1
             if expr != "":
                 np.save(h_terms[expr], dtx)

@@ -299,17 +299,15 @@ def wick_update_amps(cc, t1, t2, eris):
     t2new = t2aanew, t2abnew, t2bbnew
     return t1new, t2new
 
-def wick_ccsd_t(cc, t1=None, t2=None, eris=None, return_t3=False):
+def wick_t3_amps(cc, t1=None, t2=None, eris=None):
     if t1 is None: t1 = cc.t1
     if t2 is None: t2 = cc.t2
     if eris is None: eris = cc.ao2mo(cc.mo_coeff)
     assert isinstance(eris, uccsd._ChemistsERIs)
     assert cc.level_shift == 0
-    t1a, t1b = t1
     t2aa, t2ab, t2bb = t2
     nocca, noccb, nvira, nvirb = t2ab.shape
 
-    # t3 amps
     t3aaa = np.zeros((nocca, ) * 3 + (nvira, ) * 3)
     t3aab = np.zeros((nocca, ) * 2 + (noccb, ) + (nvira, ) * 2 + (nvirb, ))
     t3abb = np.zeros((nocca, ) + (noccb, ) * 2 + (nvira, ) + (nvirb, ) * 2)
@@ -388,8 +386,20 @@ def wick_ccsd_t(cc, t1=None, t2=None, eris=None, return_t3=False):
     t3abb /= eabbijkabc + eabbijkabc + eabbijkabc
     t3bbb /= ebbbijkabc
     t3 = t3aaa, t3aab, t3abb, t3bbb
+    return t3
 
-    # energy correction
+def wick_ccsd_t(cc, t1=None, t2=None, eris=None, t3=None):
+    if t1 is None: t1 = cc.t1
+    if t2 is None: t2 = cc.t2
+    if eris is None: eris = cc.ao2mo(cc.mo_coeff)
+    assert isinstance(eris, uccsd._ChemistsERIs)
+    assert cc.level_shift == 0
+    t1a, t1b = t1
+    t2aa, t2ab, t2bb = t2
+    nocca, noccb = t2ab.shape[:2]
+    if t3 is None:
+        t3 = wick_t3_amps(cc, t1=t1, t2=t2, eris=eris)
+    t3aaa, t3aab, t3abb, t3bbb = t3
     e_t = np.array(0.0)
     exec(pt3_en_eq.to_einsum(PT("E")), globals(), {
         "haie": eris.focka[:nocca, nocca:],
@@ -417,7 +427,7 @@ def wick_ccsd_t(cc, t1=None, t2=None, eris=None, return_t3=False):
         "tbbbIIIEEE": t3bbb,
         "E": e_t
     })
-    return (e_t, t3) if return_t3 else e_t
+    return e_t
 
 class WickUCCSD(uccsd.UCCSD):
     def __init__(self, mf, **kwargs):
