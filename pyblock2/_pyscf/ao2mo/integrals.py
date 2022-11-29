@@ -98,7 +98,7 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
             "ij,ji->", core_dmao[0], hcore_ao + 0.5 * hveff_ao[0], optimize=True
         )
         ecore += np.einsum(
-            "ij,ji->", core_dmao[0], hcore_ao + 0.5 * hveff_ao[1], optimize=True
+            "ij,ji->", core_dmao[1], hcore_ao + 0.5 * hveff_ao[1], optimize=True
         )
 
     h1e_a = mo_cas[0].T @ (hcore_ao + hveff_ao[0]) @ mo_cas[0]

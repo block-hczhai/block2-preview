@@ -630,14 +630,23 @@ class DMRGDriver:
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
-    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, iprint=1):
+    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, hxe=None, iprint=1):
         bw = self.bw
         import numpy as np
 
-        x = np.array(orb_sym, dtype=int)
         error = 0
+        if hxe is not None:
+            assert len(orb_sym) == hxe.ndim
+            x = [np.array(m, dtype=int) for m in orb_sym]
+            mask = 0
+            for i in range(hxe.ndim):
+                mask = mask ^ x[i][(None, ) * i + (slice(None), ) + (None, ) * (hxe.ndim - i - 1)]
+            mask = mask != 0
+            error += np.sum(np.abs(hxe[mask]))
+            hxe[mask] = 0
         if SymmetryTypes.SZ in bw.symm_type:
             if h1e is not None:
+                x = np.array(orb_sym, dtype=int)
                 if x.ndim == 1:
                     mask = (x[:, None] ^ x[None, :]) != 0
                     error += sum(np.sum(np.abs(h[mask])) for h in h1e)
@@ -649,6 +658,7 @@ class DMRGDriver:
                         error += np.sum(np.abs(h1e[i][mask]))
                         h1e[i][mask] = 0
             if g2e is not None:
+                x = np.array(orb_sym, dtype=int)
                 if x.ndim == 1:
                     mask = (
                         x[:, None, None, None]
@@ -676,10 +686,12 @@ class DMRGDriver:
                         g2e[i][mask] = 0
         else:
             if h1e is not None:
+                x = np.array(orb_sym, dtype=int)
                 mask = (x[:, None] ^ x[None, :]) != 0
                 error += np.sum(np.abs(h1e[mask]))
                 h1e[mask] = 0
             if g2e is not None:
+                x = np.array(orb_sym, dtype=int)
                 mask = (
                     x[:, None, None, None]
                     ^ x[None, :, None, None]
@@ -2561,12 +2573,6 @@ class SimilarityTransform:
 
         eq = eq.expand(6).simplify()
 
-        if iprint:
-            print("ST Hamiltonian = ")
-            print("NTERMS = %5d" % len(eq.terms))
-            if iprint >= 2:
-                print(eq)
-
         if not os.path.isdir(scratch):
             os.makedirs(scratch)
 
@@ -2598,6 +2604,16 @@ class SimilarityTransform:
         if ncas == -1:
             ncas = len(cidxa) - ncore
         cas_mask[ncore : ncore + ncas] = True
+
+        if iprint:
+            print(
+                "(%do, %de) -> CAS(%do, %de)"
+                % (len(cidxa), n_elec + ncore * 2, ncas, n_elec)
+            )
+            print("ST Hamiltonian = ")
+            print("NTERMS = %5d" % len(eq.terms))
+            if iprint >= 3:
+                print(eq)
 
         ccidxa = cidxa & cas_mask
         ccidxb = cidxb & cas_mask
@@ -2693,9 +2709,8 @@ class SimilarityTransform:
                 else:
                     dtx[ix(mask)] += ts.flatten()
                 if iprint >= 2:
-                    print(
-                        "%4d / %4d --" % (xiter, len(eq.terms)), expr, np_str, mask, f
-                    )
+                    xr = ("%20.15f" % ecore) if expr == "" else expr
+                    print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
                 xiter += 1
             if expr != "":
                 np.save(h_terms[expr], dtx)
@@ -2789,7 +2804,7 @@ class SimilarityTransform:
             )
             print("ST Hamiltonian = ")
             print("NTERMS = %5d" % len(eq.terms))
-            if iprint >= 2:
+            if iprint >= 3:
                 print(eq)
 
         ccidx = cidx & cas_mask
