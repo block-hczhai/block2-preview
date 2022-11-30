@@ -150,15 +150,16 @@ def get_metal_init_guess(
     dm0 = rmf.get_init_guess(key="atom")
     if dm0.ndim == 2:
         dm0 = np.array([dm0, dm0]) / 2.0
-    print(dm0.shape)
     nelec = np.einsum("sij,ji->s", dm0, rmf.get_ovlp())
     logger.info(scf.RHF(mol), "NELEC BEFORE = %.1f %.1f", nelec[0], nelec[1])
 
     idxs = []
     assert len(atom_idxs) == len(coupling)
     for ia in atom_idxs:
-        idx = mol.search_ao_label("%d %s %s.*" % (ia, mol.atom_symbol(ia), orb))
-        idxs.append(idx)
+        orbs = orb if isinstance(orb, list) else [orb]
+        for orx in orbs:
+            idx = mol.search_ao_label("%d %s %s.*" % (ia, mol.atom_symbol(ia), orx))
+            idxs.append(idx)
 
     ld = lo.orth_ao(mol, "lowdin", pre_orth_ao="SCF")
     dl0 = transform_rdm1_to_mo(dm0, ld, rmf.get_ovlp())
