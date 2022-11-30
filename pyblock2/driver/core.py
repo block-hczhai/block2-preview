@@ -2707,11 +2707,12 @@ class SimilarityTransform:
                         )
                         opidx.append("".join([i.name for i in t.indices]))
                 np_str = ",".join(opidx) + "->" + result
-                ts = f * np.einsum(np_str, *tensors, optimize=True)
-                if len(expr) == 0:
-                    ecore += ts
-                else:
-                    dtx[ix(mask)] += ts.flatten()
+                if 0 not in [x.size for x in tensors]:
+                    ts = f * np.einsum(np_str, *tensors, optimize=True)
+                    if len(expr) == 0:
+                        ecore += ts
+                    else:
+                        dtx[ix(mask)] += ts.flatten()
                 if iprint >= 2:
                     xr = ("%20.15f" % ecore) if expr == "" else expr
                     print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
