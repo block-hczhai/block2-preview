@@ -208,6 +208,7 @@ class DMRGDriver:
         n_threads=None,
         symm_type=SymmetryTypes.SU2,
         mpi=None,
+        stack_mem_ratio=0.4,
     ):
         if mpi is not None and mpi:
             self.mpi = True
@@ -218,6 +219,7 @@ class DMRGDriver:
         self._scratch = scratch
         self._restart_dir = restart_dir
         self.stack_mem = stack_mem
+        self.stack_mem_ratio = stack_mem_ratio
         self.symm_type = symm_type
         bw = self.bw
 
@@ -445,14 +447,16 @@ class DMRGDriver:
         if reset_frame:
             if SymmetryTypes.SP not in bw.symm_type:
                 bw.b.Global.frame = bw.b.DoubleDataFrame(
-                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
+                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch,
+                    self.stack_mem_ratio, self.stack_mem_ratio
                 )
                 bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(1e-16, 1024)
                 bw.b.Global.frame_float = None
                 self.frame = bw.b.Global.frame
             else:
                 bw.b.Global.frame_float = bw.b.FloatDataFrame(
-                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch
+                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch,
+                    self.stack_mem_ratio, self.stack_mem_ratio
                 )
                 bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(1e-16, 1024)
                 bw.b.Global.frame = None
