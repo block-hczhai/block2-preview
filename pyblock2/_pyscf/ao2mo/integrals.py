@@ -71,10 +71,14 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         ncas = mo_a.shape[1] - ncore
 
     if pg_symm and mol.symmetry:
-        orb_syma = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2)
+        orb_syma = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2
+        )
         orb_syma = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_syma]
         orb_syma = orb_syma[ncore : ncore + ncas]
-        orb_symb = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo_b, tol=1e-2)
+        orb_symb = symm.label_orb_symm(
+            mol, mol.irrep_name, mol.symm_orb, mo_b, tol=1e-2
+        )
         orb_symb = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_symb]
         orb_symb = orb_symb[ncore : ncore + ncas]
         if orb_syma == orb_symb:
@@ -105,13 +109,12 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
     h1e_b = mo_cas[1].T @ (hcore_ao + hveff_ao[1]) @ mo_cas[1]
 
     eri_ao = mol if mf._eri is None else mf._eri
-    g2e = ao2mo.full(eri_ao, np.hstack(mo_cas))
-
-    na = mo_cas[0].shape[1]
-    g2e = ao2mo.restore(1, g2e, ncas * 2)
-    g2e_aa = ao2mo.restore(g2e_symm, g2e[:na, :na, :na, :na].copy(), ncas)
-    g2e_ab = ao2mo.restore(min(g2e_symm, 4), g2e[:na, :na, na:, na:].copy(), ncas)
-    g2e_bb = ao2mo.restore(g2e_symm, g2e[na:, na:, na:, na:].copy(), ncas)
+    mo_a, mo_b = mo_cas
+    g2e_aa = ao2mo.restore(g2e_symm, ao2mo.full(eri_ao, mo_a), ncas)
+    g2e_ab = ao2mo.restore(
+        min(g2e_symm, 4), ao2mo.general(eri_ao, (mo_a, mo_a, mo_b, mo_b)), ncas
+    )
+    g2e_bb = ao2mo.restore(g2e_symm, ao2mo.full(eri_ao, mo_b), ncas)
 
     n_elec = mol.nelectron - ncore * 2
     spin = mol.spin
