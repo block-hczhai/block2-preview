@@ -57,6 +57,11 @@ def init_parsers():
     perm_map[("taab", 6)] = perm_01
     perm_map[("tabb", 6)] = perm_12
     perm_map[("tbbb", 6)] = WickPermutation.pair_anti_symmetric(3)
+    perm_map[("ra", 2)] = WickPermutation.non_symmetric()
+    perm_map[("rb", 2)] = WickPermutation.non_symmetric()
+    perm_map[("raa", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("rbb", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("rab", 4)] = WickPermutation.non_symmetric()
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
     pt = lambda x: WickTensor.parse(x, idx_map, perm_map)
@@ -436,6 +441,22 @@ class WickUCCSD(uccsd.UCCSD):
     update_amps = wick_update_amps
     ccsd_t = wick_ccsd_t
 
+    def ipccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_uccsd import WickUEOMIP
+        return WickUEOMIP(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eaccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_uccsd import WickUEOMEA
+        return WickUEOMEA(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eomee_ccsd(self, nroots=1, koopmans=False, guess=None, eris=None):
+        from pyblock2.cc.eom_uccsd import WickUEOMEESpinKeep
+        return WickUEOMEESpinKeep(self).kernel(nroots, koopmans, guess, eris)
+
 UCCSD = WickUCCSD
 
 if __name__ == "__main__":
@@ -444,8 +465,12 @@ if __name__ == "__main__":
     mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.UHF(mol).run(conv_tol=1E-14)
     ccsd = uccsd.UCCSD(mf).run()
-    e_t = ccsd.ccsd_t()
-    print('E(T) = ', e_t)
+    print('E(T) = ', ccsd.ccsd_t())
+    print('E-ee = ', ccsd.eomee_ccsd()[0])
+    print('E-ip (right) = ', ccsd.ipccsd()[0])
+    print('E-ea (right) = ', ccsd.eaccsd()[0])
     wccsd = WickUCCSD(mf).run()
-    we_t = wccsd.ccsd_t()
-    print('E(T) = ', we_t)
+    print('E(T) = ', wccsd.ccsd_t())
+    print('E-ee = ', wccsd.eomee_ccsd()[0])
+    print('E-ip (right) = ', wccsd.ipccsd()[0])
+    print('E-ea (right) = ', wccsd.eaccsd()[0])

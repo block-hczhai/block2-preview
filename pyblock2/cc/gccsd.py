@@ -43,6 +43,8 @@ def init_parsers():
     perm_map[("t", 2)] = WickPermutation.non_symmetric()
     perm_map[("t", 4)] = WickPermutation.pair_anti_symmetric(2)
     perm_map[("t", 6)] = WickPermutation.pair_anti_symmetric(3)
+    perm_map[("r", 2)] = WickPermutation.non_symmetric()
+    perm_map[("r", 4)] = WickPermutation.pair_anti_symmetric(2)
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
     pt = lambda x: WickTensor.parse(x, idx_map, perm_map)
@@ -75,10 +77,11 @@ ex3 = P("C[i] C[j] C[k] D[c] D[b] D[a]")
 
 h = NR(h1 + h2)
 t = NR(t1 + t2)
+hbar = HBar(h, t, 4)
 
 en_eq = FC(HBar(h, t, 2))
 t1_eq = FC(ex1 * HBar(h, t, 3))
-t2_eq = FC(ex2 * HBar(h, t, 4))
+t2_eq = FC(ex2 * hbar)
 
 # add diag fock term to lhs and rhs of the equation
 t1_eq = t1_eq + P("h[ii]\n - h[aa]") * P("t[ia]")
@@ -217,6 +220,22 @@ class WickGCCSD(gccsd.GCCSD):
     update_amps = wick_update_amps
     ccsd_t = wick_ccsd_t
 
+    def ipccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_gccsd import WickGEOMIP
+        return WickGEOMIP(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eaccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_gccsd import WickGEOMEA
+        return WickGEOMEA(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eeccsd(self, nroots=1, koopmans=False, guess=None, eris=None):
+        from pyblock2.cc.eom_gccsd import WickGEOMEE
+        return WickGEOMEE(self).kernel(nroots, koopmans, guess, eris)
+
 GCCSD = WickGCCSD
 
 if __name__ == "__main__":
@@ -225,8 +244,16 @@ if __name__ == "__main__":
     mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.GHF(mol).run(conv_tol=1E-14)
     ccsd = gccsd.GCCSD(mf).run()
-    e_t = ccsd.ccsd_t()
-    print('E(T) = ', e_t)
+    print('E(T) = ', ccsd.ccsd_t())
+    print('E-ee = ', ccsd.eeccsd()[0])
+    print('E-ip (right) = ', ccsd.ipccsd()[0])
+    print('E-ip ( left) = ', ccsd.ipccsd(left=True)[0])
+    print('E-ea (right) = ', ccsd.eaccsd()[0])
+    print('E-ea ( left) = ', ccsd.eaccsd(left=True)[0])
     wccsd = WickGCCSD(mf).run()
-    we_t = wccsd.ccsd_t()
-    print('E(T) = ', we_t)
+    print('E(T) = ', wccsd.ccsd_t())
+    print('E-ee = ', wccsd.eeccsd()[0])
+    print('E-ip (right) = ', wccsd.ipccsd()[0])
+    print('E-ip ( left) = ', wccsd.ipccsd(left=True)[0])
+    print('E-ea (right) = ', wccsd.eaccsd()[0])
+    print('E-ea ( left) = ', wccsd.eaccsd(left=True)[0])

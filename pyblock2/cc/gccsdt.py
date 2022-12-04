@@ -427,8 +427,8 @@ if __name__ == "__main__":
     mf = scf.GHF(mol).run(conv_tol=1e-14)
     ccsd = gccsd.GCCSD(mf).run()
     wccsd = GCCSD(mf).run()
-    wccsd = GCCSDT(mf).run()
-    # wccsd = GCCSDTQ(mf).run()
+    wccsdt = GCCSDT(mf).run()
+    # wccsdtq = GCCSDTQ(mf).run()
 
     # 1...   3.880 sec
     # 2...  15.781 sec

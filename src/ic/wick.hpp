@@ -345,6 +345,13 @@ struct WickTensor {
             tensor_type = WickTensorTypes::CreationOperator;
         else if (name == "D" && indices.size() == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
+        // the number indicates the summed spin label
+        else if (name[0] == 'C' && name.length() == 2 && name[1] >= '0' &&
+                 name[1] <= '9' && indices.size() == 1)
+            tensor_type = WickTensorTypes::CreationOperator;
+        else if (name[0] == 'D' && name.length() == 2 && name[1] >= '0' &&
+                 name[1] <= '9' && indices.size() == 1)
+            tensor_type = WickTensorTypes::DestroyOperator;
         // for external usage
         else if ((name == "Ca" || name == "Cb") && indices.size() == 1)
             tensor_type = WickTensorTypes::CreationOperator;
@@ -1635,17 +1642,23 @@ struct WickExpr {
             x.tensors.begin(), x.tensors.end(), [](const WickTensor &wt) {
                 return wt.type == WickTensorTypes::SpinFreeOperator;
             });
-        assert(!cd_type || !sf_type);
         vector<WickTensor> cd_tensors, ot_tensors;
         vector<int> cd_idx_map, n_inactive_idxs_a, n_inactive_idxs_b;
         int init_sign = 0, final_sign = 0;
         cd_tensors.reserve(x.tensors.size());
         ot_tensors.reserve(x.tensors.size());
+        map<int, vector<int>> cd_spin_map;
         for (auto &wt : x.tensors)
             if (wt.type == WickTensorTypes::CreationOperator ||
-                wt.type == WickTensorTypes::DestroyOperator)
+                wt.type == WickTensorTypes::DestroyOperator) {
                 cd_tensors.push_back(wt);
-            else if (wt.type == WickTensorTypes::SpinFreeOperator) {
+                if (sf_type) {
+                    assert(wt.name.length() == 2);
+                    int spin_tag = 1 + (wt.name[1] - '0');
+                    cd_idx_map.push_back(-1);
+                    cd_spin_map[spin_tag].push_back(cd_tensors.size() - 1);
+                }
+            } else if (wt.type == WickTensorTypes::SpinFreeOperator) {
                 int sf_n = wt.indices.size() / 2;
                 // sign from reverse destroy operator
                 init_sign ^= ((sf_n - 1) & 1) ^ (((sf_n - 1) & 2) >> 1);
@@ -1659,6 +1672,13 @@ struct WickExpr {
                 }
             } else
                 ot_tensors.push_back(wt);
+        if (cd_type && sf_type) {
+            for (auto &x : cd_spin_map) {
+                assert(x.second.size() == 2);
+                cd_idx_map[x.second[0]] = x.second[1];
+                cd_idx_map[x.second[1]] = x.second[0];
+            }
+        }
         int ot_count = (int)ot_tensors.size();
         // all possible pairs
         vector<pair<int, int>> ctr_idxs;
@@ -1899,8 +1919,8 @@ struct WickExpr {
                         // due to su2 factor, CD = DC, this will cancel
                         // normal fermionic factor whenever there is
                         // a D operator in the first half
-                        if (!cds[i] && i < tn)
-                            inact_fac = -inact_fac;
+                        // if (!cds[i] && i < tn)
+                        //     inact_fac = -inact_fac;
                     }
                     if (wis.size() != 0)
                         ot_tensors.push_back(
@@ -1982,11 +2002,11 @@ struct WickExpr {
                     tensors.push_back(wt);
                 } else if (wt.type == WickTensorTypes::CreationOperator) {
                     wt.type = WickTensorTypes::DestroyOperator;
-                    wt.name = wt.name == "C" ? "D" : wt.name;
+                    wt.name[0] = wt.name[0] == 'C' ? 'D' : wt.name[0];
                     tensors.push_back(wt);
                 } else if (wt.type == WickTensorTypes::DestroyOperator) {
                     wt.type = WickTensorTypes::CreationOperator;
-                    wt.name = wt.name == "D" ? "C" : wt.name;
+                    wt.name[0] = wt.name[0] == 'D' ? 'C' : wt.name[0];
                     tensors.push_back(wt);
                 }
             for (auto &wt : rr.tensors)
