@@ -41,6 +41,8 @@ def init_parsers():
     perm_map[("t", 2)] = WickPermutation.non_symmetric()
     perm_map[("t", 4)] = WickPermutation.pair_symmetric(2, False)
     perm_map[("t", 6)] = WickPermutation.pair_symmetric(3, False)
+    perm_map[("r", 2)] = WickPermutation.non_symmetric()
+    perm_map[("r", 4)] = WickPermutation.pair_symmetric(2, False)
 
     defs = MapStrPWickTensorExpr()
     p = lambda x: WickExpr.parse(x, idx_map, perm_map).substitute(defs)
@@ -62,15 +64,26 @@ Z = P("") # zero
 # definitions
 
 DEF["h"] = PD("h[pq] = f[pq] \n - 2.0 SUM <j> v[pqjj] \n + SUM <j> v[pjjq]")
-h1 = P("SUM <pq> h[pq] E1[p,q]")
-h2 = 0.5 * P("SUM <pqrs> v[prqs] E2[pq,rs]")
-t1 = P("SUM <ai> t[ia] E1[a,i]")
-t2 = 0.5 * P("SUM <abij> t[ijab] E1[a,i] E1[b,j]")
-t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
-ex1 = P("E1[i,a]")
-ex2 = P("E1[i,a] E1[j,b]")
-ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
 ehf = P("2 SUM <i> h[ii] \n + 2 SUM <ij> v[iijj] \n - SUM <ij> v[ijji]")
+
+# h1 = P("SUM <pq> h[pq] E1[p,q]")
+# h2 = 0.5 * P("SUM <pqrs> v[prqs] E2[pq,rs]")
+# t1 = P("SUM <ai> t[ia] E1[a,i]")
+# t2 = 0.5 * P("SUM <abij> t[ijab] E1[a,i] E1[b,j]")
+# t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
+# ex1 = P("E1[i,a]")
+# ex2 = P("E1[i,a] E1[j,b]")
+# ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
+
+# C/D with the same number will be spin-traced
+h1 = P("SUM <pq> h[pq] C1[p] D1[q]")
+h2 = 0.5 * P("SUM <pqrs> v[prqs] C1[p] C2[q] D2[s] D1[r]")
+t1 = P("SUM <ai> t[ia] C1[a] D1[i]")
+t2 = 0.5 * P("SUM <abij> t[ijab] C1[a] D1[i] C2[b] D2[j]")
+t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] C1[a] D1[i] C2[b] D2[j] C3[c] D3[k]")
+ex1 = P("C1[i] D1[a]")
+ex2 = P("C1[i] D1[a] C2[j] D2[b]")
+ex3 = P("C1[i] D1[a] C2[j] D2[b] C3[k] D3[c]")
 
 h = SP(h1 + h2 - ehf)
 t = SP(t1 + t2)
@@ -82,9 +95,10 @@ HBarTerms = [
     (1 / 24.0) * ((((h ^ t1) ^ t1) ^ t1) ^ t1)
 ]
 
+hbar = sum(HBarTerms[:5], Z)
 en_eq = FC(sum(HBarTerms[:3], Z))
 t1_eq = FC(ex1 * sum(HBarTerms[:4], Z))
-t2_eq = FC(ex2 * sum(HBarTerms[:5], Z))
+t2_eq = FC(ex2 * hbar)
 
 # need some rearrangements
 t1_eq = 0.5 * t1_eq
@@ -259,8 +273,6 @@ if __name__ == "__main__":
     mol = gto.M(atom='O 0 0 0; H 0 1 0; H 0 0 1', basis='cc-pvdz')
     mf = scf.RHF(mol).run(conv_tol=1E-14)
     ccsd = rccsd.RCCSD(mf).run()
-    e_t = ccsd.ccsd_t()
-    print('E(T) = ', e_t)
+    print('E(T) = ', ccsd.ccsd_t())
     wccsd = WickRCCSD(mf).run()
-    we_t = wccsd.ccsd_t()
-    print('E(T) = ', we_t)
+    print('E(T) = ', wccsd.ccsd_t())

@@ -346,10 +346,10 @@ struct WickTensor {
         else if (name == "D" && indices.size() == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
         // the number indicates the summed spin label
-        else if (name[0] == 'C' && name.length() == 2 && name[1] >= '0' &&
+        else if (name[0] == 'C' && name.length() >= 2 && name[1] >= '0' &&
                  name[1] <= '9' && indices.size() == 1)
             tensor_type = WickTensorTypes::CreationOperator;
-        else if (name[0] == 'D' && name.length() == 2 && name[1] >= '0' &&
+        else if (name[0] == 'D' && name.length() >= 2 && name[1] >= '0' &&
                  name[1] <= '9' && indices.size() == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
         // for external usage
@@ -516,6 +516,26 @@ struct WickTensor {
         return WickTensor(
             name, WickIndex::add_types(vector<WickIndex>{index}, idx_map),
             WickPermutation::non_symmetric(), WickTensorTypes::DestroyOperator);
+    }
+    int get_spin_tag() const {
+        if ((type == WickTensorTypes::CreationOperator ||
+             type == WickTensorTypes::DestroyOperator) &&
+            name.length() >= 2 && name[1] >= '0' && name[1] <= '9') {
+            int spin_tag = 0;
+            for (int i = 1; i < name.length(); i++)
+                spin_tag = spin_tag * 10 + (name[i] - '0');
+            return spin_tag;
+        } else
+            return -1;
+    }
+    void set_spin_tag(int tag) {
+        if ((type == WickTensorTypes::CreationOperator ||
+             type == WickTensorTypes::DestroyOperator) &&
+            name.length() >= 2 && name[1] >= '0' && name[1] <= '9') {
+            stringstream ss;
+            ss << tag;
+            name = string(1, name[0]) + ss.str();
+        }
     }
     WickTensor sort(double &factor) const {
         WickTensor x = *this;
@@ -824,6 +844,15 @@ struct WickString {
             r.insert(ts.indices.begin(), ts.indices.end());
         return r;
     }
+    map<int, int> used_spin_tags() const {
+        map<int, int> r;
+        for (auto &ts : tensors) {
+            int spin_tag = ts.get_spin_tag();
+            if (spin_tag != -1)
+                r[spin_tag]++;
+        }
+        return r;
+    }
     WickString operator*(const WickString &other) const noexcept {
         vector<WickTensor> xtensors = tensors;
         xtensors.insert(xtensors.end(), other.tensors.begin(),
@@ -875,6 +904,38 @@ struct WickString {
             for (auto &wi : xtensors[i].indices)
                 if (mp_idxs.count(wi) && xb_rep.count(wi))
                     wi = mp_idxs[wi];
+        // resolve conflicts in spin tags
+        map<int, int> a_tags = used_spin_tags(),
+                      b_tags = other.used_spin_tags();
+        int new_tag = 0;
+        for (auto &atg : a_tags)
+            if (b_tags.count(atg.first)) {
+                int atgv = atg.second;
+                int btgv = b_tags.at(atg.first);
+                if (btgv > 1) {
+                    while (a_tags.count(new_tag) || b_tags.count(new_tag))
+                        new_tag++;
+                    b_tags[new_tag] = btgv;
+                    b_tags.erase(atg.first);
+                    for (int i = tensors.size(); i < (int)xtensors.size(); i++)
+                        if (xtensors[i].get_spin_tag() == atg.first)
+                            xtensors[i].set_spin_tag(new_tag);
+                }
+            }
+        for (auto &btg : b_tags)
+            if (a_tags.count(btg.first)) {
+                int btgv = btg.second;
+                int atgv = a_tags.at(btg.first);
+                if (atgv > 1) {
+                    while (a_tags.count(new_tag) || b_tags.count(new_tag))
+                        new_tag++;
+                    a_tags[new_tag] = atgv;
+                    a_tags.erase(btg.first);
+                    for (int i = 0; i < (int)tensors.size(); i++)
+                        if (xtensors[i].get_spin_tag() == btg.first)
+                            xtensors[i].set_spin_tag(new_tag);
+                }
+            }
         xctr_indices.clear();
         for (auto &wi : ctr_indices)
             if (mp_idxs.count(wi) && xa_rep.count(wi) && !xc_rep.count(wi))
@@ -1127,8 +1188,18 @@ struct WickString {
                                  (xtensors[xidxs[j]].indices[0] == ib &&
                                   xtensors[xidxs[j]].indices[1] == ia)))
                                 found = true;
-                        if (!found)
+                        if (!found) {
                             xidxs.push_back(i);
+                            WickIndex ic = min(ia, ib);
+                            for (int j = 0; j < (int)xtensors.size(); j++)
+                                if (j != i)
+                                    for (int k = 0;
+                                         k < (int)xtensors[j].indices.size();
+                                         k++)
+                                        if (xtensors[j].indices[k] == ia ||
+                                            xtensors[j].indices[k] == ib)
+                                            xtensors[j].indices[k] = ic;
+                        }
                     } else {
                         WickIndex ic;
                         if (xctr_indices.count(ia)) {
@@ -1642,6 +1713,10 @@ struct WickExpr {
             x.tensors.begin(), x.tensors.end(), [](const WickTensor &wt) {
                 return wt.type == WickTensorTypes::SpinFreeOperator;
             });
+        sf_type = sf_type || any_of(x.tensors.begin(), x.tensors.end(),
+                                    [](const WickTensor &wt) {
+                                        return wt.get_spin_tag() != -1;
+                                    });
         vector<WickTensor> cd_tensors, ot_tensors;
         vector<int> cd_idx_map, n_inactive_idxs_a, n_inactive_idxs_b;
         int init_sign = 0, final_sign = 0;
@@ -1653,10 +1728,9 @@ struct WickExpr {
                 wt.type == WickTensorTypes::DestroyOperator) {
                 cd_tensors.push_back(wt);
                 if (sf_type) {
-                    assert(wt.name.length() == 2);
-                    int spin_tag = 1 + (wt.name[1] - '0');
                     cd_idx_map.push_back(-1);
-                    cd_spin_map[spin_tag].push_back(cd_tensors.size() - 1);
+                    cd_spin_map[wt.get_spin_tag()].push_back(cd_tensors.size() -
+                                                             1);
                 }
             } else if (wt.type == WickTensorTypes::SpinFreeOperator) {
                 int sf_n = wt.indices.size() / 2;
