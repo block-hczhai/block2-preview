@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2021 Seunghoon Lee <seunghoonlee89@gmail.com>
+ * Copyright (C) 2020-2022 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -397,6 +397,8 @@ template <typename S = void> void bind_wick(py::module &m) {
                         WickTensor::des,
                     py::arg("index"), py::arg("idx_map"),
                     py::arg("name") = string("D"))
+        .def("get_spin_tag", &WickTensor::get_spin_tag)
+        .def("set_spin_tag", &WickTensor::set_spin_tag)
         .def("sort",
              [](WickTensor *self) {
                  double factor = 1.0;
@@ -433,6 +435,7 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("substitute", &WickString::substitute)
         .def("index_map", &WickString::index_map)
         .def("used_indices", &WickString::used_indices)
+        .def("used_spin_tags", &WickString::used_spin_tags)
         .def("group_less", &WickString::group_less)
         .def("has_inactive_ops", &WickString::has_inactive_ops)
         .def("has_external_ops", &WickString::has_external_ops)
