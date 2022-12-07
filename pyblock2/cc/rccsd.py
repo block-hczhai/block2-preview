@@ -66,24 +66,14 @@ Z = P("") # zero
 DEF["h"] = PD("h[pq] = f[pq] \n - 2.0 SUM <j> v[pqjj] \n + SUM <j> v[pjjq]")
 ehf = P("2 SUM <i> h[ii] \n + 2 SUM <ij> v[iijj] \n - SUM <ij> v[ijji]")
 
-# h1 = P("SUM <pq> h[pq] E1[p,q]")
-# h2 = 0.5 * P("SUM <pqrs> v[prqs] E2[pq,rs]")
-# t1 = P("SUM <ai> t[ia] E1[a,i]")
-# t2 = 0.5 * P("SUM <abij> t[ijab] E1[a,i] E1[b,j]")
-# t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
-# ex1 = P("E1[i,a]")
-# ex2 = P("E1[i,a] E1[j,b]")
-# ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
-
-# C/D with the same number will be spin-traced
-h1 = P("SUM <pq> h[pq] C1[p] D1[q]")
-h2 = 0.5 * P("SUM <pqrs> v[prqs] C1[p] C2[q] D2[s] D1[r]")
-t1 = P("SUM <ai> t[ia] C1[a] D1[i]")
-t2 = 0.5 * P("SUM <abij> t[ijab] C1[a] D1[i] C2[b] D2[j]")
-t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] C1[a] D1[i] C2[b] D2[j] C3[c] D3[k]")
-ex1 = P("C1[i] D1[a]")
-ex2 = P("C1[i] D1[a] C2[j] D2[b]")
-ex3 = P("C1[i] D1[a] C2[j] D2[b] C3[k] D3[c]")
+h1 = P("SUM <pq> h[pq] E1[p,q]")
+h2 = 0.5 * P("SUM <pqrs> v[prqs] E2[pq,rs]")
+t1 = P("SUM <ai> t[ia] E1[a,i]")
+t2 = 0.5 * P("SUM <abij> t[ijab] E1[a,i] E1[b,j]")
+t3 = (1.0 / 6.0) * P("SUM <abcijk> t[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
+ex1 = P("E1[i,a]")
+ex2 = P("E1[i,a] E1[j,b]")
+ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
 
 h = SP(h1 + h2 - ehf)
 t = SP(t1 + t2)
@@ -265,6 +255,23 @@ class WickRCCSD(rccsd.RCCSD):
     update_amps = wick_update_amps
     ccsd_t = wick_ccsd_t
 
+    def ipccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_rccsd import WickREOMIP
+        return WickREOMIP(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eaccsd(self, nroots=1, left=False, koopmans=False, guess=None,
+               partition=None, eris=None):
+        from pyblock2.cc.eom_rccsd import WickREOMEA
+        return WickREOMEA(self).kernel(nroots, left, koopmans, guess,
+                                            partition, eris)
+
+    def eomee_ccsd_singlet(self, nroots=1, koopmans=False, guess=None, eris=None):
+        from pyblock2.cc.eom_rccsd import WickREOMEESinglet
+        return WickREOMEESinglet(self).kernel(nroots, koopmans, guess, eris)
+
+
 RCCSD = WickRCCSD
 
 if __name__ == "__main__":
@@ -274,5 +281,15 @@ if __name__ == "__main__":
     mf = scf.RHF(mol).run(conv_tol=1E-14)
     ccsd = rccsd.RCCSD(mf).run()
     print('E(T) = ', ccsd.ccsd_t())
+    print('E-ee = ', ccsd.eomee_ccsd_singlet()[0])
+    print('E-ip (right) = ', ccsd.ipccsd()[0])
+    print('E-ip ( left) = ', ccsd.ipccsd(left=True)[0])
+    print('E-ea (right) = ', ccsd.eaccsd()[0])
+    print('E-ea ( left) = ', ccsd.eaccsd(left=True)[0])
     wccsd = WickRCCSD(mf).run()
     print('E(T) = ', wccsd.ccsd_t())
+    print('E-ee = ', wccsd.eomee_ccsd_singlet()[0])
+    print('E-ip (right) = ', wccsd.ipccsd()[0])
+    print('E-ip ( left) = ', wccsd.ipccsd(left=True)[0])
+    print('E-ea (right) = ', wccsd.eaccsd()[0])
+    print('E-ea ( left) = ', wccsd.eaccsd(left=True)[0])
