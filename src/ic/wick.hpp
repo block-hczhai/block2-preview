@@ -1887,8 +1887,7 @@ struct WickExpr {
                             n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
                         n_inact_b +=
                             n_inactive_idxs_b[b] - n_inactive_idxs_b[b + 1];
-                        inact_fac *=
-                            1 << ((cd_idx_map_rev[a] == b) & inactive_mask[a]);
+                        inact_fac *= 1 << (cd_idx_map_rev[a] == b);
                         cd_idx_map_rev[cd_idx_map_rev[a]] = cd_idx_map_rev[b];
                         cd_idx_map_rev[cd_idx_map_rev[b]] = cd_idx_map_rev[a];
                     }
@@ -1910,8 +1909,7 @@ struct WickExpr {
                         n_inact_b + n_inactive_idxs_b[d + 1] <
                             n_inactive_idxs_b[0])
                         continue;
-                    inact_fac *=
-                        1 << ((cd_idx_map_rev[c] == d) & inactive_mask[c]);
+                    inact_fac *= 1 << (cd_idx_map_rev[c] == d);
                     cd_idx_map_rev[cd_idx_map_rev[c]] = cd_idx_map_rev[d];
                     cd_idx_map_rev[cd_idx_map_rev[d]] = cd_idx_map_rev[c];
                 } else {
