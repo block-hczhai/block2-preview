@@ -531,9 +531,11 @@ struct WickTensor {
     void set_spin_tag(int tag) {
         if ((type == WickTensorTypes::CreationOperator ||
              type == WickTensorTypes::DestroyOperator) &&
-            name.length() >= 2 && name[1] >= '0' && name[1] <= '9') {
+            (name.length() == 1 ||
+             (name.length() >= 2 && name[1] >= '0' && name[1] <= '9'))) {
             stringstream ss;
-            ss << tag;
+            if (tag >= 0)
+                ss << tag;
             name = string(1, name[0]) + ss.str();
         }
     }
@@ -1696,7 +1698,7 @@ struct WickExpr {
         return r;
     }
     // no_unctr_sf_inact: if false, will keep spin-free operators with
-    // destroy operators before creation operators
+    // destroy operators before creation operators (will then not using E1/E2)
     // note that under this case there can be extra terms due to the
     // ambiguity in the definition of normal order for spin-free operators
     static WickExpr normal_order_impl_new(const WickString &x,
@@ -1753,6 +1755,17 @@ struct WickExpr {
                 cd_idx_map[x.second[1]] = x.second[0];
             }
         }
+        if (sf_type) {
+            int max_tag = (int)cd_tensors.size() + 1, spin_tag = 0;
+            for (int i = 0; i < (int)cd_tensors.size(); i++)
+                cd_tensors[i].set_spin_tag(max_tag);
+            for (int i = 0; i < (int)cd_tensors.size(); i++)
+                if (cd_tensors[i].get_spin_tag() == max_tag) {
+                    cd_tensors[i].set_spin_tag(spin_tag);
+                    cd_tensors[cd_idx_map[i]].set_spin_tag(spin_tag);
+                    spin_tag++;
+                }
+        }
         int ot_count = (int)ot_tensors.size();
         // all possible pairs
         vector<pair<int, int>> ctr_idxs;
@@ -1796,7 +1809,6 @@ struct WickExpr {
         vector<pair<int, int>> que;
         vector<pair<int, int>> cur_idxs(cd_tensors.size());
         vector<int8_t> cur_idxs_mask(cd_tensors.size(), 0);
-        vector<int8_t> inactive_mask(cd_tensors.size(), 0);
         vector<int> tensor_idxs(cd_tensors.size()), rev_idxs(cd_tensors.size());
         vector<int> cd_idx_map_rev(cd_tensors.size());
         vector<int> acc_sign(cd_tensors.size() + 1);
@@ -1817,19 +1829,42 @@ struct WickExpr {
                                   return cd_tensors[i].type ==
                                          WickTensorTypes::CreationOperator;
                               }));
-            } else if (sf_type && !no_unctr_sf_inact) {
-                stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
-                            [&cd_tensors](int i, int j) {
-                                return cd_tensors[i].fermi_type(
-                                           WickIndexTypes::Inactive) <
-                                       cd_tensors[j].fermi_type(
-                                           WickIndexTypes::Inactive);
-                            });
             } else {
                 stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                             [&cd_tensors](int i, int j) {
                                 return cd_tensors[i] < cd_tensors[j];
                             });
+                if (sf_type && !no_unctr_sf_inact) {
+                    int n_sf = tensor_idxs.size() / 2;
+                    stable_sort(
+                        tensor_idxs.begin(), tensor_idxs.begin() + n_sf,
+                        [&cd_tensors](int i, int j) {
+                            int fc =
+                                cd_tensors[i].fermi_type_compare(cd_tensors[j]);
+                            int ispin = cd_tensors[i].get_spin_tag();
+                            int jspin = cd_tensors[j].get_spin_tag();
+                            return cd_tensors[i].type != cd_tensors[j].type &&
+                                           fc != 0
+                                       ? (fc == -1)
+                                       : (ispin != jspin
+                                              ? ispin < jspin
+                                              : cd_tensors[i] < cd_tensors[j]);
+                        });
+                    stable_sort(
+                        tensor_idxs.begin() + n_sf, tensor_idxs.end(),
+                        [&cd_tensors](int i, int j) {
+                            int fc =
+                                cd_tensors[i].fermi_type_compare(cd_tensors[j]);
+                            int ispin = cd_tensors[i].get_spin_tag();
+                            int jspin = cd_tensors[j].get_spin_tag();
+                            return cd_tensors[i].type != cd_tensors[j].type &&
+                                           fc != 0
+                                       ? (fc == -1)
+                                       : (ispin != jspin
+                                              ? ispin > jspin
+                                              : cd_tensors[i] < cd_tensors[j]);
+                        });
+                }
                 // sign for reordering tensors to the normal order
                 for (int i = 0; i < (int)tensor_idxs.size(); i++)
                     rev_idxs[tensor_idxs[i]] = i;
@@ -1852,12 +1887,9 @@ struct WickExpr {
             ot_tensors.resize(ot_count + l + 1);
             memset(cur_idxs_mask.data(), 0,
                    sizeof(int8_t) * cur_idxs_mask.size());
-            if (sf_type) {
+            if (sf_type)
                 memcpy(cd_idx_map_rev.data(), cd_idx_map.data(),
                        sizeof(int) * cd_idx_map.size());
-                memset(inactive_mask.data(), 0,
-                       sizeof(int8_t) * inactive_mask.size());
-            }
             if (l != -1) {
                 tie(c, d) = cur_idxs[l];
                 bool skip = false;
@@ -1877,12 +1909,6 @@ struct WickExpr {
                     n_inact_a = n_inact_b = 0;
                     for (int i = 0; i < l; i++) {
                         tie(a, b) = cur_idxs[i];
-                        inactive_mask[a] |=
-                            n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
-                        inactive_mask[b] |=
-                            n_inactive_idxs_b[b] - n_inactive_idxs_b[b + 1];
-                        inactive_mask[cd_idx_map_rev[a]] |= inactive_mask[a];
-                        inactive_mask[cd_idx_map_rev[b]] |= inactive_mask[b];
                         n_inact_a +=
                             n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
                         n_inact_b +=
@@ -1891,12 +1917,6 @@ struct WickExpr {
                         cd_idx_map_rev[cd_idx_map_rev[a]] = cd_idx_map_rev[b];
                         cd_idx_map_rev[cd_idx_map_rev[b]] = cd_idx_map_rev[a];
                     }
-                    inactive_mask[c] |=
-                        n_inactive_idxs_a[c] - n_inactive_idxs_a[c + 1];
-                    inactive_mask[d] |=
-                        n_inactive_idxs_b[d] - n_inactive_idxs_b[d + 1];
-                    inactive_mask[cd_idx_map_rev[c]] |= inactive_mask[c];
-                    inactive_mask[cd_idx_map_rev[d]] |= inactive_mask[d];
                     n_inact_a +=
                         n_inactive_idxs_a[c] - n_inactive_idxs_a[c + 1];
                     n_inact_b +=
@@ -1912,7 +1932,8 @@ struct WickExpr {
                     inact_fac *= 1 << (cd_idx_map_rev[c] == d);
                     cd_idx_map_rev[cd_idx_map_rev[c]] = cd_idx_map_rev[d];
                     cd_idx_map_rev[cd_idx_map_rev[d]] = cd_idx_map_rev[c];
-                } else {
+                }
+                if (!sf_type || (sf_type && !no_unctr_sf_inact)) {
                     // remove tensor reorder sign for c/d
                     acc_sign[l + 2] ^= (rev_idxs[d] < rev_idxs[c]);
                     for (int i = 0; i < (int)rev_idxs.size(); i++)
@@ -1933,45 +1954,20 @@ struct WickExpr {
                     que.push_back(make_pair(l + 1, k));
             if (max_unctr != -1 && cd_tensors.size() - (l + l + 2) > max_unctr)
                 continue;
-            if (sf_type) {
-                if (no_unctr_sf_inact && n_inact_a < n_inactive_idxs_a[0] &&
+            if (sf_type && no_unctr_sf_inact) {
+                if (n_inact_a < n_inactive_idxs_a[0] &&
                     n_inact_b < n_inactive_idxs_b[0])
                     continue;
                 int sf_n = cd_tensors.size() / 2, tn = sf_n - l - 1;
                 vector<WickIndex> wis(tn * 2);
-                if (no_unctr_sf_inact) {
-                    for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
-                        if (!cur_idxs_mask[tensor_idxs[i]] &&
-                            cd_tensors[tensor_idxs[i]].type ==
-                                WickTensorTypes::CreationOperator) {
-                            rev_idxs[k] = tensor_idxs[i];
-                            rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
-                            k++;
-                        }
-                } else {
-                    vector<int> tvis(tensor_idxs.size(), -1);
-                    for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
-                        if (!cur_idxs_mask[tensor_idxs[i]] &&
-                            tvis[tensor_idxs[i]] == -1) {
-                            rev_idxs[k] = tensor_idxs[i];
-                            rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
-                            tvis[tensor_idxs[i]] = k;
-                            tvis[cd_idx_map_rev[tensor_idxs[i]]] = k;
-                            k++;
-                        }
-                    // move all virtual C near the middle
-                    // so that the right half order can be fixed
-                    for (int i = 0; i < tn; i++)
-                        if (cd_tensors[rev_idxs[i]].type ==
-                            WickTensorTypes::CreationOperator)
-                            for (int j = tn - 1; j > i; j--)
-                                if (cd_tensors[rev_idxs[j]].type ==
-                                    WickTensorTypes::DestroyOperator) {
-                                    swap(rev_idxs[i], rev_idxs[j]);
-                                    swap(rev_idxs[i + tn], rev_idxs[j + tn]);
-                                    break;
-                                }
-                }
+                for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
+                    if (!cur_idxs_mask[tensor_idxs[i]] &&
+                        cd_tensors[tensor_idxs[i]].type ==
+                            WickTensorTypes::CreationOperator) {
+                        rev_idxs[k] = tensor_idxs[i];
+                        rev_idxs[k + tn] = cd_idx_map_rev[tensor_idxs[i]];
+                        k++;
+                    }
                 for (int i = 0; i < tn + tn; i++)
                     wis[i] = cd_tensors[rev_idxs[i]].indices[0];
                 // sign for reversing destroy operator
@@ -1980,25 +1976,26 @@ struct WickExpr {
                 for (int i = 0; i < (int)(tn + tn); i++)
                     for (int j = i + 1; j < (int)(tn + tn); j++)
                         final_sign ^= (rev_idxs[j] < rev_idxs[i]);
-                if (no_unctr_sf_inact) {
-                    if (wis.size() != 0)
-                        ot_tensors.push_back(WickTensor::spin_free(wis));
-                } else {
-                    vector<uint8_t> cds(tn + tn);
-                    for (int i = 0; i < tn + tn; i++) {
-                        cds[i] = cd_tensors[rev_idxs[i]].type ==
-                                 WickTensorTypes::CreationOperator;
-                        // due to su2 factor, CD = DC, this will cancel
-                        // normal fermionic factor whenever there is
-                        // a D operator in the first half
-                        // if (!cds[i] && i < tn)
-                        //     inact_fac = -inact_fac;
-                    }
-                    if (wis.size() != 0)
-                        ot_tensors.push_back(
-                            WickTensor::general_spin_free(wis, cds));
-                }
+                if (wis.size() != 0)
+                    ot_tensors.push_back(WickTensor::spin_free(wis));
             } else {
+                if (sf_type && !no_unctr_sf_inact) {
+                    int max_tag = (int)tensor_idxs.size() + 1;
+                    for (int i = 0; i < (int)tensor_idxs.size(); i++)
+                        if (!cur_idxs_mask[tensor_idxs[i]])
+                            cd_tensors[tensor_idxs[i]].set_spin_tag(max_tag);
+                    int spin_tag = 0;
+                    for (int i = 0; i < (int)tensor_idxs.size(); i++)
+                        if (!cur_idxs_mask[tensor_idxs[i]])
+                            if (cd_tensors[tensor_idxs[i]].get_spin_tag() ==
+                                max_tag) {
+                                cd_tensors[tensor_idxs[i]].set_spin_tag(
+                                    spin_tag);
+                                cd_tensors[cd_idx_map_rev[tensor_idxs[i]]]
+                                    .set_spin_tag(spin_tag);
+                                spin_tag++;
+                            }
+                }
                 for (int i = 0; i < (int)tensor_idxs.size(); i++)
                     if (!cur_idxs_mask[tensor_idxs[i]])
                         ot_tensors.push_back(cd_tensors[tensor_idxs[i]]);

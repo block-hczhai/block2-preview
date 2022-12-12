@@ -447,16 +447,22 @@ class DMRGDriver:
         if reset_frame:
             if SymmetryTypes.SP not in bw.symm_type:
                 bw.b.Global.frame = bw.b.DoubleDataFrame(
-                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch,
-                    self.stack_mem_ratio, self.stack_mem_ratio
+                    int(self.stack_mem * 0.1),
+                    int(self.stack_mem * 0.9),
+                    self.scratch,
+                    self.stack_mem_ratio,
+                    self.stack_mem_ratio,
                 )
                 bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(1e-16, 1024)
                 bw.b.Global.frame_float = None
                 self.frame = bw.b.Global.frame
             else:
                 bw.b.Global.frame_float = bw.b.FloatDataFrame(
-                    int(self.stack_mem * 0.1), int(self.stack_mem * 0.9), self.scratch,
-                    self.stack_mem_ratio, self.stack_mem_ratio
+                    int(self.stack_mem * 0.1),
+                    int(self.stack_mem * 0.9),
+                    self.scratch,
+                    self.stack_mem_ratio,
+                    self.stack_mem_ratio,
                 )
                 bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(1e-16, 1024)
                 bw.b.Global.frame = None
@@ -644,7 +650,10 @@ class DMRGDriver:
             x = [np.array(m, dtype=int) for m in orb_sym]
             mask = 0
             for i in range(hxe.ndim):
-                mask = mask ^ x[i][(None, ) * i + (slice(None), ) + (None, ) * (hxe.ndim - i - 1)]
+                mask = (
+                    mask
+                    ^ x[i][(None,) * i + (slice(None),) + (None,) * (hxe.ndim - i - 1)]
+                )
             mask = mask != 0
             error += np.sum(np.abs(hxe[mask]))
             hxe[mask] = 0
@@ -776,6 +785,7 @@ class DMRGDriver:
         post_integral_cutoff=1e-20,
         algo_type=None,
         normal_order_ref=None,
+        normal_order_wick=True,
         symmetrize=True,
         sum_mpo_mod=-1,
         compute_accurate_svd_error=True,
@@ -945,15 +955,15 @@ class DMRGDriver:
         else:
             if SymmetryTypes.SU2 in bw.symm_type:
                 h1es, g2es, ecore = NormalOrder.make_su2(
-                    h1e, g2e, ecore, normal_order_ref
+                    h1e, g2e, ecore, normal_order_ref, normal_order_wick
                 )
             elif SymmetryTypes.SZ in bw.symm_type:
                 h1es, g2es, ecore = NormalOrder.make_sz(
-                    h1e, g2e, ecore, normal_order_ref
+                    h1e, g2e, ecore, normal_order_ref, normal_order_wick
                 )
             elif SymmetryTypes.SGF in bw.symm_type:
                 h1es, g2es, ecore = NormalOrder.make_sgf(
-                    h1e, g2e, ecore, normal_order_ref
+                    h1e, g2e, ecore, normal_order_ref, normal_order_wick
                 )
 
             if self.mpi is not None:
@@ -2080,8 +2090,11 @@ class NormalOrder:
         return gctr
 
     @staticmethod
-    def make_su2(h1e, g2e, const_e, cidx):
+    def make_su2(h1e, g2e, const_e, cidx, use_wick):
         import numpy as np
+
+        if use_wick:
+            return WickNormalOrder.make_su2(h1e, g2e, const_e, cidx)
 
         ix = NormalOrder.def_ix(cidx)
         gctr = NormalOrder.def_gctr(cidx, h1e, g2e)
@@ -2125,8 +2138,11 @@ class NormalOrder:
         return h1es, g2es, const_es
 
     @staticmethod
-    def make_sz(h1e, g2e, const_e, cidx):
+    def make_sz(h1e, g2e, const_e, cidx, use_wick):
         import numpy as np
+
+        if use_wick:
+            return WickNormalOrder.make_sz(h1e, g2e, const_e, cidx)
 
         g2e = [g2e[0], g2e[1], g2e[1].transpose(2, 3, 0, 1), g2e[2]]
         ix = NormalOrder.def_ix(cidx)
@@ -2204,8 +2220,11 @@ class NormalOrder:
         return h1es, g2es, const_es
 
     @staticmethod
-    def make_sgf(h1e, g2e, const_e, cidx):
+    def make_sgf(h1e, g2e, const_e, cidx, use_wick):
         import numpy as np
+
+        if use_wick:
+            return WickNormalOrder.make_sgf(h1e, g2e, const_e, cidx)
 
         ix = NormalOrder.def_ix(cidx)
         gctr = NormalOrder.def_gctr(cidx, h1e, g2e)
@@ -2248,6 +2267,290 @@ class NormalOrder:
         np.putmask(g2es["CCDD"], ix("EIEE"), g2es["CCDD"] + 0.5 * gctr("pqrs->rpqs"))
 
         return h1es, g2es, const_es
+
+
+class WickNormalOrder:
+
+    @staticmethod
+    def make_su2(h1e, g2e, const_e, cidx, iprint=1):
+        import block2 as b
+        import numpy as np
+
+        if iprint:
+            print("-- Normal order (su2) using Wick's theorem")
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.Inactive] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.External] = b.WickIndex.parse_set("pqrsabcdefg")
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("v", 4)] = b.WickPermutation.qc_chem()
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+        h = P("SUM <pq> h[pq] E1[p,q] + 0.5 SUM <pqrs> v[prqs] E2[pq,rs]")
+        eq = h.expand(-1, False, False).simplify()
+        WickSpinAdaptation.adjust_spin_coupling(eq)
+        exprs = WickSpinAdaptation.get_eq_exprs(eq)
+
+        dts = {}
+        const_es = const_e
+        tensor_d = {"h": h1e, "v": g2e}
+
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        def ix(x):
+            p = {"I": cidx, "E": ~cidx}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((len(cidx),) * len(x))
+
+        def tx(x, ix):
+            for ig, ii in enumerate(ix):
+                idx = (slice(None),) * ig
+                idx += (cidx if is_inactive(ii.types) else ~cidx,)
+                x = x[idx]
+            return x
+
+        xiter = 0
+        for term, (wf, wex) in zip(eq.terms, exprs):
+            if len(wex) != 0 and wex not in dts:
+                op_len = wex.count("C") + wex.count("D")
+                if op_len not in dts:
+                    dts[op_len] = {}
+                if wex not in dts[op_len]:
+                    dts[op_len][wex] = np.zeros((len(cidx), ) * op_len, dtype=h1e.dtype)
+                dtx = dts[op_len][wex]
+            tensors = []
+            opidx = []
+            result = ""
+            mask = ""
+            f = term.factor * wf
+            for t in term.tensors:
+                if t.type == b.WickTensorTypes.Tensor:
+                    tensors.append(tx(tensor_d[t.name], t.indices))
+                    opidx.append("".join([i.name for i in t.indices]))
+                else:
+                    mask += "I" if is_inactive(t.indices[0].types) else "E"
+                    result += t.indices[0].name
+            np_str = ",".join(opidx) + "->" + result
+            if 0 not in [x.size for x in tensors]:
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(wex) == 0:
+                    const_es += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+            if iprint:
+                xr = ("%20.15f" % const_es) if wex == "" else wex
+                print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
+            xiter += 1
+        assert sorted(dts.keys()) == [2, 4]
+        return dts[2], dts[4], const_es
+    
+
+    @staticmethod
+    def make_sz(h1e, g2e, const_e, cidx, iprint=1):
+        import block2 as b
+        import numpy as np
+
+        if iprint:
+            print("-- Normal order (sz) using Wick's theorem")
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.InactiveAlpha] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.InactiveBeta] = b.WickIndex.parse_set("PQRSIJKLMNO")
+        idx_map[b.WickIndexTypes.ExternalAlpha] = b.WickIndex.parse_set("pqrsabcdefg")
+        idx_map[b.WickIndexTypes.ExternalBeta] = b.WickIndex.parse_set("PQRSABCDEFG")
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("vaa", 4)] = b.WickPermutation.qc_chem()
+        perm_map[("vbb", 4)] = b.WickPermutation.qc_chem()
+        perm_map[("vab", 4)] = b.WickPermutation.qc_chem()[1:]
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+        h1 = P("SUM <pq> ha[pq] C[p] D[q]\n + SUM <PQ> hb[PQ] C[P] D[Q]")
+        h2 = P(
+            """
+            0.5 SUM <prqs> vaa[prqs] C[p] C[q] D[s] D[r]
+            0.5 SUM <prQS> vab[prQS] C[p] C[Q] D[S] D[r]
+            0.5 SUM <PRqs> vab[qsPR] C[P] C[q] D[s] D[R]
+            0.5 SUM <PRQS> vbb[PRQS] C[P] C[Q] D[S] D[R]
+            """
+        )
+        eq = (h1 + h2).expand().simplify()
+
+        ha, hb = h1e
+        vaa, vab, vbb = g2e
+
+        dts = {}
+        const_es = const_e
+        tensor_d = {"ha": ha, "hb": hb, "vaa": vaa, "vab": vab, "vbb": vbb}
+
+        is_alpha = lambda x: (x & b.WickIndexTypes.Alpha) != b.WickIndexTypes.Nothing
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        if np.array(cidx).ndim == 2:
+            cidxa, cidxb = cidx
+        else:
+            cidxa, cidxb = cidx, cidx
+
+        def ix(x):
+            p = {"i": cidxa, "e": ~cidxa, "I": cidxb, "E": ~cidxb}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((len(cidxa),) * len(x))
+
+        def tx(x, ix):
+            for ig, ii in enumerate(ix):
+                idx = (slice(None),) * ig
+                if is_alpha(ii.types):
+                    idx += (cidxa if is_inactive(ii.types) else ~cidxa,)
+                else:
+                    idx += (cidxb if is_inactive(ii.types) else ~cidxb,)
+                x = x[idx]
+            return x
+
+        xiter = 0
+        for term in eq.terms:
+            wex = ""
+            for t in term.tensors:
+                if t.type != b.WickTensorTypes.Tensor:
+                    if t.type == b.WickTensorTypes.CreationOperator:
+                        wex += "c" if is_alpha(t.indices[0].types) else "C"
+                    elif t.type == b.WickTensorTypes.DestroyOperator:
+                        wex += "d" if is_alpha(t.indices[0].types) else "D"
+            if len(wex) != 0 and wex not in dts:
+                op_len = sum([wex.count(cd) for cd in "cdCD"])
+                if op_len not in dts:
+                    dts[op_len] = {}
+                if wex not in dts[op_len]:
+                    dts[op_len][wex] = np.zeros((len(cidxa), ) * op_len, dtype=ha.dtype)
+                dtx = dts[op_len][wex]
+            tensors = []
+            opidx = []
+            result = ""
+            mask = ""
+            f = term.factor
+            for t in term.tensors:
+                if t.type == b.WickTensorTypes.Tensor:
+                    tensors.append(tx(tensor_d[t.name], t.indices))
+                    opidx.append("".join([i.name for i in t.indices]))
+                else:
+                    if is_alpha(t.indices[0].types):
+                        mask += "i" if is_inactive(t.indices[0].types) else "e"
+                    else:
+                        mask += "I" if is_inactive(t.indices[0].types) else "E"
+                    result += t.indices[0].name
+            np_str = ",".join(opidx) + "->" + result
+            if 0 not in [x.size for x in tensors]:
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(wex) == 0:
+                    const_es += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+            if iprint:
+                xr = ("%20.15f" % const_es) if wex == "" else wex
+                print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
+            xiter += 1
+        assert sorted(dts.keys()) == [2, 4]
+        return dts[2], dts[4], const_es
+
+    @staticmethod
+    def make_sgf(h1e, g2e, const_e, cidx, iprint=1):
+        import block2 as b
+        import numpy as np
+
+        if iprint:
+            print("-- Normal order (sgf) using Wick's theorem")
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.Inactive] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.External] = b.WickIndex.parse_set("pqrsabcdefg")
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("v", 4)] = b.WickPermutation.qc_chem()
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+        h = P("SUM <pq> h[pq] C[p] D[q] + 0.5 SUM <pqrs> v[pqrs] C[p] C[r] D[s] D[q]")
+        eq = h.expand().simplify()
+
+        dts = {}
+        const_es = const_e
+        tensor_d = {"h": h1e, "v": g2e}
+
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        def ix(x):
+            p = {"I": cidx, "E": ~cidx}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((len(cidx),) * len(x))
+
+        def tx(x, ix):
+            for ig, ii in enumerate(ix):
+                idx = (slice(None),) * ig
+                idx += (cidx if is_inactive(ii.types) else ~cidx,)
+                x = x[idx]
+            return x
+
+        xiter = 0
+        for term in eq.terms:
+            wex = ""
+            for t in term.tensors:
+                if t.type != b.WickTensorTypes.Tensor:
+                    if t.type == b.WickTensorTypes.CreationOperator:
+                        wex += "C"
+                    elif t.type == b.WickTensorTypes.DestroyOperator:
+                        wex += "D"
+            if len(wex) != 0 and wex not in dts:
+                op_len = wex.count("C") + wex.count("D")
+                if op_len not in dts:
+                    dts[op_len] = {}
+                if wex not in dts[op_len]:
+                    dts[op_len][wex] = np.zeros((len(cidx), ) * op_len, dtype=h1e.dtype)
+                dtx = dts[op_len][wex]
+            tensors = []
+            opidx = []
+            result = ""
+            mask = ""
+            f = term.factor
+            for t in term.tensors:
+                if t.type == b.WickTensorTypes.Tensor:
+                    tensors.append(tx(tensor_d[t.name], t.indices))
+                    opidx.append("".join([i.name for i in t.indices]))
+                else:
+                    mask += "I" if is_inactive(t.indices[0].types) else "E"
+                    result += t.indices[0].name
+            np_str = ",".join(opidx) + "->" + result
+            if 0 not in [x.size for x in tensors]:
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(wex) == 0:
+                    const_es += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+            if iprint:
+                xr = ("%20.15f" % const_es) if wex == "" else wex
+                print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
+            xiter += 1
+        assert sorted(dts.keys()) == [2, 4]
+        return dts[2], dts[4], const_es
 
 
 class ExprBuilder:
@@ -2499,6 +2802,121 @@ class OrbitalEntropy:
                 ip += d * d
             assert ix == len(lx) and ip == len(ld)
         return lx
+
+
+class WickSpinAdaptation:
+    @staticmethod
+    def spin_tag_to_pattern(x):
+        """[1, 2, 2, 1] -> ((.+(.+.)0)1+.)0 ."""
+        if len(x) == 0:
+            return ""
+        elif len(x) == 2:
+            return "(.+.)0"
+        elif x[0] == x[-1]:
+            return "((.+%s)1+.)0" % WickSpinAdaptation.spin_tag_to_pattern(x[1:-1])
+        else:
+            for i in range(2, len(x) - 1, 2):
+                if len(set(x[:i]) & set(x[i:])) == 0:
+                    return "(%s+%s)0" % tuple(
+                        WickSpinAdaptation.spin_tag_to_pattern(xx) for xx in [x[:i], x[i:]]
+                    )
+            raise RuntimeError("Pattern not supported!")
+
+    @staticmethod
+    def adjust_spin_coupling(eq):
+        """correct up to 4-body terms."""
+        for term in eq.terms:
+            x = [t.name for t in term.tensors if t.name[0] in "CD"]
+            n = len(x)
+            ii = len(term.tensors) - n
+            tensors = term.tensors[ii:]
+            found = True
+            factor = 1
+            while found:
+                found = False
+                for i in range(n - 1):
+                    if x[i][0] != x[i + 1][0]:
+                        continue
+                    if (
+                        (i > 0 and x[i - 1][1:] == x[i + 1][1:])
+                        or (i < n - 2 and x[i + 2][1:] == x[i][1:])
+                        or (n >= 6 and i == n - 2 and x[0][1:] == x[i][1:])
+                        or (n >= 6 and i == 0 and x[-1][1:] == x[i + 1][1:])
+                        or (
+                            n >= 8
+                            and i <= n - 3
+                            and i >= 1
+                            and x[0][1:] == x[i + 1][1:]
+                            and x[-1][1:] == x[i][1:]
+                        )
+                        or (
+                            n >= 8
+                            and i == n - 4
+                            and x[0][1:] == x[i][1:]
+                            and x[i + 2][1:] == x[i + 3][1:]
+                        )
+                        or (
+                            n >= 8
+                            and i == 2
+                            and x[i - 2][1:] == x[i - 1][1:]
+                            and x[i + 1][1:] == x[-1][1:]
+                        )
+                        or (
+                            i <= n - 4
+                            and x[i][1:] == x[i + 3][1:]
+                            and x[i + 1][1:] != x[i + 2][1:]
+                        )
+                    ):
+                        factor = -factor
+                        tensors[i : i + 2] = tensors[i : i + 2][::-1]
+                        x[i : i + 2] = x[i : i + 2][::-1]
+                        found = True
+                        break
+                if found:
+                    continue
+                for i in range(n - 2):
+                    if x[i][0] != x[i + 1][0] or x[i + 1][0] != x[i + 2][0]:
+                        continue
+                    if (
+                        (i > 0 and x[i - 1][1:] == x[i + 2][1:])
+                        or (i < n - 3 and x[i + 3][1:] == x[i][1:])
+                        or (n >= 6 and i == n - 3 and x[0][1:] == x[i][1:])
+                    ):
+                        factor = -factor
+                        tensors[i : i + 3] = tensors[i : i + 3][::-1]
+                        x[i : i + 3] = x[i : i + 3][::-1]
+                        found = True
+                        break
+            term.factor *= factor
+            term.tensors[ii:] = tensors
+
+    @staticmethod
+    def get_eq_exprs(eq):
+        import block2 as b
+
+        cg = b.SU2CG(200)
+        cg.initialize()
+        r = []
+        for term in eq.terms:
+            tensors = [t for t in term.tensors if t.name[0] in "CD"]
+            cds = b.VectorUInt8([t.name[0] == "C" for t in tensors])
+            spin_pat = WickSpinAdaptation.spin_tag_to_pattern(
+                [int(t.name[1:]) for t in tensors]
+            )
+            indices = b.VectorUInt16(list(range(len(tensors))))
+            tensor = b.SpinPermRecoupling.make_tensor(spin_pat, indices, cds, cg).data[
+                0
+            ]
+            assert all(
+                [abs(x.factor - y.factor) < 1e-10 for x, y in zip(tensor, tensor[1:])]
+            )
+            r.append(
+                (
+                    1.0 / tensor[0].factor,
+                    spin_pat.replace(".", "%s") % tuple("DC"[cd] for cd in cds),
+                )
+            )
+        return r
 
 
 class SimilarityTransform:
