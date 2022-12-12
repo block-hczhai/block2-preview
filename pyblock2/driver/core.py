@@ -2270,7 +2270,6 @@ class NormalOrder:
 
 
 class WickNormalOrder:
-
     @staticmethod
     def make_su2(h1e, g2e, const_e, cidx, iprint=1):
         import block2 as b
@@ -2324,7 +2323,7 @@ class WickNormalOrder:
                 if op_len not in dts:
                     dts[op_len] = {}
                 if wex not in dts[op_len]:
-                    dts[op_len][wex] = np.zeros((len(cidx), ) * op_len, dtype=h1e.dtype)
+                    dts[op_len][wex] = np.zeros((len(cidx),) * op_len, dtype=h1e.dtype)
                 dtx = dts[op_len][wex]
             tensors = []
             opidx = []
@@ -2351,7 +2350,6 @@ class WickNormalOrder:
             xiter += 1
         assert sorted(dts.keys()) == [2, 4]
         return dts[2], dts[4], const_es
-    
 
     @staticmethod
     def make_sz(h1e, g2e, const_e, cidx, iprint=1):
@@ -2435,7 +2433,7 @@ class WickNormalOrder:
                 if op_len not in dts:
                     dts[op_len] = {}
                 if wex not in dts[op_len]:
-                    dts[op_len][wex] = np.zeros((len(cidxa), ) * op_len, dtype=ha.dtype)
+                    dts[op_len][wex] = np.zeros((len(cidxa),) * op_len, dtype=ha.dtype)
                 dtx = dts[op_len][wex]
             tensors = []
             opidx = []
@@ -2524,7 +2522,7 @@ class WickNormalOrder:
                 if op_len not in dts:
                     dts[op_len] = {}
                 if wex not in dts[op_len]:
-                    dts[op_len][wex] = np.zeros((len(cidx), ) * op_len, dtype=h1e.dtype)
+                    dts[op_len][wex] = np.zeros((len(cidx),) * op_len, dtype=h1e.dtype)
                 dtx = dts[op_len][wex]
             tensors = []
             opidx = []
@@ -2818,7 +2816,8 @@ class WickSpinAdaptation:
             for i in range(2, len(x) - 1, 2):
                 if len(set(x[:i]) & set(x[i:])) == 0:
                     return "(%s+%s)0" % tuple(
-                        WickSpinAdaptation.spin_tag_to_pattern(xx) for xx in [x[:i], x[i:]]
+                        WickSpinAdaptation.spin_tag_to_pattern(xx)
+                        for xx in [x[:i], x[i:]]
                     )
             raise RuntimeError("Pattern not supported!")
 
@@ -2920,6 +2919,175 @@ class WickSpinAdaptation:
 
 
 class SimilarityTransform:
+    @staticmethod
+    def make_su2(
+        h1e,
+        g2e,
+        ecore,
+        t1,
+        t2,
+        scratch,
+        n_elec,
+        t3=None,
+        ncore=0,
+        ncas=-1,
+        st_type=STTypes.H_HT_HT2T2,
+        iprint=1,
+    ):
+        import block2 as b
+        import numpy as np
+        import os
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.Inactive] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.External] = b.WickIndex.parse_set("pqrsabcdefg")
+
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("v", 4)] = b.WickPermutation.qc_chem()
+        perm_map[("t", 2)] = b.WickPermutation.non_symmetric()
+        perm_map[("tt", 4)] = b.WickPermutation.pair_symmetric(2, False)
+        perm_map[("ttt", 6)] = b.WickPermutation.pair_symmetric(3, False)
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+
+        h1 = P("SUM <pq> h[pq] E1[p,q]")
+        h2 = 0.5 * P("SUM <pqrs> v[prqs] E2[pq,rs]")
+        tt1 = P("SUM <ai> t[ia] E1[a,i]")
+        tt2 = 0.5 * P("SUM <abij> tt[ijab] E1[a,i] E1[b,j]")
+        tt3 = (1.0 / 6.0) * P("SUM <abcijk> ttt[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
+
+        h = (h1 + h2).expand(-1, False, False).simplify()
+        tt = (tt1 + tt2).expand(-1, False, False).simplify()
+
+        eq = P("")
+        if STTypes.H in st_type:
+            eq = eq + h
+        if STTypes.HT in st_type:
+            eq = eq + (h ^ tt)
+        if STTypes.HT1T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt1) ^ tt1) + ((h ^ tt2) ^ tt1)
+        if STTypes.HT2T2 in st_type:
+            eq = eq + 0.5 * ((h ^ tt2) ^ tt2)
+        if STTypes.HT1T3 in st_type:
+            eq = eq + ((h ^ tt3) ^ tt1)
+        if STTypes.HT2T3 in st_type:
+            eq = eq + ((h ^ tt3) ^ tt2)
+
+        eq = eq.expand(6, False, False).simplify()
+        WickSpinAdaptation.adjust_spin_coupling(eq)
+        exprs = WickSpinAdaptation.get_eq_exprs(eq)
+
+        if not os.path.isdir(scratch):
+            os.makedirs(scratch)
+
+        nocc, nvir = t1.shape
+        cidx = np.array([True] * nocc + [False] * nvir)
+
+        tensor_d = {"h": h1e, "v": g2e, "t": t1, "tt": t2, "ttt": t3}
+
+        cas_mask = np.array([False] * len(cidx))
+        n_elec -= ncore * 2
+        if ncas == -1:
+            ncas = len(cidx) - ncore
+        cas_mask[ncore : ncore + ncas] = True
+
+        if iprint:
+            print(
+                "(%do, %de) -> CAS(%do, %de)"
+                % (len(cidx), n_elec + ncore * 2, ncas, n_elec)
+            )
+            print("ST Hamiltonian = ")
+            print("NTERMS = %5d" % len(eq.terms))
+            if iprint >= 3:
+                print(eq)
+
+        ccidx = cidx & cas_mask
+        vcidx = (~cidx) & cas_mask
+        icas = cas_mask[cidx]
+        vcas = cas_mask[~cidx]
+        xicas = cidx[cas_mask]
+        xvcas = (~cidx)[cas_mask]
+        h_terms = {}
+
+        def ix(x):
+            p = {"I": xicas, "E": xvcas}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((ncas,) * len(x))
+
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+
+        def tx(x, ix, rx, in_cas):
+            for ig, (ii, rr) in enumerate(zip(ix, rx)):
+                idx = (slice(None),) * ig
+                if in_cas:
+                    if rr:
+                        idx += (icas if is_inactive(ii.types) else vcas,)
+                elif rr:
+                    idx += (ccidx if is_inactive(ii.types) else vcidx,)
+                else:
+                    idx += (cidx if is_inactive(ii.types) else ~cidx,)
+                x = x[idx]
+            return x
+
+        e_terms = {}
+        for term, (wf, expr) in zip(eq.terms, exprs):
+            if expr not in e_terms:
+                e_terms[expr] = []
+            e_terms[expr].append((term, wf))
+
+        xiter = 0
+        for expr, terms in e_terms.items():
+            if expr != "":
+                h_terms[expr] = scratch + "/ST-DMRG." + expr + ".npy"
+                op_len = expr.count("C") + expr.count("D")
+                dtx = np.zeros((ncas,) * op_len, dtype=t1.dtype)
+            for term, wf in terms:
+                tensors = []
+                opidx = []
+                result = ""
+                mask = ""
+                f = term.factor * wf
+                for t in term.tensors:
+                    if t.type != b.WickTensorTypes.Tensor:
+                        if is_inactive(t.indices[0].types):
+                            mask += "I"
+                        else:
+                            mask += "E"
+                        result += t.indices[0].name
+                for t in term.tensors:
+                    if t.type == b.WickTensorTypes.Tensor:
+                        cmask = [it.name in result for it in t.indices]
+                        tensors.append(
+                            tx(tensor_d[t.name], t.indices, cmask, t.name[0] == "t")
+                        )
+                        opidx.append("".join([i.name for i in t.indices]))
+                np_str = ",".join(opidx) + "->" + result
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(expr) == 0:
+                    ecore += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+                if iprint >= 2:
+                    xr = ("%20.15f" % ecore) if expr == "" else expr
+                    print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
+                xiter += 1
+            if expr != "":
+                np.save(h_terms[expr], dtx)
+                dtx = None
+
+        if iprint:
+            print("ECORE = %20.15f" % ecore)
+
+        return h_terms, ecore, ncas, n_elec
+
     @staticmethod
     def make_sz(
         h1e,
