@@ -1779,26 +1779,35 @@ struct WickExpr {
             ctr_cd_idxs[i] = (int)ctr_idxs.size();
             if (sf_type) {
                 for (int j = i + 1; j < (int)cd_tensors.size(); j++) {
-                    const bool ti =
-                        (cd_tensors[i].indices[0].types &
-                         WickIndexTypes::Inactive) != WickIndexTypes::None;
-                    const bool tj =
-                        (cd_tensors[j].indices[0].types &
-                         WickIndexTypes::Inactive) != WickIndexTypes::None;
-                    if (ti || tj) {
-                        if (cd_tensors[i].type < cd_tensors[j].type && ti &&
-                            tj) {
-                            ctr_idxs.push_back(make_pair(i, j));
-                            n_inactive_idxs_a[i] = n_inactive_idxs_b[j] = 1;
-                        }
-                    } else if (cd_tensors[j].type < cd_tensors[i].type)
+                    const WickIndexTypes tij = cd_tensors[i].indices[0].types &
+                                               cd_tensors[j].indices[0].types;
+                    if (tij != WickIndexTypes::None &&
+                        cd_tensors[i].type != cd_tensors[j].type &&
+                        cd_tensors[j] < cd_tensors[i]) {
                         ctr_idxs.push_back(make_pair(i, j));
+                        if ((tij & WickIndexTypes::Inactive) !=
+                            WickIndexTypes::None)
+                            n_inactive_idxs_a[i] = n_inactive_idxs_b[j] = 1;
+                    }
                 }
             } else {
-                for (int j = i + 1; j < (int)cd_tensors.size(); j++)
-                    if (cd_tensors[i].type != cd_tensors[j].type &&
+                for (int j = i + 1; j < (int)cd_tensors.size(); j++) {
+                    const WickIndexTypes &ia = cd_tensors[i].indices[0].types,
+                                         &ib = cd_tensors[j].indices[0].types;
+                    if (((ia == WickIndexTypes::None &&
+                          ib == WickIndexTypes::None) ||
+                         ((((ia & (~WickIndexTypes::AlphaBeta)) ==
+                                WickIndexTypes::None &&
+                            (ib & (~WickIndexTypes::AlphaBeta)) ==
+                                WickIndexTypes::None) ||
+                           ((ia & ib) & (~WickIndexTypes::AlphaBeta)) !=
+                               WickIndexTypes::None) &&
+                          (ia & WickIndexTypes::AlphaBeta) ==
+                              (ib & WickIndexTypes::AlphaBeta))) &&
+                        cd_tensors[i].type != cd_tensors[j].type &&
                         cd_tensors[j] < cd_tensors[i])
                         ctr_idxs.push_back(make_pair(i, j));
+                }
             }
         }
         ctr_cd_idxs[cd_tensors.size()] = (int)ctr_idxs.size();
