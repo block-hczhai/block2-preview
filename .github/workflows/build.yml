@@ -23,7 +23,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-20.04, macos-latest ]
         python: [ 3.9 ]
         manylinux: [ 2010 ]
         plat: [ x86_64 ]
@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4.3.0
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
 
@@ -48,13 +48,13 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11
 
       - name: install requirements (linux / mpi)
-        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-latest'
+        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-20.04'
         run: |
           sudo apt-get install libopenmpi-dev
           python -m pip install mpi4py
 
       - name: build gtest (linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-20.04'
         run: |
           sudo apt-get install libgtest-dev
           cd /usr/src/gtest
@@ -87,7 +87,7 @@ jobs:
           make -j 2
 
       - name: build test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-latest'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
         run: |
@@ -116,7 +116,7 @@ jobs:
           ./block2_tests
 
       - name: run test (serial-pytest, linux)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-latest'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
           python -m pip install pytest 'pyscf==2.1.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -152,7 +152,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-20.04, macos-latest ]
         python: [ '3.7', '3.8', '3.9', '3.10' ]
         manylinux: [ 2010 ]
         plat: [ x86_64, arm64 ]
@@ -160,13 +160,13 @@ jobs:
         exclude:
           - os: macos-latest
             parallel: mpi
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             plat: arm64
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4.3.0
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
 
@@ -233,7 +233,7 @@ jobs:
           delocate-wheel --require-archs=arm64 -k dist/*.whl
 
       - name: prepare build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -242,7 +242,7 @@ jobs:
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
         uses: ./.github/actions/build-wheel
         with:
           python-version: ${{ matrix.python }}
@@ -265,14 +265,14 @@ jobs:
   pypi:
     name: pypi
     needs: [build, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: startsWith(github.ref, 'refs/tags/')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4.3.0
+      - uses: actions/setup-python@v4
         with:
           python-version: 3.9
 
@@ -323,11 +323,11 @@ jobs:
   publish:
     name: publish
     needs: [build, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4.3.0
+      - uses: actions/setup-python@v4
         with:
           python-version: 3.9
 
