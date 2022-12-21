@@ -610,8 +610,7 @@ struct SpinPermPattern {
                            act_split_idx.begin()))
                     continue;
             }
-            ts[i] =
-                SpinPermRecoupling::make_tensor(pp[i], ref_indices, cds, cg);
+            ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
             assert(ts[i].data.size() != 0);
         }
         vector<int> selected_pp_idx;
