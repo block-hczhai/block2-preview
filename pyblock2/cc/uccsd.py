@@ -62,6 +62,11 @@ def init_parsers():
     perm_map[("raa", 4)] = WickPermutation.pair_anti_symmetric(2)
     perm_map[("rbb", 4)] = WickPermutation.pair_anti_symmetric(2)
     perm_map[("rab", 4)] = WickPermutation.non_symmetric()
+    perm_map[("la", 2)] = WickPermutation.non_symmetric()
+    perm_map[("lb", 2)] = WickPermutation.non_symmetric()
+    perm_map[("laa", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("lbb", 4)] = WickPermutation.pair_anti_symmetric(2)
+    perm_map[("lab", 4)] = WickPermutation.non_symmetric()
 
     p = lambda x: WickExpr.parse(x, idx_map, perm_map)
     pt = lambda x: WickTensor.parse(x, idx_map, perm_map)
@@ -457,6 +462,18 @@ class WickUCCSD(uccsd.UCCSD):
         from pyblock2.cc.eom_uccsd import WickUEOMEESpinKeep
         return WickUEOMEESpinKeep(self).kernel(nroots, koopmans, guess, eris)
 
+    def solve_lambda(self, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyblock2.cc.lambda_uccsd import wick_kernel
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        self.converged_lambda, self.l1, self.l2 = \
+            wick_kernel(self, eris, t1, t2, l1, l2,
+                                max_cycle=self.max_cycle,
+                                tol=self.conv_tol_normt,
+                                verbose=self.verbose)
+        return self.l1, self.l2
+
 UCCSD = WickUCCSD
 
 if __name__ == "__main__":
@@ -469,8 +486,11 @@ if __name__ == "__main__":
     print('E-ee = ', ccsd.eomee_ccsd()[0])
     print('E-ip (right) = ', ccsd.ipccsd()[0])
     print('E-ea (right) = ', ccsd.eaccsd()[0])
+    l1, l2 = ccsd.solve_lambda()
     wccsd = WickUCCSD(mf).run()
     print('E(T) = ', wccsd.ccsd_t())
     print('E-ee = ', wccsd.eomee_ccsd()[0])
     print('E-ip (right) = ', wccsd.ipccsd()[0])
     print('E-ea (right) = ', wccsd.eaccsd()[0])
+    wl1, wl2 = wccsd.solve_lambda()
+    print('lambda diff = ', np.linalg.norm(np.array(l1) - np.array(wl1)), np.linalg.norm(np.array(l2) - np.array(wl2)))

@@ -43,6 +43,8 @@ def init_parsers():
     perm_map[("t", 6)] = WickPermutation.pair_symmetric(3, False)
     perm_map[("r", 2)] = WickPermutation.non_symmetric()
     perm_map[("r", 4)] = WickPermutation.pair_symmetric(2, False)
+    perm_map[("l", 2)] = WickPermutation.non_symmetric()
+    perm_map[("l", 4)] = WickPermutation.pair_symmetric(2, False)
 
     defs = MapStrPWickTensorExpr()
     p = lambda x: WickExpr.parse(x, idx_map, perm_map).substitute(defs)
@@ -271,6 +273,17 @@ class WickRCCSD(rccsd.RCCSD):
         from pyblock2.cc.eom_rccsd import WickREOMEESinglet
         return WickREOMEESinglet(self).kernel(nroots, koopmans, guess, eris)
 
+    def solve_lambda(self, t1=None, t2=None, l1=None, l2=None, eris=None):
+        from pyblock2.cc.lambda_rccsd import wick_kernel
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if eris is None: eris = self.ao2mo(self.mo_coeff)
+        self.converged_lambda, self.l1, self.l2 = \
+            wick_kernel(self, eris, t1, t2, l1, l2,
+                                max_cycle=self.max_cycle,
+                                tol=self.conv_tol_normt,
+                                verbose=self.verbose)
+        return self.l1, self.l2
 
 RCCSD = WickRCCSD
 
@@ -286,6 +299,7 @@ if __name__ == "__main__":
     print('E-ip ( left) = ', ccsd.ipccsd(left=True)[0])
     print('E-ea (right) = ', ccsd.eaccsd()[0])
     print('E-ea ( left) = ', ccsd.eaccsd(left=True)[0])
+    l1, l2 = ccsd.solve_lambda()
     wccsd = WickRCCSD(mf).run()
     print('E(T) = ', wccsd.ccsd_t())
     print('E-ee (right) = ', wccsd.eomee_ccsd_singlet()[0])
@@ -293,3 +307,5 @@ if __name__ == "__main__":
     print('E-ip ( left) = ', wccsd.ipccsd(left=True)[0])
     print('E-ea (right) = ', wccsd.eaccsd()[0])
     print('E-ea ( left) = ', wccsd.eaccsd(left=True)[0])
+    wl1, wl2 = wccsd.solve_lambda()
+    print('lambda diff = ', np.linalg.norm(l1 - wl1), np.linalg.norm(l2 - wl2))
