@@ -584,8 +584,7 @@ struct SpinPermPattern {
                                      const vector<uint16_t> &ref_indices,
                                      int target_twos = 0, int split_idx = -1,
                                      bool ref_split = false) {
-        SU2CG cg(100);
-        cg.initialize();
+        SU2CG cg;
         int nn = cds.size();
         vector<uint16_t> indices = ref_indices;
         if (indices.size() == 0)
@@ -694,8 +693,7 @@ struct SpinPermScheme {
     static SpinPermScheme initialize_su2(int nn, string spin_str) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
-        SU2CG cg(100);
-        cg.initialize();
+        SU2CG cg;
         vector<uint8_t> cds;
         spin_str = SpinPermRecoupling::split_cds(spin_str, cds);
         int target_twos = SpinPermRecoupling::get_target_twos(spin_str);
@@ -921,8 +919,7 @@ struct SpinPermScheme {
 //         }
 //     }
 //     abort();
-//     SU2CG cg(100);
-//     cg.initialize();
+//     SU2CG cg;
 //     uint16_t p = 0, q = 1, r = 2, s = 3;
 //     // a = mul(mul('Cp', 'Cq', 2), mul('Dr', 'Ds', 2), 0)
 //     // b = mul(mul(mul('Cp', 'Cq', 2), 'Dr', 1), 'Ds', 0)

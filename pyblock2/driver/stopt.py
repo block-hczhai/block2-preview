@@ -128,8 +128,7 @@ class SPDMRG:
         ket.load_data()
         cf = ket.canonical_form
         _print('CF = %s CENTER = %d' % (cf, ket.center))
-        cg = CG(200)
-        cg.initialize()
+        cg = CG()
         if ket.center == center:
             if ket.canonical_form[0] == 'S':
                 ket.move_right(cg, None)

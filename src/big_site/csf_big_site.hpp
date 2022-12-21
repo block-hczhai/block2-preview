@@ -236,7 +236,6 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                    csf_offsets[qs_idxs[i + 1]] - csf_offsets[qs_idxs[i]]);
         }
         cg = make_shared<CG<S>>((n_max_unpaired + 1) * 2);
-        cg->initialize();
     }
     LL n_configs() const { return n_unpaired_idxs.back(); }
     LL n_csfs() const { return csf_offsets.back(); }
@@ -547,7 +546,7 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                 cdq = adq + ((ops >> ((imax + 1) << 1)) & 2) - 1;
                 assert(cdq >= 0);
                 int8_t cqpj = (q_pattern >> (imax + 2)) & 1;
-                factor *= (FL)cg->racah(cqpj, bdq, aqj, adq, aqpj, cdq);
+                factor *= (FL)cg->SU2CG::racah(cqpj, bdq, aqj, adq, aqpj, cdq);
                 factor *= (FL)sqrt((cdq + 1) * (aqpj + 1)) *
                           (((adq + bdq - cdq) & 2) ? -1 : 1);
                 adq = cdq, aqpj = cqpj, imax++;
@@ -555,7 +554,7 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                 cdq = adq + ((ops >> ((imin - 1) << 1)) & 2) - 1;
                 assert(cdq >= 0);
                 int8_t cqj = (q_pattern >> (imin - 1)) & 1;
-                factor *= (FL)cg->racah(aqpj, adq, cqj, bdq, aqj, cdq);
+                factor *= (FL)cg->SU2CG::racah(aqpj, adq, cqj, bdq, aqj, cdq);
                 factor *= (FL)sqrt((cdq + 1) * (aqj + 1)) *
                           (((adq + bdq - cdq) & 2) ? -1 : 1);
                 adq = cdq, aqj = cqj, imin--;
@@ -923,12 +922,12 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                         rr *=
                             (FL)sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
                         if (vt) {
-                            rr *= (FL)cg->wigner_9j(0, bk, ck, ab, db, dc, ab,
-                                                    bb, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(0, bk, ck, ab, db,
+                                                           dc, ab, bb, cb);
                             rr *= ((0 & 1) & (db & 1)) ? -1 : 1;
                         } else {
-                            rr *= (FL)cg->wigner_9j(bk, 0, ck, db, ab, dc, bb,
-                                                    ab, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(bk, 0, ck, db, ab,
+                                                           dc, bb, ab, cb);
                             rr *= ((bk & 1) & (ab & 1)) ? -1 : 1;
                         }
                         lops >>= 2, lopt >>= 2;
@@ -942,12 +941,12 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                         rr *=
                             (FL)sqrt((ck + 1) * (dc + 1) * (0 + 1) * (bb + 1));
                         if (vt) {
-                            rr *= (FL)cg->wigner_9j(ak, bk, ck, ak, db, dc, 0,
-                                                    bb, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(ak, bk, ck, ak, db,
+                                                           dc, 0, bb, cb);
                             rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
                         } else {
-                            rr *= (FL)cg->wigner_9j(bk, ak, ck, db, ak, dc, bb,
-                                                    0, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(bk, ak, ck, db, ak,
+                                                           dc, bb, 0, cb);
                             rr *= ((bk & 1) & (ak & 1)) ? -1 : 1;
                         }
                         lops >>= 2, lopt >>= 2;
@@ -964,12 +963,12 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                         rr *=
                             (FL)sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
                         if (vt) {
-                            rr *= (FL)cg->wigner_9j(ak, bk, ck, 2, db, dc, ab,
-                                                    bb, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(ak, bk, ck, 2, db,
+                                                           dc, ab, bb, cb);
                             rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
                         } else {
-                            rr *= (FL)cg->wigner_9j(bk, ak, ck, db, 2, dc, bb,
-                                                    ab, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(bk, ak, ck, db, 2,
+                                                           dc, bb, ab, cb);
                             rr *= ((bk & 1) & (2 & 1)) ? -1 : 1;
                         }
                         lops >>= 4, lopt >>= 2;
@@ -982,12 +981,12 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                         rr *=
                             (FL)sqrt((ck + 1) * (dc + 1) * (ab + 1) * (bb + 1));
                         if (vt) {
-                            rr *= (FL)cg->wigner_9j(ak, bk, ck, da, db, dc, ab,
-                                                    bb, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(ak, bk, ck, da, db,
+                                                           dc, ab, bb, cb);
                             rr *= ((ak & 1) & (db & 1)) ? -1 : 1;
                         } else {
-                            rr *= (FL)cg->wigner_9j(bk, ak, ck, db, da, dc, bb,
-                                                    ab, cb);
+                            rr *= (FL)cg->SU2CG::wigner_9j(bk, ak, ck, db, da,
+                                                           dc, bb, ab, cb);
                             rr *= ((bk & 1) & (da & 1)) ? -1 : 1;
                         }
                         jbra++, jket++;

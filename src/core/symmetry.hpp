@@ -40,7 +40,7 @@ struct SZShort {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SZShort() : data(0) {}
-    SZShort(uint32_t data) : data(data) {}
+    explicit SZShort(uint32_t data) : data(data) {}
     SZShort(int n, int twos, int pg)
         : data((uint32_t)((n << 24) | ((uint8_t)twos << 8) | pg)) {}
     int n() const { return (int)(((int32_t)data) >> 24); }
@@ -109,7 +109,7 @@ struct SZLong {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SZLong() : data(0) {}
-    SZLong(uint32_t data) : data(data) {}
+    explicit SZLong(uint32_t data) : data(data) {}
     SZLong(int n, int twos, int pg)
         : data((((uint32_t)n >> 1) << 18) |
                ((uint32_t)((twos & 0x7FFFU) << 3) | pg)) {}
@@ -185,7 +185,7 @@ template <bool IF> struct SGLong {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SGLong() : data(0) {}
-    SGLong(uint32_t data) : data(data) {}
+    explicit SGLong(uint32_t data) : data(data) {}
     SGLong(int n, int pg) : data((((uint32_t)n) << 16) | pg) {}
     SGLong(int n, int twos, int pg) : data((((uint32_t)n) << 16) | pg) {
         assert(twos == 0);
@@ -246,7 +246,7 @@ struct SZLongLong {
     // S(invalid) must have maximal particle number n
     const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
     SZLongLong() : data(0) {}
-    SZLongLong(uint64_t data) : data(data) {}
+    explicit SZLongLong(uint64_t data) : data(data) {}
     SZLongLong(int n, int twos, int pg)
         : data((uint64_t)(((int64_t)n << 48) |
                           ((uint64_t)(twos & 0xFFFFULL) << 16) |
@@ -330,7 +330,7 @@ struct SZKLong {
     // S(invalid) must have maximal particle number n
     const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
     SZKLong() : data(0) {}
-    SZKLong(uint64_t data) : data(data) {}
+    explicit SZKLong(uint64_t data) : data(data) {}
     SZKLong(int n, int twos, int pg)
         : data((uint64_t)(((int64_t)n << 48) |
                           ((uint64_t)(twos & 0xFFFFULL) << 32) |
@@ -456,7 +456,7 @@ struct SZLZ {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SZLZ() : data(0) {}
-    SZLZ(uint32_t data) : data(data) {}
+    explicit SZLZ(uint32_t data) : data(data) {}
     SZLZ(int n, int twos, int pg)
         : data((((uint32_t)n >> 1) << 22) |
                ((uint32_t)((twos & 0x7FFU) << 11) | (pg & 0x7FFU))) {}
@@ -547,7 +547,7 @@ struct SU2Short {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SU2Short() : data(0) {}
-    SU2Short(uint32_t data) : data(data) {}
+    explicit SU2Short(uint32_t data) : data(data) {}
     SU2Short(int n, int twos, int pg)
         : data((uint32_t)((n << 24) | (twos << 16) | (twos << 8) | pg)) {}
     SU2Short(int n, int twos_low, int twos, int pg)
@@ -659,7 +659,7 @@ struct SU2Long {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SU2Long() : data(0) {}
-    SU2Long(uint32_t data) : data(data) {}
+    explicit SU2Long(uint32_t data) : data(data) {}
     SU2Long(int n, int twos, int pg)
         : data((uint32_t)(((n >> 1) << 22) | ((twos >> 1) << 13) | (twos << 3) |
                           pg)) {}
@@ -775,7 +775,7 @@ struct SU2LongLong {
     // S(invalid) must have maximal particle number n
     const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
     SU2LongLong() : data(0) {}
-    SU2LongLong(uint64_t data) : data(data) {}
+    explicit SU2LongLong(uint64_t data) : data(data) {}
     SU2LongLong(int n, int twos, int pg)
         : data((uint64_t)(((uint64_t)(int64_t)n << 48) |
                           ((uint64_t)twos << 32) | ((uint64_t)twos << 16) |
@@ -905,7 +905,7 @@ struct SU2KLong {
     // S(invalid) must have maximal particle number n
     const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
     SU2KLong() : data(0) {}
-    SU2KLong(uint64_t data) : data(data) {}
+    explicit SU2KLong(uint64_t data) : data(data) {}
     SU2KLong(int n, int twos, int pg)
         : data((uint64_t)(((uint64_t)(int64_t)n << 52) |
                           ((uint64_t)twos << 40) | ((uint64_t)twos << 28) |
@@ -1083,7 +1083,7 @@ struct SU2LZ {
     // S(invalid) must have maximal particle number n
     const static uint32_t invalid = 0x7FFFFFFFU;
     SU2LZ() : data(0) {}
-    SU2LZ(uint32_t data) : data(data) {}
+    explicit SU2LZ(uint32_t data) : data(data) {}
     SU2LZ(int n, int twos, int pg)
         : data((uint32_t)(((n >> 1) << 24) | ((twos >> 1) << 17) | (twos << 9) |
                           (pg & 0x1FFU))) {}

@@ -1210,10 +1210,8 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
             if MPI is not None:
                 MPI.barrier()
-            cg = CG(200)
-            cg.initialize()
             mps.flip_fused_form(
-                mps.center, cg, prule if MPI is not None else None)
+                mps.center, CG(), prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -1225,10 +1223,8 @@ elif "fullrestart" in dic:
         if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
             if MPI is not None:
                 MPI.barrier()
-            cg = CG(200)
-            cg.initialize()
             mps.flip_fused_form(
-                mps.center, cg, prule if MPI is not None else None)
+                mps.center, CG(), prule if MPI is not None else None)
             mps.save_data()
             if MPI is not None:
                 MPI.barrier()
@@ -1243,10 +1239,8 @@ elif "fullrestart" in dic:
         if MPI is not None:
             MPI.barrier()
         if mps.canonical_form[mps.center] in "KJ":
-            cg = CG(200)
-            cg.initialize()
             mps.flip_fused_form(
-                mps.center, cg, prule if MPI is not None else None)
+                mps.center, CG(), prule if MPI is not None else None)
         mps.center = mps.n_sites - 2
         mps.save_data()
         forward = False
@@ -1260,10 +1254,8 @@ elif "fullrestart" in dic:
         if MPI is not None:
             MPI.barrier()
         if mps.canonical_form[mps.center] in "ST":
-            cg = CG(200)
-            cg.initialize()
             mps.flip_fused_form(
-                mps.center, cg, prule if MPI is not None else None)
+                mps.center, CG(), prule if MPI is not None else None)
         mps.save_data()
         forward = True
         if MPI is not None:
@@ -1754,10 +1746,8 @@ def split_mps(iroot, mps, mps_info, mpi=MPI):
         if mpi is not None:
             mpi.barrier()
         if smps.canonical_form[smps.center] in "ST":
-            cg = CG(200)
-            cg.initialize()
             smps.flip_fused_form(
-                smps.center, cg, prule if mpi is not None else None)
+                smps.center, CG(), prule if mpi is not None else None)
         smps.save_data()
         forward = True
         if mpi is not None:
@@ -1852,24 +1842,18 @@ def get_mps_from_tags(iroot, proj_mps=False, ref_center=0):
             if MPI is not None:
                 MPI.barrier()
             if smps.canonical_form[smps.center] in "ST":
-                cg = CG(200)
-                cg.initialize()
                 smps.flip_fused_form(
-                    smps.center, cg, prule if MPI is not None else None)
+                    smps.center, CG(), prule if MPI is not None else None)
             smps.save_data()
             if MPI is not None:
                 MPI.barrier()
             _print(cf + ' -> ' + smps.canonical_form)
     if smps.dot == 1 and dot == 2:
         if smps.center == 0 and smps.canonical_form[0] == 'S':
-            cg = CG(200)
-            cg.initialize()
-            smps.move_right(cg, prule if MPI is not None else None)
+            smps.move_right(CG(), prule if MPI is not None else None)
             smps.center = 0
         elif smps.center == smps.n_sites - 1 and smps.canonical_form[smps.center] == 'K':
-            cg = CG(200)
-            cg.initialize()
-            smps.move_left(cg, prule if MPI is not None else None)
+            smps.move_left(CG(), prule if MPI is not None else None)
             smps.center = smps.n_sites - 2
         smps.dot = dot
         if MPI is not None:
@@ -1923,14 +1907,10 @@ def get_state_specific_mps(iroot, mps_info):
         smps.dot = 1
     elif (smps.dot == 1 or smps.center == smps.n_sites - 1) and dot == 2:
         if smps.center == 0 and smps.canonical_form[0] == 'S':
-            cg = CG(200)
-            cg.initialize()
-            smps.move_right(cg, prule)
+            smps.move_right(CG(), prule)
             smps.center = 0
         elif smps.center == smps.n_sites - 1 and smps.canonical_form[smps.center] == 'K':
-            cg = CG(200)
-            cg.initialize()
-            smps.move_left(cg, prule)
+            smps.move_left(CG(), prule)
             smps.center = smps.n_sites - 2
         elif smps.center == smps.n_sites - 1 and smps.canonical_form[smps.center] == 'S':
             smps.center = smps.n_sites - 2
@@ -1999,14 +1979,10 @@ if not pre_run:
                 _print(iex, ext_mpss[iex].canonical_form, ext_mpss[iex].center)
                 if (ext_mps.dot == 1 or ext_mps.center == ext_mps.n_sites - 1) and dot == 2:
                     if ext_mps.center == 0 and ext_mps.canonical_form[0] == 'S':
-                        cg = CG(200)
-                        cg.initialize()
-                        ext_mps.move_right(cg, prule)
+                        ext_mps.move_right(CG(), prule)
                         ext_mps.center = 0
                     elif ext_mps.center == ext_mps.n_sites - 1 and ext_mps.canonical_form[ext_mps.center] == 'K':
-                        cg = CG(200)
-                        cg.initialize()
-                        ext_mps.move_left(cg, prule)
+                        ext_mps.move_left(CG(), prule)
                         ext_mps.center = ext_mps.n_sites - 2
                     elif ext_mps.center == ext_mps.n_sites - 1 and ext_mps.canonical_form[ext_mps.center] == 'S':
                         ext_mps.center = ext_mps.n_sites - 2
@@ -3422,9 +3398,7 @@ if not pre_run:
         if MPI is None or MPI.rank == 0:
             if (mps.center == 0 and mps.canonical_form[0] == 'S') or \
                     (mps.center == mps.n_sites - 1 and mps.canonical_form[-1] == 'K'):
-                cg = CG(200)
-                cg.initialize()
-                mps.flip_fused_form(mps.center, cg, None)
+                mps.flip_fused_form(mps.center, CG(), None)
                 mps.save_data()
         if MPI is not None:
             MPI.barrier()
@@ -3459,10 +3433,8 @@ if not pre_run:
                         from block2.sz import MPICommunicator as MPICommunicatorX
                         from block2.sz import CG as CGX, ParallelRuleQC as ParallelRuleQCX
                         prulex = ParallelRuleQCX(MPICommunicatorX())
-                        cgx = CGX(200)
-                        cgx.initialize()
                         cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'S'
-                        cp_mps.flip_fused_form(cp_mps.center, cgx, prulex)
+                        cp_mps.flip_fused_form(cp_mps.center, CGX(), prulex)
             cp_mps.info.load_mutable()
             cp_mps.load_mutable()
             cp_mps.dynamic_canonicalize()
@@ -3478,7 +3450,7 @@ if not pre_run:
             if MPI is not None:
                 MPI.barrier()
             if last_flipped is not None:
-                cp_mps.flip_fused_form(cp_mps.n_sites - 1, cgx, prulex)
+                cp_mps.flip_fused_form(cp_mps.n_sites - 1, CGX(), prulex)
                 cp_mps.canonical_form = cp_mps.canonical_form[: -
                                                               1] + last_flipped
                 if MPI is None or MPI.rank == 0:
@@ -3499,14 +3471,12 @@ if not pre_run:
                 cp_mps.center = cp_mps.n_sites - 1
             elif cp_mps.center == cp_mps.n_sites - 2 and cp_mps.canonical_form[-2] == 'L':
                 cp_mps.center = cp_mps.n_sites - 1
-            cg = CG(200)
-            cg.initialize()
             while cp_mps.center > 0:
-                cp_mps.move_left(cg, prule)
+                cp_mps.move_left(CG(), prule)
             if "trans_mps_to_singlet_embedding" in dic:
-                cp_mps.to_singlet_embedding_wfn(cg, SX.invalid, prule)
+                cp_mps.to_singlet_embedding_wfn(CG(), SX.invalid, prule)
             if "trans_mps_from_singlet_embedding" in dic:
-                cp_mps.from_singlet_embedding_wfn(cg, prule)
+                cp_mps.from_singlet_embedding_wfn(CG(), prule)
             if MPI is None or MPI.rank == 0:
                 cp_mps.save_data()
 

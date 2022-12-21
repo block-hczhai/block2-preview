@@ -157,8 +157,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                     FL factor =
                         scale * (conj ? xconj<FL>(b->factor) : b->factor);
                     if (conj)
-                        factor *= cg->transpose_cg(bdq.twos(), bra.twos(),
-                                                   ket.twos());
+                        factor *= cg->transpose_cg(bdq, bra, ket);
                     if (seq->mode != SeqTypes::None &&
                         seq->mode != SeqTypes::Tasked)
                         seq->iadd((*a)[ia], (*b)[ib], factor, conj, a->factor);
@@ -657,9 +656,8 @@ template <typename S, typename FL> struct OperatorFunctions {
         if (abs(scale) < TINY)
             return;
         bool cja = conj & 1, cjb = (conj & 2) >> 1;
-        int adq = a->info->delta_quantum.multiplicity() - 1,
-            bdq = b->info->delta_quantum.multiplicity() - 1,
-            cdq = c->info->delta_quantum.multiplicity() - 1;
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum,
+          cdq = c->info->delta_quantum;
         S sadq = cja ? -a->info->delta_quantum : a->info->delta_quantum;
         S sbdq = cjb ? -b->info->delta_quantum : b->info->delta_quantum;
         for (int ic = 0; ic < c->info->n; ic++) {
@@ -677,20 +675,16 @@ template <typename S, typename FL> struct OperatorFunctions {
                     if (bl != S(S::invalid)) {
                         int ib = b->info->find_state(bl);
                         if (ib != -1) {
-                            int aqpj = aqprime.multiplicity() - 1,
-                                cqj = cq.multiplicity() - 1,
-                                cqpj = cqprime.multiplicity() - 1;
                             double factor =
-                                cg->racah(cqpj, bdq, cqj, adq, aqpj, cdq);
-                            factor *= sqrt((cdq + 1) * (aqpj + 1)) *
-                                      (((adq + bdq - cdq) & 2) ? -1 : 1);
+                                cg->racah(cqprime, bdq, cq, adq, aqprime, cdq);
+                            factor *= sqrt(cdq.multiplicity() *
+                                           aqprime.multiplicity()) *
+                                      cg->phase(adq, bdq, cdq);
                             if (cja)
-                                factor *= cg->transpose_cg(
-                                    (-sadq).twos(), cq.twos(), aqprime.twos());
+                                factor *= cg->transpose_cg(-sadq, cq, aqprime);
                             if (cjb)
-                                factor *= cg->transpose_cg((-sbdq).twos(),
-                                                           aqprime.twos(),
-                                                           cqprime.twos());
+                                factor *=
+                                    cg->transpose_cg(-sbdq, aqprime, cqprime);
                             GMatrixFunctions<FL>::multiply(
                                 (*a)[ia], cja, (*b)[ib], cjb, (*c)[ic],
                                 scale * (FP)factor, 1.0);

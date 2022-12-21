@@ -326,9 +326,7 @@ class MRPT(lib.StreamObject):
             state.dot = 1
         
         if state.center == state.n_sites - 1 and state.canonical_form[state.center] == 'K':
-            cg = CG(200)
-            cg.initialize()
-            state.move_left(cg, None)
+            state.move_left(CG(), None)
             state.center = state.n_sites - 2
         
         # 1PDM MPO

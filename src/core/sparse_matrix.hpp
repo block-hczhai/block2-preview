@@ -119,15 +119,12 @@ struct SparseMatrixInfo<
                         double factor =
                             sqrt(cdq.multiplicity() * opdq.multiplicity() *
                                  aq.multiplicity() * bq.multiplicity()) *
-                            cg->wigner_9j(aq.twos(), bq.twos(), cdq.twos(),
-                                          adq.twos(), bdq.twos(), opdq.twos(),
-                                          aq.twos(), bq.twos(), cdq.twos());
+                            cg->wigner_9j(aq, bq, cdq, adq, bdq, opdq, aq, bq,
+                                          cdq);
                         if (cja)
-                            factor *= cg->transpose_cg(adq.twos(), aq.twos(),
-                                                       aq.twos());
+                            factor *= cg->transpose_cg(adq, aq, aq);
                         if (cjb)
-                            factor *= cg->transpose_cg(bdq.twos(), bq.twos(),
-                                                       bq.twos());
+                            factor *= cg->transpose_cg(bdq, bq, bq);
                         factor *=
                             (binfo->is_fermion && aq.is_fermion()) ? -1 : 1;
                         if (abs(factor) >= TINY) {
@@ -222,23 +219,19 @@ struct SparseMatrixInfo<
                                              opdq.multiplicity() *
                                              lq.multiplicity() *
                                              rq.multiplicity()) *
-                                        cg->wigner_9j(
-                                            lqprime.twos(), rqprime.twos(),
-                                            cdq.twos(), adq.twos(), bdq.twos(),
-                                            opdq.twos(), lq.twos(), rq.twos(),
-                                            vdq.twos());
+                                        cg->wigner_9j(lqprime, rqprime, cdq,
+                                                      adq, bdq, opdq, lq, rq,
+                                                      vdq);
                                     factor *= (binfo->is_fermion &&
                                                lqprime.is_fermion())
                                                   ? -1
                                                   : 1;
                                     if (cja)
-                                        factor *= cg->transpose_cg(
-                                            adq.twos(), lq.twos(),
-                                            lqprime.twos());
+                                        factor *=
+                                            cg->transpose_cg(adq, lq, lqprime);
                                     if (cjb)
-                                        factor *= cg->transpose_cg(
-                                            bdq.twos(), rq.twos(),
-                                            rqprime.twos());
+                                        factor *=
+                                            cg->transpose_cg(bdq, rq, rqprime);
                                     if (abs(factor) >= TINY) {
                                         if (pv.size() <= ip)
                                             pv.push_back(
@@ -368,23 +361,19 @@ struct SparseMatrixInfo<
                                              cdq.multiplicity() *
                                              aq.multiplicity() *
                                              bq.multiplicity()) *
-                                        cg->wigner_9j(
-                                            aqprime.twos(), bqprime.twos(),
-                                            cqprime.twos(), adq.twos(),
-                                            bdq.twos(), cdq.twos(), aq.twos(),
-                                            bq.twos(), cq.twos());
+                                        cg->wigner_9j(aqprime, bqprime, cqprime,
+                                                      adq, bdq, cdq, aq, bq,
+                                                      cq);
                                     factor *= (binfo->is_fermion &&
                                                aqprime.is_fermion())
                                                   ? -1
                                                   : 1;
                                     if (cja)
-                                        factor *= cg->transpose_cg(
-                                            adq.twos(), aq.twos(),
-                                            aqprime.twos());
+                                        factor *=
+                                            cg->transpose_cg(adq, aq, aqprime);
                                     if (cjb)
-                                        factor *= cg->transpose_cg(
-                                            bdq.twos(), bq.twos(),
-                                            bqprime.twos());
+                                        factor *=
+                                            cg->transpose_cg(bdq, bq, bqprime);
                                     if (abs(factor) >= TINY) {
                                         via.push_back(ia);
                                         vib.push_back(ib);
@@ -1781,12 +1770,11 @@ template <typename S, typename FL> struct SparseMatrix {
                     for (pair<MKL_INT, int> &t :
                          mp.at(new_fused_cinfo.quanta[bb].data).at(ik)) {
                         S ket_mr = old_fused.quanta[t.second];
-                        FP factor = (FP)(cg->racah(bra_l.twos(), bra_m.twos(),
-                                                   info->delta_quantum.twos(),
-                                                   ket.twos(), bra.twos(),
-                                                   ket_mr.twos()) *
-                                         sqrt(1.0 * bra.multiplicity() *
-                                              ket_mr.multiplicity()));
+                        FP factor =
+                            (FP)(cg->racah(bra_l, bra_m, info->delta_quantum,
+                                           ket, bra, ket_mr) *
+                                 sqrt(1.0 * bra.multiplicity() *
+                                      ket_mr.multiplicity()));
                         for (ubond_t j = 0; j < l.n_states[ibba]; j++)
                             GMatrixFunctions<FL>::iadd(
                                 GMatrix<FL>(ptr + j * lp, lp, 1),
@@ -1854,12 +1842,11 @@ template <typename S, typename FL> struct SparseMatrix {
                     for (tuple<MKL_INT, MKL_INT, int> &t :
                          mp.at(new_fused_cinfo.quanta[kk].data).at(ib)) {
                         S bra_lm = old_fused.quanta[get<2>(t)];
-                        FP factor = (FP)(cg->racah(ket_r.twos(), ket_m.twos(),
-                                                   info->delta_quantum.twos(),
-                                                   bra.twos(), ket.twos(),
-                                                   bra_lm.twos()) *
-                                         sqrt(1.0 * ket.multiplicity() *
-                                              bra_lm.multiplicity()));
+                        FP factor =
+                            (FP)(cg->racah(ket_r, ket_m, info->delta_quantum,
+                                           bra, ket, bra_lm) *
+                                 sqrt(1.0 * ket.multiplicity() *
+                                      bra_lm.multiplicity()));
                         for (ubond_t j = 0; j < l.n_states[ib]; j++) {
                             GMatrixFunctions<FL>::iadd(
                                 GMatrix<FL>(ptr + j * lp, (MKL_INT)get<1>(t),

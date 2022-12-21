@@ -2893,8 +2893,7 @@ class WickSpinAdaptation:
     def get_eq_exprs(eq):
         import block2 as b
 
-        cg = b.SU2CG(200)
-        cg.initialize()
+        cg = b.SU2CG()
         r = []
         for term in eq.terms:
             tensors = [t for t in term.tensors if t.name[0] in "CD"]

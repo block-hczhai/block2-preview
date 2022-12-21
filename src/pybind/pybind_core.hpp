@@ -359,17 +359,15 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_sz_t()) {
     py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
         .def(py::init<>())
         .def(py::init<int>())
-        .def("initialize", [](CG<S> *self) { self->initialize(); })
-        .def("deallocate", &CG<S>::deallocate)
-        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
-        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
-             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
-        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
-        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
-             py::arg("tr"));
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"),
+             py::arg("g"), py::arg("h"), py::arg("i"))
+        .def("racah", &CG<S>::racah, py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("d"), py::arg("l"),
+             py::arg("r"));
 }
 
 template <typename S>
@@ -377,17 +375,15 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_sg_t()) {
     py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
         .def(py::init<>())
         .def(py::init<int>())
-        .def("initialize", [](CG<S> *self) { self->initialize(); })
-        .def("deallocate", &CG<S>::deallocate)
-        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
-        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
-             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
-        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
-        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
-             py::arg("tr"));
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"),
+             py::arg("g"), py::arg("h"), py::arg("i"))
+        .def("racah", &CG<S>::racah, py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("d"), py::arg("l"),
+             py::arg("r"));
 }
 
 template <typename S>
@@ -395,8 +391,6 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_su2_t()) {
     py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
         .def(py::init<>())
         .def(py::init<int>())
-        .def("initialize", [](CG<S> *self) { self->initialize(); })
-        .def("deallocate", &CG<S>::deallocate)
         .def_static("triangle", &CG<S>::triangle, py::arg("tja"),
                     py::arg("tjb"), py::arg("tjc"))
         .def("sqrt_delta", &CG<S>::sqrt_delta, py::arg("tja"), py::arg("tjb"),
@@ -405,15 +399,15 @@ auto bind_cg(py::module &m) -> decltype(typename S::is_su2_t()) {
              py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
         .def("wigner_3j", &CG<S>::wigner_3j, py::arg("tja"), py::arg("tjb"),
              py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
-        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
-        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
-             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
-        .def("racah", &CG<S>::racah, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
-        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("td"), py::arg("tl"),
-             py::arg("tr"));
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"),
+             py::arg("g"), py::arg("h"), py::arg("i"))
+        .def("racah", &CG<S>::racah, py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("d"), py::arg("l"),
+             py::arg("r"));
 }
 
 template <typename S> void bind_expr(py::module &m) {
@@ -1943,8 +1937,14 @@ template <typename S = void> void bind_io(py::module &m) {
     py::class_<SU2CG, shared_ptr<SU2CG>>(m, "SU2CG")
         .def(py::init<>())
         .def(py::init<int>())
-        .def("initialize", [](SU2CG *self) { self->initialize(); })
-        .def("deallocate", &SU2CG::deallocate)
+        .def_static("triangle", &SU2CG::triangle, py::arg("tja"),
+                    py::arg("tjb"), py::arg("tjc"))
+        .def("sqrt_delta", &SU2CG::sqrt_delta, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"))
+        .def("cg", &SU2CG::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
+             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_3j", &SU2CG::wigner_3j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
         .def("wigner_6j", &SU2CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
              py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
         .def("wigner_9j", &SU2CG::wigner_9j, py::arg("tja"), py::arg("tjb"),

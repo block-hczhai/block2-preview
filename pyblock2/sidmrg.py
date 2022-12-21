@@ -768,8 +768,7 @@ if __name__ == "__main__" and do_h2o:
         hsoao[0, 4, 3] = hsoao[1, 2, 4] = hsoao[2, 3, 2] = v
         hsoao[0, 3, 4] = hsoao[1, 4, 2] = hsoao[2, 2, 3] = -v
     hso = np.einsum('rij,ip,jq->rpq', hsoao, mo_coeff, mo_coeff)
-    cg = CG(200)
-    cg.initialize()
+    cg = CG()
     print('HSO.SHAPE = ', hso.shape)
     pdms = dmrg.trans_onepdm(mpss)
     print('PDMS.SHAPE = ', pdms.shape)
@@ -1018,8 +1017,7 @@ if __name__ == "__main__" and do_cu_atom:
         hso = None
     if MPI is not None:
         hso = comm.bcast(hso, root=0)
-    cg = CG(200)
-    cg.initialize()
+    cg = CG()
     _print('HSO.SHAPE = ', hso.shape)
     dmrg.verbose = 1
     pdms = dmrg.trans_onepdm(mpss)

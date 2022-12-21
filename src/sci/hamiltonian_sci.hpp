@@ -94,7 +94,6 @@ template <typename S> struct HamiltonianSCI {
         site_norm_ops = new vector<
             pair<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, double>>>>[n_sites];
         opf = make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>());
-        opf->cg->initialize();
     }
     virtual ~HamiltonianSCI() = default;
 
@@ -208,7 +207,6 @@ template <typename S> struct HamiltonianSCI {
     }
 
     virtual void deallocate() {
-        opf->cg->deallocate();
         delete[] site_norm_ops;
     }
 

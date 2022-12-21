@@ -552,7 +552,6 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
-        opf->cg->initialize();
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -785,7 +784,6 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
 };
@@ -818,8 +816,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
         int twos = -1)
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), twos(twos) {
-        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>(100));
-        opf->cg->initialize();
+        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -1105,7 +1102,6 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
 };
@@ -1140,7 +1136,6 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
-        opf->cg->initialize();
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -1296,7 +1291,6 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
 };
@@ -1332,7 +1326,6 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), twos(twos) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
-        opf->cg->initialize();
         if (orb_sym.size() == 0)
             Hamiltonian<S, FL>::orb_sym.resize(n_sites);
         basis.resize(n_sites);
@@ -1501,7 +1494,6 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
 };

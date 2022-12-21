@@ -628,8 +628,7 @@ template <typename S, typename FL> struct MPO {
         ifs.read((char *)&left_vacuum, sizeof(left_vacuum));
         sparse_form = string(n_sites, 'N');
         ifs.read((char *)&sparse_form[0], sizeof(char) * n_sites);
-        shared_ptr<CG<S>> cg = make_shared<CG<S>>(200);
-        cg->initialize();
+        shared_ptr<CG<S>> cg = make_shared<CG<S>>();
         if (sparse_form.find('S') == string::npos)
             tf = make_shared<TensorFunctions<S, FL>>(
                 make_shared<OperatorFunctions<S, FL>>(cg));

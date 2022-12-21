@@ -34,8 +34,6 @@ template <typename, typename = void> struct CG;
 // Trivial CG factors for Abelian symmetry
 struct TrivialCG {
     TrivialCG() {}
-    void initialize(double *ptr = 0) {}
-    void deallocate() {}
     long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
                           int tjf) const noexcept {
         return 1.0L;
@@ -58,23 +56,12 @@ struct SU2CG {
     shared_ptr<vector<double>> vdata;
     long double *sqrt_fact;
     int n_sf;
-    SU2CG() : n_sf(0), sqrt_fact(nullptr), vdata(nullptr) {}
-    SU2CG(int n_sqrt_fact) : n_sf(n_sqrt_fact) {}
-    void initialize(double *ptr = 0) {
-        assert(n_sf != 0);
-        if (ptr == 0) {
-            vdata = make_shared<vector<double>>(n_sf * 2);
-            ptr = vdata->data();
-        }
-        sqrt_fact = (long double *)ptr;
+    SU2CG(int n_sqrt_fact = 200) : n_sf(n_sqrt_fact) {
+        vdata = make_shared<vector<double>>(n_sf * 2);
+        sqrt_fact = (long double *)vdata->data();
         sqrt_fact[0] = 1;
         for (int i = 1; i < n_sf; i++)
             sqrt_fact[i] = sqrt_fact[i - 1] * sqrtl(i);
-    }
-    void deallocate() {
-        assert(n_sf != 0);
-        vdata = nullptr;
-        sqrt_fact = nullptr;
     }
     static bool triangle(int tja, int tjb, int tjc) {
         return !((tja + tjb + tjc) & 1) && tjc <= tja + tjb &&
@@ -174,30 +161,63 @@ struct SU2CG {
         return ((max_alpha & 1) ? -1 : 1) * r;
     }
     // D.M. Brink, G.R. Satchler. Angular Momentum. P142
-    long double racah(int ta, int tb, int tc, int td, int te, int tf) {
+    long double racah(int ta, int tb, int tc, int td, int te, int tf) const {
         return (1 - ((ta + tb + tc + td) & 2)) *
                wigner_6j(ta, tb, te, td, tc, tf);
     }
     // Transpose factor for an operator with delta quantum number 2S = td
     // and row / column quantum number 2S = tl / tr
-    long double transpose_cg(int td, int tl, int tr) {
+    long double transpose_cg(int td, int tl, int tr) const {
         return (1 - ((td + tl - tr) & 2)) * sqrtl(tr + 1) / sqrtl(tl + 1);
+    }
+    long double phase(int ta, int tb, int tc) const {
+        return (1 - ((ta + tb - tc) & 2));
     }
 };
 
 template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
-    CG() : TrivialCG() {}
-    CG(int n_sqrt_fact) : TrivialCG() {}
+    CG(int n_sqrt_fact = 200) : TrivialCG() {}
+    long double wigner_6j(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
+    long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
+        return 1.0L;
+    }
+    long double racah(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
+    long double transpose_cg(S d, S l, S r) const { return 1.0L; }
+    long double phase(S a, S b, S c) const { return 1.0L; }
 };
 
 template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
-    CG() : TrivialCG() {}
-    CG(int n_sqrt_fact) : TrivialCG() {}
+    CG(int n_sqrt_fact = 200) : TrivialCG() {}
+    long double wigner_6j(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
+    long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
+        return 1.0L;
+    }
+    long double racah(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
+    long double transpose_cg(S d, S l, S r) const { return 1.0L; }
+    long double phase(S a, S b, S c) const { return 1.0L; }
 };
 
 template <typename S> struct CG<S, typename S::is_su2_t> : SU2CG {
-    CG() : SU2CG() {}
-    CG(int n_sqrt_fact) : SU2CG(n_sqrt_fact) {}
+    CG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
+    long double wigner_6j(S a, S b, S c, S d, S e, S f) const {
+        return SU2CG::wigner_6j(a.twos(), b.twos(), c.twos(), d.twos(),
+                                e.twos(), f.twos());
+    }
+    long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
+        return SU2CG::wigner_9j(a.twos(), b.twos(), c.twos(), d.twos(),
+                                e.twos(), f.twos(), g.twos(), h.twos(),
+                                i.twos());
+    }
+    long double racah(S a, S b, S c, S d, S e, S f) const {
+        return SU2CG::racah(a.twos(), b.twos(), c.twos(), d.twos(), e.twos(),
+                            f.twos());
+    }
+    long double transpose_cg(S d, S l, S r) const {
+        return SU2CG::transpose_cg(d.twos(), l.twos(), r.twos());
+    }
+    long double phase(S a, S b, S c) const {
+        return SU2CG::phase(a.twos(), b.twos(), c.twos());
+    }
 };
 
 } // namespace block2

@@ -69,7 +69,6 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
-        opf->cg->initialize();
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -613,7 +612,6 @@ struct HamiltonianQC<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
     FL v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
@@ -660,8 +658,7 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         // SU2 does not support UHF orbitals
         assert(fcidump == nullptr || !fcidump->uhf);
-        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>(100));
-        opf->cg->initialize();
+        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -1046,7 +1043,6 @@ struct HamiltonianQC<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
     FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
@@ -1092,7 +1088,6 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
         : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
         // SZ does not need CG factors
         opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
-        opf->cg->initialize();
         basis.resize(n_sites);
         site_op_infos.resize(n_sites);
         site_norm_ops.resize(n_sites);
@@ -1418,7 +1413,6 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
                 site_op_infos[m][j].second->deallocate();
         for (int16_t m = n_sites - 1; m >= 0; m--)
             basis[m]->deallocate();
-        opf->cg->deallocate();
         Hamiltonian<S, FL>::deallocate();
     }
     FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {

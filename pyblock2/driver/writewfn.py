@@ -170,8 +170,7 @@ if mps.info.bond_dim < max_bdim:
 
 mps.load_data()
 
-cg = CG(200)
-cg.initialize()
+cg = CG()
 orig_cf = mps.canonical_form
 if mps.canonical_form[0] == 'C' and mps.canonical_form[1] == 'R':
     mps.canonical_form = 'K' + mps.canonical_form[1:]

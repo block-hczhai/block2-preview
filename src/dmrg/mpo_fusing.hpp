@@ -609,8 +609,9 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         assert(fused_mat->m == 1 || fused_mat->n == 1);
         shared_ptr<StateInfo<S>> fused_basis = nullptr;
         if (ref == nullptr)
-            fused_basis = make_shared<StateInfo<S>>(
-                StateInfo<S>::tensor_product(*basis[a], *basis[b], S::invalid));
+            fused_basis =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[a], *basis[b], S(S::invalid)));
         else
             fused_basis = make_shared<StateInfo<S>>(
                 StateInfo<S>::tensor_product(*basis[a], *basis[b], *ref));

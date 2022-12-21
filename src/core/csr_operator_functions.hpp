@@ -80,8 +80,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
                     ((ib = b->info->find_state(bq)) != -1)) {
                     FL factor = scale * b->factor;
                     if (conj)
-                        factor *= (FP)cg->transpose_cg(bdq.twos(), bra.twos(),
-                                                       ket.twos());
+                        factor *= (FP)cg->transpose_cg(bdq, bra, ket);
                     if (a->factor != (FP)1.0)
                         GCSRMatrixFunctions<FL>::iscale((*ca)[ia], a->factor);
                     if (factor != (FP)0.0)

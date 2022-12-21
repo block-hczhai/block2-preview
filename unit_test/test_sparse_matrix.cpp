@@ -64,8 +64,7 @@ TYPED_TEST(TestSparseMatrix, TestInfo) {
     shared_ptr<Allocator<double>> d_alloc =
         make_shared<VectorAllocator<double>>();
     shared_ptr<OperatorFunctions<S, double>> opf =
-        make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>(200));
-    opf->cg->initialize();
+        make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>());
     int iter = 10, nst = 50, nq = 20;
     for (int i = 0; i < this->n_tests; i++) {
         shared_ptr<StateInfo<S>> ksi = this->random_state_info(
@@ -114,8 +113,7 @@ TYPED_TEST(TestSparseMatrix, TestInfo) {
 TYPED_TEST(TestSparseMatrix, TestSplit) {
     using S = TypeParam;
     shared_ptr<OperatorFunctions<S, double>> opf =
-        make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>(200));
-    opf->cg->initialize();
+        make_shared<OperatorFunctions<S, double>>(make_shared<CG<S>>());
     int iter = 5, nst = 50, nq = 20;
     for (int i = 0; i < this->n_tests; i++) {
         shared_ptr<Allocator<uint32_t>> i_alloc =
@@ -173,8 +171,7 @@ TYPED_TEST(TestSparseMatrix, TestComplexInfo) {
         make_shared<VectorAllocator<double>>();
     shared_ptr<OperatorFunctions<S, complex<double>>> opf =
         make_shared<OperatorFunctions<S, complex<double>>>(
-            make_shared<CG<S>>(200));
-    opf->cg->initialize();
+            make_shared<CG<S>>());
     int iter = 10, nst = 50, nq = 20;
     for (int i = 0; i < this->n_tests; i++) {
         shared_ptr<StateInfo<S>> ksi = this->random_state_info(
@@ -227,8 +224,7 @@ TYPED_TEST(TestSparseMatrix, TestComplexSplit) {
     using S = TypeParam;
     shared_ptr<OperatorFunctions<S, complex<double>>> opf =
         make_shared<OperatorFunctions<S, complex<double>>>(
-            make_shared<CG<S>>(200));
-    opf->cg->initialize();
+            make_shared<CG<S>>());
     int iter = 5, nst = 50, nq = 20;
     for (int i = 0; i < this->n_tests; i++) {
         shared_ptr<Allocator<uint32_t>> i_alloc =

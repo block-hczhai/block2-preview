@@ -11,19 +11,17 @@ class TestCG : public ::testing::Test {
     size_t dsize = 1L << 24;
     static const int max_twoj = 300;
     static const int n_tests = 10000;
-    CG<SU2> cg;
+    SU2CG cg;
     double factorial[max_twoj];
     void SetUp() override {
         Random::rand_seed(0);
-        cg = CG<SU2>(max_twoj);
+        cg = SU2CG(max_twoj);
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
-        cg.initialize();
         factorial[0] = 1;
         for (int i = 1; i < max_twoj; i++)
             factorial[i] = i * factorial[i - 1];
     }
     void TearDown() override {
-        cg.deallocate();
         frame_<FP>()->activate(0);
         assert(ialloc_()->used == 0 && dalloc_<FP>()->used == 0);
         frame_<FP>() = nullptr;
@@ -47,7 +45,8 @@ TEST_F(TestCG, TestCGTranspose) {
             for (int rz = -r; rz <= r; rz += 2) {
                 long double factor = cg.cg(l, d, r, lz, -d, rz);
                 if (abs(factor) > TINY) {
-                    expected = ((d & 1) ? -1 : 1) * factor / cg.cg(r, d, l, rz, d, lz);
+                    expected =
+                        ((d & 1) ? -1 : 1) * factor / cg.cg(r, d, l, rz, d, lz);
                     break;
                 }
             }
