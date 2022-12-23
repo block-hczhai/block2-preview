@@ -61,6 +61,7 @@ def init_parsers():
 P, PT, PD, PX, DEF = init_parsers() # parsers
 SP = lambda x: x.simplify() # just simplify
 FC = lambda x: x.expand(0).simplify() # fully contracted
+NR = lambda x: x.expand(-1, True, False).simplify() # normal order
 Z = P("") # zero
 
 # definitions
@@ -80,16 +81,16 @@ ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
 h = SP(h1 + h2 - ehf)
 t = SP(t1 + t2)
 
-HBarTerms = [
+HBarTerms = lambda h: [
     h, h ^ t,
     0.5 * ((h ^ t1) ^ t1) + ((h ^ t2) ^ t1) + 0.5 * ((h ^ t2) ^ t2),
     (1 / 6.0) * (((h ^ t1) ^ t1) ^ t1) + 0.5 * (((h ^ t2) ^ t1) ^ t1),
     (1 / 24.0) * ((((h ^ t1) ^ t1) ^ t1) ^ t1)
 ]
 
-hbar = sum(HBarTerms[:5], Z)
-en_eq = FC(sum(HBarTerms[:3], Z))
-t1_eq = FC(ex1 * sum(HBarTerms[:4], Z))
+hbar = sum(HBarTerms(h)[:5], Z)
+en_eq = FC(sum(HBarTerms(h)[:3], Z))
+t1_eq = FC(ex1 * sum(HBarTerms(h)[:4], Z))
 t2_eq = FC(ex2 * hbar)
 
 # need some rearrangements
@@ -285,6 +286,24 @@ class WickRCCSD(rccsd.RCCSD):
                                 verbose=self.verbose)
         return self.l1, self.l2
 
+    def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, **kwargs):
+        from pyblock2.cc.rdm_rccsd import wick_make_rdm1
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if l1 is None: l1, l2 = self.solve_lambda(t1, t2)
+        return wick_make_rdm1(self, t1, t2, l1, l2, **kwargs)
+
+    def make_rdm2(self, t1=None, t2=None, l1=None, l2=None, **kwargs):
+        from pyblock2.cc.rdm_rccsd import wick_make_rdm2
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if l1 is None: l1, l2 = self.solve_lambda(t1, t2)
+        return wick_make_rdm2(self, t1, t2, l1, l2, **kwargs)
+
 RCCSD = WickRCCSD
 
 if __name__ == "__main__":
@@ -300,6 +319,8 @@ if __name__ == "__main__":
     print('E-ea (right) = ', ccsd.eaccsd()[0])
     print('E-ea ( left) = ', ccsd.eaccsd(left=True)[0])
     l1, l2 = ccsd.solve_lambda()
+    dm1 = ccsd.make_rdm1()
+    dm2 = ccsd.make_rdm2()
     wccsd = WickRCCSD(mf).run()
     print('E(T) = ', wccsd.ccsd_t())
     print('E-ee (right) = ', wccsd.eomee_ccsd_singlet()[0])
@@ -309,3 +330,6 @@ if __name__ == "__main__":
     print('E-ea ( left) = ', wccsd.eaccsd(left=True)[0])
     wl1, wl2 = wccsd.solve_lambda()
     print('lambda diff = ', np.linalg.norm(l1 - wl1), np.linalg.norm(l2 - wl2))
+    wdm1 = wccsd.make_rdm1()
+    wdm2 = wccsd.make_rdm2()
+    print('dm diff = ', np.linalg.norm(dm1 - wdm1), np.linalg.norm(dm2 - wdm2))
