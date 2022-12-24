@@ -2035,6 +2035,39 @@ template <typename S = void> void bind_io(py::module &m) {
 
     py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,
                                                         "VectorSpinPermScheme");
+
+    py::class_<NPDMCounter, shared_ptr<NPDMCounter>>(m, "NPDMCounter")
+        .def(py::init<int, int>())
+        .def_readwrite("n_ops", &NPDMCounter::n_ops)
+        .def_readwrite("n_sites", &NPDMCounter::n_sites)
+        .def_readwrite("dp", &NPDMCounter::dp)
+        .def("count_left", &NPDMCounter::count_left)
+        .def("init_left", &NPDMCounter::init_left)
+        .def("next_left", &NPDMCounter::next_left)
+        .def("count_right", &NPDMCounter::count_right)
+        .def("init_right", &NPDMCounter::init_right)
+        .def("next_right", &NPDMCounter::next_right);
+
+    py::class_<NPDMScheme, shared_ptr<NPDMScheme>>(m, "NPDMScheme")
+        .def(py::init<shared_ptr<SpinPermScheme>>())
+        .def(py::init<const vector<shared_ptr<SpinPermScheme>> &>())
+        .def_readwrite("left_terms", &NPDMScheme::left_terms)
+        .def_readwrite("right_terms", &NPDMScheme::right_terms)
+        .def_readwrite("middle_terms", &NPDMScheme::middle_terms)
+        .def_readwrite("middle_perm_patterns",
+                       &NPDMScheme::middle_perm_patterns)
+        .def_readwrite("left_blocking", &NPDMScheme::left_blocking)
+        .def_readwrite("right_blocking", &NPDMScheme::right_blocking)
+        .def_readwrite("middle_blocking", &NPDMScheme::middle_blocking)
+        .def_readwrite("last_right_terms", &NPDMScheme::last_right_terms)
+        .def_readwrite("last_right_blocking", &NPDMScheme::last_right_blocking)
+        .def_readwrite("last_middle_blocking",
+                       &NPDMScheme::last_middle_blocking)
+        .def_readwrite("local_terms", &NPDMScheme::local_terms)
+        .def_readwrite("perms", &NPDMScheme::perms)
+        .def_readwrite("n_max_ops", &NPDMScheme::n_max_ops)
+        .def("initialize", &NPDMScheme::initialize)
+        .def("to_str", &NPDMScheme::to_str);
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {

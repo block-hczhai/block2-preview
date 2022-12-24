@@ -4383,7 +4383,7 @@ struct Expect {
             if (r.expectations.size() == 1)
                 os << " " << setw(14) << r.expectations[0].second;
             else
-                os << " Nterms = " << setw(6) << r.expectations.size();
+                os << " Nterms = " << setw(12) << r.expectations.size();
             os << " Error = " << setw(15) << setprecision(12) << r.bra_error
                << "/" << setw(15) << setprecision(12) << r.ket_error
                << " FLOPS = " << scientific << setw(8) << setprecision(2)
@@ -5414,6 +5414,7 @@ struct Expect {
     FLX solve(bool propagate, bool forward = true) {
         Timer start, current;
         start.get_time();
+        current.get_time();
         for (auto &x : expectations)
             x.clear();
         if (propagate) {

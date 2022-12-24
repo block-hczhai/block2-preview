@@ -89,6 +89,7 @@ enum struct OpNames : uint8_t {
     XL,
     XR,
     X,
+    XPDM,
     SP,
     SM,
     SZ

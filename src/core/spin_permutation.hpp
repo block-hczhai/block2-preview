@@ -32,6 +32,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -171,6 +172,17 @@ struct SpinPermTensor {
                 n ^= 1, tag[j] = 1, j = perm[j];
         }
         return n;
+    }
+    // old -> new
+    static vector<uint16_t> find_pattern_perm(const vector<uint16_t> &x) {
+        vector<uint16_t> perm(x.size()), pcnt(x.size() + 1, 0);
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[x[i] + 1]++;
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[i + 1] += pcnt[i];
+        for (uint16_t i = 0; i < x.size(); i++)
+            perm[i] = pcnt[x[i]]++;
+        return perm;
     }
     static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
                                               const string &xops) {
@@ -896,11 +908,516 @@ struct SpinPermScheme {
     }
 };
 
+struct NPDMCounter {
+    int n_ops, n_sites;
+    vector<vector<uint32_t>> dp;
+    NPDMCounter(int n_ops, int n_sites) : n_ops(n_ops), n_sites(n_sites) {
+        // dp[n][k] = term count of n distinct ops with index range [0, k)
+        dp.resize(n_ops + 1);
+        for (int i = 0; i < n_ops + 1; i++) {
+            dp[i] = vector<uint32_t>(n_sites + 1, 1);
+            if (i != 0) {
+                dp[i][0] = 0;
+                for (int kk = 1; kk <= n_sites; kk++)
+                    dp[i][kk] = dp[i][kk - 1] + dp[i - 1][kk - 1];
+            }
+        }
+    }
+    uint32_t count_left(const vector<uint16_t> &pattern, int k, bool f) const {
+        set<uint16_t> g(pattern.begin(), pattern.end());
+        if (k == n_sites - 1 || k == -1)
+            return pattern.size() == 0 ? 1 : 0;
+        if (f && g.size() != 0)
+            return dp[(int)g.size() - 1][k];
+        else
+            return dp[(int)g.size()][k + 1];
+    }
+    bool init_left(const vector<uint16_t> &pattern, int k, bool f,
+                   vector<uint16_t> &r) const {
+        r.clear();
+        r.resize(pattern.size(), 0);
+        if (pattern.size() == 0)
+            return true;
+        for (int i = 1; i < (int)pattern.size(); i++)
+            r[i] = r[i - 1] + (pattern[i - 1] != pattern[i]);
+        if (r.back() > k)
+            return false;
+        if (f && r.size() > 0) {
+            r.back() = k;
+            for (int i = (int)r.size() - 2; i >= 0; i--)
+                if (pattern[i] == pattern[i + 1])
+                    r[i] = k;
+                else
+                    break;
+        }
+        return true;
+    }
+    bool next_left(const vector<uint16_t> &pattern, int k,
+                   vector<uint16_t> &r) const {
+        if (pattern.size() == 0)
+            return false;
+        vector<uint16_t> kk(1, 0);
+        for (int i = 1; i < (int)pattern.size(); i++)
+            if (pattern[i - 1] != pattern[i])
+                kk.push_back(i);
+        for (int i = 0; i < (int)kk.size(); i++)
+            if ((i == kk.size() - 1 && r[kk[i]] < k) ||
+                (i < kk.size() - 1 && r[kk[i]] + 1 < r[kk[i + 1]])) {
+                int j = i == kk.size() - 1 ? r.size() : kk[i + 1];
+                for (int m = kk[i]; m < j; m++)
+                    r[m]++;
+                for (int m = 0; m < kk[i]; m++)
+                    r[m] =
+                        m == 0 ? 0 : r[m - 1] + (pattern[m - 1] != pattern[m]);
+                return true;
+            } else if (i == kk.size() - 1)
+                return false;
+        return false;
+    }
+    uint32_t count_right(const vector<uint16_t> &pattern, int k) const {
+        set<uint16_t> g(pattern.begin(), pattern.end());
+        if (k == 0)
+            return pattern.size() == 0 ? 1 : 0;
+        else
+            return dp[(int)g.size()][n_sites - k];
+    }
+    bool init_right(const vector<uint16_t> &pattern, int k,
+                    vector<uint16_t> &r) const {
+        r.clear();
+        if (pattern.size() == 0)
+            return true;
+        r.resize(pattern.size(), k);
+        for (int i = 1; i < (int)pattern.size(); i++)
+            r[i] = r[i - 1] + (pattern[i - 1] != pattern[i]);
+        return r.back() < n_sites;
+    }
+    bool next_right(const vector<uint16_t> &pattern, int k,
+                    vector<uint16_t> &r) const {
+        if (pattern.size() == 0)
+            return false;
+        vector<uint16_t> kk(1, 0);
+        for (int i = 1; i < (int)pattern.size(); i++)
+            if (pattern[i - 1] != pattern[i])
+                kk.push_back(i);
+        for (int i = (int)kk.size() - 1; i >= 0; i--)
+            if (r[kk[i]] < n_sites - kk.size() + i) {
+                int j = i == kk.size() - 1 ? r.size() : kk[i + 1];
+                for (int m = kk[i]; m < j; m++)
+                    r[m]++;
+                for (int m = j; m < (int)r.size(); m++)
+                    r[m] = r[m - 1] + (pattern[m - 1] != pattern[m]);
+                return true;
+            } else if (i == 0)
+                return false;
+        return false;
+    }
+};
+
+struct NPDMScheme {
+    vector<pair<pair<vector<uint16_t>, string>, bool>> left_terms, right_terms;
+    vector<vector<uint32_t>> left_blocking, right_blocking;
+    vector<vector<uint16_t>> middle_perm_patterns;
+    vector<vector<string>> middle_terms;
+    vector<vector<pair<uint32_t, uint32_t>>> middle_blocking;
+    vector<pair<pair<vector<uint16_t>, string>, bool>> last_right_terms;
+    vector<vector<uint32_t>> last_right_blocking;
+    vector<vector<pair<uint32_t, uint32_t>>> last_middle_blocking;
+    vector<string> local_terms;
+    vector<shared_ptr<SpinPermScheme>> perms;
+    int n_max_ops;
+    NPDMScheme(const shared_ptr<SpinPermScheme> &perm)
+        : NPDMScheme(vector<shared_ptr<SpinPermScheme>>{perm}) {}
+    NPDMScheme(const vector<shared_ptr<SpinPermScheme>> &perms) : perms(perms) {
+        n_max_ops = 0;
+        for (auto perm : perms)
+            for (int i = 0; i < (int)perm->index_patterns.size(); i++)
+                n_max_ops = max(n_max_ops, (int)perm->index_patterns[i].size());
+        initialize();
+    }
+    void initialize() {
+        set<string> locals;
+        map<vector<uint16_t>, map<string, int>> left_patterns, right_patterns;
+        map<vector<uint16_t>, map<string, int>> last_right_patterns;
+        left_patterns[vector<uint16_t>()][""] = true;
+        right_patterns[vector<uint16_t>()][""] = true;
+        locals.insert("");
+        map<vector<uint16_t>, vector<pair<int, int>>> middle_patterns;
+        for (int i = 0; i < (int)perms.size(); i++)
+            for (int j = 0; j < (int)perms[i]->index_patterns.size(); j++)
+                middle_patterns[perms[i]->index_patterns[j]].push_back(
+                    make_pair(i, j));
+        middle_perm_patterns.clear();
+        middle_perm_patterns.reserve(middle_patterns.size());
+        for (auto pr : middle_patterns)
+            middle_perm_patterns.push_back(pr.first);
+        sort(middle_perm_patterns.begin(), middle_perm_patterns.end(),
+             [](const vector<uint16_t> &a, const vector<uint16_t> &b) {
+                 return a.size() != b.size() ? a.size() < b.size() : a < b;
+             });
+        vector<set<string>> cds(middle_perm_patterns.size());
+        for (int i = 0; i < (int)middle_perm_patterns.size(); i++)
+            for (auto &r : middle_patterns.at(middle_perm_patterns[i]))
+                for (auto &dt : perms[r.first]->data[r.second])
+                    for (auto x : dt.second)
+                        cds[i].insert(x.second);
+        middle_terms.clear();
+        for (int i = 0; i < (int)cds.size(); i++) {
+            middle_terms.push_back(
+                vector<string>(cds[i].begin(), cds[i].end()));
+            sort(middle_terms[i].begin(), middle_terms[i].end(),
+                 [](const string &a, const string &b) {
+                     return a.length() != b.length() ? a.length() < b.length()
+                                                     : a < b;
+                 });
+        }
+        // find required left / right terms
+        for (int i = 0; i < (int)middle_perm_patterns.size(); i++) {
+            vector<uint16_t> &pat = middle_perm_patterns[i];
+            int n_ops = (int)pat.size();
+            int ii = n_ops - n_ops / 2 - 1, kk;
+            while (ii < n_ops - 1 && pat[ii] == pat[ii + 1])
+                ii++;
+            vector<pair<int, bool>> left_sub_pats;
+            for (int jj = 0; jj < ii; jj++)
+                if (pat[jj] != pat[jj + 1])
+                    left_sub_pats.push_back(make_pair(jj + 1, false));
+            left_sub_pats.push_back(make_pair(ii + 1, true));
+            for (auto &k : left_sub_pats) {
+                vector<uint16_t> spat(pat.begin(), pat.begin() + k.first);
+                kk = k.first - 1;
+                while (kk > 0 && pat[kk - 1] == pat[kk])
+                    kk--;
+                for (auto &cd : cds[i]) {
+                    locals.insert(cd.substr(kk, k.first - kk));
+                    string xcd = cd.substr(0, k.first);
+                    if (left_patterns[spat].count(xcd) == 0 || !k.second)
+                        left_patterns[spat][xcd] = k.second;
+                }
+            }
+            vector<uint16_t> rpat(pat.begin() + (ii + 1), pat.end());
+            const uint16_t rref = rpat.size() == 0 ? 0 : rpat[0];
+            for (auto &r : rpat)
+                r -= rref;
+            kk = ii + 1;
+            while (kk < n_ops - 1 && pat[kk] == pat[kk + 1])
+                kk++;
+            for (auto &cd : cds[i]) {
+                locals.insert(cd.substr(ii + 1, kk - ii));
+                string xcd = cd.substr(ii + 1);
+                right_patterns[rpat][xcd] = true;
+            }
+            if (ii == n_ops - 1) {
+                while (ii > 0 && pat[ii - 1] == pat[ii])
+                    ii--;
+                vector<uint16_t> rpat(pat.begin() + ii, pat.end());
+                const uint16_t rref = rpat.size() == 0 ? 0 : rpat[0];
+                for (auto &r : rpat)
+                    r -= rref;
+                for (auto &cd : cds[i]) {
+                    locals.insert(cd.substr(ii));
+                    string xcd = cd.substr(ii);
+                    last_right_patterns[rpat][xcd] = true;
+                }
+            }
+        }
+        for (auto &lr : last_right_patterns)
+            if (right_patterns.count(lr.first))
+                for (auto &llr : lr.second)
+                    if (right_patterns.at(lr.first).count(llr.first))
+                        llr.second = false;
+        // local sorting
+        local_terms = vector<string>(locals.begin(), locals.end());
+        sort(local_terms.begin(), local_terms.end(),
+             [](const string &a, const string &b) {
+                 return a.length() != b.length() ? a.length() < b.length()
+                                                 : a < b;
+             });
+        // left terms sorting
+        vector<vector<uint16_t>> map_keys;
+        map_keys.reserve(left_patterns.size());
+        for (auto &p : left_patterns)
+            map_keys.push_back(p.first);
+        sort(map_keys.begin(), map_keys.end(),
+             [](const vector<uint16_t> &a, const vector<uint16_t> &b) {
+                 return a.size() != b.size() ? a.size() < b.size() : a < b;
+             });
+        left_terms.clear();
+        for (auto &k : map_keys)
+            for (auto &r : left_patterns.at(k)) {
+                left_terms.push_back(
+                    make_pair(make_pair(k, r.first), (bool)r.second));
+                r.second = left_terms.size() - 1;
+            }
+        // right terms sorting
+        map_keys.clear();
+        map_keys.reserve(right_patterns.size());
+        for (auto &p : right_patterns)
+            map_keys.push_back(p.first);
+        sort(map_keys.begin(), map_keys.end(),
+             [](const vector<uint16_t> &a, const vector<uint16_t> &b) {
+                 return a.size() != b.size() ? a.size() < b.size() : a < b;
+             });
+        right_terms.clear();
+        for (auto &k : map_keys)
+            for (auto &r : right_patterns.at(k)) {
+                right_terms.push_back(
+                    make_pair(make_pair(k, r.first), (bool)r.second));
+                r.second = right_terms.size() - 1;
+            }
+        // last right terms sorting
+        map_keys.clear();
+        map_keys.reserve(last_right_patterns.size());
+        for (auto &p : last_right_patterns)
+            map_keys.push_back(p.first);
+        sort(map_keys.begin(), map_keys.end(),
+             [](const vector<uint16_t> &a, const vector<uint16_t> &b) {
+                 return a.size() != b.size() ? a.size() < b.size() : a < b;
+             });
+        last_right_terms.clear();
+        for (auto &k : map_keys)
+            for (auto &r : last_right_patterns.at(k))
+                if (r.second) {
+                    last_right_terms.push_back(
+                        make_pair(make_pair(k, r.first), (bool)r.second));
+                    r.second = last_right_terms.size() - 1 + right_terms.size();
+                } else
+                    r.second = right_patterns.at(k).at(r.first);
+        // middle blocking
+        middle_blocking.clear();
+        for (int i = 0; i < (int)middle_perm_patterns.size(); i++) {
+            middle_blocking.push_back(
+                vector<pair<uint32_t, uint32_t>>(middle_terms[i].size()));
+            vector<uint16_t> &pat = middle_perm_patterns[i];
+            int n_ops = (int)pat.size();
+            int ii = n_ops - n_ops / 2 - 1;
+            while (ii < n_ops - 1 && pat[ii] == pat[ii + 1])
+                ii++;
+            vector<uint16_t> lpat(pat.begin(), pat.begin() + ii + 1);
+            vector<uint16_t> rpat(pat.begin() + (ii + 1), pat.end());
+            const uint16_t rref = rpat.size() == 0 ? 0 : rpat[0];
+            for (auto &r : rpat)
+                r -= rref;
+            for (int j = 0; j < (int)middle_terms[i].size(); j++) {
+                uint32_t lp = left_patterns.at(lpat).at(
+                    middle_terms[i][j].substr(0, ii + 1));
+                uint32_t rp = right_patterns.at(rpat).at(
+                    middle_terms[i][j].substr(ii + 1));
+                middle_blocking[i][j] = make_pair(lp, rp);
+            }
+        }
+        // last middle blocking
+        last_middle_blocking.clear();
+        for (int i = 0; i < (int)middle_perm_patterns.size(); i++) {
+            vector<uint16_t> &pat = middle_perm_patterns[i];
+            int n_ops = (int)pat.size();
+            int ii = n_ops - n_ops / 2 - 1;
+            while (ii < n_ops - 1 && pat[ii] == pat[ii + 1])
+                ii++;
+            if (ii != n_ops - 1)
+                last_middle_blocking.push_back(
+                    vector<pair<uint32_t, uint32_t>>());
+            else {
+                last_middle_blocking.push_back(
+                    vector<pair<uint32_t, uint32_t>>(middle_terms[i].size()));
+                while (ii > 0 && pat[ii - 1] == pat[ii])
+                    ii--;
+                vector<uint16_t> lpat(pat.begin(), pat.begin() + ii);
+                vector<uint16_t> rpat(pat.begin() + ii, pat.end());
+                const uint16_t rref = rpat.size() == 0 ? 0 : rpat[0];
+                for (auto &r : rpat)
+                    r -= rref;
+                for (int j = 0; j < (int)middle_terms[i].size(); j++) {
+                    uint32_t lp = left_patterns.at(lpat).at(
+                        middle_terms[i][j].substr(0, ii));
+                    uint32_t rp = last_right_patterns.at(rpat).at(
+                        middle_terms[i][j].substr(ii));
+                    last_middle_blocking[i][j] = make_pair(lp, rp);
+                }
+            }
+        }
+        map<string, uint32_t> local_map;
+        for (int i = 0; i < (int)local_terms.size(); i++)
+            local_map[local_terms[i]] = i;
+        // left blocking
+        left_blocking.resize(left_terms.size());
+        for (int ir = 0; ir < (int)left_terms.size(); ir++) {
+            auto &r = left_terms[ir];
+            left_blocking[ir].clear();
+            if (!r.second || r.first.first.size() == 0) {
+                left_blocking[ir].push_back(ir);
+                left_blocking[ir].push_back(local_map.at(""));
+            }
+            if (r.first.first.size() != 0) {
+                int kk = (int)r.first.first.size() - 1;
+                while (kk > 0 && r.first.first[kk - 1] == r.first.first[kk])
+                    kk--;
+                vector<uint16_t> ppat(r.first.first.begin(),
+                                      r.first.first.begin() + kk);
+                left_blocking[ir].push_back(
+                    left_patterns.at(ppat).at(r.first.second.substr(0, kk)));
+                left_blocking[ir].push_back(
+                    local_map.at(r.first.second.substr(kk)));
+            }
+        }
+        // right blocking
+        right_blocking.resize(right_terms.size());
+        for (int ir = 0; ir < (int)right_terms.size(); ir++) {
+            auto &r = right_terms[ir];
+            right_blocking[ir].clear();
+            if (r.first.first.size() == 0) {
+                right_blocking[ir].push_back(local_map.at(""));
+                right_blocking[ir].push_back(ir);
+            } else {
+                if (r.first.first.size() != 0) {
+                    int kk = 0;
+                    while (kk < (int)r.first.first.size() - 1 &&
+                           r.first.first[kk + 1] == r.first.first[kk])
+                        kk++;
+                    vector<uint16_t> ppat(r.first.first.begin() + kk + 1,
+                                          r.first.first.end());
+                    const uint16_t rref = ppat.size() == 0 ? 0 : ppat[0];
+                    for (auto &r : ppat)
+                        r -= rref;
+                    right_blocking[ir].push_back(
+                        local_map.at(r.first.second.substr(0, kk + 1)));
+                    right_blocking[ir].push_back(right_patterns.at(ppat).at(
+                        r.first.second.substr(kk + 1)));
+                }
+                right_blocking[ir].push_back(local_map.at(""));
+                right_blocking[ir].push_back(ir);
+            }
+        }
+        // last right blocking
+        last_right_blocking.resize(last_right_terms.size());
+        for (int ir = 0; ir < (int)last_right_terms.size(); ir++) {
+            auto &r = last_right_terms[ir];
+            assert(r.first.first.size() != 0);
+            last_right_blocking[ir].clear();
+            last_right_blocking[ir].push_back(local_map.at(r.first.second));
+            last_right_blocking[ir].push_back(0);
+        }
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "N_MAX_OPS = " << n_max_ops << endl;
+        ss << "N_LOCAL = " << local_terms.size() << endl;
+        for (int i = 0; i < (int)local_terms.size(); i++)
+            ss << "[" << setw(4) << i << "] = " << local_terms[i] << endl;
+        ss << endl;
+        ss << " N_L = " << left_terms.size() << endl;
+        for (int i = 0; i < (int)left_terms.size(); i++) {
+            ss << "[" << setw(4) << i << "] = ";
+            for (auto &r : left_terms[i].first.first)
+                ss << r << " ";
+            ss << "- " << left_terms[i].first.second;
+            ss << " " << (left_terms[i].second ? "T" : "F");
+            ss << " :: ";
+            for (int j = 0; j < left_blocking[i].size(); j += 2)
+                ss << left_blocking[i][j] << "+" << left_blocking[i][j + 1]
+                   << " / ";
+            ss << endl;
+        }
+        ss << endl;
+        ss << " N_R = " << right_terms.size() << endl;
+        for (int i = 0; i < (int)right_terms.size(); i++) {
+            ss << "[" << setw(4) << i << "] = ";
+            for (auto &r : right_terms[i].first.first)
+                ss << r << " ";
+            ss << "- " << right_terms[i].first.second;
+            ss << " " << (right_terms[i].second ? "T" : "F");
+            ss << " :: ";
+            for (int j = 0; j < right_blocking[i].size(); j += 2)
+                ss << right_blocking[i][j] << "+" << right_blocking[i][j + 1]
+                   << " / ";
+            ss << endl;
+        }
+        ss << endl;
+        ss << " N_R_LAST = " << last_right_terms.size() << endl;
+        for (int i = 0; i < (int)last_right_terms.size(); i++) {
+            ss << "[" << setw(4) << i << "] = ";
+            for (auto &r : last_right_terms[i].first.first)
+                ss << r << " ";
+            ss << "- " << last_right_terms[i].first.second;
+            ss << " " << (last_right_terms[i].second ? "T" : "F");
+            ss << " :: ";
+            for (int j = 0; j < last_right_blocking[i].size(); j += 2)
+                ss << last_right_blocking[i][j] << "+"
+                   << last_right_blocking[i][j + 1] << " / ";
+            ss << endl;
+        }
+        ss << endl;
+        ss << " N_M = " << middle_terms.size() << endl;
+        for (int i = 0; i < (int)middle_terms.size(); i++) {
+            ss << "[" << setw(4) << i << "] = ";
+            for (auto &r : middle_perm_patterns[i])
+                ss << r << " ";
+            ss << ":: ";
+            for (int j = 0; j < (int)middle_terms[i].size(); j++) {
+                ss << middle_terms[i][j] << " ";
+                ss << middle_blocking[i][j].first << "+"
+                   << middle_blocking[i][j].second << " / ";
+            }
+            ss << endl;
+        }
+        ss << endl;
+        int m_last_count = 0;
+        for (int i = 0; i < (int)middle_terms.size(); i++)
+            m_last_count += (last_middle_blocking[i].size() != 0);
+        ss << " N_M_LAST = " << m_last_count << endl;
+        for (int i = 0; i < (int)middle_terms.size(); i++) {
+            if (last_middle_blocking[i].size() == 0)
+                continue;
+            ss << "[" << setw(4) << i << "] = ";
+            for (auto &r : middle_perm_patterns[i])
+                ss << r << " ";
+            ss << ":: ";
+            for (int j = 0; j < (int)last_middle_blocking[i].size(); j++) {
+                ss << middle_terms[i][j] << " ";
+                ss << last_middle_blocking[i][j].first << "+"
+                   << last_middle_blocking[i][j].second << " / ";
+            }
+            ss << endl;
+        }
+        ss << endl;
+        return ss.str();
+    }
+};
+
 } // namespace block2
 
 // using namespace block2;
 
 // int main() {
+//     shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
+//         SpinPermScheme::initialize_sz(4, "CCDD", true));
+//     auto pp = x->index_patterns[12];
+//     for(auto & gg:pp )
+//         cout <<  gg << " ";
+//     cout << endl;
+//     NPDMCounter ct(6, 7);
+//     int k = 4;
+//     bool kf = true;
+//     int cnt = ct.count_left(pp, k, kf);
+//     cout << "left = " << cnt << endl;
+//     vector<uint16_t> xx;
+//     cout << ct.init_left(pp, k, kf, xx) << endl;
+//     for (int i = 0; i < cnt; i++) {
+//         for(auto & gg:xx )
+//             cout <<  gg << " ";
+//         cout << ">" << ct.next_left(pp, k, xx) << endl;
+//     }
+//     k = 2;
+//     cnt = ct.count_right(pp, k);
+//     cout << "right = " << cnt << endl;
+//     cout << ct.init_right(pp, k, xx) << endl;
+//     for (int i = 0; i < cnt; i++) {
+//         for(auto & gg:xx )
+//             cout <<  gg << " ";
+//         cout << ">" << ct.next_right(pp, k, xx) << endl;
+//     }
+// cout << x->to_str() << endl;
+// NPDMScheme y(x);
+// cout << y.to_str() << endl;
 //     using T = SpinPermTensor;
 //     using R = SpinPermRecoupling;
 //     SpinPermScheme x(6);
@@ -924,7 +1441,8 @@ struct SpinPermScheme {
 //     // b = mul(mul(mul('Cp', 'Cq', 2), 'Dr', 1), 'Ds', 0)
 //     auto a = T::mul(T::mul(T::C(p), T::C(q), 2, cg),
 //                     T::mul(T::D(r), T::D(s), 2, cg), 0, cg);
-//     auto b = T::mul(T::mul(T::mul(T::C(p), T::C(q), 2, cg), T::D(r), 1, cg),
+//     auto b = T::mul(T::mul(T::mul(T::C(p), T::C(q), 2, cg), T::D(r), 1,
+//     cg),
 //                     T::D(s), 0, cg);
 //     cout << a.to_str() << endl;
 //     cout << b.to_str() << endl;
@@ -933,25 +1451,27 @@ struct SpinPermScheme {
 //     vector<string> pp = SpinPermRecoupling::initialize(nn, 0);
 //     cout << pp.size() << endl;
 //     for (auto &xp : pp)
-//         cout << xp << " | " << SpinPermRecoupling::find_split_index(xp) <<
-//         endl;
+//         cout << xp << " | " << SpinPermRecoupling::find_split_index(xp)
+//         << endl;
 //     vector<uint8_t> cds;
 //     vector<uint16_t> indices;
 //     for (int i = 0; i < nn; i++)
 //         indices.push_back(i), cds.push_back(i < nn / 2);
 //     // vector<T> ts(pp.size());
 //     // for (int i = 0; i < (int)pp.size(); i++)
-//     //     ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
+//     //     ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds,
+//     cg);
 //     // vector<int> selected_pp_idx;
 //     // for (int i = 0; i < (int)pp.size(); i++) {
-//     //     cout << i << " / " << pp.size() << " " << ts[i].to_str() << endl;
+//     //     cout << i << " / " << pp.size() << " " << ts[i].to_str() <<
+//     endl;
 //     //     bool found = false;
 //     //     for (auto j : selected_pp_idx) {
 //     //         double x = ts[i].equal_to_scaled(ts[j]);
 //     //         if (x != 0)
 //     //             found = true;
-//     //         // cout << "[" << i << "] = " << x << " * [" << j << "]" <<
-//     endl;
+//     //         // cout << "[" << i << "] = " << x << " * [" << j << "]"
+//     << endl;
 //     //     }
 //     //     if (!found)
 //     //         selected_pp_idx.push_back(i);
@@ -999,11 +1519,13 @@ struct SpinPermScheme {
 //     //             if (abs(c) > 1E-12)
 //     //                 continue;
 //     //             cout << "[" << i << "] = ";
-//     //             cout << setw(10) << setprecision(6) << x.data[0] << " * ["
+//     //             cout << setw(10) << setprecision(6) << x.data[0] << "
+//     * ["
 //     <<
 //     //             ja
 //     //                  << "] ";
-//     //             cout << setw(10) << setprecision(6) << x.data[1] << " * ["
+//     //             cout << setw(10) << setprecision(6) << x.data[1] << "
+//     * ["
 //     <<
 //     //             jb
 //     //                  << "] ";
@@ -1016,9 +1538,9 @@ struct SpinPermScheme {
 //         for (int k = 0; k < gg.size(); k++)
 //             cout << setw(4) << rr[i + k];
 //         // cout << endl;
-//         vector<uint16_t> indices(rr.begin() + i, rr.begin() + i + gg.size());
-//         string xpre = "(.+.)0";
-//         for (int inn = 4; inn <= nn; inn += 2)
+//         vector<uint16_t> indices(rr.begin() + i, rr.begin() + i +
+//         gg.size()); string xpre = "(.+.)0"; for (int inn = 4; inn <= nn;
+//         inn += 2)
 //             xpre = "((.+" + xpre + ")1+.)0";
 //         SpinPermTensor x =
 //             SpinPermRecoupling::make_tensor(xpre, indices, cds, cg) * 2;
@@ -1033,15 +1555,16 @@ struct SpinPermScheme {
 //         //     cout << (target_cds[j] ? "C" : "D");
 //         // cout << endl;
 //         vector<string> ttp =
-//             SpinPermPattern::get_unique(target_cds, vector<uint16_t>(), nn /
-//             2);
+//             SpinPermPattern::get_unique(target_cds, vector<uint16_t>(),
+//             nn / 2);
 //         vector<T> tts(ttp.size());
 //         bool found = false;
 //         for (int j = 0; j < tts.size(); j++) {
 //             tts[j] = R::make_tensor(ttp[j], gg, target_cds, cg) * 2;
 //             double x = xs.equal_to_scaled(tts[j]);
 //             if (x != 0)
-//                 found = true, cout << " = " << setw(10) << setprecision(6)
+//                 found = true, cout << " = " << setw(10) <<
+//                 setprecision(6)
 //                                    << fixed << x << " * [" << j << "]" <<
 //                                    endl;
 //         }
@@ -1065,8 +1588,9 @@ struct SpinPermScheme {
 //             for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++) {
 //                 MatrixRef a(ppp.data(), pgg[0].size(), 2);
 //                 MatrixRef x(ppp.data() + a.size(), 2, 1);
-//                 MatrixRef b(ppp.data() + a.size() + x.size(), pgg[0].size(),
-//                 1); for (int k = 0; k < (int)pgg[0].size(); k++)
+//                 MatrixRef b(ppp.data() + a.size() + x.size(),
+//                 pgg[0].size(), 1); for (int k = 0; k <
+//                 (int)pgg[0].size(); k++)
 //                     b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
 //                          a(k, 1) = pgg[jb][k];
 //                 double c = MatrixFunctions::least_squares(a, b, x);
@@ -1082,7 +1606,8 @@ struct SpinPermScheme {
 //             }
 //         for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
 //             for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
-//                 for (int jc = jb + 1; jc < (int)pgg.size() && !found; jc++) {
+//                 for (int jc = jb + 1; jc < (int)pgg.size() && !found;
+//                 jc++) {
 //                     MatrixRef a(ppp.data(), pgg[0].size(), 3);
 //                     MatrixRef x(ppp.data() + a.size(), 3, 1);
 //                     MatrixRef b(ppp.data() + a.size() + x.size(),
@@ -1095,11 +1620,14 @@ struct SpinPermScheme {
 //                     if (abs(c) > 1E-12)
 //                         continue;
 //                     cout << " = ";
-//                     cout << setw(10) << setprecision(6) << fixed << x.data[0]
+//                     cout << setw(10) << setprecision(6) << fixed <<
+//                     x.data[0]
 //                          << " * [" << ja << "] ";
-//                     cout << setw(10) << setprecision(6) << fixed << x.data[1]
+//                     cout << setw(10) << setprecision(6) << fixed <<
+//                     x.data[1]
 //                          << " * [" << jb << "] ";
-//                     cout << setw(10) << setprecision(6) << fixed << x.data[2]
+//                     cout << setw(10) << setprecision(6) << fixed <<
+//                     x.data[2]
 //                          << " * [" << jc << "] ";
 //                     cout << endl;
 //                     found = true;
@@ -1112,24 +1640,32 @@ struct SpinPermScheme {
 //     //     R::make_tensor("((.+(.+.)0)1+.)0", indices, cds, cg) * 2;
 //     // cout << zstd.to_str() << endl;
 //     // vector<SpinPermTensor> A = {
-//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, r, s},
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, r,
+//     s},
 //     //                    R::make_cds("CCDD"), cg),
-//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, s, r},
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, q, s,
+//     r},
 //     //                    R::make_cds("CCDD"), cg),
-//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, q, s},
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, q,
+//     s},
 //     //                    R::make_cds("CDCD"), cg),
-//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, s, q},
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{p, r, s,
+//     q},
 //     //                    R::make_cds("CDDC"), cg),
 //     // };
 //     // vector<SpinPermTensor> B = {
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, r, s},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, r,
+//     s},
 //     //                    R::make_cds("CCDD"), cg),
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, s, r},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, q, s,
+//     r},
 //     //                    R::make_cds("CCDD"), cg) *
 //     //         -1,
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, q, s},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, q,
+//     s},
 //     //                    R::make_cds("CDCD"), cg),
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, s, q},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{p, r, s,
+//     q},
 //     //                    R::make_cds("CDDC"), cg) *
 //     //         -1,
 //     // };
@@ -1139,14 +1675,17 @@ struct SpinPermScheme {
 //     //     cout << (zz == zstd) << " === " << zz.to_str() << endl;
 //     // }
 //     // SpinPermTensor ZA =
-//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{0, 1, 2, 3},
+//     //     R::make_tensor("((.+.)0+(.+.)0)0", vector<uint16_t>{0, 1, 2,
+//     3},
 //     //                    R::make_cds("CDDC"), cg);
 //     // SpinPermTensor ZB =
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2,
+//     3},
 //     //                    R::make_cds("CDDC"), cg) *
 //     //     -1;
 //     // SpinPermTensor ZC =
-//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2, 3},
+//     //     R::make_tensor("((.+.)2+(.+.)2)0", vector<uint16_t>{0, 1, 2,
+//     3},
 //     //                    R::make_cds("CCDD"), cg) *
 //     //     -1;
 //     // cout << "ZA = " << ZA.to_str() << endl;

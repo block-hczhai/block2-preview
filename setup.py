@@ -167,7 +167,7 @@ setup(
         "cmake>=3.19",
         "scipy",
         "psutil",
-        "pybind11",
+        "pybind11<=2.10.1",
     ],
     scripts=[
         "pyblock2/driver/block2main",

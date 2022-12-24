@@ -1894,6 +1894,33 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
                       const string &>(),
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>());
+
+    py::class_<GeneralNPDMMPO<S, FL>, shared_ptr<GeneralNPDMMPO<S, FL>>,
+               MPO<S, FL>>(m, "GeneralNPDMMPO")
+        .def_readwrite("scheme", &GeneralNPDMMPO<S, FL>::scheme)
+        .def_readwrite("counter", &GeneralNPDMMPO<S, FL>::counter)
+        .def_readwrite("cutoff", &GeneralNPDMMPO<S, FL>::cutoff)
+        .def_readwrite("iprint", &GeneralNPDMMPO<S, FL>::iprint)
+        .def_readwrite("left_vacuum", &GeneralNPDMMPO<S, FL>::left_vacuum)
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<NPDMScheme> &>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<NPDMScheme> &,
+                      typename GeneralMPO<S, FL>::FP>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<NPDMScheme> &,
+                      typename GeneralMPO<S, FL>::FP, int>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>())
+        .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
+                      const shared_ptr<NPDMScheme> &,
+                      typename GeneralMPO<S, FL>::FP, int, const string &>(),
+             py::call_guard<checked_ostream_redirect,
+                            checked_estream_redirect>());
 }
 
 template <typename S, typename FL>
