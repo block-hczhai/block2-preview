@@ -424,6 +424,34 @@ struct SpinPermRecoupling {
             return SpinPermTensor::mul(a, b, twos, cg);
         }
     }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        int cnt = 0, depth = 0, start = -1, extra = 0;
+        stringstream ss;
+        for (auto &c : expr) {
+            if (c == 'C' || c == 'D' || c == 'c' || c == 'd' || c == 'T') {
+                if (cnt >= i && cnt < j)
+                    ss << c;
+                cnt++;
+            } else if (c == '(') {
+                depth++;
+                if (cnt == i && start == -1 && j > i + 1)
+                    start = depth;
+                if (cnt >= i && cnt < j && start != -1 && depth >= start)
+                    ss << c, extra++;
+            } else if (c == ')') {
+                depth--;
+                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
+                    ss << c, extra--;
+            } else if (c >= '0' && c <= '9') {
+                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
+                    ss << c;
+            } else if (c == '+') {
+                if (cnt >= i && cnt < j && start != -1 && depth >= start)
+                    ss << c;
+            }
+        }
+        return ss.str().substr(extra);
+    }
     static uint16_t find_split_index(const string &x) {
         int dot_cnt = 0, depth = 0;
         for (auto &c : x)
@@ -443,7 +471,7 @@ struct SpinPermRecoupling {
                                                          int start_depth = 1) {
         int dot_cnt = 0, depth = 0;
         vector<uint16_t> r;
-        for (size_t ic = 0; ic < x.length(); ic++) {
+        for (int ic = 0; ic < (int)x.length(); ic++) {
             auto &c = x[ic];
             if (c == '(')
                 depth++;
@@ -457,6 +485,29 @@ struct SpinPermRecoupling {
             }
         }
         return r;
+    }
+    // (((.+.)0+.)0+.)0 -> 1 2 3
+    // ((.+.)0+(.+.)0) -> 1 2
+    static vector<uint16_t> find_split_indices_from_right(const string &x,
+                                                          int start_depth = 1) {
+        int dot_cnt = 0, depth = 0;
+        vector<uint16_t> r, rx;
+        for (int ic = (int)x.length() - 1; ic >= 0; ic--) {
+            auto &c = x[ic];
+            if (c == ')')
+                depth++;
+            else if (c == '(')
+                depth--;
+            else if (c == '.')
+                dot_cnt++;
+            else if (c == '+' && depth == start_depth) {
+                r.push_back(dot_cnt);
+                start_depth++;
+            }
+        }
+        for (int i = (int)r.size() - 1; i >= 0; i--)
+            rx.push_back(dot_cnt - r[i]);
+        return rx;
     }
     // site_dq = 2 -> heisenberg spin model
     static vector<string> initialize(uint16_t n, uint16_t twos,
@@ -560,26 +611,23 @@ struct SpinPermPattern {
             for (auto &x : mpx) {
                 r[ic++] = i;
                 memcpy(r.data() + ic, x.data(), sizeof(uint16_t) * n);
-                r[ic + n] = n;
-                for (int16_t k = (n - 1) >> 1; k >= 0; k--) {
-                    if (r[ic + k] != r[ic + k + 1]) {
-                        r[ic + n] = k;
-                        break;
-                    }
-                    if (r[ic + n - 1 - k] != r[ic + n - 1 - k + 1]) {
-                        r[ic + n] = n - 1 - k;
-                        break;
-                    }
-                }
+                for (r[ic + n] = (n - 1) >> 1;
+                     r[ic + n] < n - 1 && x[r[ic + n]] == x[r[ic + n] + 1];
+                     r[ic + n]++)
+                    ;
+                r[ic + n]++;
                 ic += n + 1;
             }
         }
         return r;
     }
     size_t count() const { return data.size() / (n + 2); }
-    vector<uint16_t> operator[](size_t i) {
+    vector<uint16_t> operator[](size_t i) const {
         return vector<uint16_t>(data.begin() + i * (n + 2) + 1,
                                 data.begin() + i * (n + 2) + n + 1);
+    }
+    uint16_t get_split_index(size_t i) const {
+        return data[i * (n + 2) + n + 1];
     }
     string to_str() const {
         stringstream ss;
@@ -592,6 +640,7 @@ struct SpinPermPattern {
         }
         return ss.str();
     }
+    // if split_idx != -1: npdm case. else: hamiltonian mpo case
     static vector<string> get_unique(const vector<uint8_t> &cds,
                                      const vector<uint16_t> &ref_indices,
                                      int target_twos = 0, int split_idx = -1,
@@ -603,18 +652,48 @@ struct SpinPermPattern {
             for (int i = 0; i < nn; i++)
                 indices.push_back(i);
         vector<uint16_t> ref_split_idx;
+        int ref_mid = -1;
         for (int i = 1; i < nn; i++)
-            if (indices[i] != indices[i - 1])
+            if (indices[i] != indices[i - 1]) {
                 ref_split_idx.push_back(i);
+                if (i == split_idx)
+                    ref_mid = (int)ref_split_idx.size() - 1;
+            }
+        if (split_idx == nn)
+            ref_mid = (int)ref_split_idx.size() - 1;
         bool heis = cds.size() != 0 && cds[0] == 2;
         vector<string> pp =
             SpinPermRecoupling::initialize(nn, target_twos, heis ? 2 : 1);
         vector<SpinPermTensor> ts(pp.size());
         for (int i = 0; i < (int)pp.size(); i++) {
-            if (split_idx != -1 &&
-                SpinPermRecoupling::find_split_index(pp[i]) != split_idx)
-                continue;
-            if (ref_split) {
+            if (split_idx != -1 && !ref_split) {
+                if (SpinPermRecoupling::find_split_index(pp[i]) != split_idx)
+                    continue;
+            } else if (split_idx != -1) {
+                // handle npdm split
+                if (ref_split_idx.size() != 0) {
+                    if (split_idx < nn && SpinPermRecoupling::find_split_index(
+                                              pp[i]) != split_idx)
+                        continue;
+                    vector<uint16_t> act_split_left_idx =
+                        SpinPermRecoupling::find_split_indices_from_right(
+                            pp[i]);
+                    vector<uint16_t> act_split_right_idx =
+                        SpinPermRecoupling::find_split_indices_from_left(pp[i]);
+                    if (act_split_left_idx.size() < ref_mid + 1 ||
+                        !equal(ref_split_idx.begin(),
+                               ref_split_idx.begin() + ref_mid + 1,
+                               act_split_left_idx.begin() +
+                                   (act_split_left_idx.size() - ref_mid - 1)))
+                        continue;
+                    else if (act_split_right_idx.size() <
+                                 (int)ref_split_idx.size() - ref_mid ||
+                             !equal(ref_split_idx.begin() + ref_mid,
+                                    ref_split_idx.end(),
+                                    act_split_right_idx.begin()))
+                        continue;
+                }
+            } else if (ref_split) {
                 vector<uint16_t> act_split_idx =
                     SpinPermRecoupling::find_split_indices_from_left(pp[i]);
                 if (act_split_idx.size() < ref_split_idx.size() ||
@@ -665,14 +744,19 @@ struct SpinPermPattern {
 struct SpinPermScheme {
     vector<vector<uint16_t>> index_patterns;
     vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
+    bool is_su2;
+    int8_t left_vacuum;
     SpinPermScheme() {}
-    SpinPermScheme(string spin_str, bool su2 = true, bool is_fermion = true) {
+    SpinPermScheme(string spin_str, bool su2 = true, bool is_fermion = true,
+                   bool is_npdm = false) {
         int nn = SpinPermRecoupling::count_cds(spin_str);
         SpinPermScheme r =
-            su2 ? SpinPermScheme::initialize_su2(nn, spin_str)
+            su2 ? SpinPermScheme::initialize_su2(nn, spin_str, is_npdm)
                 : SpinPermScheme::initialize_sz(nn, spin_str, is_fermion);
         index_patterns = r.index_patterns;
         data = r.data;
+        is_su2 = r.is_su2;
+        left_vacuum = r.left_vacuum;
     }
     static SpinPermScheme initialize_sz(int nn, string spin_str,
                                         bool is_fermion = true) {
@@ -699,9 +783,12 @@ struct SpinPermScheme {
                     is_fermion ? (double)pis.second : 1.0, pis.first));
             }
         }
+        r.is_su2 = false;
+        r.left_vacuum = 0;
         return r;
     }
-    static SpinPermScheme initialize_su2(int nn, string spin_str) {
+    static SpinPermScheme initialize_su2(int nn, string spin_str,
+                                         bool is_npdm = false) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg;
@@ -715,6 +802,7 @@ struct SpinPermScheme {
         r.data.resize(spat.count());
         for (size_t i = 0; i < spat.count(); i++) {
             vector<uint16_t> irr = spat[i];
+            int split_idx = is_npdm ? spat.get_split_index(i) : -1;
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
             int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
@@ -733,7 +821,7 @@ struct SpinPermScheme {
                          (uint8_t)SpinOperator::S) |
                         (xs.data[0][0].ops[j].first & SpinOperator::C);
                 vector<string> ttp = SpinPermPattern::get_unique(
-                    target_cds, irr, target_twos, -1, true);
+                    target_cds, irr, target_twos, split_idx, true);
                 vector<T> tts(ttp.size());
                 bool found = false;
                 for (int j = 0; j < tts.size() && !found; j++) {
@@ -882,6 +970,8 @@ struct SpinPermScheme {
                 assert(found);
             }
         }
+        r.is_su2 = true;
+        r.left_vacuum = (int8_t)target_twos;
         return r;
     }
     string to_str() const {
@@ -1088,8 +1178,10 @@ struct NPDMScheme {
                 while (kk > 0 && pat[kk - 1] == pat[kk])
                     kk--;
                 for (auto &cd : cds[i]) {
-                    locals.insert(cd.substr(kk, k.first - kk));
-                    string xcd = cd.substr(0, k.first);
+                    locals.insert(
+                        SpinPermRecoupling::get_sub_expr(cd, kk, k.first));
+                    string xcd =
+                        SpinPermRecoupling::get_sub_expr(cd, 0, k.first);
                     if (left_patterns[spat].count(xcd) == 0 || !k.second)
                         left_patterns[spat][xcd] = k.second;
                 }
@@ -1102,8 +1194,10 @@ struct NPDMScheme {
             while (kk < n_ops - 1 && pat[kk] == pat[kk + 1])
                 kk++;
             for (auto &cd : cds[i]) {
-                locals.insert(cd.substr(ii + 1, kk - ii));
-                string xcd = cd.substr(ii + 1);
+                locals.insert(
+                    SpinPermRecoupling::get_sub_expr(cd, ii + 1, kk + 1));
+                string xcd =
+                    SpinPermRecoupling::get_sub_expr(cd, ii + 1, n_ops);
                 right_patterns[rpat][xcd] = true;
             }
             if (ii == n_ops - 1) {
@@ -1114,8 +1208,9 @@ struct NPDMScheme {
                 for (auto &r : rpat)
                     r -= rref;
                 for (auto &cd : cds[i]) {
-                    locals.insert(cd.substr(ii));
-                    string xcd = cd.substr(ii);
+                    string xcd =
+                        SpinPermRecoupling::get_sub_expr(cd, ii, n_ops);
+                    locals.insert(xcd);
                     last_right_patterns[rpat][xcd] = true;
                 }
             }
@@ -1198,10 +1293,12 @@ struct NPDMScheme {
             for (auto &r : rpat)
                 r -= rref;
             for (int j = 0; j < (int)middle_terms[i].size(); j++) {
-                uint32_t lp = left_patterns.at(lpat).at(
-                    middle_terms[i][j].substr(0, ii + 1));
-                uint32_t rp = right_patterns.at(rpat).at(
-                    middle_terms[i][j].substr(ii + 1));
+                uint32_t lp =
+                    left_patterns.at(lpat).at(SpinPermRecoupling::get_sub_expr(
+                        middle_terms[i][j], 0, ii + 1));
+                uint32_t rp =
+                    right_patterns.at(rpat).at(SpinPermRecoupling::get_sub_expr(
+                        middle_terms[i][j], ii + 1, n_ops));
                 middle_blocking[i][j] = make_pair(lp, rp);
             }
         }
@@ -1228,9 +1325,11 @@ struct NPDMScheme {
                     r -= rref;
                 for (int j = 0; j < (int)middle_terms[i].size(); j++) {
                     uint32_t lp = left_patterns.at(lpat).at(
-                        middle_terms[i][j].substr(0, ii));
+                        SpinPermRecoupling::get_sub_expr(middle_terms[i][j], 0,
+                                                         ii));
                     uint32_t rp = last_right_patterns.at(rpat).at(
-                        middle_terms[i][j].substr(ii));
+                        SpinPermRecoupling::get_sub_expr(middle_terms[i][j], ii,
+                                                         n_ops));
                     last_middle_blocking[i][j] = make_pair(lp, rp);
                 }
             }
@@ -1253,10 +1352,11 @@ struct NPDMScheme {
                     kk--;
                 vector<uint16_t> ppat(r.first.first.begin(),
                                       r.first.first.begin() + kk);
+                left_blocking[ir].push_back(left_patterns.at(ppat).at(
+                    SpinPermRecoupling::get_sub_expr(r.first.second, 0, kk)));
                 left_blocking[ir].push_back(
-                    left_patterns.at(ppat).at(r.first.second.substr(0, kk)));
-                left_blocking[ir].push_back(
-                    local_map.at(r.first.second.substr(kk)));
+                    local_map.at(SpinPermRecoupling::get_sub_expr(
+                        r.first.second, kk, (int)r.first.first.size())));
             }
         }
         // right blocking
@@ -1279,9 +1379,12 @@ struct NPDMScheme {
                     for (auto &r : ppat)
                         r -= rref;
                     right_blocking[ir].push_back(
-                        local_map.at(r.first.second.substr(0, kk + 1)));
+                        local_map.at(SpinPermRecoupling::get_sub_expr(
+                            r.first.second, 0, kk + 1)));
                     right_blocking[ir].push_back(right_patterns.at(ppat).at(
-                        r.first.second.substr(kk + 1)));
+                        SpinPermRecoupling::get_sub_expr(
+                            r.first.second, kk + 1,
+                            (int)r.first.first.size())));
                 }
                 right_blocking[ir].push_back(local_map.at(""));
                 right_blocking[ir].push_back(ir);
@@ -1388,6 +1491,8 @@ struct NPDMScheme {
 // using namespace block2;
 
 // int main() {
+//     shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
+//         SpinPermScheme::initialize_su2(4, "((C+D)0+(C+D)0)0", true));
 //     shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
 //         SpinPermScheme::initialize_sz(4, "CCDD", true));
 //     auto pp = x->index_patterns[12];

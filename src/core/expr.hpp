@@ -264,10 +264,8 @@ struct SiteIndex {
         for (auto iit = i.begin(); iit != i.end(); iit++, x += 12)
             data |= (uint64_t)(*iit) << x;
         x = 56;
-        for (auto sit = s.begin(); sit != s.end(); sit++, x++) {
-            assert((*sit) == 0 || (*sit) == 1);
+        for (auto sit = s.begin(); sit != s.end(); sit++, x++)
             data |= (uint64_t)(*sit) << x;
-        }
     }
     SiteIndex(const vector<uint16_t> &i, const vector<uint8_t> &s) : data(0) {
         data |= i.size() | (s.size() << 4);

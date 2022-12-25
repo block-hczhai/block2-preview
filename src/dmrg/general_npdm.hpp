@@ -77,77 +77,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         tensors.resize(n_sites, nullptr);
         for (uint16_t m = 0; m < n_sites; m++)
             tensors[m] = make_shared<OperatorTensor<S, FL>>();
-        S vacuum = hamil->vacuum;
         counter = make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
-        vector<string> left_exprs, right_exprs;
-        vector<uint16_t> left_term_l, right_term_l;
-        vector<vector<string>> middle_exprs;
-        vector<uint16_t> middle_term_l;
-        left_exprs.reserve(scheme->left_terms.size());
-        left_term_l.reserve(scheme->left_terms.size());
-        for (int i = 0; i < (int)scheme->left_terms.size(); i++) {
-            left_exprs.push_back(scheme->left_terms[i].first.second);
-            left_term_l.push_back(
-                (uint16_t)scheme->left_terms[i].first.first.size());
-        }
-        right_exprs.reserve(scheme->right_terms.size() +
-                            scheme->last_right_terms.size());
-        right_term_l.reserve(scheme->right_terms.size() +
-                             scheme->last_right_terms.size());
-        for (int i = 0; i < (int)scheme->right_terms.size(); i++) {
-            right_exprs.push_back(scheme->right_terms[i].first.second);
-            right_term_l.push_back(
-                (uint16_t)scheme->right_terms[i].first.first.size());
-        }
-        for (int i = 0; i < (int)scheme->last_right_terms.size(); i++) {
-            right_exprs.push_back(scheme->last_right_terms[i].first.second);
-            right_term_l.push_back(
-                (uint16_t)scheme->last_right_terms[i].first.first.size());
-        }
-        middle_exprs.resize(scheme->middle_terms.size());
-        middle_term_l.resize(scheme->middle_terms.size());
-        for (int i = 0; i < (int)scheme->middle_terms.size(); i++) {
-            middle_term_l[i] = (uint16_t)scheme->middle_perm_patterns[i].size();
-            for (int j = 0; j < (int)scheme->middle_terms[i].size(); j++)
-                middle_exprs[i].push_back(scheme->middle_terms[i][j]);
-        }
-        vector<vector<S>> left_quanta_ref =
-            GeneralHamiltonian<S, FL>::init_string_quanta(
-                left_exprs, left_term_l, left_vacuum);
-        vector<vector<S>> right_quanta_ref =
-            GeneralHamiltonian<S, FL>::init_string_quanta(
-                right_exprs, right_term_l, left_vacuum);
-        vector<vector<vector<S>>> middle_quanta_ref(middle_exprs.size());
-        for (int i = 0; i < (int)scheme->middle_terms.size(); i++) {
-            vector<uint16_t> tl(middle_exprs[i].size(), middle_term_l[i]);
-            middle_quanta_ref[i] =
-                GeneralHamiltonian<S, FL>::init_string_quanta(middle_exprs[i],
-                                                              tl, left_vacuum);
-        }
-        S qh = hamil->vacuum, actual_qh = qh;
-        left_vacuum = hamil->vacuum;
-        for (int i = 0; i < (int)middle_exprs.size(); i++) {
-            bool found = false;
-            for (int ix = 0; ix < (int)middle_exprs[i].size(); ix++) {
-                qh = hamil
-                         ->get_string_quanta(
-                             middle_quanta_ref[i][ix], middle_exprs[i][ix],
-                             &scheme->middle_perm_patterns[i][0],
-                             middle_term_l[i])
-                         .first;
-                auto pl = hamil->get_string_quanta(
-                    middle_quanta_ref[i][ix], middle_exprs[i][ix],
-                    &scheme->middle_perm_patterns[i][0], 0);
-                left_vacuum = pl.first, actual_qh = pl.second;
-                found = true;
-                break;
-            }
-            if (found)
-                break;
-        }
-        assert(qh.combine(left_vacuum, -actual_qh) != S(S::invalid));
-        vector<S> left_q = vector<S>{qh.combine(left_vacuum, -actual_qh)};
-        MPO<S, FL>::left_vacuum = left_vacuum;
+        MPO<S, FL>::left_vacuum = hamil->vacuum;
         if (iprint) {
             cout << "Build NPDMMPO | Nsites = " << setw(5) << n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
@@ -211,12 +142,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                   (uint16_t)(ixx / 1000 % 1000),
                                   (uint16_t)(ixx % 1000)},
                                  {});
-                    S q = hamil
-                              ->get_string_quanta(
-                                  left_quanta_ref[i],
-                                  scheme->left_terms[i].first.second, &idx[0],
-                                  (uint16_t)idx.size())
-                              .first;
+                    S q = hamil->get_string_quantum(
+                        scheme->left_terms[i].first.second, &idx[0]);
                     (*plop)[ixx] =
                         make_shared<OpElement<S, FL>>(OpNames::XL, si, q);
                     if (iprint >= 2) {
@@ -254,12 +181,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                   (uint16_t)(ixx / 1000 % 1000),
                                   (uint16_t)(ixx % 1000)},
                                  {});
-                    S q =
-                        hamil
-                            ->get_string_quanta(
-                                right_quanta_ref[i],
-                                scheme->right_terms[i].first.second, &idx[0], 0)
-                            .second;
+                    S q = hamil->get_string_quantum(
+                        scheme->right_terms[i].first.second, &idx[0]);
                     (*prop)[ixx] =
                         make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
                     if (iprint >= 2) {
@@ -291,13 +214,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                       (uint16_t)(ixx / 1000 % 1000),
                                       (uint16_t)(ixx % 1000)},
                                      {});
-                        S q = hamil
-                                  ->get_string_quanta(
-                                      right_quanta_ref[i + scheme->right_terms
-                                                               .size()],
-                                      scheme->last_right_terms[i].first.second,
-                                      &idx[0], 0)
-                                  .second;
+                        S q = hamil->get_string_quantum(
+                            scheme->last_right_terms[i].first.second, &idx[0]);
                         (*prop)[ixx] =
                             make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
                         if (iprint >= 2) {
@@ -504,8 +422,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     scheme->right_terms[rx].first.first, m);
                 for (auto &r :
                      middle_patterns.at(scheme->middle_perm_patterns[i]))
-                    mshape += (lcnt * rcnt) *
-                              scheme->perms[r.first]->data[r.second].size();
+                    for (auto &rr : scheme->perms[r.first]->data[r.second])
+                        mshape += (lcnt * rcnt) * rr.second.size();
             }
             if (m == n_sites - 1)
                 for (int i = 0; i < scheme->last_middle_blocking.size(); i++)
@@ -526,9 +444,9 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                             m);
                         for (auto &r : middle_patterns.at(
                                  scheme->middle_perm_patterns[i]))
-                            mshape +=
-                                (lcnt * rcnt) *
-                                scheme->perms[r.first]->data[r.second].size();
+                            for (auto &rr :
+                                 scheme->perms[r.first]->data[r.second])
+                                mshape += (lcnt * rcnt) * rr.second.size();
                     }
             if (iprint) {
                 cout << " M = " << setw(12) << mshape;
@@ -561,125 +479,130 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     middle_cd_map[scheme->middle_terms[i][j]] = j;
                 for (auto &r :
                      middle_patterns.at(scheme->middle_perm_patterns[i]))
-                    for (auto &pr : scheme->perms[r.first]->data[r.second]) {
-                        if (iprint >= 2) {
-                            cout << (is_last ? " - MIDDLE*" : " - MIDDLE ")
-                                 << " BLOCKING  [" << setw(5) << r.first << "/"
-                                 << setw(5) << r.second << "] ";
-                            for (auto &g : scheme->middle_perm_patterns[i])
-                                cout << g << " ";
-                            cout << pr.second[0].second;
-                            cout << " -> ";
-                            for (auto &g : pr.first)
-                                cout << g << " ";
-                            cout << ":: ";
-                        }
-                        assert(pr.second.size() == 1); // not working for su2
-                        int jj = middle_cd_map[pr.second[0].second];
-                        uint32_t lx =
-                            is_last ? scheme->last_middle_blocking[i][jj].first
-                                    : scheme->middle_blocking[i][jj].first;
-                        uint32_t rx =
-                            is_last ? scheme->last_middle_blocking[i][jj].second
-                                    : scheme->middle_blocking[i][jj].second;
-                        vector<LL> plidxs, pridxs;
-                        plidxs.resize(scheme->left_terms.size() + 1, 0);
-                        for (int k = 0; k < (int)scheme->left_terms.size(); k++)
-                            plidxs[k + 1] =
-                                plidxs[k] +
-                                counter->count_left(
-                                    scheme->left_terms[k].first.first, m - 1,
-                                    scheme->left_terms[k].second);
-                        pridxs.resize(scheme->right_terms.size() + 1, 0);
-                        for (int k = 0; k < (int)scheme->right_terms.size();
-                             k++)
-                            pridxs[k + 1] =
-                                pridxs[k] +
-                                counter->count_right(
-                                    scheme->right_terms[k].first.first, m);
-                        if (is_last) {
-                            pridxs.resize(scheme->right_terms.size() +
-                                              scheme->last_right_terms.size() +
-                                              1,
-                                          0);
-                            for (int k = 0;
-                                 k < (int)scheme->last_right_terms.size(); k++)
-                                pridxs[k + 1 + scheme->right_terms.size()] =
-                                    pridxs[k + scheme->right_terms.size()] +
-                                    counter->count_right(
-                                        scheme->last_right_terms[k].first.first,
-                                        m);
-                        }
-                        vector<uint16_t> perm =
-                            SpinPermTensor::find_pattern_perm(pr.first);
-                        vector<uint16_t> lxx, rxx, mxx(pr.first.size());
-                        vector<uint16_t> rpat =
-                            rx < scheme->right_terms.size()
-                                ? scheme->right_terms[rx].first.first
-                                : scheme
-                                      ->last_right_terms
-                                          [rx - scheme->right_terms.size()]
-                                      .first.first;
-                        LL lcnt = counter->count_left(
-                            scheme->left_terms[lx].first.first, m - 1,
-                            !is_last);
-                        LL rcnt = counter->count_right(rpat, m);
-                        LL lshift =
-                            !scheme->left_terms[lx].second && !is_last
-                                ? counter->count_left(
-                                      scheme->left_terms[lx].first.first, m - 1,
-                                      scheme->left_terms[lx].second) -
-                                      lcnt
-                                : 0;
-                        counter->init_left(scheme->left_terms[lx].first.first,
-                                           m - 1, !is_last, lxx);
-                        for (LL il = 0; il < lcnt; il++) {
-                            counter->init_right(rpat, m, rxx);
-                            for (LL ir = 0; ir < rcnt; ir++) {
-                                LL acc = 1, ixx = 0;
-                                for (int k = 0; k < (int)pr.first.size(); k++) {
-                                    mxx[k] = perm[k] < lxx.size()
-                                                 ? lxx[perm[k]]
-                                                 : rxx[perm[k] - lxx.size()];
-                                    ixx += mxx[k] * acc;
-                                    acc *= n_sites;
-                                }
-                                S q = hamil
-                                          ->get_string_quanta(
-                                              middle_quanta_ref[i][jj],
-                                              middle_exprs[i][jj], &mxx[0],
-                                              middle_term_l[i])
-                                          .first;
-                                if (iprint >= 2) {
-                                    for (auto &g : mxx)
-                                        cout << g << " ";
-                                    cout << ": " << plidxs[lx] + lshift + il
-                                         << "+" << pridxs[rx] + ir << " (*"
-                                         << fixed << setprecision(3) << setw(6)
-                                         << pr.second[0].first << ") ";
-                                }
-                                (*pmop)[im] = make_shared<OpElement<S, FL>>(
-                                    OpNames::XPDM,
-                                    SiteIndex(
-                                        {(uint16_t)(ixx / 1000 / 1000 / 1000),
-                                         (uint16_t)(ixx / 1000 / 1000 % 1000),
-                                         (uint16_t)(ixx / 1000 % 1000),
-                                         (uint16_t)(ixx % 1000)},
-                                        {}),
-                                    q);
-                                (*pmexpr)[im] =
-                                    (FL)pr.second[0].first *
-                                    (*pmlop)[plidxs[lx] + lshift + il] *
-                                    (*pmrop)[pridxs[rx] + ir];
-                                counter->next_right(rpat, m, rxx);
-                                im++;
+                    for (auto &pr : scheme->perms[r.first]->data[r.second])
+                        for (auto &prr : pr.second) {
+                            if (iprint >= 2) {
+                                cout << (is_last ? " - MIDDLE*" : " - MIDDLE ")
+                                     << " BLOCKING  [" << setw(5) << r.first
+                                     << "/" << setw(5) << r.second << "] ";
+                                for (auto &g : scheme->middle_perm_patterns[i])
+                                    cout << g << " ";
+                                cout << prr.second;
+                                cout << " -> ";
+                                for (auto &g : pr.first)
+                                    cout << g << " ";
+                                cout << ":: ";
                             }
-                            counter->next_left(
-                                scheme->left_terms[lx].first.first, m - 1, lxx);
+                            int jj = middle_cd_map[prr.second];
+                            uint32_t lx =
+                                is_last
+                                    ? scheme->last_middle_blocking[i][jj].first
+                                    : scheme->middle_blocking[i][jj].first;
+                            uint32_t rx =
+                                is_last
+                                    ? scheme->last_middle_blocking[i][jj].second
+                                    : scheme->middle_blocking[i][jj].second;
+                            vector<LL> plidxs, pridxs;
+                            plidxs.resize(scheme->left_terms.size() + 1, 0);
+                            for (int k = 0; k < (int)scheme->left_terms.size();
+                                 k++)
+                                plidxs[k + 1] =
+                                    plidxs[k] +
+                                    counter->count_left(
+                                        scheme->left_terms[k].first.first,
+                                        m - 1, scheme->left_terms[k].second);
+                            pridxs.resize(scheme->right_terms.size() + 1, 0);
+                            for (int k = 0; k < (int)scheme->right_terms.size();
+                                 k++)
+                                pridxs[k + 1] =
+                                    pridxs[k] +
+                                    counter->count_right(
+                                        scheme->right_terms[k].first.first, m);
+                            if (is_last) {
+                                pridxs.resize(
+                                    scheme->right_terms.size() +
+                                        scheme->last_right_terms.size() + 1,
+                                    0);
+                                for (int k = 0;
+                                     k < (int)scheme->last_right_terms.size();
+                                     k++)
+                                    pridxs[k + 1 + scheme->right_terms.size()] =
+                                        pridxs[k + scheme->right_terms.size()] +
+                                        counter->count_right(
+                                            scheme->last_right_terms[k]
+                                                .first.first,
+                                            m);
+                            }
+                            vector<uint16_t> perm =
+                                SpinPermTensor::find_pattern_perm(pr.first);
+                            vector<uint16_t> lxx, rxx, mxx(pr.first.size());
+                            vector<uint16_t> rpat =
+                                rx < scheme->right_terms.size()
+                                    ? scheme->right_terms[rx].first.first
+                                    : scheme
+                                          ->last_right_terms
+                                              [rx - scheme->right_terms.size()]
+                                          .first.first;
+                            LL lcnt = counter->count_left(
+                                scheme->left_terms[lx].first.first, m - 1,
+                                !is_last);
+                            LL rcnt = counter->count_right(rpat, m);
+                            LL lshift =
+                                !scheme->left_terms[lx].second && !is_last
+                                    ? counter->count_left(
+                                          scheme->left_terms[lx].first.first,
+                                          m - 1,
+                                          scheme->left_terms[lx].second) -
+                                          lcnt
+                                    : 0;
+                            counter->init_left(
+                                scheme->left_terms[lx].first.first, m - 1,
+                                !is_last, lxx);
+                            for (LL il = 0; il < lcnt; il++) {
+                                counter->init_right(rpat, m, rxx);
+                                for (LL ir = 0; ir < rcnt; ir++) {
+                                    LL ixx = 0;
+                                    for (int k = 0; k < (int)pr.first.size();
+                                         k++) {
+                                        mxx[k] =
+                                            perm[k] < lxx.size()
+                                                ? lxx[perm[k]]
+                                                : rxx[perm[k] - lxx.size()];
+                                        ixx = ixx * n_sites + mxx[k];
+                                    }
+                                    S q = hamil->get_string_quantum(
+                                        scheme->middle_terms[i][jj], &mxx[0]);
+                                    if (iprint >= 2) {
+                                        for (auto &g : mxx)
+                                            cout << g << " ";
+                                        cout << ": " << plidxs[lx] + lshift + il
+                                             << "+" << pridxs[rx] + ir << " (*"
+                                             << fixed << setprecision(3)
+                                             << setw(6) << prr.first << ") ";
+                                    }
+                                    (*pmop)[im] = make_shared<OpElement<S, FL>>(
+                                        OpNames::XPDM,
+                                        SiteIndex(
+                                            {(uint16_t)(ixx >> 36),
+                                             (uint16_t)((ixx >> 24) & 0xFFFLL),
+                                             (uint16_t)((ixx >> 12) & 0xFFFLL),
+                                             (uint16_t)(ixx & 0xFFFLL)},
+                                            {(uint8_t)r.first}),
+                                        q);
+                                    (*pmexpr)[im] =
+                                        (FL)prr.first *
+                                        (*pmlop)[plidxs[lx] + lshift + il] *
+                                        (*pmrop)[pridxs[rx] + ir];
+                                    counter->next_right(rpat, m, rxx);
+                                    im++;
+                                }
+                                counter->next_left(
+                                    scheme->left_terms[lx].first.first, m - 1,
+                                    lxx);
+                            }
+                            if (iprint >= 2)
+                                cout << endl;
                         }
-                        if (iprint >= 2)
-                            cout << endl;
-                    }
             }
             assert(im == mshape);
             middle_operator_names.push_back(pmop);

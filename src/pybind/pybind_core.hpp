@@ -2003,9 +2003,14 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("split_cds", &SpinPermRecoupling::split_cds)
         .def_static("count_cds", &SpinPermRecoupling::count_cds)
         .def_static("make_tensor", &SpinPermRecoupling::make_tensor)
+        .def_static("get_sub_expr", &SpinPermRecoupling::get_sub_expr)
         .def_static("find_split_index", &SpinPermRecoupling::find_split_index)
         .def_static("find_split_indices_from_left",
-                    &SpinPermRecoupling::find_split_indices_from_left)
+                    &SpinPermRecoupling::find_split_indices_from_left,
+                    py::arg("x"), py::arg("start_depth") = 1)
+        .def_static("find_split_indices_from_right",
+                    &SpinPermRecoupling::find_split_indices_from_right,
+                    py::arg("x"), py::arg("start_depth") = 1)
         .def_static("initialize", &SpinPermRecoupling::initialize, py::arg("n"),
                     py::arg("twos"), py::arg("site_dq") = 1);
 
@@ -2020,6 +2025,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("make_matrix", &SpinPermPattern::make_matrix)
         .def("count", &SpinPermPattern::count)
         .def("__getitem__", &SpinPermPattern::operator[])
+        .def("get_split_index", &SpinPermPattern::get_split_index)
         .def("to_str", &SpinPermPattern::to_str);
 
     py::class_<SpinPermScheme, shared_ptr<SpinPermScheme>>(m, "SpinPermScheme")
@@ -2027,10 +2033,17 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<string>())
         .def(py::init<string, bool>())
         .def(py::init<string, bool, bool>())
+        .def(py::init<string, bool, bool, bool>())
         .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
         .def_readwrite("data", &SpinPermScheme::data)
-        .def_static("initialize_sz", &SpinPermScheme::initialize_sz)
-        .def_static("initialize_su2", &SpinPermScheme::initialize_su2)
+        .def_readwrite("is_su2", &SpinPermScheme::is_su2)
+        .def_readwrite("left_vacuum", &SpinPermScheme::left_vacuum)
+        .def_static("initialize_sz", &SpinPermScheme::initialize_sz,
+                    py::arg("nn"), py::arg("spin_str"),
+                    py::arg("is_fermion") = true)
+        .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
+                    py::arg("nn"), py::arg("spin_str"),
+                    py::arg("is_npdm") = false)
         .def("to_str", &SpinPermScheme::to_str);
 
     py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,

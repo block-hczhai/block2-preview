@@ -1049,6 +1049,8 @@ void bind_fl_expect(py::module &m, const string &name) {
         .def("get_1npc_spatial", &Expect<S, FL, FLS, FLX>::get_1npc_spatial,
              py::arg("s"), py::arg("n_physical_sites") = (uint16_t)0U)
         .def("get_1npc", &Expect<S, FL, FLS, FLX>::get_1npc, py::arg("s"),
+             py::arg("n_physical_sites") = (uint16_t)0U)
+        .def("get_npdm", &Expect<S, FL, FLS, FLX>::get_npdm, py::arg("scheme"),
              py::arg("n_physical_sites") = (uint16_t)0U);
 }
 

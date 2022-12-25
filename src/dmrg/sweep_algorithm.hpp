@@ -23,6 +23,7 @@
 #include "../core/expr.hpp"
 #include "../core/matrix.hpp"
 #include "../core/sparse_matrix.hpp"
+#include "../core/spin_permutation.hpp"
 #include "effective_functions.hpp"
 #include "moving_environment.hpp"
 #include "parallel_mps.hpp"
@@ -5505,31 +5506,33 @@ struct Expect {
             return r.expectations[0].second;
         }
     }
-    GMatrix<FLX> get_1pdm_spatial(uint16_t n_physical_sites = 0U) {
+    GMatrix<FLX> get_1pdm_spatial(uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM1MPOQC<S, FLX>::get_matrix_spatial(expectations,
                                                      n_physical_sites);
     }
-    GMatrix<FLX> get_1pdm(uint16_t n_physical_sites = 0U) {
+    GMatrix<FLX> get_1pdm(uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM1MPOQC<S, FLX>::get_matrix(expectations, n_physical_sites);
     }
-    shared_ptr<GTensor<FLX>> get_2pdm_spatial(uint16_t n_physical_sites = 0U) {
+    shared_ptr<GTensor<FLX>>
+    get_2pdm_spatial(uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM2MPOQC<S, FLX>::get_matrix_spatial(expectations,
                                                      n_physical_sites);
     }
-    shared_ptr<GTensor<FLX>> get_2pdm(uint16_t n_physical_sites = 0U) {
+    shared_ptr<GTensor<FLX>> get_2pdm(uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return PDM2MPOQC<S, FLX>::get_matrix(expectations, n_physical_sites);
     }
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
-    GMatrix<FLX> get_1npc_spatial(uint8_t s, uint16_t n_physical_sites = 0U) {
+    GMatrix<FLX> get_1npc_spatial(uint8_t s,
+                                  uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return NPC1MPOQC<S, FLX>::get_matrix_spatial(s, expectations,
@@ -5537,10 +5540,38 @@ struct Expect {
     }
     // number of particle correlation
     // s == 0: pure spin; s == 1: mixed spin
-    GMatrix<FLX> get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) {
+    GMatrix<FLX> get_1npc(uint8_t s, uint16_t n_physical_sites = 0U) const {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         return NPC1MPOQC<S, FLX>::get_matrix(s, expectations, n_physical_sites);
+    }
+    vector<shared_ptr<GTensor<FLX>>>
+    get_npdm(const shared_ptr<NPDMScheme> &scheme,
+             uint16_t n_physical_sites = 0U) {
+        vector<shared_ptr<GTensor<FLX>>> r(scheme->perms.size());
+        if (n_physical_sites == 0U)
+            n_physical_sites = me->n_sites;
+        for (int i = 0; i < (int)scheme->perms.size(); i++) {
+            int n_op = (int)scheme->perms[i]->index_patterns[0].size();
+            vector<MKL_INT> shape(n_op, n_physical_sites);
+            r[i] = make_shared<GTensor<FLX>>(shape);
+            r[i]->clear();
+        }
+        for (int ix = 0; ix < me->n_sites - 1; ix++) {
+            vector<pair<shared_ptr<OpExpr<S>>, FLX>> &v = expectations[ix];
+            for (size_t i = 0; i < (size_t)v.size(); i++) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(v[i].first);
+                assert(op->name == OpNames::XPDM);
+                int ii = op->site_index.ss();
+                size_t kk = ((size_t)op->site_index[0] << 36) |
+                            ((size_t)op->site_index[1] << 24) |
+                            ((size_t)op->site_index[2] << 12) |
+                            ((size_t)op->site_index[3]);
+                r[ii]->data[kk] += v[i].second;
+            }
+        }
+        return r;
     }
 };
 

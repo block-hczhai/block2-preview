@@ -769,6 +769,24 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         }
         return make_pair(l, r);
     }
+    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+        S r(0, 0, 0);
+        for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
+            typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (orb_sym.size() == n_sites * 2 &&
+                (expr[j] == 'C' || expr[j] == 'D'))
+                ipg = orb_sym[idxs[j] + n_sites];
+            if (expr[j] == 'c')
+                r = r + S(1, 1, ipg);
+            else if (expr[j] == 'C')
+                r = r + S(1, -1, ipg);
+            else if (expr[j] == 'd')
+                r = r + S(-1, -1, S::pg_inv(ipg));
+            else if (expr[j] == 'D')
+                r = r + S(-1, 1, S::pg_inv(ipg));
+        }
+        return r;
+    }
     static string get_sub_expr(const string &expr, int i, int j) {
         return expr.substr(i, j - i);
     }
@@ -1062,33 +1080,25 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         }
         return make_pair(l, r);
     }
-    static string get_sub_expr(const string &expr, int i, int j) {
-        int cnt = 0, depth = 0, start = -1, extra = 0;
-        stringstream ss;
-        for (auto &c : expr) {
-            if (c == '(') {
-                depth++;
-                if (cnt == i && start == -1 && j > i + 1)
-                    start = depth;
-                if (cnt >= i && cnt < j && start != -1 && depth >= start)
-                    ss << c, extra++;
-            } else if (c == ')') {
-                depth--;
-                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
-                    ss << c, extra--;
-            } else if (c >= '0' && c <= '9') {
-                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
-                    ss << c;
-            } else if (c == '+') {
-                if (cnt >= i && cnt < j && start != -1 && depth >= start)
-                    ss << c;
-            } else if (c == 'C' || c == 'D' || c == 'T') {
-                if (cnt >= i && cnt < j)
-                    ss << c;
-                cnt++;
-            }
+    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+        S r(0, 0, 0);
+        for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
+            if (expr[j] != 'C' && expr[j] != 'D')
+                continue;
+            typename S::pg_t ipg = orb_sym[idxs[i]];
+            if (expr[j] == 'C')
+                r = r + S(1, 1, ipg);
+            else if (expr[j] == 'D')
+                r = r + S(-1, 1, S::pg_inv(ipg));
+            i++;
         }
-        return ss.str().substr(extra);
+        int rr = SpinPermRecoupling::get_target_twos(expr);
+        r.set_twos(rr);
+        r.set_twos_low(rr);
+        return r;
+    }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        return SpinPermRecoupling::get_sub_expr(expr, i, j);
     }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
@@ -1275,6 +1285,17 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
                 r.set_pg(S::pg_mul(r.pg(), ipg));
         }
         return make_pair(l, r);
+    }
+    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+        S r(0, 0);
+        for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
+            typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (expr[j] == 'C')
+                r = r + S(1, ipg);
+            else if (expr[j] == 'D')
+                r = r + S(-1, S::pg_inv(ipg));
+        }
+        return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
         return expr.substr(i, j - i);
@@ -1478,6 +1499,19 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                 r.set_pg(S::pg_mul(r.pg(), ipg));
         }
         return make_pair(l, r);
+    }
+    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+        S r(0, 0);
+        for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
+            typename S::pg_t ipg = orb_sym[idxs[j]];
+            if (expr[j] == 'Z')
+                continue;
+            else if (expr[j] == 'P')
+                r = r + S(2, ipg);
+            else if (expr[j] == 'M')
+                r = r + S(-2, S::pg_inv(ipg));
+        }
+        return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
         return expr.substr(i, j - i);
