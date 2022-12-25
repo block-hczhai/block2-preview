@@ -138,7 +138,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DMPI=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
-          make -j 2
+          make -j 1 # memory issue of mpi compiler
 
       - name: run test (mpi)
         if: matrix.parallel == 'mpi'
