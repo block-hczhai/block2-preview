@@ -21,6 +21,8 @@
 #include "../block2_core.hpp"
 
 template struct block2::OpExpr<block2::SZ>;
+template struct block2::OpExprRef<block2::SZ>;
+template struct block2::OpCounter<block2::SZ>;
 template struct block2::OpElement<block2::SZ, double>;
 template struct block2::OpElementRef<block2::SZ, double>;
 template struct block2::OpProduct<block2::SZ, double>;
@@ -28,6 +30,8 @@ template struct block2::OpSumProd<block2::SZ, double>;
 template struct block2::OpSum<block2::SZ, double>;
 
 template struct block2::OpExpr<block2::SU2>;
+template struct block2::OpExprRef<block2::SU2>;
+template struct block2::OpCounter<block2::SU2>;
 template struct block2::OpElement<block2::SU2, double>;
 template struct block2::OpElementRef<block2::SU2, double>;
 template struct block2::OpProduct<block2::SU2, double>;

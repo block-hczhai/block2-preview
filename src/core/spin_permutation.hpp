@@ -1081,6 +1081,32 @@ struct NPDMCounter {
             r[i] = r[i - 1] + (pattern[i - 1] != pattern[i]);
         return r.back() < n_sites;
     }
+    bool index_right(const vector<uint16_t> &pattern, int k, int ix,
+                     vector<uint16_t> &r) const {
+        r.clear();
+        if (pattern.size() == 0)
+            return true;
+        r.resize(pattern.size(), 0);
+        int gz = 1;
+        for (int i = 1; i < (int)pattern.size(); i++)
+            gz += (pattern[i - 1] != pattern[i]);
+        for (int i = 0; i < (int)pattern.size(); i++)
+            if (i != 0 && pattern[i - 1] == pattern[i])
+                r[i] = r[i - 1];
+            else {
+                int cnt = dp[gz][n_sites - k];
+                r[i] = n_sites -
+                       (uint16_t)(lower_bound(dp[gz].begin(),
+                                              dp[gz].begin() + n_sites - k + 1,
+                                              cnt - ix) -
+                                  dp[gz].begin());
+                ix -= cnt - dp[gz][n_sites - r[i]];
+                k = r[i] + 1;
+                gz--;
+            }
+        assert(ix == 0);
+        return r.back() < n_sites;
+    }
     bool next_right(const vector<uint16_t> &pattern, int k,
                     vector<uint16_t> &r) const {
         if (pattern.size() == 0)
@@ -1493,18 +1519,18 @@ struct NPDMScheme {
 // int main() {
 //     shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
 //         SpinPermScheme::initialize_su2(4, "((C+D)0+(C+D)0)0", true));
-//     shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
-//         SpinPermScheme::initialize_sz(4, "CCDD", true));
-//     auto pp = x->index_patterns[12];
-//     for(auto & gg:pp )
-//         cout <<  gg << " ";
-//     cout << endl;
-//     NPDMCounter ct(6, 7);
-//     int k = 4;
+// shared_ptr<SpinPermScheme> x = make_shared<SpinPermScheme>(
+//     SpinPermScheme::initialize_sz(6, "CCCDDD", true));
+// auto pp = x->index_patterns[12];
+// for (auto &gg : pp)
+//     cout << gg << " ";
+// cout << endl;
+// NPDMCounter ct(6, 7);
+// int k = 2;
 //     bool kf = true;
 //     int cnt = ct.count_left(pp, k, kf);
 //     cout << "left = " << cnt << endl;
-//     vector<uint16_t> xx;
+// vector<uint16_t> xx;
 //     cout << ct.init_left(pp, k, kf, xx) << endl;
 //     for (int i = 0; i < cnt; i++) {
 //         for(auto & gg:xx )
@@ -1512,14 +1538,23 @@ struct NPDMScheme {
 //         cout << ">" << ct.next_left(pp, k, xx) << endl;
 //     }
 //     k = 2;
-//     cnt = ct.count_right(pp, k);
-//     cout << "right = " << cnt << endl;
-//     cout << ct.init_right(pp, k, xx) << endl;
-//     for (int i = 0; i < cnt; i++) {
-//         for(auto & gg:xx )
-//             cout <<  gg << " ";
-//         cout << ">" << ct.next_right(pp, k, xx) << endl;
-//     }
+// int cnt = ct.count_right(pp, k);
+// cout << "right = " << cnt << endl;
+// cout << ct.init_right(pp, k, xx) << endl;
+// for (int i = 0; i < cnt; i++) {
+//     cout << "[ " << i << " ] ";
+//     for (auto &gg : xx)
+//         cout << gg << " ";
+//     cout << ">" << ct.next_right(pp, k, xx) << endl;
+// }
+// cout << endl;
+// for (int i = 0; i < cnt; i++) {
+//     cout << "[ " << i << " ] ";
+//     bool bb = ct.index_right(pp, k, i, xx);
+//     for (auto &gg : xx)
+//         cout << gg << " ";
+//     cout << ">" << bb << endl;
+// }
 // cout << x->to_str() << endl;
 // NPDMScheme y(x);
 // cout << y.to_str() << endl;

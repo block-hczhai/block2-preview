@@ -35,6 +35,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <sstream>
 
 using namespace std;
 
@@ -334,56 +335,205 @@ struct GDiagonalMatrix<FL, typename enable_if<is_complex<FL>::value>::type>
 typedef GDiagonalMatrix<complex<double>> ComplexDiagonalMatrix;
 
 // General rank-n dense tensor
-template <typename FL> struct GTensor {
-    vector<MKL_INT> shape;
-    vector<FL> data;
-    GTensor(MKL_INT m, MKL_INT k, MKL_INT n) : shape{m, k, n} {
-        data.resize((size_t)m * k * n);
+template <typename FL, typename IX = MKL_INT> struct GTensor {
+    vector<IX> shape;
+    shared_ptr<vector<FL>> data;
+    GTensor() {}
+    GTensor(IX m, IX k, IX n) : shape{m, k, n} {
+        data = make_shared<vector<FL>>((size_t)m * k * n);
     }
-    GTensor(const vector<MKL_INT> &shape) : shape(shape) {
+    GTensor(const vector<IX> &shape) : shape(shape) {
         size_t x = 1;
-        for (MKL_INT sh : shape)
+        for (IX sh : shape)
             x = x * (size_t)sh;
-        data.resize(x);
+        data = make_shared<vector<FL>>(x);
     }
-    size_t size() const { return data.size(); }
-    void clear() { memset(data.data(), 0, size() * sizeof(FL)); }
-    void truncate(MKL_INT n) {
+    size_t size() const { return data->size(); }
+    void clear() { memset(data->data(), 0, size() * sizeof(FL)); }
+    void truncate(IX n) {
         assert(shape.size() == 1);
-        data.resize(n);
+        data->resize(n);
         shape[0] = n;
     }
-    void truncate_left(MKL_INT nl) {
+    void truncate_left(IX nl) {
         assert(shape.size() == 2);
-        data.resize(nl * shape[1]);
+        data->resize(nl * shape[1]);
         shape[0] = nl;
     }
-    void truncate_right(MKL_INT nr) {
+    void truncate_right(IX nr) {
         assert(shape.size() == 2);
-        for (MKL_INT i = 1; i < shape[0]; i++)
-            memmove(data.data() + i * nr, data.data() + i * shape[1],
+        for (IX i = 1; i < shape[0]; i++)
+            memmove(data->data() + i * nr, data->data() + i * shape[1],
                     nr * sizeof(FL));
-        data.resize(shape[0] * nr);
+        data->resize(shape[0] * nr);
         shape[1] = nr;
     }
     GMatrix<FL> ref() {
         if (shape.size() == 3 && shape[1] == 1)
-            return GMatrix<FL>(data.data(), shape[0], shape[2]);
+            return GMatrix<FL>(data->data(), shape[0], shape[2]);
         else if (shape.size() == 2)
-            return GMatrix<FL>(data.data(), shape[0], shape[1]);
+            return GMatrix<FL>(data->data(), shape[0], shape[1]);
         else if (shape.size() == 1)
-            return GMatrix<FL>(data.data(), shape[0], 1);
+            return GMatrix<FL>(data->data(), shape[0], 1);
         else {
             assert(false);
-            return GMatrix<FL>(data.data(), 0, 1);
+            return GMatrix<FL>(data->data(), 0, 1);
         }
     }
-    FL &operator()(initializer_list<MKL_INT> idx) {
+    FL &operator()(initializer_list<IX> idx) {
         size_t i = 0;
         int k = 0;
         for (auto &ix : idx)
             i = i * shape[k++] + ix;
-        return data.at(i);
+        return data->at(i);
+    }
+    // write array in numpy format
+    void write_array(ostream &ofs) const {
+        const string magic = "\x93NUMPY";
+        const char ver_major = 1, ver_minor = 0;
+        const size_t pre_len = sizeof(char) * magic.length() +
+                               sizeof(ver_major) + sizeof(ver_minor) +
+                               (ver_major == 1 ? 2 : 4);
+        ofs.write((char *)magic.c_str(), sizeof(char) * magic.length());
+        ofs.write((char *)&ver_major, sizeof(ver_major));
+        ofs.write((char *)&ver_minor, sizeof(ver_minor));
+        stringstream ss;
+        ss << "{'descr': ";
+        if (is_same<FL, float>::value)
+            ss << "'<f4'";
+        else if (is_same<FL, double>::value)
+            ss << "'<f8'";
+        else if (is_same<FL, long double>::value)
+            ss << "'<f16'";
+        else if (is_same<FL, complex<float>>::value)
+            ss << "'<c8'";
+        else if (is_same<FL, complex<double>>::value)
+            ss << "'<c16'";
+        else if (is_same<FL, complex<long double>>::value)
+            ss << "'<c32'";
+        else
+            throw runtime_error("GTensor::write_array: unsupported data type");
+        ss << ", 'fortran_order': False, 'shape': (";
+        size_t arr_len = 1;
+        for (int i = 0; i < (int)shape.size(); i++) {
+            ss << shape[i] << (i == (int)shape.size() - 1 ? ")" : ", ");
+            arr_len *= shape[i];
+        }
+        ss << ", }\n";
+        string header = ss.str();
+        if (((pre_len + header.length()) & 0x3F) != 0)
+            header = header +
+                     string(0x40 - ((pre_len + header.length()) & 0x3F), ' ');
+        assert(((pre_len + header.length()) & 0x3F) == 0);
+        if (ver_major == 1) {
+            uint16_t header_len = (uint16_t)header.length();
+            ofs.write((char *)&header_len, sizeof(header_len));
+        } else {
+            uint32_t header_len = (uint32_t)header.length();
+            ofs.write((char *)&header_len, sizeof(header_len));
+        }
+        ofs.write((char *)header.c_str(), sizeof(char) * header.length());
+        ofs.write((char *)&(*data)[0], sizeof(FL) * arr_len);
+    }
+    // read array in numpy format
+    void read_array(istream &ifs) {
+        string magic = "??????";
+        char ver_major, ver_minor;
+        ifs.read((char *)magic.c_str(), sizeof(char) * magic.length());
+        assert(magic == "\x93NUMPY");
+        ifs.read((char *)&ver_major, sizeof(ver_major));
+        ifs.read((char *)&ver_minor, sizeof(ver_minor));
+        assert(ver_major >= 1 && ver_major <= 3 && ver_minor == 0);
+        uint32_t header_len = 0;
+        if (ver_major == 1) {
+            uint16_t header_len_short;
+            ifs.read((char *)&header_len_short, sizeof(header_len_short));
+            header_len = header_len_short;
+        } else
+            ifs.read((char *)&header_len, sizeof(header_len));
+        string header(header_len, ' ');
+        ifs.read((char *)&header[0], sizeof(char) * header.length());
+        vector<string> tokens;
+        for (int i = 0, j; i < (int)header_len; i++) {
+            if (header[i] == '{' || header[i] == '}' || header[i] == ' ' ||
+                header[i] == '\n')
+                continue;
+            else if (header[i] == '\'' || header[i] == '\"') {
+                for (j = i + 1; j < header_len; j++)
+                    if (header[j] == header[i] && header[j - 1] != '\\')
+                        break;
+                assert(header[j] == header[i]);
+                tokens.push_back(header.substr(i + 1, j - i - 1));
+                i = j;
+            } else if (header[i] == ':' || header[i] == ',')
+                tokens.push_back(string(1, header[i]));
+            else if (header[i] == '(') {
+                for (j = i + 1; j < header_len; j++)
+                    if (header[j] == ')')
+                        break;
+                assert(header[j] == ')');
+                tokens.push_back(header.substr(i + 1, j - i - 1));
+                i = j;
+            } else {
+                for (j = i + 1; j < header_len; j++)
+                    if (header[j] == '}' || header[j] == ',' ||
+                        header[j] == ':' || header[j] == ' ')
+                        break;
+                tokens.push_back(header.substr(i, j - i));
+                i = j - 1;
+            }
+        }
+        shape.clear();
+        for (int i = 0; i < (int)tokens.size(); i++) {
+            if (tokens[i] == "descr") {
+                assert(i + 2 < (int)tokens.size());
+                assert(tokens[i + 1] == ":");
+                string dtype = "";
+                if (is_same<FL, float>::value)
+                    dtype = "<f4";
+                else if (is_same<FL, double>::value)
+                    dtype = "<f8";
+                else if (is_same<FL, long double>::value)
+                    dtype = "<f16";
+                else if (is_same<FL, complex<float>>::value)
+                    dtype = "<c8";
+                else if (is_same<FL, complex<double>>::value)
+                    dtype = "<c16";
+                else if (is_same<FL, complex<long double>>::value)
+                    dtype = "<c32";
+                if (dtype != tokens[i + 2])
+                    throw runtime_error(
+                        "GTensor::read_array: unsupported descr : " + dtype);
+                i += 2;
+            } else if (tokens[i] == "fortran_order") {
+                assert(i + 2 < (int)tokens.size());
+                assert(tokens[i + 1] == ":");
+                if ("False" != tokens[i + 2])
+                    throw runtime_error(
+                        "GTensor::read_array: unsupported fortran_order : " +
+                        tokens[i + 2]);
+                i += 2;
+            } else if (tokens[i] == "shape") {
+                assert(i + 2 < (int)tokens.size());
+                assert(tokens[i + 1] == ":");
+                vector<string> shape_str =
+                    Parsing::split(tokens[i + 2], ",", true);
+                for (auto &r : shape_str)
+                    shape.push_back(
+                        (IX)Parsing::to_long_long(Parsing::trim(r)));
+                i += 2;
+            } else if (tokens[i] == ",")
+                continue;
+            else
+                throw runtime_error(
+                    "GTensor::read_array: unsupported token : '" + tokens[i] +
+                    "'");
+        }
+        size_t arr_len = 1;
+        for (IX sh : shape)
+            arr_len = arr_len * (size_t)sh;
+        data = make_shared<vector<FL>>(arr_len);
+        ifs.read((char *)&(*data)[0], sizeof(FL) * arr_len);
     }
     friend ostream &operator<<(ostream &os, const GTensor &ts) {
         os << "TENSOR ( ";
@@ -391,7 +541,7 @@ template <typename FL> struct GTensor {
             os << sh << " ";
         os << ")" << endl;
         os << "   DATA [";
-        for (auto x : ts.data)
+        for (auto x : *ts.data)
             os << fixed << setw(20) << setprecision(14) << x << " ";
         os << "]" << endl;
         return os;

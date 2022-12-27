@@ -640,6 +640,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
            << Parsing::to_string(i);
         return ss.str();
     }
+    string get_npdm_fragment_filename(int i) const {
+        stringstream ss;
+        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+           << ".PART." << tag << ".NPDM.FRAG." << Parsing::to_string(i);
+        return ss.str();
+    }
     void shallow_copy_to(const shared_ptr<MovingEnvironment> &me) const {
         for (int i = 0; i < n_sites; i++) {
             me->envs[i] = make_shared<Partition<S, FL>>(*envs[i]);
@@ -1754,7 +1760,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<EffectiveHamiltonian<S, FL>> efh =
             make_shared<EffectiveHamiltonian<S, FL>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
-                mpo->left_vacuum, mpo->tf, compute_diag);
+                mpo->left_vacuum, mpo->tf, compute_diag, mpo->npdm_scheme);
+        efh->npdm_fragment_filename = get_npdm_fragment_filename(center);
+        efh->npdm_n_sites = n_sites;
+        efh->npdm_center = center;
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;
@@ -1882,7 +1891,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> efh =
             make_shared<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
-                mpo->left_vacuum, mpo->tf, compute_diag);
+                mpo->left_vacuum, mpo->tf, compute_diag, mpo->npdm_scheme);
+        efh->npdm_fragment_filename = get_npdm_fragment_filename(center);
+        efh->npdm_n_sites = n_sites;
+        efh->npdm_center = center;
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;
@@ -2456,11 +2468,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (with_multi)
                     for (int p = 0; p < qs[i].multiplicity(); p++)
                         wfn_spectra.insert(wfn_spectra.end(),
-                                           s[i]->data.begin(),
-                                           s[i]->data.end());
+                                           s[i]->data->begin(),
+                                           s[i]->data->end());
                 else
-                    wfn_spectra.insert(wfn_spectra.end(), s[i]->data.begin(),
-                                       s[i]->data.end());
+                    wfn_spectra.insert(wfn_spectra.end(), s[i]->data->begin(),
+                                       s[i]->data->end());
         }
         FPS error = 0.0;
         ss.reserve(k_total);
@@ -2472,22 +2484,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             sort(
                 ss.begin(), ss.end(),
                 [&s_reduced](const pair<int, int> &a, const pair<int, int> &b) {
-                    return s_reduced[a.first]->data[a.second] >
-                           s_reduced[b.first]->data[b.second];
+                    return (*s_reduced[a.first]->data)[a.second] >
+                           (*s_reduced[b.first]->data)[b.second];
                 });
             if (((ubond_t)trunc_type / (ubond_t)TruncationTypes::KeepOne) ==
                 0) {
                 for (int i = k; i < k_total; i++) {
-                    FPS x = s[ss[i].first]->data[ss[i].second];
+                    FPS x = (*s[ss[i].first]->data)[ss[i].second];
                     if (x > 0)
                         error += x * x;
                 }
                 for (k = min(k, k_total);
                      k > 1 &&
-                     s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
+                     (*s_reduced[ss[k - 1].first]->data)[ss[k - 1].second] <
                          cutoff;
                      k--) {
-                    FPS x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    FPS x = (*s[ss[k - 1].first]->data)[ss[k - 1].second];
                     if (x > 0)
                         error += x * x;
                 }
@@ -2502,16 +2514,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     smask[i] = mask[ss[i].first] > (int)keep;
                 }
                 for (int i = k; i < k_total; i++) {
-                    FPS x = s[ss[i].first]->data[ss[i].second];
+                    FPS x = (*s[ss[i].first]->data)[ss[i].second];
                     if (x > 0 && smask[i])
                         error += x * x;
                 }
                 for (k = min(k, k_total);
                      k > 1 &&
-                     s_reduced[ss[k - 1].first]->data[ss[k - 1].second] <
+                     (*s_reduced[ss[k - 1].first]->data)[ss[k - 1].second] <
                          cutoff;
                      k--) {
-                    FPS x = s[ss[k - 1].first]->data[ss[k - 1].second];
+                    FPS x = (*s[ss[k - 1].first]->data)[ss[k - 1].second];
                     if (x > 0 && smask[k - 1])
                         error += x * x;
                 }
@@ -2783,7 +2795,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                                  rinfo->n_states_total[ir] +
                                                  j * r[iw]->shape[1],
                                              1, r[iw]->shape[1]),
-                                s[ss[iss + j].first]->data[ss[iss + j].second]);
+                                (*s[ss[iss + j].first]
+                                      ->data)[ss[iss + j].second]);
                         }
                     } else
                         GMatrixFunctions<FLS>::multiply((*left)[i], 3,
@@ -2823,7 +2836,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 GMatrix<FLS>(left->data +
                                                  linfo->n_states_total[il] + j,
                                              linfo->n_states_bra[il], 1),
-                                s[ss[iss + j].first]->data[ss[iss + j].second],
+                                (*s[ss[iss + j].first]
+                                      ->data)[ss[iss + j].second],
                                 linfo->n_states_ket[il]);
                         }
                     } else

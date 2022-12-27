@@ -260,6 +260,11 @@ template <typename S, typename FL> struct Hamiltonian {
         else
             return p->second;
     }
+    // get the delta quantum of an operator string
+    virtual S get_string_quantum(const string &expr,
+                                 const uint16_t *idxs) const {
+        return vacuum;
+    }
     virtual void deallocate() {}
 };
 

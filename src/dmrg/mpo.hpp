@@ -24,6 +24,7 @@
 #include "../core/hamiltonian.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/rule.hpp"
+#include "../core/spin_permutation.hpp"
 #include "../core/symbolic.hpp"
 #include "../core/tensor_functions.hpp"
 #include "mps.hpp"
@@ -153,6 +154,9 @@ template <typename S, typename FL> struct MPO {
                    //!< data causing MPO data invalid
     S left_vacuum; //!< to support singlet embedding for non-singlet MPO. For
                    //!< normal MPO this is normal vacuum
+    shared_ptr<NPDMScheme> npdm_scheme =
+        nullptr; //!< Optional field for constructing npdm expectation values
+                 //!< without symbols
     MPO(int n_sites, const string &tag = "H")
         : n_sites(n_sites), tag(tag), sparse_form(n_sites, 'N'),
           const_e((typename const_fl_type<FL>::FL)0.0), op(nullptr),
@@ -983,6 +987,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
+        MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
@@ -1183,6 +1188,7 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
+        MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::site_op_infos =
             vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
@@ -1476,6 +1482,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
+        MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
         MPO<S, FL>::tf = mpo->tf;
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;

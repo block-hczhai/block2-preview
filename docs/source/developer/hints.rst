@@ -344,3 +344,9 @@ library is linked to only pure "so.1" or only pure "so".
     svd dead loop, with full CPU usage. CPU has avx512.
 
 **Solution:** Update MKL from 2019 to 2021.4 or 2022.1.
+
+[2022-12-26]
+
+**Error:** ::
+
+    Insert ``cout`` in openMP parallel code will cause stuck. Because it is not thread-safe. Use ``printf`` instead.

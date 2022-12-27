@@ -48,6 +48,7 @@ template <typename S, typename FL> struct ClassicParallelMPO : MPO<S, FL> {
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
+        MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
         MPO<S, FL>::tf =
             make_shared<ParallelTensorFunctions<S, FL>>(mpo->tf->opf, rule);
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;
@@ -170,6 +171,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         MPO<S, FL>::basis = mpo->basis;
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
+        MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
         MPO<S, FL>::tf =
             make_shared<ParallelTensorFunctions<S, FL>>(mpo->tf->opf, rule);
         MPO<S, FL>::site_op_infos = mpo->site_op_infos;

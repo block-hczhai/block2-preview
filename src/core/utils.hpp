@@ -31,6 +31,7 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <sys/stat.h>
 #include <type_traits>
@@ -76,7 +77,9 @@ inline int gettimeofday(struct timeval *tp, struct timezone *tzp) {
 
 template <typename FL> inline FL xconj(FL x) { return x; }
 
-template <> inline complex<long double> xconj<complex<long double>>(complex<long double> x) {
+template <>
+inline complex<long double>
+xconj<complex<long double>>(complex<long double> x) {
     return conj(x);
 }
 
@@ -124,19 +127,31 @@ template <> inline float xreal<complex<float>>(complex<float> x) {
 
 template <typename FL> struct alt_fl_type;
 
-template <> struct alt_fl_type<float> { typedef double FL; };
+template <> struct alt_fl_type<float> {
+    typedef double FL;
+};
 
-template <> struct alt_fl_type<double> { typedef float FL; };
+template <> struct alt_fl_type<double> {
+    typedef float FL;
+};
 
-template <> struct alt_fl_type<complex<float>> { typedef complex<double> FL; };
+template <> struct alt_fl_type<complex<float>> {
+    typedef complex<double> FL;
+};
 
-template <> struct alt_fl_type<complex<double>> { typedef complex<float> FL; };
+template <> struct alt_fl_type<complex<double>> {
+    typedef complex<float> FL;
+};
 
 template <typename FL> struct const_fl_type;
 
-template <> struct const_fl_type<float> { typedef double FL; };
+template <> struct const_fl_type<float> {
+    typedef double FL;
+};
 
-template <> struct const_fl_type<double> { typedef long double FL; };
+template <> struct const_fl_type<double> {
+    typedef long double FL;
+};
 
 template <> struct const_fl_type<complex<float>> {
     typedef complex<double> FL;

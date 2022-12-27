@@ -113,7 +113,8 @@ enum struct OpTypes : uint8_t {
     Sum,
     ElemRef,
     SumProd,
-    ExprRef
+    ExprRef,
+    Counter
 };
 
 struct OpNamesSet {
@@ -951,6 +952,13 @@ template <typename S> struct OpExprRef : OpExpr<S> {
         ss << "[" << (is_local ? "T" : "F") << "]" << op->to_str();
         return ss.str();
     }
+};
+
+// Counter used in npdm expectation to avoid explicit symbols
+template <typename S> struct OpCounter : OpExpr<S> {
+    uint64_t data;
+    OpCounter(uint64_t data) : data(data) {}
+    OpTypes get_type() const override { return OpTypes::Counter; }
 };
 
 template <typename S>

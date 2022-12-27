@@ -419,6 +419,14 @@ template <typename S> void bind_expr(py::module &m) {
 
     py::bind_vector<vector<shared_ptr<OpExpr<S>>>>(m, "VectorOpExpr");
 
+    py::class_<OpExprRef<S>, shared_ptr<OpExprRef<S>>, OpExpr<S>>(m,
+                                                                  "OpExprRef");
+
+    py::class_<OpCounter<S>, shared_ptr<OpCounter<S>>, OpExpr<S>>(m,
+                                                                  "OpCounter")
+        .def(py::init<uint64_t>())
+        .def_readwrite("data", &OpCounter<S>::data);
+
     struct PySymbolic : Symbolic<S> {
         using Symbolic<S>::Symbolic;
         SymTypes get_type() const override {
@@ -1060,6 +1068,10 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
              &TensorFunctions<S, FL>::delayed_right_contract)
         .def("left_rotate", &TensorFunctions<S, FL>::left_rotate)
         .def("right_rotate", &TensorFunctions<S, FL>::right_rotate)
+        .def("tensor_product_npdm_fragment",
+             &TensorFunctions<S, FL>::tensor_product_npdm_fragment)
+        .def("tensor_product_expectation",
+             &TensorFunctions<S, FL>::tensor_product_expectation)
         .def("intermediates", &TensorFunctions<S, FL>::intermediates)
         .def("numerical_transform",
              &TensorFunctions<S, FL>::numerical_transform)
@@ -1115,6 +1127,7 @@ template <typename S, typename FL> void bind_fl_hamiltonian(py::module &m) {
         .def("get_site_ops", &Hamiltonian<S, FL>::get_site_ops)
         .def("filter_site_ops", &Hamiltonian<S, FL>::filter_site_ops)
         .def("find_site_op_info", &Hamiltonian<S, FL>::find_site_op_info)
+        .def("get_string_quantum", &Hamiltonian<S, FL>::get_string_quantum)
         .def("deallocate", &Hamiltonian<S, FL>::deallocate);
 }
 
@@ -1511,7 +1524,9 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Prod", OpTypes::Prod)
         .value("Sum", OpTypes::Sum)
         .value("ElemRef", OpTypes::ElemRef)
-        .value("SumProd", OpTypes::SumProd);
+        .value("SumProd", OpTypes::SumProd)
+        .value("ExprRef", OpTypes::ExprRef)
+        .value("Counter", OpTypes::Counter);
 
     py::enum_<NoiseTypes>(m, "NoiseTypes", py::arithmetic())
         .value("Nothing", NoiseTypes::None)
@@ -2059,6 +2074,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("next_left", &NPDMCounter::next_left)
         .def("count_right", &NPDMCounter::count_right)
         .def("init_right", &NPDMCounter::init_right)
+        .def("index_right", &NPDMCounter::index_right)
         .def("next_right", &NPDMCounter::next_right);
 
     py::class_<NPDMScheme, shared_ptr<NPDMScheme>>(m, "NPDMScheme")
@@ -2187,7 +2203,7 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
         .def("load", [](FPCodec<FL> *self, const string &filename) {
             ifstream ifs(filename.c_str(), ios::binary);
             if (!ifs.good())
-                throw runtime_error("FPCodec::load_data on '" + filename +
+                throw runtime_error("FPCodec::load on '" + filename +
                                     "' failed.");
             size_t arr_len;
             ifs >> arr_len;
@@ -2565,6 +2581,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
                                                      py::buffer_protocol())
         .def(py::init<MKL_INT, MKL_INT, MKL_INT>())
         .def(py::init<const vector<MKL_INT> &>())
+        .def(py::init<>())
         .def_buffer([](GTensor<FL> *self) -> py::buffer_info {
             vector<ssize_t> shape, strides;
             for (auto x : self->shape)
@@ -2573,13 +2590,38 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
             for (int i = (int)shape.size() - 1; i > 0; i--)
                 strides.push_back(strides.back() * shape[i]);
             reverse(strides.begin(), strides.end());
-            return py::buffer_info(&self->data[0], sizeof(FL),
+            return py::buffer_info(&(*self->data)[0], sizeof(FL),
                                    py::format_descriptor<FL>::format(),
                                    shape.size(), shape, strides);
         })
         .def_readwrite("shape", &GTensor<FL>::shape)
         .def_readwrite("data", &GTensor<FL>::data)
         .def_property_readonly("ref", &GTensor<FL>::ref)
+        .def("save",
+             [](GTensor<FL> *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("GTensor::save on '" + filename +
+                                         "' failed.");
+                 self->write_array(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("GTensor::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load",
+             [](GTensor<FL> *self, const string &filename) {
+                 ifstream ifs(filename.c_str(), ios::binary);
+                 if (!ifs.good())
+                     throw runtime_error("GTensor::load on '" + filename +
+                                         "' failed.");
+                 self->read_array(ifs);
+                 if (ifs.fail() || ifs.bad())
+                     throw runtime_error("GTensor::load on '" + filename +
+                                         "' failed.");
+                 ifs.close();
+                 return self;
+             })
         .def("__repr__", [](GTensor<FL> *self) {
             stringstream ss;
             ss << *self;

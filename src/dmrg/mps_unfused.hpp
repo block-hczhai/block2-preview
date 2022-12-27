@@ -278,7 +278,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                               wfn ? mps->info->target - ket : ket),
                     make_shared<GTensor<FL>>(l.n_states[ibba], m.n_states[ibbb],
                                              mat->info->n_states_ket[i])));
-                memcpy(ts->data[ibbb].back().second->data.data(), mat->data + p,
+                memcpy(ts->data[ibbb].back().second->data->data(), mat->data + p,
                        lp * sizeof(FL));
                 p += lp;
             }
@@ -322,7 +322,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                                              m.n_states[ikka],
                                              r.n_states[ikkb])));
                 for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
-                    memcpy(&ts->data[ikka].back().second->data[ip * lp],
+                    memcpy(&(*ts->data[ikka].back().second->data)[ip * lp],
                            mat->data + p + ip * mat->info->n_states_ket[i],
                            lp * sizeof(FL));
                 p += lp;
@@ -404,7 +404,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                     assert(ts->shape[0] == l.n_states[ibba]);
                     assert(ts->shape[1] == m.n_states[ibbb]);
                     assert(ts->shape[2] == mat->info->n_states_ket[i]);
-                    memcpy(mat->data + p, ts->data.data(), lp * sizeof(FL));
+                    memcpy(mat->data + p, ts->data->data(), lp * sizeof(FL));
                 }
                 p += lp;
             }
@@ -465,7 +465,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                     assert(ts->shape[2] == r.n_states[ikkb]);
                     for (int ip = 0; ip < (int)mat->info->n_states_bra[i]; ip++)
                         memcpy(mat->data + p + ip * mat->info->n_states_ket[i],
-                               &ts->data[ip * lp], lp * sizeof(FL));
+                               &(*ts->data)[ip * lp], lp * sizeof(FL));
                 }
                 p += lp;
             }

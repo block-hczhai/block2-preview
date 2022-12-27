@@ -769,11 +769,12 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         }
         return make_pair(l, r);
     }
-    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+    S get_string_quantum(const string &expr,
+                         const uint16_t *idxs) const override {
         S r(0, 0, 0);
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
-            typename S::pg_t ipg = orb_sym[idxs[j]];
-            if (orb_sym.size() == n_sites * 2 &&
+            typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[j]] : 0;
+            if (idxs != nullptr && orb_sym.size() == n_sites * 2 &&
                 (expr[j] == 'C' || expr[j] == 'D'))
                 ipg = orb_sym[idxs[j] + n_sites];
             if (expr[j] == 'c')
@@ -1080,12 +1081,13 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         }
         return make_pair(l, r);
     }
-    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+    S get_string_quantum(const string &expr,
+                         const uint16_t *idxs) const override {
         S r(0, 0, 0);
         for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
             if (expr[j] != 'C' && expr[j] != 'D')
                 continue;
-            typename S::pg_t ipg = orb_sym[idxs[i]];
+            typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[i]] : 0;
             if (expr[j] == 'C')
                 r = r + S(1, 1, ipg);
             else if (expr[j] == 'D')
@@ -1286,10 +1288,11 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
         }
         return make_pair(l, r);
     }
-    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+    S get_string_quantum(const string &expr,
+                         const uint16_t *idxs) const override {
         S r(0, 0);
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
-            typename S::pg_t ipg = orb_sym[idxs[j]];
+            typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[j]] : 0;
             if (expr[j] == 'C')
                 r = r + S(1, ipg);
             else if (expr[j] == 'D')
@@ -1500,10 +1503,11 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         }
         return make_pair(l, r);
     }
-    S get_string_quantum(const string &expr, const uint16_t *idxs) {
+    S get_string_quantum(const string &expr,
+                         const uint16_t *idxs) const override {
         S r(0, 0);
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
-            typename S::pg_t ipg = orb_sym[idxs[j]];
+            typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[j]] : 0;
             if (expr[j] == 'Z')
                 continue;
             else if (expr[j] == 'P')

@@ -47,7 +47,23 @@ enum FuseTypes : uint8_t {
     FuseLR = 3
 };
 
-enum struct ExpectationAlgorithmTypes : uint8_t { Automatic, Normal, Fast };
+enum struct ExpectationAlgorithmTypes : uint8_t {
+    Automatic = 1,
+    Normal = 2,
+    Fast = 4,
+    SymbolFree = 8,
+    Compressed = 16
+};
+
+inline ExpectationAlgorithmTypes operator|(ExpectationAlgorithmTypes a,
+                                           ExpectationAlgorithmTypes b) {
+    return ExpectationAlgorithmTypes((uint8_t)a | (uint8_t)b);
+}
+
+inline uint8_t operator&(ExpectationAlgorithmTypes a,
+                         ExpectationAlgorithmTypes b) {
+    return (uint8_t)a & (uint8_t)b;
+}
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
 
@@ -86,6 +102,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     bool compute_diag;
     vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>> wfn_infos;
     vector<S> operator_quanta;
+    shared_ptr<NPDMScheme> npdm_scheme = nullptr;
+    string npdm_fragment_filename = "";
+    int npdm_n_sites = 0, npdm_center = -1;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -94,10 +113,12 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         const shared_ptr<SparseMatrix<S, FL>> &ket,
         const shared_ptr<OpElement<S, FL>> &hop,
         const shared_ptr<SymbolicColumnVector<S>> &hop_mat, S hop_left_vacuum,
-        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
+        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true,
+        const shared_ptr<NPDMScheme> &npdm_scheme = nullptr)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
-          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag) {
+          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag),
+          npdm_scheme(npdm_scheme) {
         // wavefunction
         if (compute_diag) {
             // for non-hermitian hamiltonian, bra and ket may share the same
@@ -116,6 +137,26 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
                                                   hop_left_vacuum);
+        // symbol-free npdm case
+        if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
+                OpNames::XPDM &&
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->site_index ==
+                SiteIndex()) {
+            for (int i = 0; i < (int)msl.size(); i++) {
+                set<S> set_subsl;
+                for (auto &pl : left_op_infos)
+                    for (auto &pr : right_op_infos) {
+                        S p = msl[i].combine(pl.first, -pr.first);
+                        if (p != S(S::invalid))
+                            msubsl[i].push_back(make_pair(0, p));
+                    }
+                sort(msubsl[i].begin(), msubsl[i].end());
+                msubsl[i].resize(
+                    distance(msubsl[i].begin(),
+                             unique(msubsl[i].begin(), msubsl[i].end())));
+            }
+        }
         // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
@@ -547,10 +588,17 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
         assert(ex_type == ExpectationTypes::Real || is_complex<FL>::value);
-        if (algo_type == ExpectationAlgorithmTypes::Automatic)
+        if (algo_type == ExpectationAlgorithmTypes::Automatic) {
             algo_type = op->mat->data.size() > 1
                             ? ExpectationAlgorithmTypes::Fast
                             : ExpectationAlgorithmTypes::Normal;
+            if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
+                    OpNames::XPDM &&
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])
+                        ->site_index == SiteIndex())
+                algo_type = ExpectationAlgorithmTypes::SymbolFree;
+        }
         SeqTypes mode = tf->opf->seq->mode;
         tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
                                  ? SeqTypes::Simple
@@ -614,9 +662,19 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 for (size_t i = 0; i < results.size(); i++)
                     expectations[results_idx[i]].second = results[i];
             }
-        } else
+        } else if (algo_type == ExpectationAlgorithmTypes::Fast) {
             expectations = tf->tensor_product_expectation(
                 op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
+        } else if (algo_type & ExpectationAlgorithmTypes::SymbolFree) {
+            if (npdm_scheme == nullptr)
+                throw runtime_error("ExpectationAlgorithmTypes::SymbolFree "
+                                    "only works with general NPDM MPO.");
+            expectations = 
+            tf->tensor_product_npdm_fragment(
+                npdm_scheme, opdq, npdm_fragment_filename, npdm_n_sites,
+                npdm_center, op->lopt, op->ropt, ket, bra,
+                algo_type & ExpectationAlgorithmTypes::Compressed);
+        }
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
         tf->opf->seq->mode = mode;
@@ -1040,6 +1098,9 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
         wfn_infos;
     vector<S> operator_quanta;
+    string npdm_fragment_filename = "";
+    shared_ptr<NPDMScheme> npdm_scheme = nullptr;
+    int npdm_n_sites = 0, npdm_center = -1;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -1048,10 +1109,12 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         const vector<shared_ptr<SparseMatrixGroup<S, FL>>> &ket,
         const shared_ptr<OpElement<S, FL>> &hop,
         const shared_ptr<SymbolicColumnVector<S>> &hop_mat, S hop_left_vacuum,
-        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true)
+        const shared_ptr<TensorFunctions<S, FL>> &ptf, bool compute_diag = true,
+        const shared_ptr<NPDMScheme> &npdm_scheme = nullptr)
         : left_op_infos(left_op_infos), right_op_infos(right_op_infos), op(op),
           bra(bra), ket(ket), tf(ptf->copy()), hop_mat(hop_mat),
-          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag) {
+          hop_left_vacuum(hop_left_vacuum), compute_diag(compute_diag),
+          npdm_scheme(npdm_scheme) {
         // wavefunction
         if (compute_diag) {
             // for non-hermitian hamiltonian, bra and ket may share the same

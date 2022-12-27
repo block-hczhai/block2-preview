@@ -49,17 +49,18 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
     using MPO<S, FL>::middle_operator_names;
     using MPO<S, FL>::middle_operator_exprs;
     using MPO<S, FL>::basis;
-    shared_ptr<NPDMScheme> scheme;
-    shared_ptr<NPDMCounter> counter;
     FP cutoff;
     int iprint;
+    bool symbol_free;
     S left_vacuum = S(S::invalid);
     GeneralNPDMMPO(const shared_ptr<GeneralHamiltonian<S, FL>> &hamil,
-                   const shared_ptr<NPDMScheme> &scheme, FP cutoff = (FP)0.0,
+                   const shared_ptr<NPDMScheme> &scheme,
+                   bool symbol_free = false, FP cutoff = (FP)0.0,
                    int iprint = 1, const string &tag = "NPDM")
-        : MPO<S, FL>(hamil->n_sites, tag), scheme(scheme), cutoff(cutoff),
-          iprint(iprint) {
+        : MPO<S, FL>(hamil->n_sites, tag), symbol_free(symbol_free),
+          cutoff(cutoff), iprint(iprint) {
         MPO<S, FL>::hamil = hamil;
+        MPO<S, FL>::npdm_scheme = scheme;
     }
     void build() override {
         shared_ptr<GeneralHamiltonian<S, FL>> hamil =
@@ -74,14 +75,19 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         basis = hamil->basis;
         left_operator_names.resize(n_sites, nullptr);
         right_operator_names.resize(n_sites, nullptr);
+        middle_operator_names.resize(n_sites - 1, nullptr);
+        middle_operator_exprs.resize(n_sites - 1, nullptr);
         tensors.resize(n_sites, nullptr);
         for (uint16_t m = 0; m < n_sites; m++)
             tensors[m] = make_shared<OperatorTensor<S, FL>>();
-        counter = make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
+        shared_ptr<NPDMScheme> scheme = MPO<S, FL>::npdm_scheme;
+        shared_ptr<NPDMCounter> counter =
+            make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
         MPO<S, FL>::left_vacuum = hamil->vacuum;
         if (iprint) {
             cout << "Build NPDMMPO | Nsites = " << setw(5) << n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
+                 << " | SymbolFree = " << (symbol_free ? "T" : "F")
                  << " | Cutoff = " << scientific << setw(8) << setprecision(2)
                  << cutoff << endl;
         }
@@ -138,9 +144,10 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     cout << " -  LEFT  [" << setw(5) << i << "] :: ";
                 assert(has_next);
                 for (int j = 0; j < cnt; j++) {
-                    SiteIndex si({(uint16_t)(ixx / 1000 / 1000),
-                                  (uint16_t)(ixx / 1000 % 1000),
-                                  (uint16_t)(ixx % 1000)},
+                    SiteIndex si({(uint16_t)(ixx >> 36),
+                                  (uint16_t)((ixx >> 24) & 0xFFFLL),
+                                  (uint16_t)((ixx >> 12) & 0xFFFLL),
+                                  (uint16_t)(ixx & 0xFFFLL)},
                                  {});
                     S q = hamil->get_string_quantum(
                         scheme->left_terms[i].first.second, &idx[0]);
@@ -177,9 +184,10 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     cout << " - RIGHT  [" << setw(5) << i << "] :: ";
                 assert(has_next);
                 for (int j = 0; j < cnt; j++) {
-                    SiteIndex si({(uint16_t)(ixx / 1000 / 1000),
-                                  (uint16_t)(ixx / 1000 % 1000),
-                                  (uint16_t)(ixx % 1000)},
+                    SiteIndex si({(uint16_t)(ixx >> 36),
+                                  (uint16_t)((ixx >> 24) & 0xFFFLL),
+                                  (uint16_t)((ixx >> 12) & 0xFFFLL),
+                                  (uint16_t)(ixx & 0xFFFLL)},
                                  {});
                     S q = hamil->get_string_quantum(
                         scheme->right_terms[i].first.second, &idx[0]);
@@ -210,9 +218,10 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                         cout << " - RIGHT* [" << setw(5) << i << "] :: ";
                     assert(has_next);
                     for (int j = 0; j < cnt; j++) {
-                        SiteIndex si({(uint16_t)(ixx / 1000 / 1000),
-                                      (uint16_t)(ixx / 1000 % 1000),
-                                      (uint16_t)(ixx % 1000)},
+                        SiteIndex si({(uint16_t)(ixx >> 36),
+                                      (uint16_t)((ixx >> 24) & 0xFFFLL),
+                                      (uint16_t)((ixx >> 12) & 0xFFFLL),
+                                      (uint16_t)(ixx & 0xFFFLL)},
                                      {});
                         S q = hamil->get_string_quantum(
                             scheme->last_right_terms[i].first.second, &idx[0]);
@@ -274,9 +283,10 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                         m == 0 || m == n_sites - 1
                             ? (m == 0 ? OpNames::XL : OpNames::XR)
                             : OpNames::X,
-                        SiteIndex({(uint16_t)(ixx / 1000 / 1000),
-                                   (uint16_t)(ixx / 1000 % 1000),
-                                   (uint16_t)(ixx % 1000)},
+                        SiteIndex({(uint16_t)(ixx >> 36),
+                                   (uint16_t)((ixx >> 24) & 0xFFFLL),
+                                   (uint16_t)((ixx >> 12) & 0xFFFLL),
+                                   (uint16_t)(ixx & 0xFFFLL)},
                                   {}),
                         xm->info->delta_quantum);
                     ixx++;
@@ -454,6 +464,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             }
             if (iprint >= 2)
                 cout << endl;
+            if (symbol_free)
+                mshape = 1;
             shared_ptr<SymbolicColumnVector<S>> pmop =
                 make_shared<SymbolicColumnVector<S>>(mshape);
             shared_ptr<SymbolicColumnVector<S>> pmexpr =
@@ -465,10 +477,30 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             shared_ptr<SymbolicColumnVector<S>> pmrop =
                 dynamic_pointer_cast<SymbolicColumnVector<S>>(
                     right_operator_names[m]);
+            vector<LL> plidxs(scheme->left_terms.size() + 1, 0);
+            for (int k = 0; k < (int)scheme->left_terms.size(); k++)
+                plidxs[k + 1] =
+                    plidxs[k] +
+                    counter->count_left(scheme->left_terms[k].first.first,
+                                        m - 1, scheme->left_terms[k].second);
+            vector<LL> pridxs(scheme->right_terms.size() +
+                                  scheme->last_right_terms.size() + 1,
+                              0);
+            for (int k = 0; k < (int)scheme->right_terms.size(); k++)
+                pridxs[k + 1] =
+                    pridxs[k] +
+                    counter->count_right(scheme->right_terms[k].first.first, m);
+            for (int k = 0; k < (int)scheme->last_right_terms.size(); k++)
+                pridxs[k + 1 + scheme->right_terms.size()] =
+                    pridxs[k + scheme->right_terms.size()] +
+                    counter->count_right(
+                        scheme->last_right_terms[k].first.first, m);
             int middle_count = (int)scheme->middle_blocking.size();
             int middle_base_count = middle_count;
             if (m == n_sites - 1)
                 middle_count += (int)scheme->last_middle_blocking.size();
+            if (symbol_free)
+                middle_count = 0;
             for (int ii = 0; ii < middle_count; ii++) {
                 bool is_last = ii >= middle_base_count;
                 int i = is_last ? ii - middle_base_count : ii;
@@ -479,7 +511,9 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     middle_cd_map[scheme->middle_terms[i][j]] = j;
                 for (auto &r :
                      middle_patterns.at(scheme->middle_perm_patterns[i]))
-                    for (auto &pr : scheme->perms[r.first]->data[r.second])
+                    for (auto &pr : scheme->perms[r.first]->data[r.second]) {
+                        vector<uint16_t> perm =
+                            SpinPermTensor::find_pattern_perm(pr.first);
                         for (auto &prr : pr.second) {
                             if (iprint >= 2) {
                                 cout << (is_last ? " - MIDDLE*" : " - MIDDLE ")
@@ -502,39 +536,6 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                 is_last
                                     ? scheme->last_middle_blocking[i][jj].second
                                     : scheme->middle_blocking[i][jj].second;
-                            vector<LL> plidxs, pridxs;
-                            plidxs.resize(scheme->left_terms.size() + 1, 0);
-                            for (int k = 0; k < (int)scheme->left_terms.size();
-                                 k++)
-                                plidxs[k + 1] =
-                                    plidxs[k] +
-                                    counter->count_left(
-                                        scheme->left_terms[k].first.first,
-                                        m - 1, scheme->left_terms[k].second);
-                            pridxs.resize(scheme->right_terms.size() + 1, 0);
-                            for (int k = 0; k < (int)scheme->right_terms.size();
-                                 k++)
-                                pridxs[k + 1] =
-                                    pridxs[k] +
-                                    counter->count_right(
-                                        scheme->right_terms[k].first.first, m);
-                            if (is_last) {
-                                pridxs.resize(
-                                    scheme->right_terms.size() +
-                                        scheme->last_right_terms.size() + 1,
-                                    0);
-                                for (int k = 0;
-                                     k < (int)scheme->last_right_terms.size();
-                                     k++)
-                                    pridxs[k + 1 + scheme->right_terms.size()] =
-                                        pridxs[k + scheme->right_terms.size()] +
-                                        counter->count_right(
-                                            scheme->last_right_terms[k]
-                                                .first.first,
-                                            m);
-                            }
-                            vector<uint16_t> perm =
-                                SpinPermTensor::find_pattern_perm(pr.first);
                             vector<uint16_t> lxx, rxx, mxx(pr.first.size());
                             vector<uint16_t> rpat =
                                 rx < scheme->right_terms.size()
@@ -603,10 +604,22 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                             if (iprint >= 2)
                                 cout << endl;
                         }
+                    }
+            }
+            if (symbol_free) {
+                S q = scheme->middle_terms.size() > 0 &&
+                              scheme->middle_terms[0].size() > 0
+                          ? hamil->get_string_quantum(
+                                scheme->middle_terms[0][0], nullptr)
+                          : hamil->vacuum;
+                (*pmop)[im] = make_shared<OpElement<S, FL>>(OpNames::XPDM,
+                                                            SiteIndex(), q);
+                (*pmexpr)[im] = make_shared<OpExpr<S>>();
+                im++;
             }
             assert(im == mshape);
-            middle_operator_names.push_back(pmop);
-            middle_operator_exprs.push_back(pmexpr);
+            middle_operator_names[m - 1] = pmop;
+            middle_operator_exprs[m - 1] = pmexpr;
             if (iprint) {
                 tsite += _t.get_time();
                 cout << " Tmid = " << fixed << setprecision(3) << tsite - tnmid;

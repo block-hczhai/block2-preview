@@ -1131,7 +1131,7 @@ TYPED_TEST(TestComplexMatrix, TestSVD) {
             make_shared<GTensor<FL>>(vector<MKL_INT>{m, m});
         shared_ptr<GTensor<FL>> rr =
             make_shared<GTensor<FL>>(vector<MKL_INT>{n, n});
-        Random::complex_fill<FP>(a->data.data(), a->size());
+        Random::complex_fill<FP>(a->data->data(), a->size());
         GMatrixFunctions<FL>::copy(aa->ref(), a->ref());
         if (Random::rand_int(0, 2))
             GMatrixFunctions<FL>::accurate_svd(
@@ -1159,7 +1159,7 @@ TYPED_TEST(TestComplexMatrix, TestSVD) {
             ASSERT_TRUE(GMatrixFunctions<FL>::all_close(
                 rr->ref(), IdentityMatrix(n), thrd, thrd2));
         }
-        GMatrix<FL> x(r->data.data(), 1, n);
+        GMatrix<FL> x(r->data->data(), 1, n);
         for (MKL_INT i = 0; i < k; i++) {
             ASSERT_GE((*s)({i}), 0.0);
             GMatrixFunctions<FL>::iscale(x.shift_ptr(i * n), (*s)({i}));
@@ -1201,7 +1201,7 @@ TYPED_TEST(TestComplexMatrix, TestDisjointSVD) {
         a->clear();
         for (size_t i = 0; i < nnz; i++)
             Random::complex_fill<FP>(
-                &a->data[Random::rand_int(0, (int)a->size())], 1);
+                &(*a->data)[Random::rand_int(0, (int)a->size())], 1);
         GMatrixFunctions<FL>::copy(aa->ref(), a->ref());
         vector<FP> levels{0.6, 0.3};
         levels.resize(Random::rand_int(0, (int)levels.size() + 1));
@@ -1229,7 +1229,7 @@ TYPED_TEST(TestComplexMatrix, TestDisjointSVD) {
                     rr->ref(), IdentityMatrix(n), thrd, thrd2));
             }
         }
-        GMatrix<FL> x(r->data.data(), 1, n);
+        GMatrix<FL> x(r->data->data(), 1, n);
         for (MKL_INT i = 0; i < k; i++) {
             ASSERT_GE((*s)({i}), 0.0);
             GMatrixFunctions<FL>::iscale(x.shift_ptr(i * n), (*s)({i}));

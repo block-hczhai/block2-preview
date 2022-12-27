@@ -147,7 +147,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
             os << " Error = " << scientific << setw(8) << setprecision(2)
                << r.error << " FLOPS = " << scientific << setw(8)
-               << setprecision(2) << (double)r.nflop / r.tdav
+               << setprecision(2)
+               << (r.tdav == 0.0 ? 0 : (double)r.nflop / r.tdav)
                << " Tdav = " << fixed << setprecision(2) << r.tdav;
             if (r.energies.size() != 1 && r.quanta.size() != 0) {
                 for (size_t i = 0; i < r.energies.size(); i++) {
@@ -2567,7 +2568,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             }
             os << " Error = " << scientific << setw(8) << setprecision(2)
                << r.error << " FLOPS = " << scientific << setw(8)
-               << setprecision(2) << (double)r.nflop / r.tmult
+               << setprecision(2)
+               << (r.tmult == 0.0 ? 0 : (double)r.nflop / r.tmult)
                << " Tmult = " << fixed << setprecision(2) << r.tmult;
             return os;
         }
@@ -4381,15 +4383,21 @@ struct Expect {
               ket_error(ket_error), nflop(nflop), tmult(tmult) {}
         friend ostream &operator<<(ostream &os, const Iteration &r) {
             os << fixed << setprecision(8);
-            if (r.expectations.size() == 1)
-                os << " " << setw(14) << r.expectations[0].second;
+            if (r.expectations.size() == 1 &&
+                r.expectations[0].first->get_type() == OpTypes::Counter)
+                os << "Nterms = " << setw(12)
+                   << dynamic_pointer_cast<OpCounter<S>>(
+                          r.expectations[0].first)
+                          ->data;
+            else if (r.expectations.size() == 1)
+                os << setw(14) << r.expectations[0].second;
             else
-                os << " Nterms = " << setw(12) << r.expectations.size();
+                os << "Nterms = " << setw(12) << r.expectations.size();
             os << " Error = " << setw(15) << setprecision(12) << r.bra_error
                << "/" << setw(15) << setprecision(12) << r.ket_error
                << " FLOPS = " << scientific << setw(8) << setprecision(2)
-               << (double)r.nflop / r.tmult << " Tmult = " << fixed
-               << setprecision(2) << r.tmult;
+               << (r.tmult == 0.0 ? 0 : (double)r.nflop / r.tmult)
+               << " Tmult = " << fixed << setprecision(2) << r.tmult;
             return os;
         }
     };
@@ -5489,7 +5497,7 @@ struct Expect {
                          << " | Tdiag = " << me->tdiag
                          << " | Tinfo = " << me->tinfo << endl;
                 cout << " | Teff = " << teff << " | Texpt = " << tex
-                     << " | Tblk = " << tblk << " | Tmve = " << tmve << endl;
+                     << " | Tblk = " << tblk << " | Tmve = " << tmve << endl << endl;
             }
             this->forward = forward;
             if (expectations.size() != 0 && expectations[0].size() == 1)
@@ -5545,32 +5553,66 @@ struct Expect {
             n_physical_sites = me->n_sites;
         return NPC1MPOQC<S, FLX>::get_matrix(s, expectations, n_physical_sites);
     }
-    vector<shared_ptr<GTensor<FLX>>>
-    get_npdm(const shared_ptr<NPDMScheme> &scheme,
-             uint16_t n_physical_sites = 0U) {
+    vector<shared_ptr<GTensor<FLX>>> get_npdm(uint16_t n_physical_sites = 0U) {
+        if (me->mpo->npdm_scheme == nullptr)
+            throw runtime_error(
+                "Expect::get_npdm only works with general NPDM MPO.");
+        shared_ptr<NPDMScheme> scheme = me->mpo->npdm_scheme;
         vector<shared_ptr<GTensor<FLX>>> r(scheme->perms.size());
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
+        size_t total_mem = 0;
         for (int i = 0; i < (int)scheme->perms.size(); i++) {
             int n_op = (int)scheme->perms[i]->index_patterns[0].size();
             vector<MKL_INT> shape(n_op, n_physical_sites);
             r[i] = make_shared<GTensor<FLX>>(shape);
             r[i]->clear();
+            total_mem += r[i]->size();
         }
+        bool symbol_free =
+            expectations[0].size() == 1 &&
+            expectations[0][0].first->get_type() == OpTypes::Counter;
+        if (iprint)
+            cout << "NPDM Finalize | Nsites = " << setw(5) << me->n_sites
+                 << " | Nmaxops = " << setw(2) << scheme->n_max_ops
+                 << " | SymbolFree = " << (symbol_free ? "T" : "F")
+                 << " | Mem = "
+                 << Parsing::to_size_string(total_mem * sizeof(FLX)) << endl;
+        Timer current;
+        current.get_time();
+        double tsite, tsite_total = 0;
         for (int ix = 0; ix < me->n_sites - 1; ix++) {
             vector<pair<shared_ptr<OpExpr<S>>, FLX>> &v = expectations[ix];
-            for (size_t i = 0; i < (size_t)v.size(); i++) {
-                shared_ptr<OpElement<S, FL>> op =
-                    dynamic_pointer_cast<OpElement<S, FL>>(v[i].first);
-                assert(op->name == OpNames::XPDM);
-                int ii = op->site_index.ss();
-                size_t kk = ((size_t)op->site_index[0] << 36) |
-                            ((size_t)op->site_index[1] << 24) |
-                            ((size_t)op->site_index[2] << 12) |
-                            ((size_t)op->site_index[3]);
-                r[ii]->data[kk] += v[i].second;
+            if (iprint) {
+                cout << " Site = " << setw(5) << ix << " .. ";
+                cout.flush();
+            }
+            if (symbol_free)
+                me->mpo->tf->template npdm_finalize<FLX>(
+                    scheme, r, me->get_npdm_fragment_filename(ix), me->n_sites,
+                    ix, algo_type & ExpectationAlgorithmTypes::Compressed);
+            else
+                for (size_t i = 0; i < (size_t)v.size(); i++) {
+                    shared_ptr<OpElement<S, FL>> op =
+                        dynamic_pointer_cast<OpElement<S, FL>>(v[i].first);
+                    assert(op->name == OpNames::XPDM);
+                    int ii = op->site_index.ss();
+                    size_t kk = ((size_t)op->site_index[0] << 36) |
+                                ((size_t)op->site_index[1] << 24) |
+                                ((size_t)op->site_index[2] << 12) |
+                                ((size_t)op->site_index[3]);
+                    (*r[ii]->data)[kk] += v[i].second;
+                }
+            if (iprint) {
+                tsite = current.get_time();
+                cout << " T = " << fixed << setprecision(3) << tsite;
+                cout << endl;
+                tsite_total += tsite;
             }
         }
+        if (iprint)
+            cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
+                 << tsite_total << endl << endl;
         return r;
     }
 };
