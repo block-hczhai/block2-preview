@@ -2076,6 +2076,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Fast", ExpectationAlgorithmTypes::Fast)
         .value("SymbolFree", ExpectationAlgorithmTypes::SymbolFree)
         .value("Compressed", ExpectationAlgorithmTypes::Compressed)
+        .value("LowMem", ExpectationAlgorithmTypes::LowMem)
         .value("CompressedSymbolFree",
                ExpectationAlgorithmTypes::Compressed |
                    ExpectationAlgorithmTypes::SymbolFree)

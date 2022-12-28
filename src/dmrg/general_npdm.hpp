@@ -630,7 +630,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         }
         if (iprint)
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
-                 << tsite_total << endl;
+                 << tsite_total << endl
+                 << endl;
     }
     virtual ~GeneralNPDMMPO() = default;
 };

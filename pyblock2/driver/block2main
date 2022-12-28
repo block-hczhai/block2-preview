@@ -1979,10 +1979,10 @@ if not pre_run:
                 _print(iex, ext_mpss[iex].canonical_form, ext_mpss[iex].center)
                 if (ext_mps.dot == 1 or ext_mps.center == ext_mps.n_sites - 1) and dot == 2:
                     if ext_mps.center == 0 and ext_mps.canonical_form[0] == 'S':
-                        ext_mps.move_right(CG(), prule)
+                        ext_mps.move_right(CG(), prule if MPI is not None else None)
                         ext_mps.center = 0
                     elif ext_mps.center == ext_mps.n_sites - 1 and ext_mps.canonical_form[ext_mps.center] == 'K':
-                        ext_mps.move_left(CG(), prule)
+                        ext_mps.move_left(CG(), prule if MPI is not None else None)
                         ext_mps.center = ext_mps.n_sites - 2
                     elif ext_mps.center == ext_mps.n_sites - 1 and ext_mps.canonical_form[ext_mps.center] == 'S':
                         ext_mps.center = ext_mps.n_sites - 2

@@ -1053,7 +1053,7 @@ struct NPDMCounter {
         for (int i = 0; i < (int)kk.size(); i++)
             if ((i == kk.size() - 1 && r[kk[i]] < k) ||
                 (i < kk.size() - 1 && r[kk[i]] + 1 < r[kk[i + 1]])) {
-                int j = i == kk.size() - 1 ? r.size() : kk[i + 1];
+                int j = i == kk.size() - 1 ? pattern.size() : kk[i + 1];
                 for (int m = kk[i]; m < j; m++)
                     r[m]++;
                 for (int m = 0; m < kk[i]; m++)
@@ -1117,7 +1117,7 @@ struct NPDMCounter {
                 kk.push_back(i);
         for (int i = (int)kk.size() - 1; i >= 0; i--)
             if (r[kk[i]] < n_sites - kk.size() + i) {
-                int j = i == kk.size() - 1 ? r.size() : kk[i + 1];
+                int j = i == kk.size() - 1 ? pattern.size() : kk[i + 1];
                 for (int m = kk[i]; m < j; m++)
                     r[m]++;
                 for (int m = j; m < (int)r.size(); m++)

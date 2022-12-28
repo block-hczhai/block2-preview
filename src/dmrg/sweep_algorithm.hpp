@@ -5497,7 +5497,8 @@ struct Expect {
                          << " | Tdiag = " << me->tdiag
                          << " | Tinfo = " << me->tinfo << endl;
                 cout << " | Teff = " << teff << " | Texpt = " << tex
-                     << " | Tblk = " << tblk << " | Tmve = " << tmve << endl << endl;
+                     << " | Tblk = " << tblk << " | Tmve = " << tmve << endl
+                     << endl;
             }
             this->forward = forward;
             if (expectations.size() != 0 && expectations[0].size() == 1)
@@ -5573,7 +5574,7 @@ struct Expect {
             expectations[0].size() == 1 &&
             expectations[0][0].first->get_type() == OpTypes::Counter;
         if (iprint)
-            cout << "NPDM Finalize | Nsites = " << setw(5) << me->n_sites
+            cout << "NPDM Sorting | Nsites = " << setw(5) << me->n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
                  << " | SymbolFree = " << (symbol_free ? "T" : "F")
                  << " | Mem = "
@@ -5588,9 +5589,11 @@ struct Expect {
                 cout.flush();
             }
             if (symbol_free)
-                me->mpo->tf->template npdm_finalize<FLX>(
+                me->mpo->tf->template npdm_sort<FLX>(
                     scheme, r, me->get_npdm_fragment_filename(ix), me->n_sites,
-                    ix, algo_type & ExpectationAlgorithmTypes::Compressed);
+                    ix,
+                    (algo_type & ExpectationAlgorithmTypes::Compressed) ||
+                        (algo_type & ExpectationAlgorithmTypes::Automatic));
             else
                 for (size_t i = 0; i < (size_t)v.size(); i++) {
                     shared_ptr<OpElement<S, FL>> op =
@@ -5612,7 +5615,8 @@ struct Expect {
         }
         if (iprint)
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
-                 << tsite_total << endl << endl;
+                 << tsite_total << endl
+                 << endl;
         return r;
     }
 };

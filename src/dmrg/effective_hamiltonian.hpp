@@ -47,22 +47,23 @@ enum FuseTypes : uint8_t {
     FuseLR = 3
 };
 
-enum struct ExpectationAlgorithmTypes : uint8_t {
+enum struct ExpectationAlgorithmTypes : uint16_t {
     Automatic = 1,
     Normal = 2,
     Fast = 4,
     SymbolFree = 8,
-    Compressed = 16
+    Compressed = 16,
+    LowMem = 32
 };
 
 inline ExpectationAlgorithmTypes operator|(ExpectationAlgorithmTypes a,
                                            ExpectationAlgorithmTypes b) {
-    return ExpectationAlgorithmTypes((uint8_t)a | (uint8_t)b);
+    return ExpectationAlgorithmTypes((uint16_t)a | (uint16_t)b);
 }
 
-inline uint8_t operator&(ExpectationAlgorithmTypes a,
+inline uint16_t operator&(ExpectationAlgorithmTypes a,
                          ExpectationAlgorithmTypes b) {
-    return (uint8_t)a & (uint8_t)b;
+    return (uint16_t)a & (uint16_t)b;
 }
 
 enum struct ExpectationTypes : uint8_t { Real, Complex };
@@ -597,7 +598,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     OpNames::XPDM &&
                 dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])
                         ->site_index == SiteIndex())
-                algo_type = ExpectationAlgorithmTypes::SymbolFree;
+                algo_type = ExpectationAlgorithmTypes::SymbolFree |
+                            ExpectationAlgorithmTypes::Compressed;
         }
         SeqTypes mode = tf->opf->seq->mode;
         tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
@@ -669,11 +671,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             if (npdm_scheme == nullptr)
                 throw runtime_error("ExpectationAlgorithmTypes::SymbolFree "
                                     "only works with general NPDM MPO.");
-            expectations = 
-            tf->tensor_product_npdm_fragment(
+            expectations = tf->tensor_product_npdm_fragment(
                 npdm_scheme, opdq, npdm_fragment_filename, npdm_n_sites,
                 npdm_center, op->lopt, op->ropt, ket, bra,
-                algo_type & ExpectationAlgorithmTypes::Compressed);
+                algo_type & ExpectationAlgorithmTypes::Compressed,
+                algo_type & ExpectationAlgorithmTypes::LowMem);
         }
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;

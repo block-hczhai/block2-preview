@@ -748,7 +748,7 @@ class DMRGDriver:
                 % (
                     self.mpi.rank if self.mpi is not None else 0,
                     time.perf_counter() - tt,
-                    algo_type.name,
+                    algo_type.name if algo_type is not None else "Conventional",
                     bdim,
                     nnz,
                     sz,
