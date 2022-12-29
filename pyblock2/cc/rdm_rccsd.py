@@ -20,7 +20,10 @@
 Spin-free CCSD rdm in general orbitals with equations derived on the fly.
 """
 
-from rccsd import HBarTerms, Z, P, PT, SP, NR, FC
+try:
+    from .rccsd import HBarTerms, Z, P, PT, SP, NR, FC
+except ImportError:
+    from rccsd import HBarTerms, Z, P, PT, SP, NR, FC
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] E1[i,a]")

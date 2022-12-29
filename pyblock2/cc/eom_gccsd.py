@@ -19,8 +19,10 @@
 """
 EOM-CCSD (EE/IP/EA) in general orbitals with equations derived on the fly.
 """
-
-from gccsd import hbar, ex1, ex2, P, PT, NR, FC, fix_eri_permutations
+try:
+    from .gccsd import hbar, ex1, ex2, P, PT, NR, FC, fix_eri_permutations
+except ImportError:
+    from gccsd import hbar, ex1, ex2, P, PT, NR, FC, fix_eri_permutations
 import numpy as np
 import functools
 

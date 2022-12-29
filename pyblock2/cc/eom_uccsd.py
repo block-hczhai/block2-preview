@@ -20,20 +20,10 @@
 UHF/EOM-CCSD (EE/IP/EA) in spatial orbitals with equations derived on the fly.
 """
 
-from uccsd import (
-    h4,
-    ex1a,
-    ex1b,
-    ex2aa,
-    ex2ab,
-    ex2ba,
-    ex2bb,
-    P,
-    PT,
-    NR,
-    FC,
-    fix_eri_permutations,
-)
+try:
+    from .uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+except ImportError:
+    from uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
 import numpy as np
 import functools
 

@@ -22,8 +22,10 @@ Spin-free EOM-CCSD (EE/IP/EA) with equations derived on the fly.
 Authors:  Huanchen Zhai
           Johannes Tölle    Dec 4-6, 2022
 """
-
-from rccsd import hbar, ex1, ex2, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+try:
+    from .rccsd import hbar, ex1, ex2, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+except ImportError:
+    from rccsd import hbar, ex1, ex2, P, PT, SP, FC, fix_eri_permutations, MapStrStr
 import numpy as np
 import functools
 

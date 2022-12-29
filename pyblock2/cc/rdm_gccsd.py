@@ -20,7 +20,10 @@
 CCSD rdm in general orbitals with equations derived on the fly.
 """
 
-from gccsd import HBar, t, P, PT, NR, FC
+try:
+    from .gccsd import HBar, t, P, PT, NR, FC
+except ImportError:
+    from gccsd import HBar, t, P, PT, NR, FC
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] C[i] D[a]")

@@ -20,21 +20,10 @@
 UHF/CCSD lambda equation in spatial orbitals with equations derived on the fly.
 """
 
-from uccsd import (
-    h4,
-    en_eq,
-    ex1a,
-    ex1b,
-    ex2aa,
-    ex2ab,
-    ex2ba,
-    ex2bb,
-    P,
-    PT,
-    NR,
-    FC,
-    fix_eri_permutations,
-)
+try:
+    from .uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+except ImportError:
+    from uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
 import numpy as np
 
 l1 = P("SUM <ai> la[ia] C[i] D[a]\n + SUM <AI> lb[IA] C[I] D[A]")

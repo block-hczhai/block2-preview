@@ -20,7 +20,10 @@
 Spin-free CCSD lambda equation with equations derived on the fly.
 """
 
-from rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+try:
+    from .rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+except ImportError:
+    from rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] E1[i,a]")
