@@ -583,6 +583,8 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("npdm_fragment_filename",
                        &EffectiveHamiltonian<S, FL>::npdm_fragment_filename)
         .def_readwrite("npdm_scheme", &EffectiveHamiltonian<S, FL>::npdm_scheme)
+        .def_readwrite("npdm_parallel_center",
+                       &EffectiveHamiltonian<S, FL>::npdm_parallel_center)
         .def_readwrite("npdm_n_sites",
                        &EffectiveHamiltonian<S, FL>::npdm_n_sites)
         .def_readwrite("npdm_center", &EffectiveHamiltonian<S, FL>::npdm_center)
@@ -696,6 +698,9 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite(
             "npdm_scheme",
             &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::npdm_scheme)
+        .def_readwrite(
+            "npdm_parallel_center",
+            &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::npdm_parallel_center)
         .def_readwrite(
             "npdm_n_sites",
             &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::npdm_n_sites)
@@ -1605,6 +1610,8 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("op", &MPO<S, FL>::op)
         .def_readwrite("left_vacuum", &MPO<S, FL>::left_vacuum)
         .def_readwrite("npdm_scheme", &MPO<S, FL>::npdm_scheme)
+        .def_readwrite("npdm_parallel_center",
+                       &MPO<S, FL>::npdm_parallel_center)
         .def_readwrite("schemer", &MPO<S, FL>::schemer)
         .def_readwrite("tf", &MPO<S, FL>::tf)
         .def_readwrite("site_op_infos", &MPO<S, FL>::site_op_infos)
@@ -1941,6 +1948,7 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("iprint", &GeneralNPDMMPO<S, FL>::iprint)
         .def_readwrite("left_vacuum", &GeneralNPDMMPO<S, FL>::left_vacuum)
         .def_readwrite("symbol_free", &GeneralNPDMMPO<S, FL>::symbol_free)
+        .def_readwrite("parallel_rule", &GeneralNPDMMPO<S, FL>::parallel_rule)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<NPDMScheme> &>(),
              py::call_guard<checked_ostream_redirect,

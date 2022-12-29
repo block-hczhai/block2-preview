@@ -1761,9 +1761,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S, FL>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->left_vacuum, mpo->tf, compute_diag, mpo->npdm_scheme);
-        efh->npdm_fragment_filename = get_npdm_fragment_filename(center);
+        efh->npdm_fragment_filename = get_npdm_fragment_filename(iM);
         efh->npdm_n_sites = n_sites;
-        efh->npdm_center = center;
+        efh->npdm_center = iM;
+        efh->npdm_parallel_center = mpo->npdm_parallel_center;
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;
@@ -1892,9 +1893,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             make_shared<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>(
                 left_op_infos, right_op_infos, op, fbw, fkw, mpo->op, hops,
                 mpo->left_vacuum, mpo->tf, compute_diag, mpo->npdm_scheme);
-        efh->npdm_fragment_filename = get_npdm_fragment_filename(center);
+        efh->npdm_fragment_filename = get_npdm_fragment_filename(iM);
         efh->npdm_n_sites = n_sites;
-        efh->npdm_center = center;
+        efh->npdm_center = iM;
+        efh->npdm_parallel_center = mpo->npdm_parallel_center;
         tdiag += _t2.get_time();
         frame_<FP>()->update_peak_used_memory();
         return efh;

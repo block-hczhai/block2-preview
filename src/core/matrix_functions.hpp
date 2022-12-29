@@ -847,7 +847,7 @@ struct GMatrixFunctions<
     }
     // c(.T) = bra.T * a(.T) * ket
     // return nflop. (.T) is always transpose conjugate
-    static size_t rotate(const GMatrix<FL> &a, bool conj_a,
+    static size_t left_partial_rotate(const GMatrix<FL> &a, bool conj_a,
                          const GMatrix<FL> &c, bool conj_c,
                          const GMatrix<FL> &bra, const GMatrix<FL> &ket,
                          FL scale) {
@@ -862,6 +862,24 @@ struct GMatrixFunctions<
             multiply(work, true, bra, false, c, scale, 1.0);
         work.deallocate(d_alloc);
         return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * bra.n;
+    }
+    // c(.T) = bra.c * a(.T) * ket.t = (a(~.T) * bra.t).T * ket.t
+    // return nflop. (.T) is always transpose conjugate
+    static size_t right_partial_rotate(const GMatrix<FL> &a, bool conj_a,
+                         const GMatrix<FL> &c, bool conj_c,
+                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
+                         FL scale) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        GMatrix<FL> work(nullptr, conj_a ? a.m : a.n, bra.m);
+        work.allocate(d_alloc);
+        multiply(a, !conj_a, bra, true, work, 1.0, 0.0);
+        if (!conj_c)
+            multiply(work, true, ket, true, c, scale, 1.0);
+        else
+            multiply(ket, false, work, false, c, scale, 1.0);
+        work.deallocate(d_alloc);
+        return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * ket.m;
     }
     // dleft == true : c = bra (= da x db) * a * ket
     // dleft == false: c = bra * a * ket (= da x db)

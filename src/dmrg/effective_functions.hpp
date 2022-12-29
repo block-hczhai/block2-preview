@@ -280,7 +280,8 @@ struct EffectiveFunctions<
         h_eff->post_precompute();
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+            para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                 para_rule->comm->root);
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(gf, make_pair(nmult, niter), (size_t)nflop,
                           t.get_time());
@@ -392,7 +393,8 @@ struct EffectiveFunctions<
         h_eff->post_precompute();
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+            para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                 para_rule->comm->root);
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(FC(rgf, igf), make_pair(nmult + 1, nmultp),
                           (size_t)nflop, t.get_time());
@@ -447,7 +449,8 @@ struct EffectiveFunctions<
         h_eff->post_precompute();
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+            para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                 para_rule->comm->root);
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(energy, norm, nexpo + 1, (size_t)nflop, t.get_time());
     }
@@ -537,7 +540,8 @@ struct EffectiveFunctions<
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop +
                          x_eff->tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+            para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                 para_rule->comm->root);
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         x_eff->tf->opf->seq->cumulative_nflop = 0;
         aa.deallocate();
@@ -654,7 +658,8 @@ struct EffectiveFunctions<S, FL,
         h_eff->post_precompute();
         uint64_t nflop = h_eff->tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
-            para_rule->comm->reduce_sum(&nflop, 1, para_rule->comm->root);
+            para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                 para_rule->comm->root);
         h_eff->tf->opf->seq->cumulative_nflop = 0;
         return make_tuple(gf, make_pair(nmult, niter), (size_t)nflop,
                           t.get_time());

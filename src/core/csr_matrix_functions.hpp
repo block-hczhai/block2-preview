@@ -848,10 +848,10 @@ template <typename FL> struct GCSRMatrixFunctions {
         work.deallocate(d_alloc);
     }
     // c(.T) = bra.T * a(.T) * ket for partial expectation
-    static void rotate(const GCSRMatrix<FL> &a, bool conj_a,
-                       const GMatrix<FL> &c, bool conj_c,
-                       const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                       FL scale) {
+    static void left_partial_rotate(const GCSRMatrix<FL> &a, bool conj_a,
+                                    const GMatrix<FL> &c, bool conj_c,
+                                    const GMatrix<FL> &bra,
+                                    const GMatrix<FL> &ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, conj_a ? a.n : a.m, ket.n);
@@ -862,6 +862,24 @@ template <typename FL> struct GCSRMatrixFunctions {
                                            1.0);
         else
             GMatrixFunctions<FL>::multiply(work, true, bra, false, c, scale,
+                                           1.0);
+        work.deallocate(d_alloc);
+    }
+    // c(.T) = bra.c * a(.T) * ket.t for partial expectation
+    static void right_partial_rotate(const GCSRMatrix<FL> &a, bool conj_a,
+                                     const GMatrix<FL> &c, bool conj_c,
+                                     const GMatrix<FL> &bra,
+                                     const GMatrix<FL> &ket, FL scale) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        GMatrix<FL> work(nullptr, conj_a ? a.m : a.n, bra.m);
+        work.allocate(d_alloc);
+        multiply(a, !conj_a, bra, true, work, 1.0, 0.0);
+        if (!conj_c)
+            GMatrixFunctions<FL>::multiply(work, true, ket, true, c, scale,
+                                           1.0);
+        else
+            GMatrixFunctions<FL>::multiply(ket, false, work, false, c, scale,
                                            1.0);
         work.deallocate(d_alloc);
     }

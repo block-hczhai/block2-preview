@@ -919,7 +919,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     }
     // c(.T) = bra.T * a(.T) * ket
     // return nflop. (.T) is always transpose conjugate
-    static size_t rotate(const GMatrix<FL> &a, bool conj_a,
+    static size_t left_partial_rotate(const GMatrix<FL> &a, bool conj_a,
                          const GMatrix<FL> &c, bool conj_c,
                          const GMatrix<FL> &bra, const GMatrix<FL> &ket,
                          FL scale) {
@@ -934,6 +934,24 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             multiply(work, 3, bra, false, c, conj(scale), 1.0);
         work.deallocate(d_alloc);
         return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * bra.n;
+    }
+    // c(.T) = bra.c * a(.T) * ket.t = (a(~.T) * bra.t).T * ket.t
+    // return nflop. (.T) is always transpose conjugate
+    static size_t right_partial_rotate(const GMatrix<FL> &a, bool conj_a,
+                         const GMatrix<FL> &c, bool conj_c,
+                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
+                         FL scale) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        GMatrix<FL> work(nullptr, conj_a ? a.m : a.n, bra.m);
+        work.allocate(d_alloc);
+        multiply(a, conj_a ? 0 : 3, bra, 1, work, 1.0, 0.0);
+        if (!conj_c)
+            multiply(work, 3, ket, 1, c, scale, 1.0);
+        else
+            multiply(ket, 2, work, false, c, conj(scale), 1.0);
+        work.deallocate(d_alloc);
+        return (size_t)a.m * a.n * work.n + (size_t)work.m * work.n * ket.m;
     }
     // dleft == true : c = bra (= da x db) * a * ket
     // dleft == false: c = bra * a * ket (= da x db)

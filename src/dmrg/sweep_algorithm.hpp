@@ -2317,9 +2317,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         shared_ptr<ParallelCommunicator<S>> comm =
                             para_mps->rule->comm;
                         double tt[2] = {comm->tcomm, comm->tidle};
-                        comm->reduce_sum(&tt[0], 2, comm->root);
-                        comm->reduce_sum((uint64_t *)&sweep_cumulative_nflop, 1,
-                                         comm->root);
+                        comm->reduce_sum_optional(&tt[0], 2, comm->root);
+                        comm->reduce_sum_optional(
+                            (uint64_t *)&sweep_cumulative_nflop, 1, comm->root);
                         cout << " | GTcomm = " << tt[0] / comm->size
                              << " | GTidle = " << tt[1] / comm->size << endl;
                     }
@@ -2337,7 +2337,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         shared_ptr<ParallelCommunicator<S>> comm =
                             me->para_rule->comm;
                         double tt[3] = {comm->tcomm, comm->tidle, comm->twait};
-                        comm->reduce_sum(&tt[0], 3, comm->root);
+                        comm->reduce_sum_optional(&tt[0], 3, comm->root);
                         sout << " | Tcomm = " << tt[0] / comm->size
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
@@ -4216,7 +4216,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                         double tt[3] = {lme->para_rule->comm->tcomm,
                                         lme->para_rule->comm->tidle,
                                         lme->para_rule->comm->twait};
-                        lme->para_rule->comm->reduce_sum(
+                        lme->para_rule->comm->reduce_sum_optional(
                             &tt[0], 3, lme->para_rule->comm->root);
                         tt[0] /= lme->para_rule->comm->size;
                         tt[1] /= lme->para_rule->comm->size;
@@ -4361,6 +4361,10 @@ struct Expect {
         : me(me), bra_bond_dim(bra_bond_dim), ket_bond_dim(ket_bond_dim),
           forward(false) {
         expectations.resize(me->n_sites - me->dot + 1);
+        // for final step of serial execution of parallel npdm
+        if (expectations.size() != 0 && me->mpo->npdm_scheme != nullptr)
+            expectations[0].push_back(
+                make_pair(make_shared<OpCounter<S>>(0), (FLX)0.0));
         partition_weights = PartitionWeights<FLX>::get_partition_weights();
     }
     Expect(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
@@ -4694,8 +4698,8 @@ struct Expect {
         teff += _t.get_time();
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
-        auto pdi =
-            h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
+        auto pdi = h_eff->expect(me->mpo->const_e, algo_type, ex_type,
+                                 me->para_rule, fuse_left);
         tex += _t.get_time();
         h_eff->deallocate();
         FPS bra_error = 0.0, ket_error = 0.0;
@@ -5457,8 +5461,8 @@ struct Expect {
                     double tt[3] = {me->para_rule->comm->tcomm,
                                     me->para_rule->comm->tidle,
                                     me->para_rule->comm->twait};
-                    me->para_rule->comm->reduce_sum(&tt[0], 3,
-                                                    me->para_rule->comm->root);
+                    me->para_rule->comm->reduce_sum_optional(
+                        &tt[0], 3, me->para_rule->comm->root);
                     tt[0] /= me->para_rule->comm->size;
                     tt[1] /= me->para_rule->comm->size;
                     tt[2] /= me->para_rule->comm->size;
@@ -5570,9 +5574,11 @@ struct Expect {
             r[i]->clear();
             total_mem += r[i]->size();
         }
-        bool symbol_free =
-            expectations[0].size() == 1 &&
-            expectations[0][0].first->get_type() == OpTypes::Counter;
+        bool symbol_free = false;
+        // for zero-dot backward, expectations[0] may be empty
+        for (auto &v : expectations)
+            if (v.size() == 1 && v[0].first->get_type() == OpTypes::Counter)
+                symbol_free = true;
         if (iprint)
             cout << "NPDM Sorting | Nsites = " << setw(5) << me->n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops

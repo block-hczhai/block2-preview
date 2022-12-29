@@ -50,7 +50,9 @@ template <typename S> struct ParallelCommunicator {
         assert(false);
         return nullptr;
     }
-    virtual void barrier() { assert(size == 1); }
+    // mainly for no communication parallel execution in serial
+    virtual bool is_root() const noexcept { return true; }
+    virtual void barrier() {}
     virtual void broadcast(const shared_ptr<SparseMatrix<S, double>> &mat,
                            int owner) {
         assert(size == 1);
@@ -287,6 +289,10 @@ template <typename S> struct ParallelCommunicator {
     virtual void reduce_sum(uint64_t *data, size_t len, int owner) {
         assert(size == 1);
     }
+    // do not raise assertion error if not implemented
+    // mainly for no communication parallel execution in serial
+    virtual void reduce_sum_optional(double *data, size_t len, int owner) {}
+    virtual void reduce_sum_optional(uint64_t *data, size_t len, int owner) {}
     virtual void allreduce_logical_or(bool &v) { assert(size == 1); }
     virtual void waitall() { assert(size == 1); }
 };
@@ -323,11 +329,11 @@ template <typename S> struct ParallelRule<S> {
         if (frame_<double>() != nullptr) {
             frame_<double>()->prefix_distri =
                 frame_<double>()->prefix + Parsing::to_string(comm->rank);
-            frame_<double>()->prefix_can_write = comm->rank == comm->root;
+            frame_<double>()->prefix_can_write = is_root();
         } else if (frame_<float>() != nullptr) {
             frame_<float>()->prefix_distri =
                 frame_<float>()->prefix + Parsing::to_string(comm->rank);
-            frame_<float>()->prefix_can_write = comm->rank == comm->root;
+            frame_<float>()->prefix_can_write = is_root();
         } else
             throw runtime_error("DataFrame not defined!");
     }
@@ -347,7 +353,7 @@ template <typename S> struct ParallelRule<S> {
         return make_shared<ParallelRule<S>>(comm->split(igroup, irank),
                                             comm_type);
     }
-    bool is_root() const noexcept { return comm->rank == comm->root; }
+    bool is_root() const noexcept { return comm->is_root(); }
 };
 
 template <typename S, typename FL>

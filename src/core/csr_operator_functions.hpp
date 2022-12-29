@@ -181,7 +181,8 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         }
     }
     // b = < v | a | c >
-    void tensor_partial_expectation(uint8_t conj,
+    void
+    tensor_left_partial_expectation(uint8_t conj,
                                     const shared_ptr<SparseMatrix<S, FL>> &a,
                                     const shared_ptr<SparseMatrix<S, FL>> &b,
                                     const shared_ptr<SparseMatrix<S, FL>> &c,
@@ -191,7 +192,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             b->get_type() == SparseMatrixTypes::Normal &&
             c->get_type() == SparseMatrixTypes::Normal &&
             v->get_type() == SparseMatrixTypes::Normal)
-            return OperatorFunctions<S, FL>::tensor_partial_expectation(
+            return OperatorFunctions<S, FL>::tensor_left_partial_expectation(
                 conj, a, b, c, v, opdq, scale);
         shared_ptr<CSRSparseMatrix<S, FL>> ca, cb;
         int irot = 0;
@@ -226,9 +227,61 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
                     ((conj & 1) ? (*a)[ia].m : (*a)[ia].n) +
                 (size_t)(*v)[iv].m * (*v)[iv].n *
                     ((conj & 1) ? (*a)[ia].n : (*a)[ia].m);
-            GCSRMatrixFunctions<FL>::rotate((*ca)[ia], conj & 1, (*b)[ib],
-                                            conj & 2, (*v)[iv], (*c)[ic],
-                                            scale * (FP)factor);
+            GCSRMatrixFunctions<FL>::left_partial_rotate(
+                (*ca)[ia], conj & 1, (*b)[ib], (conj & 2) >> 1, (*v)[iv],
+                (*c)[ic], scale * (FP)factor);
+        }
+    }
+    // a = < v | b | c >
+    void
+    tensor_right_partial_expectation(uint8_t conj,
+                                     const shared_ptr<SparseMatrix<S, FL>> &a,
+                                     const shared_ptr<SparseMatrix<S, FL>> &b,
+                                     const shared_ptr<SparseMatrix<S, FL>> &c,
+                                     const shared_ptr<SparseMatrix<S, FL>> &v,
+                                     S opdq, FL scale = 1.0) const override {
+        if (a->get_type() == SparseMatrixTypes::Normal &&
+            b->get_type() == SparseMatrixTypes::Normal &&
+            c->get_type() == SparseMatrixTypes::Normal &&
+            v->get_type() == SparseMatrixTypes::Normal)
+            return OperatorFunctions<S, FL>::tensor_right_partial_expectation(
+                conj, a, b, c, v, opdq, scale);
+        shared_ptr<CSRSparseMatrix<S, FL>> ca, cb;
+        int irot = 0;
+        if (a->get_type() == SparseMatrixTypes::CSR)
+            ca = dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(a), irot |= 1;
+        if (b->get_type() == SparseMatrixTypes::CSR)
+            cb = dynamic_pointer_cast<CSRSparseMatrix<S, FL>>(b), irot |= 2;
+        assert(v->get_type() != SparseMatrixTypes::CSR);
+        assert(c->get_type() != SparseMatrixTypes::CSR);
+        assert(irot == 1);
+        scale = scale * b->factor * v->factor * c->factor;
+        assert(a->factor == (FP)1.0);
+        if (abs(scale) < TINY)
+            return;
+        S adq = a->info->delta_quantum, bdq = b->info->delta_quantum;
+        assert(c->info->cinfo != nullptr);
+        shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
+            c->info->cinfo;
+        S abdq = opdq.combine((conj & 1) ? -adq : adq, (conj & 2) ? bdq : -bdq);
+        int ik = (int)(lower_bound(cinfo->quanta + cinfo->n[conj],
+                                   cinfo->quanta + cinfo->n[conj + 1], abdq) -
+                       cinfo->quanta);
+        assert(ik < cinfo->n[conj + 1]);
+        int ixa = cinfo->idx[ik];
+        int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
+        for (int il = ixa; il < ixb; il++) {
+            int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
+                iv = cinfo->stride[il];
+            double factor = cinfo->factor[il];
+            seq->cumulative_nflop +=
+                (size_t)(*c)[ic].m * (*c)[ic].n *
+                    ((conj & 2) ? (*b)[ib].m : (*b)[ib].n) +
+                (size_t)(*v)[iv].m * (*v)[iv].n *
+                    ((conj & 2) ? (*b)[ib].n : (*b)[ib].m);
+            GCSRMatrixFunctions<FL>::right_partial_rotate(
+                (*cb)[ib], (conj & 2) >> 1, (*a)[ia], conj & 1, (*v)[iv],
+                (*c)[ic], scale * (FP)factor);
         }
     }
     // v = (a x b) @ c

@@ -60,6 +60,7 @@ template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
+        MPO<S, FL>::npdm_parallel_center = mpo->npdm_parallel_center;
         shared_ptr<OpExpr<S>> zero_op = make_shared<OpExpr<S>>();
         if (mpo->schemer == nullptr)
             MPO<S, FL>::schemer = nullptr;
@@ -585,6 +586,7 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         MPO<S, FL>::op = mpo->op;
         MPO<S, FL>::left_vacuum = mpo->left_vacuum;
         MPO<S, FL>::npdm_scheme = mpo->npdm_scheme;
+        MPO<S, FL>::npdm_parallel_center = mpo->npdm_parallel_center;
         if (mpo->schemer == nullptr)
             MPO<S, FL>::schemer = nullptr;
         else {

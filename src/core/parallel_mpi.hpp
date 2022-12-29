@@ -116,6 +116,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
             isize = irank = -1;
         return make_shared<MPICommunicator<S>>(icomm, isize, jrank);
     }
+    bool is_root() const noexcept override { return rank == root; }
     void barrier() override {
         if (comm == MPI_COMM_NULL)
             return;
@@ -697,6 +698,12 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void reduce_sum(const shared_ptr<SparseMatrix<S, complex<float>>> &mat,
                     int owner) override {
         reduce_sum_impl<complex<float>>(mat, owner);
+    }
+    void reduce_sum_optional(double *data, size_t len, int owner) override {
+        reduce_sum(data, len, owner);
+    }
+    void reduce_sum_optional(uint64_t *data, size_t len, int owner) override {
+        reduce_sum(data, len, owner);
     }
     void waitall() override {
         _t.get_time();

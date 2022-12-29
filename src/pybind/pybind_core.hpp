@@ -989,8 +989,12 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
              &OperatorFunctions<S, FL>::tensor_product_diagonal,
              py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
              py::arg("opdq"), py::arg("scale") = 1.0)
-        .def("tensor_partial_expectation",
-             &OperatorFunctions<S, FL>::tensor_partial_expectation,
+        .def("tensor_left_partial_expectation",
+             &OperatorFunctions<S, FL>::tensor_left_partial_expectation,
+             py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("v"), py::arg("opdq"), py::arg("scale") = 1.0)
+        .def("tensor_right_partial_expectation",
+             &OperatorFunctions<S, FL>::tensor_right_partial_expectation,
              py::arg("conj"), py::arg("a"), py::arg("b"), py::arg("c"),
              py::arg("v"), py::arg("opdq"), py::arg("scale") = 1.0)
         .def("tensor_product_multiply",
@@ -2137,6 +2141,7 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
 
     py::class_<FPCodec<FL>, shared_ptr<FPCodec<FL>>>(m,
                                                      (name + "FPCodec").c_str())
+        .def(py::init<>())
         .def(py::init<FL>())
         .def(py::init<FL, size_t>())
         .def_readwrite("ndata", &FPCodec<FL>::ndata)

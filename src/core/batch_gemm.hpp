@@ -397,6 +397,7 @@ template <typename FL, typename = void> struct AdvancedGEMM;
 template <typename FL>
 struct AdvancedGEMM<FL,
                     typename enable_if<is_floating_point<FL>::value>::type> {
+    const static bool is_complex = false;
     // [c] = [a] x [b]
     static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
                          const GMatrix<FL> &a, uint8_t conja,
@@ -556,6 +557,7 @@ struct AdvancedGEMM<FL,
 
 template <typename FL>
 struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
+    const static bool is_complex = true;
     // [c] = [a] x [b]
     static void multiply(const shared_ptr<BatchGEMM<FL>> &batch,
                          const GMatrix<FL> &a, uint8_t conja,
@@ -867,9 +869,10 @@ template <typename FL> struct BatchGEMMSeq {
         batch[1]->work += wsz;
     }
     // [c](.T) = scale * [bra].T x [a](.T) x [ket]
-    void rotate(const GMatrix<FL> &a, bool conj_a, const GMatrix<FL> &c,
-                bool conj_c, const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                FL scale) {
+    void left_partial_rotate(const GMatrix<FL> &a, bool conj_a,
+                             const GMatrix<FL> &c, bool conj_c,
+                             const GMatrix<FL> &bra, const GMatrix<FL> &ket,
+                             FL scale) {
         GMatrix<FL> work((FL *)0 + batch[0]->work, conj_a ? a.n : a.m, ket.n);
         AdvancedGEMM<FL>::multiply(batch[0], a, conj_a ? 3 : 0, ket, false,
                                    work, 1.0, 0.0);
@@ -880,6 +883,33 @@ template <typename FL> struct BatchGEMMSeq {
             AdvancedGEMM<FL>::multiply(batch[1], work, 3, bra, false, c,
                                        xconj<FL>(scale), 1.0);
         batch[0]->acidxs.push_back(conj_c);
+        if (mode & SeqTypes::Tasked)
+            max_work = max(max_work, work.size());
+        batch[0]->work += work.size();
+        batch[1]->work += work.size();
+    }
+    // [c](.T) = scale * [bra].c x [a](.T) x [ket].t
+    void right_partial_rotate(const GMatrix<FL> &a, bool conj_a,
+                              const GMatrix<FL> &c, bool conj_c,
+                              const GMatrix<FL> &bra, const GMatrix<FL> &ket,
+                              FL scale) {
+        GMatrix<FL> work((FL *)0 + batch[0]->work, conj_a ? a.m : a.n, bra.m);
+        AdvancedGEMM<FL>::multiply(batch[0], a, conj_a ? 0 : 3, bra, 1, work,
+                                   1.0, 0.0);
+        if (!conj_c) {
+            AdvancedGEMM<FL>::multiply(batch[1], work, 3, ket, 1, c, scale,
+                                       1.0);
+            batch[0]->acidxs.push_back(1);
+        } else {
+            AdvancedGEMM<FL>::multiply(batch[1], ket, 2, work, false, c,
+                                       xconj<FL>(scale), 1.0);
+            if (AdvancedGEMM<FL>::is_complex)
+                for (MKL_INT i = 0; i < c.m; i++)
+                    batch[0]->acidxs.push_back(0);
+            else
+                batch[0]->acidxs.push_back(0);
+        }
+        batch[0]->acidxs.push_back(!conj_c);
         if (mode & SeqTypes::Tasked)
             max_work = max(max_work, work.size());
         batch[0]->work += work.size();
