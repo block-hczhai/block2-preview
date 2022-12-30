@@ -144,6 +144,26 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         }
         tcomm += _t.get_time();
     }
+    void broadcast(long double *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Bcast((double *)(data + offset),
+                                 min(chunk_size, len - offset) * 2, MPI_DOUBLE,
+                                 owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
+    void broadcast(complex<long double> *data, size_t len, int owner) override {
+        _t.get_time();
+        for (size_t offset = 0; offset < len; offset += chunk_size) {
+            int ierr = MPI_Bcast((double *)(data + offset),
+                                 min(chunk_size, len - offset) * 4, MPI_DOUBLE,
+                                 owner, comm);
+            assert(ierr == 0);
+        }
+        tcomm += _t.get_time();
+    }
     void broadcast(float *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {

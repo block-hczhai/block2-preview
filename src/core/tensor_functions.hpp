@@ -1301,13 +1301,14 @@ template <typename S, typename FL> struct TensorFunctions {
     }
     // fast expectation algorithm for NPDM, by reusing partially contracted
     // left part, assuming there are smaller number of unique left operators
-    virtual vector<pair<shared_ptr<OpExpr<S>>, FL>> tensor_product_expectation(
-        const vector<shared_ptr<OpExpr<S>>> &names,
-        const vector<shared_ptr<OpExpr<S>>> &exprs,
-        const shared_ptr<OperatorTensor<S, FL>> &lopt,
-        const shared_ptr<OperatorTensor<S, FL>> &ropt,
-        const shared_ptr<SparseMatrix<S, FL>> &cmat,
-        const shared_ptr<SparseMatrix<S, FL>> &vmat) const {
+    virtual vector<pair<shared_ptr<OpExpr<S>>, FL>>
+    tensor_product_expectation(const vector<shared_ptr<OpExpr<S>>> &names,
+                               const vector<shared_ptr<OpExpr<S>>> &exprs,
+                               const shared_ptr<OperatorTensor<S, FL>> &lopt,
+                               const shared_ptr<OperatorTensor<S, FL>> &ropt,
+                               const shared_ptr<SparseMatrix<S, FL>> &cmat,
+                               const shared_ptr<SparseMatrix<S, FL>> &vmat,
+                               bool all_reduce) const {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(names.size());
         map<tuple<uint8_t, S, S>,
             unordered_map<shared_ptr<OpExpr<S>>,

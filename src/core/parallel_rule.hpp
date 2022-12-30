@@ -77,6 +77,12 @@ template <typename S> struct ParallelCommunicator {
     virtual void broadcast(complex<double> *data, size_t len, int owner) {
         assert(size == 1);
     }
+    virtual void broadcast(long double *data, size_t len, int owner) {
+        assert(size == 1);
+    }
+    virtual void broadcast(complex<long double> *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void broadcast(float *data, size_t len, int owner) {
         assert(size == 1);
     }

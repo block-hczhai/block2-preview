@@ -627,10 +627,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             expectations.reserve(op->mat->data.size());
             vector<FL> results;
             vector<size_t> results_idx;
-            results.reserve(op->mat->data.size());
-            results_idx.reserve(op->mat->data.size());
-            if (para_rule != nullptr)
+            if (para_rule != nullptr && npdm_scheme == nullptr) {
+                results.reserve(op->mat->data.size());
+                results_idx.reserve(op->mat->data.size());
                 para_rule->set_partition(ParallelRulePartitionTypes::Middle);
+            }
             for (size_t i = 0; i < op->mat->data.size(); i++) {
                 using OESF = OpElement<S, FL>;
                 assert(dynamic_pointer_cast<OESF>(op->dops[i])->name !=
@@ -643,11 +644,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     expectations.push_back(make_pair(op->dops[i], 0.0));
                 else {
                     FL r = 0.0;
-                    if (para_rule == nullptr ||
+                    if (para_rule == nullptr || npdm_scheme != nullptr ||
                         !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
                              ->number(op->dops[i])) {
                         btmp.clear();
-                        (*this)(ktmp, btmp, (int)i, 1.0, true);
+                        (*this)(ktmp, btmp, (int)i, 1.0, npdm_scheme == nullptr);
                         r = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                     } else {
                         if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
@@ -671,7 +672,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             }
         } else if (algo_type == ExpectationAlgorithmTypes::Fast) {
             expectations = tf->tensor_product_expectation(
-                op->dops, op->mat->data, op->lopt, op->ropt, ket, bra);
+                op->dops, op->mat->data, op->lopt, op->ropt, ket, bra,
+                npdm_scheme == nullptr);
         } else if (algo_type & ExpectationAlgorithmTypes::SymbolFree) {
             if (npdm_scheme == nullptr)
                 throw runtime_error("ExpectationAlgorithmTypes::SymbolFree "

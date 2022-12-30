@@ -547,9 +547,12 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(
-            vector<FPLS>{get<0>(pdi) + xreal<FLLS>(me->mpo->const_e)}, error,
-            mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+        get<0>(pdi) = get<0>(pdi) + xreal<FLLS>(me->mpo->const_e);
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->broadcast(&get<0>(pdi), 1,
+                                           me->para_rule->comm->root);
+        return Iteration(vector<FPLS>{get<0>(pdi)}, error, mmps, get<1>(pdi),
+                         get<2>(pdi), get<3>(pdi));
     }
     virtual tuple<FPLS, int, size_t, double>
     one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
@@ -842,9 +845,12 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
-        return Iteration(
-            vector<FPLS>{get<0>(pdi) + xreal<FLLS>(me->mpo->const_e)}, error,
-            mmps, get<1>(pdi), get<2>(pdi), get<3>(pdi));
+        get<0>(pdi) = get<0>(pdi) + xreal<FLLS>(me->mpo->const_e);
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->broadcast(&get<0>(pdi), 1,
+                                           me->para_rule->comm->root);
+        return Iteration(vector<FPLS>{get<0>(pdi)}, error, mmps, get<1>(pdi),
+                         get<2>(pdi), get<3>(pdi));
     }
     virtual tuple<FPLS, int, size_t, double>
     two_dot_eigs_and_perturb(const bool forward, const int i,
@@ -1271,6 +1277,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
             x += xreal<FLLS>(me->mpo->const_e);
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->broadcast(get<0>(pdi).data(),
+                                           get<0>(pdi).size(),
+                                           me->para_rule->comm->root);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
@@ -1609,6 +1619,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->para_rule->comm->barrier();
         for (auto &x : get<0>(pdi))
             x += xreal<FLLS>(me->mpo->const_e);
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->broadcast(get<0>(pdi).data(),
+                                           get<0>(pdi).size(),
+                                           me->para_rule->comm->root);
         Iteration r = Iteration(get<0>(pdi), error, mmps, get<1>(pdi),
                                 get<2>(pdi), get<3>(pdi));
         r.quanta = mps_quanta;
@@ -4425,6 +4439,8 @@ struct Expect {
             }
             mps->load_tensor(i);
         }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
         tuple<vector<pair<shared_ptr<OpExpr<S>>, FL>>, size_t, double> pdi;
         FPS bra_error = 0.0, ket_error = 0.0;
         if (me->para_rule == nullptr || me->para_rule->is_root()) {
@@ -4519,6 +4535,7 @@ struct Expect {
                         }
                     }
                 }
+                me->para_rule->comm->barrier();
             }
             if (forward) {
                 for (auto &mps : mpss)
@@ -5579,16 +5596,42 @@ struct Expect {
         for (auto &v : expectations)
             if (v.size() == 1 && v[0].first->get_type() == OpTypes::Counter)
                 symbol_free = true;
-        if (iprint)
+        if (iprint) {
             cout << "NPDM Sorting | Nsites = " << setw(5) << me->n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
-                 << " | SymbolFree = " << (symbol_free ? "T" : "F")
-                 << " | Mem = "
+                 << " | DotSite = "
+                 << (me->dot == 2 ? 2 : (zero_dot_algo ? 0 : 1));
+            cout << " | SymbolFree = " << (symbol_free ? "T" : "F");
+            if (symbol_free) {
+                cout << " | Compressed = "
+                     << ((algo_type & ExpectationAlgorithmTypes::Compressed) ||
+                                 (algo_type &
+                                  ExpectationAlgorithmTypes::Automatic)
+                             ? "T"
+                             : "F");
+                cout << " | LowMem = "
+                     << ((algo_type & ExpectationAlgorithmTypes::LowMem) ? "T"
+                                                                         : "F");
+            } else {
+                cout << " | Fast = "
+                     << ((algo_type & ExpectationAlgorithmTypes::Fast) ||
+                                 (algo_type &
+                                  ExpectationAlgorithmTypes::Automatic)
+                             ? "T"
+                             : "F");
+            }
+            cout << " | Mem = "
                  << Parsing::to_size_string(total_mem * sizeof(FLX)) << endl;
+        }
         Timer current;
         current.get_time();
         double tsite, tsite_total = 0;
-        for (int ix = 0; ix < me->n_sites - 1; ix++) {
+        // for zero-dot backward, last expectations may contain data
+        // for one-dot, last expectations may contain repeated data
+        int ixed = symbol_free || !(zero_dot_algo && me->dot == 1)
+                       ? me->n_sites - 1
+                       : me->n_sites;
+        for (int ix = 0; ix < ixed; ix++) {
             vector<pair<shared_ptr<OpExpr<S>>, FLX>> &v = expectations[ix];
             if (iprint) {
                 cout << " Site = " << setw(5) << ix << " .. ";
@@ -5618,6 +5661,14 @@ struct Expect {
                 cout << endl;
                 tsite_total += tsite;
             }
+        }
+        if (!symbol_free && me->para_rule != nullptr) {
+            current.get_time();
+            for (int i = 0; i < (int)scheme->perms.size(); i++)
+                me->para_rule->comm->allreduce_sum(r[i]->data->data(),
+                                                   r[i]->data->size());
+            tsite = current.get_time();
+            cout << "Tcomm = " << fixed << setprecision(3) << tsite << " ";
         }
         if (iprint)
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)

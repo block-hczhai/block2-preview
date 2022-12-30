@@ -479,8 +479,10 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                         if (center < parallel_center && is_last) {
                             if ((rx - scheme->right_terms.size()) %
                                     rule->comm->size !=
-                                rule->comm->rank)
+                                rule->comm->rank) {
+                                im++;
                                 continue;
+                            }
                         }
                         vector<uint8_t> rskip(rcnt, 0);
                         if (center < parallel_center && !is_last)
@@ -599,8 +601,10 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                         tie(lcnt, lshift) =
                             indexer->get_left_count(lx, is_last);
                         if (center >= parallel_center) {
-                            if (lx % rule->comm->size != rule->comm->rank)
+                            if (lx % rule->comm->size != rule->comm->rank) {
+                                im++;
                                 continue;
+                            }
                         }
                         l_partials.reserve(lcnt);
                         left_idxs.reserve(lcnt);
@@ -723,13 +727,14 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         ofs.close();
         return expectations;
     }
-    vector<pair<shared_ptr<OpExpr<S>>, FL>> tensor_product_expectation(
-        const vector<shared_ptr<OpExpr<S>>> &names,
-        const vector<shared_ptr<OpExpr<S>>> &exprs,
-        const shared_ptr<OperatorTensor<S, FL>> &lopt,
-        const shared_ptr<OperatorTensor<S, FL>> &ropt,
-        const shared_ptr<SparseMatrix<S, FL>> &cmat,
-        const shared_ptr<SparseMatrix<S, FL>> &vmat) const override {
+    vector<pair<shared_ptr<OpExpr<S>>, FL>>
+    tensor_product_expectation(const vector<shared_ptr<OpExpr<S>>> &names,
+                               const vector<shared_ptr<OpExpr<S>>> &exprs,
+                               const shared_ptr<OperatorTensor<S, FL>> &lopt,
+                               const shared_ptr<OperatorTensor<S, FL>> &ropt,
+                               const shared_ptr<SparseMatrix<S, FL>> &cmat,
+                               const shared_ptr<SparseMatrix<S, FL>> &vmat,
+                               bool all_reduce) const override {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(names.size());
         vector<FL> results(names.size(), 0);
         assert(names.size() == exprs.size());
@@ -762,10 +767,14 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         }
         vector<pair<shared_ptr<OpExpr<S>>, FL>> pexpectations =
             TensorFunctions<S, FL>::tensor_product_expectation(
-                pnames, pexprs, lopt, ropt, cmat, vmat);
+                pnames, pexprs, lopt, ropt, cmat, vmat, all_reduce);
         for (size_t kk = 0; kk < pidxs.size(); kk++)
             results[pidxs[kk]] = pexpectations[kk].second;
-        rule->comm->allreduce_sum(results.data(), results.size());
+        // !all_reduce is the general npdm (with symbol case)
+        if (all_reduce)
+            rule->comm->allreduce_sum(results.data(), results.size());
+        else
+            rule->comm->barrier();
         for (size_t i = 0; i < names.size(); i++)
             expectations[i].second = results[i];
         return expectations;
