@@ -328,19 +328,22 @@ template <typename FL> struct GeneralFCIDUMP {
         vector<vector<FL>> r_data;
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             shared_ptr<SpinPermScheme> scheme = psch[ix];
-            unordered_map<vector<uint16_t>, pair<int, int>,
-                          vector_uint16_hasher>
+            unordered_map<vector<uint16_t>, int, vector_uint16_hasher>
                 idx_pattern_mp;
+            vector<unordered_map<vector<uint16_t>, int, vector_uint16_hasher>>
+                idx_perm_mp((int)scheme->data.size());
             int kk = 0, nn = (int)scheme->index_patterns[0].size();
-            for (int i = 0; i < (int)scheme->data.size(); i++)
+            for (int i = 0; i < (int)scheme->data.size(); i++) {
+                idx_pattern_mp[scheme->index_patterns[i]] = i;
                 for (auto &j : scheme->data[i])
-                    if (!idx_pattern_mp.count(j.first))
-                        idx_pattern_mp[j.first] = make_pair(kk++, i);
-            vector<vector<uint16_t>> idx_pats(idx_pattern_mp.size());
-            for (auto &x : idx_pattern_mp)
-                idx_pats[x.second.first] = x.first;
+                    idx_perm_mp[i][j.first] = kk++;
+            }
+            vector<pair<int, vector<uint16_t>>> idx_pats(kk);
+            for (int i = 0; i < (int)scheme->data.size(); i++)
+                for (auto &x : idx_perm_mp[i])
+                    idx_pats[x.second] = make_pair(i, x.first);
             // first divide all indices according to scheme classes
-            vector<vector<int>> idx_patidx(idx_pattern_mp.size());
+            vector<vector<int>> idx_patidx(kk);
             if (indices.size() == 0)
                 continue;
             vector<uint16_t> idx_idx(nn);
@@ -361,8 +364,9 @@ template <typename FL> struct GeneralFCIDUMP {
                         idx_mat[j - 1] + (indices[ix][i + idx_idx[j]] !=
                                           indices[ix][i + idx_idx[j - 1]]);
                 for (int j = 0; j < nn; j++)
-                    idx_pat[idx_idx[j]] = idx_mat[j];
-                idx_patidx[idx_pattern_mp.at(idx_pat).first].push_back(i);
+                    idx_pat[idx_idx[j]] = j;
+                idx_patidx[idx_perm_mp[idx_pattern_mp.at(idx_mat)].at(idx_pat)]
+                    .push_back(i);
             }
             kk = (int)r_str_mp.size();
             // collect all reordered expr types
@@ -376,10 +380,8 @@ template <typename FL> struct GeneralFCIDUMP {
             if (r_data.size() < r_str_mp.size())
                 r_data.resize(r_str_mp.size());
             for (size_t ip = 0; ip < idx_patidx.size(); ip++) {
-                vector<uint16_t> &ipat = idx_pats[ip];
-                int schi = idx_pattern_mp.at(ipat).second;
                 vector<pair<double, string>> &strd =
-                    scheme->data[idx_pattern_mp.at(ipat).second].at(ipat);
+                    scheme->data[idx_pats[ip].first].at(idx_pats[ip].second);
                 for (auto i : idx_patidx[ip]) {
                     idx_pat = vector<uint16_t>(indices[ix].begin() + i,
                                                indices[ix].begin() + i + nn);

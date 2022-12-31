@@ -198,7 +198,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             plshapes = lshapes, prshapes = rshapes;
         MPO<S, FL>::npdm_parallel_center = parallel_center;
         if (iprint) {
-            cout << "Build NPDMMPO | Nsites = " << setw(5) << n_sites
+            cout << "Build NPDM MPO | Nsites = " << setw(5) << n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
                  << " | SymbolFree = " << (symbol_free ? "T" : "F")
                  << " | Cutoff = " << scientific << setw(8) << setprecision(2)
@@ -241,6 +241,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             shared_ptr<SymbolicRowVector<S>> plop =
                 make_shared<SymbolicRowVector<S>>(lshape);
             vector<uint16_t> idx;
+            map<string, LL> lmap, rmap;
             ixx = 0;
             if (iprint >= 2)
                 cout << endl;
@@ -265,6 +266,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                         scheme->left_terms[i].first.second, &idx[0]);
                     (*plop)[ixx] =
                         make_shared<OpElement<S, FL>>(OpNames::XL, si, q);
+                    if (m == 0)
+                        lmap[scheme->left_terms[i].first.second] = ixx;
                     if (iprint >= 2) {
                         cout << "(" << ixx << ") "
                              << scheme->left_terms[i].first.second << " ";
@@ -305,6 +308,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                         scheme->right_terms[i].first.second, &idx[0]);
                     (*prop)[ixx] =
                         make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
+                    if (m == n_sites - 1)
+                        rmap[scheme->right_terms[i].first.second] = ixx;
                     if (iprint >= 2) {
                         cout << "(" << ixx << ") "
                              << scheme->right_terms[i].first.second << " ";
@@ -339,6 +344,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                             scheme->last_right_terms[i].first.second, &idx[0]);
                         (*prop)[ixx] =
                             make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
+                        rmap[scheme->last_right_terms[i].first.second] = ixx;
                         if (iprint >= 2) {
                             cout << "(" << ixx << ") "
                                  << scheme->last_right_terms[i].first.second
@@ -391,17 +397,22 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     site_op_names[cd] = make_shared<OpElement<S, FL>>(
                         OpNames::I, SiteIndex(), xm->info->delta_quantum);
                 } else {
+                    LL igx;
+                    OpNames name;
+                    if (m == 0 && lmap.count(cd))
+                        igx = lmap.at(cd), name = OpNames::XL;
+                    else if (m == n_sites - 1 && rmap.count(cd))
+                        igx = rmap.at(cd), name = OpNames::XR;
+                    else
+                        igx = ixx++, name = OpNames::X;
                     site_op_names[cd] = make_shared<OpElement<S, FL>>(
-                        m == 0 || m == n_sites - 1
-                            ? (m == 0 ? OpNames::XL : OpNames::XR)
-                            : OpNames::X,
-                        SiteIndex({(uint16_t)(ixx >> 36),
-                                   (uint16_t)((ixx >> 24) & 0xFFFLL),
-                                   (uint16_t)((ixx >> 12) & 0xFFFLL),
-                                   (uint16_t)(ixx & 0xFFFLL)},
+                        name,
+                        SiteIndex({(uint16_t)(igx >> 36),
+                                   (uint16_t)((igx >> 24) & 0xFFFLL),
+                                   (uint16_t)((igx >> 12) & 0xFFFLL),
+                                   (uint16_t)(igx & 0xFFFLL)},
                                   {}),
                         xm->info->delta_quantum);
-                    ixx++;
                 }
                 if (xm->factor == (FL)0.0 || xm->info->n == 0 ||
                     xm->norm() < TINY)
@@ -787,8 +798,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 for (auto &r :
                      middle_patterns.at(scheme->middle_perm_patterns[i]))
                     for (auto &pr : scheme->perms[r.first]->data[r.second]) {
-                        vector<uint16_t> perm =
-                            SpinPermTensor::find_pattern_perm(pr.first);
+                        const vector<uint16_t> &perm = pr.first;
                         for (auto &prr : pr.second) {
                             if (iprint >= 2) {
                                 cout << (is_last ? " - MIDDLE*" : " - MIDDLE ")
@@ -798,7 +808,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                     cout << g << " ";
                                 cout << prr.second;
                                 cout << " -> ";
-                                for (auto &g : pr.first)
+                                for (auto &g : perm)
                                     cout << g << " ";
                                 cout << ":: ";
                             }
@@ -811,7 +821,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                 is_last
                                     ? scheme->last_middle_blocking[i][jj].second
                                     : scheme->middle_blocking[i][jj].second;
-                            vector<uint16_t> lxx, rxx, mxx(pr.first.size());
+                            vector<uint16_t> lxx, rxx, mxx(perm.size());
                             const vector<uint16_t> &rpat =
                                 rx < scheme->right_terms.size()
                                     ? scheme->right_terms[rx].first.first
@@ -876,8 +886,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                         continue;
                                     }
                                     LL ixx = 0;
-                                    for (int k = 0; k < (int)pr.first.size();
-                                         k++) {
+                                    for (int k = 0; k < (int)perm.size(); k++) {
                                         mxx[k] =
                                             perm[k] < lxx.size()
                                                 ? lxx[perm[k]]

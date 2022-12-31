@@ -2002,12 +2002,16 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("D", &SpinPermTensor::D)
         .def_static("T", &SpinPermTensor::T)
         .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
+        .def_static("find_pattern_perm", &SpinPermTensor::find_pattern_perm)
         .def_static("auto_sort_string", &SpinPermTensor::auto_sort_string)
         .def_static("mul", &SpinPermTensor::mul)
+        .def_static("dot_product", &SpinPermTensor::dot_product)
         .def("simplify", &SpinPermTensor::simplify)
         .def("auto_sort", &SpinPermTensor::auto_sort)
+        .def("get_cds", &SpinPermTensor::get_cds)
         .def("equal_to_scaled", &SpinPermTensor::equal_to_scaled)
         .def("to_str", &SpinPermTensor::to_str)
+        .def("__repr__", [](SpinPermTensor *self) { return self->to_str(); })
         .def(py::self * double())
         .def(py::self + py::self)
         .def(py::self == py::self);
@@ -2019,6 +2023,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("to_str", &SpinPermRecoupling::to_str)
         .def_static("make_cds", &SpinPermRecoupling::make_cds)
         .def_static("make_with_cds", &SpinPermRecoupling::make_with_cds)
+        .def_static("get_target_twos", &SpinPermRecoupling::get_target_twos)
         .def_static("split_cds", &SpinPermRecoupling::split_cds)
         .def_static("count_cds", &SpinPermRecoupling::count_cds)
         .def_static("make_tensor", &SpinPermRecoupling::make_tensor)
@@ -2032,6 +2037,22 @@ template <typename S = void> void bind_io(py::module &m) {
                     py::arg("x"), py::arg("start_depth") = 1)
         .def_static("initialize", &SpinPermRecoupling::initialize, py::arg("n"),
                     py::arg("twos"), py::arg("site_dq") = 1);
+
+    py::class_<SpinRecoupling, shared_ptr<SpinRecoupling>>(m, "SpinRecoupling")
+        .def_static("get_level", &SpinRecoupling::get_level)
+        .def_static("get_twos", &SpinRecoupling::get_twos)
+        .def_static("recouple", &SpinRecoupling::recouple)
+        .def_static("recouple_split", &SpinRecoupling::recouple_split);
+
+    py::class_<typename SpinRecoupling::Level,
+               shared_ptr<typename SpinRecoupling::Level>>(
+        m, "SpinRecouplingLevel")
+        .def(py::init<>())
+        .def_readwrite("left_idx", &SpinRecoupling::Level::left_idx)
+        .def_readwrite("mid_idx", &SpinRecoupling::Level::mid_idx)
+        .def_readwrite("right_idx", &SpinRecoupling::Level::right_idx)
+        .def_readwrite("left_cnt", &SpinRecoupling::Level::left_cnt)
+        .def_readwrite("right_cnt", &SpinRecoupling::Level::right_cnt);
 
     py::class_<SpinPermPattern, shared_ptr<SpinPermPattern>>(m,
                                                              "SpinPermPattern")
@@ -2060,6 +2081,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("initialize_sz", &SpinPermScheme::initialize_sz,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_fermion") = true)
+        .def_static("initialize_su2_old", &SpinPermScheme::initialize_su2_old,
+                    py::arg("nn"), py::arg("spin_str"),
+                    py::arg("is_npdm") = false)
         .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false)

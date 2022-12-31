@@ -683,6 +683,8 @@ template <typename S, typename FL> struct TensorFunctions {
         int middle_base_count = middle_count;
         if (center == n_sites - 2)
             middle_count += (int)scheme->last_middle_blocking.size();
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ii = 0; ii < middle_count; ii++) {
             bool is_last = ii >= middle_base_count;
             int i = is_last ? ii - middle_base_count : ii;
@@ -693,8 +695,7 @@ template <typename S, typename FL> struct TensorFunctions {
                 middle_cd_map[scheme->middle_terms[i][j]] = j;
             for (auto &r : middle_patterns.at(scheme->middle_perm_patterns[i]))
                 for (auto &pr : scheme->perms[r.first]->data[r.second]) {
-                    vector<uint16_t> perm =
-                        SpinPermTensor::find_pattern_perm(pr.first);
+                    const vector<uint16_t> &perm = pr.first;
                     for (auto &prr : pr.second) {
                         int jj = middle_cd_map[prr.second];
                         const uint32_t lx =
@@ -722,7 +723,7 @@ template <typename S, typename FL> struct TensorFunctions {
                             scheme->left_terms[lx].first.first.size());
                         vector<uint64_t> rmx(rpat.size());
                         uint64_t mxx = 1;
-                        for (int k = (int)pr.first.size() - 1; k >= 0; k--) {
+                        for (int k = (int)perm.size() - 1; k >= 0; k--) {
                             if (perm[k] < lmx.size())
                                 lmx[perm[k]] = mxx;
                             else
@@ -758,6 +759,7 @@ template <typename S, typename FL> struct TensorFunctions {
                     }
                 }
         }
+        threading->activate_normal();
     }
     struct NPDMIndexer {
         vector<uint64_t> plidxs, pridxs;
