@@ -802,8 +802,12 @@ template <typename FL> struct FCIDUMP {
             fd_read_line(int_idx[ill], int_val[ill], ls);
             if (int_idx[ill][0] + int_idx[ill][1] + int_idx[ill][2] +
                     int_idx[ill][3] ==
-                0)
-                fd_read_line(int_idx[ill], const_e, ls);
+                0) {
+                typename const_fl_type<FL>::FL tmp_const_e;
+                fd_read_line(int_idx[ill], tmp_const_e, ls);
+                if (tmp_const_e != (typename const_fl_type<FL>::FL)0.0)
+                    const_e = tmp_const_e;
+            }
         }
         threading->activate_normal();
         uint16_t n = (uint16_t)Parsing::to_int(params["norb"]);
@@ -1195,54 +1199,84 @@ template <typename FL> struct FCIDUMP {
         return r;
     }
     // h1e matrix
-    vector<FL> h1e_matrix() const {
+    vector<FL> h1e_matrix(int8_t s = -1) const {
         uint16_t n = n_sites();
         vector<FL> r(n * n, 0);
-        for (uint16_t i = 0; i < n; i++)
-            for (uint16_t j = 0; j < n; j++)
-                r[i * n + j] += t(i, j);
+        if (s == -1)
+            for (uint16_t i = 0; i < n; i++)
+                for (uint16_t j = 0; j < n; j++)
+                    r[i * n + j] += t(i, j);
+        else
+            for (uint16_t i = 0; i < n; i++)
+                for (uint16_t j = 0; j < n; j++)
+                    r[i * n + j] += t(s, i, j);
         return r;
     }
     // g2e 1-fold
-    vector<FL> g2e_1fold() const {
+    vector<FL> g2e_1fold(int8_t sl = -1, int8_t sr = -1) const {
         const int n = n_sites();
         const size_t m = (size_t)n * n;
         vector<FL> r(m * m, 0);
         size_t ijkl = 0;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                for (int k = 0; k < n; k++)
-                    for (int l = 0; l < n; l++)
-                        r[ijkl++] = v(i, j, k, l);
+        if (sl == -1 || sr == -1) {
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            r[ijkl++] = v(i, j, k, l);
+        } else {
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l < n; l++)
+                            r[ijkl++] = v(sl, sr, i, j, k, l);
+        }
         assert(ijkl == r.size());
         return r;
     }
     // g2e 4-fold
-    vector<FL> g2e_4fold() const {
+    vector<FL> g2e_4fold(int8_t sl = -1, int8_t sr = -1) const {
         const int n = n_sites();
         const size_t m = (size_t)n * (n + 1) >> 1;
         vector<FL> r(m * m, 0);
         size_t ijkl = 0;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j <= i; j++)
-                for (int k = 0; k < n; k++)
-                    for (int l = 0; l <= k; l++)
-                        r[ijkl++] = v(i, j, k, l);
+        if (sl == -1 || sr == -1) {
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            r[ijkl++] = v(i, j, k, l);
+        } else {
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j <= i; j++)
+                    for (int k = 0; k < n; k++)
+                        for (int l = 0; l <= k; l++)
+                            r[ijkl++] = v(sl, sr, i, j, k, l);
+        }
         assert(ijkl == r.size());
         return r;
     }
     // g2e 8-fold
-    vector<FL> g2e_8fold() const {
+    vector<FL> g2e_8fold(int8_t sl = -1, int8_t sr = -1) const {
         const int n = n_sites();
         const size_t m = (size_t)n * (n + 1) >> 1;
         vector<FL> r(m * (m + 1) >> 1, 0);
         size_t ijkl = 0;
-        for (int i = 0, ij = 0; i < n; i++)
-            for (int j = 0; j <= i; j++, ij++)
-                for (int k = 0, kl = 0; k <= i; k++)
-                    for (int l = 0; l <= k; l++, kl++)
-                        if (ij >= kl)
-                            r[ijkl++] = v(i, j, k, l);
+        if (sl == -1 || sr == -1) {
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl)
+                                r[ijkl++] = v(i, j, k, l);
+        } else {
+            for (int i = 0, ij = 0; i < n; i++)
+                for (int j = 0; j <= i; j++, ij++)
+                    for (int k = 0, kl = 0; k <= i; k++)
+                        for (int l = 0; l <= k; l++, kl++)
+                            if (ij >= kl)
+                                r[ijkl++] = v(sl, sr, i, j, k, l);
+        }
         assert(ijkl == r.size());
         return r;
     }
@@ -1330,8 +1364,7 @@ template <typename FL> struct FCIDUMP {
         if (shift == (typename const_fl_type<FL>::FL)0.0)
             x = x / (typename const_fl_type<FP>::FL)xn;
         else
-            x = (shift - const_e) /
-                (typename const_fl_type<FP>::FL)n_elec();
+            x = (shift - const_e) / (typename const_fl_type<FP>::FL)n_elec();
         for (size_t i = 0; i < ts.size(); i++)
             for (uint16_t j = 0; j < ts[i].n; j++)
                 ts[i](j, j) = ts[i](j, j) - (FL)x;

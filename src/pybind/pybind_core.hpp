@@ -2778,10 +2778,13 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("det_energy", &FCIDUMP<FL>::det_energy)
         .def("exchange_matrix", &FCIDUMP<FL>::exchange_matrix)
         .def("abs_exchange_matrix", &FCIDUMP<FL>::abs_exchange_matrix)
-        .def("h1e_matrix", &FCIDUMP<FL>::h1e_matrix)
-        .def("g2e_1fold", &FCIDUMP<FL>::g2e_1fold)
-        .def("g2e_4fold", &FCIDUMP<FL>::g2e_4fold)
-        .def("g2e_8fold", &FCIDUMP<FL>::g2e_8fold)
+        .def("h1e_matrix", &FCIDUMP<FL>::h1e_matrix, py::arg("s") = -1)
+        .def("g2e_1fold", &FCIDUMP<FL>::g2e_1fold, py::arg("sl") = -1,
+             py::arg("sr") = -1)
+        .def("g2e_4fold", &FCIDUMP<FL>::g2e_4fold, py::arg("sl") = -1,
+             py::arg("sr") = -1)
+        .def("g2e_8fold", &FCIDUMP<FL>::g2e_8fold, py::arg("sl") = -1,
+             py::arg("sr") = -1)
         .def("abs_h1e_matrix", &FCIDUMP<FL>::abs_h1e_matrix)
         .def("reorder", (void(FCIDUMP<FL>::*)(const vector<uint16_t> &)) &
                             FCIDUMP<FL>::reorder)
@@ -2811,7 +2814,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def_readwrite("vgs", &FCIDUMP<FL>::vgs)
         .def_readwrite("const_e", &FCIDUMP<FL>::const_e)
         .def_readwrite("total_memory", &FCIDUMP<FL>::total_memory)
-        .def_readwrite("uhf", &FCIDUMP<FL>::uhf);
+        .def_readwrite("uhf", &FCIDUMP<FL>::uhf)
+        .def_readwrite("general", &FCIDUMP<FL>::general);
 
     py::class_<CompressedFCIDUMP<FL>, shared_ptr<CompressedFCIDUMP<FL>>,
                FCIDUMP<FL>>(m, "CompressedFCIDUMP")

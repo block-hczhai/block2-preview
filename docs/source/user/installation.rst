@@ -28,7 +28,7 @@ One can install ``block2`` using ``pip``:
   Some guidance for resolving environment problems can be found in github issue
   `#7 <https://github.com/block-hczhai/block2-preview/issues/7>`_.
 
-* To install the most recent development version, use:
+* To install the most recent development version, use: ::
 
       pip install block2 --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/

@@ -1257,6 +1257,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             envs[i]->right = nullptr;
         }
     }
+    virtual void remove_partition_files() const {
+        for (int i = 0; i < n_sites; i++)
+            for (int info = 0; info < 2; info++) {
+                string left_data_name = get_left_partition_filename(i, info);
+                if (Parsing::file_exists(left_data_name))
+                    Parsing::remove_file(left_data_name);
+                string right_data_name = get_right_partition_filename(i, info);
+                if (Parsing::file_exists(right_data_name))
+                    Parsing::remove_file(right_data_name);
+            }
+    }
     // Move the center site by one
     virtual void move_to(int i, bool preserve_data = false) {
         string new_data_name = "";

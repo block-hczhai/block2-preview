@@ -811,6 +811,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                             checked_estream_redirect>())
         .def("prepare", &MovingEnvironment<S, FL, FLS>::prepare,
              py::arg("start_site") = 0, py::arg("end_site") = -1)
+        .def("remove_partition_files",
+             &MovingEnvironment<S, FL, FLS>::remove_partition_files)
         .def("move_to", &MovingEnvironment<S, FL, FLS>::move_to, py::arg("i"),
              py::arg("preserve_data") = false)
         .def("partial_prepare", &MovingEnvironment<S, FL, FLS>::partial_prepare)

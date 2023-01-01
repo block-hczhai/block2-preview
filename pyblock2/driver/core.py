@@ -114,6 +114,17 @@ class MPOAlgorithmTypes(IntFlag):
     NoTransNoRIntermedConventional = 4096 | 2048 | 1024
 
 
+class NPDMAlgorithmTypes(IntFlag):
+    Nothing = 0
+    SymbolFree = 1
+    Normal = 2
+    Fast = 4
+    Compressed = 8
+    LowMem = 16
+    Default = 1 | 8
+    Conventional = 32
+
+
 class STTypes(IntFlag):
     H = 1
     HT = 2
@@ -204,6 +215,7 @@ class DMRGDriver:
         self,
         stack_mem=1 << 30,
         scratch="./nodex",
+        clean_scratch=True,
         restart_dir=None,
         n_threads=None,
         symm_type=SymmetryTypes.SU2,
@@ -221,6 +233,7 @@ class DMRGDriver:
         self.stack_mem = stack_mem
         self.stack_mem_ratio = stack_mem_ratio
         self.symm_type = symm_type
+        self.clean_scratch = clean_scratch
         bw = self.bw
 
         if n_threads is None:
@@ -534,7 +547,7 @@ class DMRGDriver:
             self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
         )
 
-    def write_fcidump(self, h1e, g2e, ecore=0, filename=None, pg="d2h"):
+    def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
         bw = self.bw
         import numpy as np
 
@@ -543,8 +556,12 @@ class DMRGDriver:
         fw_map = np.array([swap_pg(x) for x in range(1, 9)])
         bk_map = np.argsort(fw_map) + 1
         if SymmetryTypes.SZ in bw.symm_type:
-            mh1e = tuple(x.flatten() for x in h1e)
+            if not h1e_symm:
+                mh1e = tuple(x.flatten() for x in h1e)
+            else:
+                mh1e = tuple(x[np.tril_indices(len(x))] for x in h1e)
             mg2e = tuple(x.flatten() for x in g2e)
+            mg2e = (mg2e[0], mg2e[2], mg2e[1])
             fcidump.initialize_sz(
                 self.n_sites,
                 self.target.n,
@@ -555,13 +572,17 @@ class DMRGDriver:
                 mg2e,
             )
         elif g2e is not None:
+            if not h1e_symm:
+                mh1e = h1e.flatten()
+            else:
+                mh1e = h1e[np.tril_indices(len(h1e))]
             fcidump.initialize_su2(
                 self.n_sites,
                 self.target.n,
                 self.target.twos,
                 bk_map[self.target.pg],
                 ecore,
-                h1e.flatten(),
+                mh1e,
                 g2e.flatten(),
             )
         else:
@@ -573,7 +594,11 @@ class DMRGDriver:
                 ecore,
                 h1e.flatten(),
             )
-        fcidump.orb_sym = bw.b.VectorUInt8([bk_map[x] for x in self.orb_sym])
+        if pg == "d2h" or pg == "c2v":
+            orb_sym = [x % 10 for x in self.orb_sym]
+        else:
+            orb_sym = self.orb_sym
+        fcidump.orb_sym = bw.b.VectorUInt8([bk_map[x] for x in orb_sym])
         if filename is not None:
             fcidump.write(filename)
         return fcidump
@@ -602,17 +627,44 @@ class DMRGDriver:
             if iprint >= 1:
                 print("rescaled const = ", fcidump.const_e)
         self.const_e = fcidump.const_e
+        self.ecore = fcidump.const_e
         import numpy as np
 
+        symm_err = fcidump.symmetrize(self.orb_sym)
         if iprint >= 1:
-            print("symmetrize error = ", fcidump.symmetrize(self.orb_sym))
+            print("symmetrize error = ", symm_err)
 
-        self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape(
-            (self.n_sites,) * 2
-        )
-        self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape(
-            (self.n_sites,) * 4
-        )
+        nn = self.n_sites
+        mm = nn * (nn + 1) // 2
+        ll = mm * (mm + 1) // 2
+        if not fcidump.uhf:
+            self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape((nn, nn))
+            if fcidump.general:
+                self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape(
+                    (nn, nn, nn, nn)
+                )
+            else:
+                self.g2e = np.array(fcidump.g2e_8fold(), copy=False).reshape((ll,))
+        else:
+            self.h1e = tuple(
+                np.array(fcidump.h1e_matrix(s=s), copy=False).reshape((nn, nn))
+                for s in [0, 1]
+            )
+            if fcidump.general:
+                self.g2e = tuple(
+                    np.array(fcidump.g2e_1fold(sl=sl, sr=sr), copy=False).reshape(
+                        (nn, nn, nn, nn)
+                    )
+                    for sl, sr in [(0, 0), (0, 1), (1, 1)]
+                )
+            else:
+                self.g2e = (
+                    np.array(fcidump.g2e_8fold(sl=0, sr=0), copy=False).reshape((ll,)),
+                    np.array(fcidump.g2e_4fold(sl=0, sr=1), copy=False).reshape(
+                        (mm, mm)
+                    ),
+                    np.array(fcidump.g2e_8fold(sl=1, sr=1), copy=False).reshape((ll,)),
+                )
         return fcidump
 
     def su2_to_sgf(self):
@@ -773,6 +825,29 @@ class DMRGDriver:
     def get_identity_mpo(self):
         return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize())
 
+    def unpack_g2e(self, g2e):
+        import numpy as np
+
+        if g2e.ndim == 1:
+            m = self.n_sites * (self.n_sites + 1) // 2
+            xtril = np.tril_indices(m)
+            r = np.zeros((m ** 2,), dtype=g2e.dtype)
+            r[xtril[0] * m + xtril[1]] = g2e
+            r[xtril[1] * m + xtril[0]] = g2e
+            g2e = r.reshape((m, m))
+
+        if g2e.ndim == 2:
+            m = self.n_sites
+            xtril = np.tril_indices(m)
+            r = np.zeros((m ** 2, m ** 2), dtype=g2e.dtype)
+            r[(xtril[0] * m + xtril[1])[:, None], xtril[0] * m + xtril[1]] = g2e
+            r[(xtril[0] * m + xtril[1])[:, None], xtril[1] * m + xtril[0]] = g2e
+            r[(xtril[1] * m + xtril[0])[:, None], xtril[0] * m + xtril[1]] = g2e
+            r[(xtril[1] * m + xtril[0])[:, None], xtril[1] * m + xtril[0]] = g2e
+            g2e = r.reshape((m, m, m, m))
+
+        return g2e
+
     def get_qc_mpo(
         self,
         h1e,
@@ -801,6 +876,11 @@ class DMRGDriver:
         import numpy as np
 
         bw = self.bw
+
+        if isinstance(g2e, np.ndarray):
+            g2e = self.unpack_g2e(g2e)
+        elif isinstance(g2e, tuple):
+            g2e = tuple(self.unpack_g2e(x) for x in g2e)
 
         if SymmetryTypes.SZ in bw.symm_type:
             if h1e is not None and isinstance(h1e, np.ndarray) and h1e.ndim == 2:
@@ -1291,6 +1371,12 @@ class DMRGDriver:
             return None
         me.init_environments(iprint >= 2)
         ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
+
+        if self.clean_scratch:
+            dmrg.me.remove_partition_files()
+            for me in dmrg.ext_mes:
+                me.remove_partition_files()
+
         ket.info.bond_dim = max(ket.info.bond_dim, bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
             ener = list(dmrg.energies[-1])
@@ -1388,7 +1474,9 @@ class DMRGDriver:
         s2 = self.get_orbital_entropies(ket, orb_type=2, iprint=iprint)
         return 0.5 * (s1[:, None] + s1[None, :] - s2) * (1 - np.identity(len(s1)))
 
-    def get_npdm(self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0):
+    def get_conventional_npdm(
+        self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0
+    ):
         bw = self.bw
         import numpy as np
 
@@ -1412,6 +1500,7 @@ class DMRGDriver:
                     mps.canonical_form = "K" + mps.canonical_form[1:]
                 else:
                     assert False
+                mps.save_data()
 
             if self.mpi is not None:
                 self.mpi.barrier()
@@ -1461,6 +1550,9 @@ class DMRGDriver:
         # expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
         expect.iprint = iprint
         expect.solve(True, mket.center == 0)
+
+        if self.clean_scratch:
+            expect.me.remove_partition_files()
 
         if pdm_type == 1:
             if SymmetryTypes.SZ in bw.symm_type:
@@ -1517,17 +1609,189 @@ class DMRGDriver:
             self.mpi.barrier()
         return dm
 
+    def get_conventional_1pdm(self, ket, *args, **kwargs):
+        return self.get_conventional_npdm(ket, pdm_type=1, *args, **kwargs)
+
+    def get_conventional_2pdm(self, ket, *args, **kwargs):
+        return self.get_conventional_npdm(ket, pdm_type=2, *args, **kwargs)
+
+    def get_conventional_trans_1pdm(self, bra, ket, *args, **kwargs):
+        return self.get_conventional_npdm(ket, pdm_type=1, bra=bra, *args, **kwargs)
+
+    def get_conventional_trans_2pdm(self, bra, ket, *args, **kwargs):
+        return self.get_conventional_npdm(ket, pdm_type=2, bra=bra, *args, **kwargs)
+
+    def get_npdm(
+        self,
+        ket,
+        pdm_type=1,
+        bra=None,
+        soc=False,
+        site_type=0,
+        algo_type=None,
+        iprint=0,
+    ):
+        bw = self.bw
+        import numpy as np
+
+        if algo_type is None:
+            algo_type = NPDMAlgorithmTypes.Default
+
+        if NPDMAlgorithmTypes.Conventional in algo_type or soc:
+            return self.get_conventional_npdm(
+                ket, pdm_type, bra, soc, site_type, iprint
+            )
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+
+        mket = ket.deep_copy("PDM-KET@TMP")
+        mpss = [mket]
+        if bra is not None and bra != ket:
+            mbra = bra.deep_copy("PDM-BRA@TMP")
+            mpss.append(mbra)
+        else:
+            mbra = mket
+
+        for mps in mpss:
+            if mps.dot == 2 and site_type != 2:
+                mps.dot = 1
+                if mps.center == mps.n_sites - 2:
+                    mps.center = mps.n_sites - 1
+                    mps.canonical_form = mps.canonical_form[:-1] + "S"
+                elif mps.center == 0:
+                    mps.canonical_form = "K" + mps.canonical_form[1:]
+                else:
+                    assert False
+                mps.save_data()
+
+            if self.mpi is not None:
+                self.mpi.barrier()
+
+            mps.load_mutable()
+            mps.info.bond_dim = max(
+                mps.info.bond_dim, mps.info.get_max_bond_dimension()
+            )
+
+        self.align_mps_center(mbra, mket)
+
+        if SymmetryTypes.SU2 in bw.symm_type:
+            op_str = "(C+D)0"
+            for _ in range(pdm_type - 1):
+                op_str = "((C+%s)1+D)0" % op_str
+            perm = bw.b.SpinPermScheme.initialize_su2(pdm_type * 2, op_str, True)
+            perms = bw.b.VectorSpinPermScheme([perm])
+        elif SymmetryTypes.SZ in bw.symm_type:
+            op_str = ["cd", "CD"]
+            for _ in range(pdm_type - 1):
+                op_str = ["c%sd" % x for x in op_str] + ["C%sD" % op_str[-1]]
+            perms = bw.b.VectorSpinPermScheme(
+                [
+                    bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                    for cd in op_str
+                ]
+            )
+        elif SymmetryTypes.SGF in bw.symm_type:
+            op_str = "C" * pdm_type + "D" * pdm_type
+            perm = bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, op_str, True)
+            perms = bw.b.VectorSpinPermScheme([perm])
+
+        if iprint >= 1:
+            print("npdm string =", op_str)
+
+        if iprint >= 3:
+            for perm in perms:
+                print(perm)
+
+        scheme = bw.b.NPDMScheme(perms)
+        pmpo = bw.bs.GeneralNPDMMPO(
+            self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
+        )
+        pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
+        if self.mpi:
+            pmpo.parallel_rule = self.prule
+        pmpo.build()
+
+        pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.Rule(), False, False)
+        if self.mpi:
+            pmpo = bw.bs.ParallelMPO(pmpo, self.prule)
+
+        pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
+        pme.init_environments(iprint >= 2)
+        pme.cached_contraction = True
+        expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
+        if site_type == 0:
+            expect.zero_dot_algo = True
+        if NPDMAlgorithmTypes.SymbolFree in algo_type:
+            expect.algo_type = bw.b.ExpectationAlgorithmTypes.SymbolFree
+            if NPDMAlgorithmTypes.LowMem in algo_type:
+                expect.algo_type = (
+                    expect.algo_type | bw.b.ExpectationAlgorithmTypes.LowMem
+                )
+            if NPDMAlgorithmTypes.Compressed in algo_type:
+                expect.algo_type = (
+                    expect.algo_type | bw.b.ExpectationAlgorithmTypes.Compressed
+                )
+        elif NPDMAlgorithmTypes.Normal in algo_type:
+            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
+        elif NPDMAlgorithmTypes.Fast in algo_type:
+            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Fast
+        else:
+            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Automatic
+
+        expect.iprint = iprint
+        expect.solve(True, mket.center == 0)
+
+        if self.clean_scratch:
+            expect.me.remove_partition_files()
+
+        npdms = list(expect.get_npdm())
+
+        if SymmetryTypes.SU2 in bw.symm_type:
+            for ip in range(len(npdms)):
+                npdms[ip] *= np.array(np.sqrt(2.0)) ** (scheme.n_max_ops // 2)
+        else:
+            for ip in range(len(npdms)):
+                npdms[ip] = np.array(npdms[ip], copy=False)
+
+        if self.reorder_idx is not None:
+            rev_idx = np.argsort(self.reorder_idx)
+            for ip in range(len(npdms)):
+                for i in range(scheme.n_max_ops):
+                    npdms[ip] = npdms[ip][(slice(None),) * i + (rev_idx,)]
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+
+        if SymmetryTypes.SU2 in bw.symm_type or SymmetryTypes.SGF in bw.symm_type:
+            assert len(npdms) == 1
+            npdms = npdms[0]
+
+        return npdms
+
     def get_1pdm(self, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=1, *args, **kwargs)
 
     def get_2pdm(self, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=2, *args, **kwargs)
 
+    def get_3pdm(self, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=3, *args, **kwargs)
+
+    def get_4pdm(self, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=4, *args, **kwargs)
+
     def get_trans_1pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=1, bra=bra, *args, **kwargs)
 
     def get_trans_2pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=2, bra=bra, *args, **kwargs)
+
+    def get_trans_3pdm(self, bra, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=3, bra=bra, *args, **kwargs)
+
+    def get_trans_4pdm(self, bra, ket, *args, **kwargs):
+        return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
     def align_mps_center(self, ket, ref):
         if self.mpi is not None:
@@ -1660,6 +1924,10 @@ class DMRGDriver:
         cps.iprint = iprint
         cps.cutoff = cutoff
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
+
+        if self.clean_scratch:
+            me.remove_partition_files()
+
         if self.mpi is not None:
             self.mpi.barrier()
         return norm
@@ -1675,6 +1943,10 @@ class DMRGDriver:
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         expect.iprint = iprint
         ex = expect.solve(False, ket.center != 0)
+
+        if self.clean_scratch:
+            me.remove_partition_files()
+
         if self.mpi is not None:
             self.mpi.barrier()
         return ex
@@ -1900,6 +2172,11 @@ class SOCDMRGDriver(DMRGDriver):
         cpx_me.init_environments(iprint >= 2)
         self._dmrg.cpx_me = cpx_me
         ener = self._dmrg.solve(n_sweeps, ket.center == 0, tol)
+
+        if self.clean_scratch:
+            self._dmrg.me.remove_partition_files()
+            self._dmrg.cpx_me.remove_partition_files()
+
         ket.info.bond_dim = max(ket.info.bond_dim, self._dmrg.bond_dims[-1])
         if isinstance(ket, bw.bs.MultiMPS):
             ener = list(self._dmrg.energies[-1])
