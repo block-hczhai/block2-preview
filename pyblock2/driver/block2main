@@ -69,7 +69,7 @@ if "single_prec" in dic and "use_complex" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.sz import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -84,7 +84,7 @@ if "single_prec" in dic and "use_complex" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.su2 import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -99,7 +99,7 @@ if "single_prec" in dic and "use_complex" not in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.sgf import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -131,7 +131,7 @@ elif "single_prec" in dic and "use_complex" in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.cpx.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.cpx.sz import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.cpx.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -146,7 +146,7 @@ elif "single_prec" in dic and "use_complex" in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.cpx.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.cpx.su2 import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.cpx.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -161,7 +161,7 @@ elif "single_prec" in dic and "use_complex" in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.sp.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.sp.cpx.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.sp.cpx.sgf import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.sp.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sp.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.sp.cpx.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -186,7 +186,7 @@ elif "use_complex" not in dic:
     if "nonspinadapted" in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-        from block2.sz import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
+        from block2.sz import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
         from block2.sz import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -201,7 +201,7 @@ elif "use_complex" not in dic:
     elif "nonspinadapted" not in dic and "k_symmetry" not in dic and "use_general_spin" not in dic:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-        from block2.su2 import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
+        from block2.su2 import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
         from block2.su2 import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -216,7 +216,7 @@ elif "use_complex" not in dic:
     elif "nonspinadapted" in dic and "k_symmetry" in dic:
         from block2 import VectorSZK as VectorSL
         from block2.szk import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-        from block2.szk import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
+        from block2.szk import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
         from block2.szk import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -231,7 +231,7 @@ elif "use_complex" not in dic:
     elif "nonspinadapted" not in dic and "k_symmetry" in dic:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-        from block2.su2k import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
+        from block2.su2k import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
         from block2.su2k import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -246,7 +246,7 @@ elif "use_complex" not in dic:
     elif "use_general_spin" in dic:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPS, MultiMPSInfo, CSRSparseMatrix, FusedMPO, CSROperatorFunctions
-        from block2.sgf import HamiltonianQC, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
+        from block2.sgf import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo
         from block2.sgf import ParallelRuleSimple, ParallelFCIDUMP, CondensedMPO
         from block2.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, CG, TensorFunctions, MPO
@@ -274,7 +274,7 @@ else:
         from block2 import VectorSZ as VectorSL
         from block2.sz import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.sz import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.cpx.sz import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.cpx.sz import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.sz import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.sz import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.sz import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -289,7 +289,7 @@ else:
         from block2 import VectorSU2 as VectorSL
         from block2.su2 import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.su2 import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.cpx.su2 import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.cpx.su2 import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.su2 import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.su2 import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.su2 import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -304,7 +304,7 @@ else:
         from block2 import VectorSZK as VectorSL
         from block2.szk import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.szk import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.cpx.szk import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.cpx.szk import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.szk import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.szk import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.szk import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -319,7 +319,7 @@ else:
         from block2 import VectorSU2K as VectorSL
         from block2.su2k import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.su2k import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.cpx.su2k import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.cpx.su2k import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.su2k import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.su2k import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.su2k import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -334,7 +334,7 @@ else:
         from block2 import VectorSGF as VectorSL
         from block2.sgf import MultiMPSInfo, MPSInfo, CASCIMPSInfo, MRCIMPSInfo, NEVPTMPSInfo, CG
         from block2.cpx.sgf import MultiMPS, CSRSparseMatrix, FusedMPO, CondensedMPO, CSROperatorFunctions
-        from block2.cpx.sgf import HamiltonianQC, MPS, ParallelRuleSimple, ParallelFCIDUMP
+        from block2.cpx.sgf import HamiltonianQC, GeneralHamiltonian, GeneralNPDMMPO, MPS, ParallelRuleSimple, ParallelFCIDUMP
         from block2.cpx.sgf import PDM1MPOQC, NPC1MPOQC, SimplifiedMPO, Rule, RuleQC, MPOQC, NoTransposeRule
         from block2.cpx.sgf import Expect, DMRG, MovingEnvironment, OperatorFunctions, TensorFunctions, MPO
         from block2.cpx.sgf import ParallelRuleQC, ParallelMPO, ParallelMPS, IdentityMPO, VectorMPS, PDM2MPOQC
@@ -485,13 +485,25 @@ else:
     te_type = TETypes.TangentSpace
 if dic.get("expt_algo_type", "auto") == "auto":
     algo_type = ExpectationAlgorithmTypes.Automatic
-elif dic.get("expt_algo_type", "auto") == "fast":
+elif dic["expt_algo_type"] == "fast":
     algo_type = ExpectationAlgorithmTypes.Fast
-else:
+elif dic["expt_algo_type"] == "normal":
     algo_type = ExpectationAlgorithmTypes.Normal
+elif dic["expt_algo_type"] == "symbolfree":
+    algo_type = ExpectationAlgorithmTypes.SymbolFree | ExpectationAlgorithmTypes.Compressed
+elif dic["expt_algo_type"] == "lowmem":
+    algo_type = ExpectationAlgorithmTypes.SymbolFree | ExpectationAlgorithmTypes.LowMem | ExpectationAlgorithmTypes.Compressed
+elif dic["expt_algo_type"] == "symbolfree-npy":
+    algo_type = ExpectationAlgorithmTypes.SymbolFree
+elif dic["expt_algo_type"] == "lowmem-npy":
+    algo_type = ExpectationAlgorithmTypes.SymbolFree | ExpectationAlgorithmTypes.LowMem
+else:
+    raise RuntimeError("Unknown expectation algo type: %s" % dic["expt_algo_type"])
 
 has_tran = "restart_tran_onepdm" in dic or "tran_onepdm" in dic \
     or "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
+    or "restart_tran_threepdm" in dic or "tran_threepdm" in dic \
+    or "restart_tran_fourpdm" in dic or "tran_fourpdm" in dic \
     or "restart_tran_oh" in dic or "tran_oh" in dic or "compression" in dic
 has_2pdm = "restart_tran_twopdm" in dic or "tran_twopdm" in dic \
     or "restart_twopdm" in dic or "twopdm" in dic
@@ -867,6 +879,7 @@ if pre_run or not no_pre_run:
                 'center =', qc_mpo_trans_center, "/", fcidump.n_sites)
         else:
             hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
+        ghamil = GeneralHamiltonian(vacuum, n_sites, orb_sym)
         if "use_hybrid_complex" in dic:
             if "simple_parallel" in dic:
                 hamil_cpx_h1e = HamiltonianQCCPX(vacuum, n_sites, orb_sym, ParallelFCIDUMPCPX(fd_cpx_h1e, prule))
@@ -1123,13 +1136,14 @@ if dic.get("warmup", None) == "occ":
 else:
     occs = None
 
-dot = 1 if "onedot" in dic or "zerodot" in dic else 2
+dot = 1 if "onedot" in dic or ("zerodot" in dic and "twodot_to_onedot" not in dic) else 2
 nroots = int(dic.get("nroots", 1))
 mps_tags = dic.get("mps_tags", "KET").split()
 read_tags = dic.get("read_mps_tags", "KET").split()
 proj_tags = dic.get("proj_mps_tags", "").split()
 soc = "soc" in dic
 overlap = "overlap" in dic
+conv_npdm = ("conventional_npdm" in dic) or soc
 
 
 def fmt_size(i, suffix='B'):
@@ -1498,7 +1512,7 @@ if pre_run or not no_pre_run:
     if MPI is None or MPI.rank == 0:
         pmpo.save_data(scratch + '/mpo-1pdm.bin')
 
-    if has_2pdm:
+    if has_2pdm and conv_npdm:
         # mpo for 2pdm
         _print("build 2pdm mpo", time.perf_counter() - tx)
         p2mpo = PDM2MPOQC(hamil_np or hamil)
@@ -1542,7 +1556,7 @@ if pre_run or not no_pre_run:
             else:
                 mpo = ParallelMPO(mpo, prule)
             pmpo = ParallelMPO(pmpo, prule_pdm1)
-            if has_2pdm:
+            if has_2pdm and conv_npdm:
                 p2mpo = ParallelMPO(p2mpo, prule_pdm2)
             if has_1npc:
                 nmpo = ParallelMPO(nmpo, prule_pdm1)
@@ -1561,7 +1575,7 @@ if pre_run or not no_pre_run:
         mpo.save_data(scratch + '/mpo.bin.%d' % mrank)
         pmpo.reduce_data()
         pmpo.save_data(scratch + '/mpo-1pdm.bin.%d' % mrank)
-        if has_2pdm:
+        if has_2pdm and conv_npdm:
             p2mpo.reduce_data()
             p2mpo.save_data(scratch + '/mpo-2pdm.bin.%d' % mrank)
         if has_1npc:
@@ -1590,7 +1604,7 @@ else:
         _print('1PDM MPO BOND DIMS = ', ''.join(
             ["%6d" % (x.m * x.n) for x in pmpo.left_operator_names]))
 
-        if has_2pdm:
+        if has_2pdm and conv_npdm:
             p2mpo = MPO(0)
             p2mpo.load_data(scratch + '/mpo-2pdm.bin')
 
@@ -1618,7 +1632,7 @@ else:
             else:
                 mpo = ParallelMPO(0, prule)
             pmpo = ParallelMPO(0, prule_pdm1)
-            if has_2pdm:
+            if has_2pdm and conv_npdm:
                 p2mpo = ParallelMPO(0, prule_pdm2)
             if has_1npc:
                 nmpo = ParallelMPO(0, prule_pdm1)
@@ -1626,7 +1640,7 @@ else:
         else:
             mpo = MPO(0)
             pmpo = MPO(0)
-            if has_2pdm:
+            if has_2pdm and conv_npdm:
                 p2mpo = MPO(0)
             if has_1npc:
                 nmpo = MPO(0)
@@ -1635,7 +1649,7 @@ else:
         mrank = MPI.rank if MPI is not None else 0
         mpo.load_data(scratch + '/mpo.bin.%d' % mrank, minimal=True)
         pmpo.load_data(scratch + '/mpo-1pdm.bin.%d' % mrank, minimal=True)
-        if has_2pdm:
+        if has_2pdm and conv_npdm:
             p2mpo.load_data(scratch + '/mpo-2pdm.bin.%d' % mrank, minimal=True)
         if has_1npc:
             nmpo.load_data(scratch + '/mpo-1npc.bin.%d' % mrank, minimal=True)
@@ -1935,7 +1949,7 @@ if not pre_run:
             else:
                 mpo = ParallelMPO(mpo, prule)
             pmpo = ParallelMPO(pmpo, prule_pdm1)
-            if has_2pdm:
+            if has_2pdm and conv_npdm:
                 p2mpo = ParallelMPO(p2mpo, prule_pdm2)
             if has_1npc:
                 nmpo = ParallelMPO(nmpo, prule_pdm1)
@@ -1963,6 +1977,7 @@ if not pre_run:
     if "statespecific" in dic and "restart_onepdm" not in dic \
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "restart_twopdm" not in dic \
+            and "restart_threepdm" not in dic and "restart_fourpdm" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
             and "restart_copy_mps" not in dic and "restart_sample" not in dic:
         assert isinstance(mps, MultiMPS)
@@ -2111,6 +2126,8 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "statespecific" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
+            and "restart_threepdm" not in dic and "restart_tran_threepdm" not in dic \
+            and "restart_fourpdm" not in dic and "restart_tran_fourpdm" not in dic \
             and "restart_copy_mps" not in dic and "restart_sample" not in dic \
             and "delta_t" not in dic and "compression" not in dic and "stopt_sampling" not in dic:
 
@@ -2465,6 +2482,96 @@ if not pre_run:
             mps_info.save_data(scratch + '/mps_info.bin')
             mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
 
+    def do_npdm(bmps, kmps, pdm_type):
+        bmps.load_mutable()
+        bmps.info.bond_dim = max(bmps.info.bond_dim, bmps.info.get_max_bond_dimension())
+        kmps.load_mutable()
+        kmps.info.bond_dim = max(kmps.info.bond_dim, kmps.info.get_max_bond_dimension())
+        import block2 as b
+
+        if "use_general_spin" in dic:
+            op_str = "C" * pdm_type + "D" * pdm_type
+            perm = b.SpinPermScheme.initialize_sz(pdm_type * 2, op_str, True)
+            perms = b.VectorSpinPermScheme([perm])
+        elif "nonspinadapted" in dic:
+            op_str = ["cd", "CD"]
+            for _ in range(pdm_type - 1):
+                op_str = ["c%sd" % x for x in op_str] + ["C%sD" % op_str[-1]]
+            perms = b.VectorSpinPermScheme([
+                b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                for cd in op_str])
+        else:
+            op_str = [
+                ["(C+D)0"],
+                ["((C+(C+D)0)1+D)0"],
+                ["((C+((C+(C+D)0)1+D)0)1+D)0"],
+                ["((C+((C+((C+(C+D)0)1+D)0)1+D)0)1+D)0"]
+            ][pdm_type - 1]
+            perms = b.VectorSpinPermScheme([
+                b.SpinPermScheme.initialize_su2(pdm_type * 2, cd, True)
+                for cd in op_str])
+        
+        _print("npdm string =", op_str)
+        npdm_prule = ParallelRuleSimple(b.ParallelSimpleTypes.Nothing, MPI)
+
+        scheme = b.NPDMScheme(perms)
+        symbol_free = (algo_type & ExpectationAlgorithmTypes.SymbolFree) or \
+            (algo_type & ExpectationAlgorithmTypes.Automatic)
+        pmpo = GeneralNPDMMPO(ghamil, scheme, symbol_free)
+        pmpo.iprint = 2 if outputlevel >= 4 else min(outputlevel, 1)
+        if MPI is not None:
+            pmpo.parallel_rule = npdm_prule
+        pmpo.build()
+
+        pmpo = SimplifiedMPO(pmpo, Rule(), False, False)
+        if MPI is not None:
+            pmpo = ParallelMPO(pmpo, npdm_prule)
+        
+        pme = MovingEnvironment(pmpo, bmps, kmps, "NPDM")
+        pme.cached_contraction = cached_contraction
+        pme.save_partition_info = True
+        pme.init_environments(outputlevel >= 2)
+
+        expect = XExpect(pme, bmps.info.bond_dim, kmps.info.bond_dim)
+        expect.zero_dot_algo = "zerodot" in dic
+        expect.algo_type = algo_type
+        expect.iprint = max(min(outputlevel, 3), 0)
+        expect.solve(True, kmps.center == 0)
+        expect.me.remove_partition_files()
+
+        npdms = list(expect.get_npdm())
+
+        if "use_general_spin" not in dic and "nonspinadapted" not in dic:
+            for ip in range(len(npdms)):
+                npdms[ip] *= np.array(np.sqrt(2.0)) ** (scheme.n_max_ops // 2)
+        else:
+            for ip in range(len(npdms)):
+                npdms[ip] = np.array(npdms[ip], copy=False)
+
+        if orb_idx is not None:
+            rev_idx = np.argsort(orb_idx)
+            if "trans_integral_to_spin_orbital" in dic:
+                rev_idx = np.array(list(zip(rev_idx*2, rev_idx*2+1))).ravel()
+            for ip in range(len(npdms)):
+                for i in range(scheme.n_max_ops):
+                    npdms[ip] = npdms[ip][(slice(None),) * i + (rev_idx,)]
+        
+        if "use_general_spin" in dic:
+            dm = npdms[0][None]
+        elif "nonspinadapted" in dic:
+            dm = np.array(npdms)
+        else:
+            if pdm_type == 1:
+                dm = np.array([npdms[0] / 2, ] * 2)
+            elif pdm_type == 2:
+                daa = (npdms[0] - npdms[0].transpose(0, 1, 3, 2)) / 6
+                dab = (2 * npdms[0] + npdms[0].transpose(0, 1, 3, 2)) / 6
+                dm = np.array([daa, dab, daa])
+            else:
+                dm = npdms[0]
+        
+        return dm
+
     def do_onepdm(bmps, kmps):
         me = MovingEnvironment(pmpo, bmps, kmps, "1PDM")
         # currently delayed_contraction is not compatible to
@@ -2526,7 +2633,10 @@ if not pre_run:
                 if MPI is not None:
                     MPI.barrier()
 
-            dm = do_onepdm(mps, mps)
+            if conv_npdm:
+                dm = do_onepdm(mps, mps)
+            else:
+                dm = do_npdm(mps, mps, pdm_type=1)
             if MPI is None or MPI.rank == 0:
                 dmocc = np.diag(np.sum(dm, axis=0))
                 if dmocc.dtype == np.complex128:
@@ -2674,7 +2784,10 @@ if not pre_run:
                         iroot, mps_info)
                 else:
                     smps, smps_info, forward = split_mps(iroot, mps, mps_info)
-                dm = do_onepdm(smps, smps)
+                if conv_npdm:
+                    dm = do_onepdm(smps, smps)
+                else:
+                    dm = do_npdm(smps, smps, pdm_type=1)
                 if MPI is None or MPI.rank == 0:
                     dmocc = np.diag(np.sum(dm, axis=0))
                     if dmocc.dtype == np.complex128:
@@ -2717,7 +2830,10 @@ if not pre_run:
                     sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
                 if jroot == iroot:
                     sjmps = simps
-                dm = do_onepdm(simps, sjmps)
+                if conv_npdm:
+                    dm = do_onepdm(simps, sjmps)
+                else:
+                    dm = do_npdm(simps, sjmps, pdm_type=1)
                 if soc:
                     if SX == SU2:
                         if hasattr(simps.info, "targets"):
@@ -2831,7 +2947,10 @@ if not pre_run:
     if "restart_twopdm" in dic or "twopdm" in dic:
 
         if nroots == 1:
-            dm = do_twopdm(mps, mps)
+            if conv_npdm:
+                dm = do_twopdm(mps, mps)
+            else:
+                dm = do_npdm(mps, mps, pdm_type=2)
             if MPI is None or MPI.rank == 0:
                 np.save(scratch + "/2pdm.npy", dm)
                 if stackblock_compat:
@@ -2848,7 +2967,10 @@ if not pre_run:
                         iroot, mps_info)
                 else:
                     smps, smps_info, forward = split_mps(iroot, mps, mps_info)
-                dm = do_twopdm(smps, smps)
+                if conv_npdm:
+                    dm = do_twopdm(smps, smps)
+                else:
+                    dm = do_npdm(smps, smps, pdm_type=2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, iroot), dm)
                     if stackblock_compat:
@@ -2888,10 +3010,86 @@ if not pre_run:
                     sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
                 if jroot == iroot:
                     sjmps = simps
-                dm = do_twopdm(simps, sjmps)
+                if conv_npdm:
+                    dm = do_twopdm(simps, sjmps)
+                else:
+                    dm = do_npdm(simps, sjmps, pdm_type=2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, jroot), dm)
                 _print("tran 2pdm finished", time.perf_counter() - tx)
+            if MPI is None or MPI.rank == 0:
+                simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
+    # THREEPDM / FOURPDM
+    if "restart_threepdm" in dic or "threepdm" in dic or "restart_fourpdm" in dic or "fourpdm" in dic:
+
+        pdm_type = 3 if "restart_threepdm" in dic or "threepdm" in dic else 4
+        pdm_name = "threepdm" if "restart_threepdm" in dic or "threepdm" in dic else "fourpdm"
+
+        if nroots == 1:
+            dm = do_npdm(mps, mps, pdm_type=pdm_type)
+            if MPI is None or MPI.rank == 0:
+                if stackblock_compat:
+                    np.save(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, 0, 0), dm)
+                np.save(scratch + "/%dpdm.npy" % pdm_type, dm)
+                mps_info.save_data(scratch + '/mps_info.bin')
+                mps_info.save_data(scratch + '/%s-mps_info.bin' % mps_tags[0])
+        else:
+            for iroot in range(nroots):
+                _print('----- root = %3d / %3d -----' % (iroot, nroots))
+                if len(mps_tags) > 1:
+                    smps, smps_info, _ = get_mps_from_tags(iroot)
+                elif "statespecific" in dic:
+                    smps, smps_info, forward = get_state_specific_mps(
+                        iroot, mps_info)
+                else:
+                    smps, smps_info, forward = split_mps(iroot, mps, mps_info)
+                dm = do_npdm(smps, smps, pdm_type=pdm_type)
+                if MPI is None or MPI.rank == 0:
+                    if stackblock_compat:
+                        np.save(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, iroot, iroot), dm)
+                    np.save(scratch + "/%dpdm-%d-%d.npy" % (pdm_type, iroot, iroot), dm)
+                    smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
+
+    # Transition THREEPDM / FOURPDM
+    # note that there can be a undetermined +1/-1 factor due to the relative phase in two MPSs
+    if "restart_tran_threepdm" in dic or "tran_threepdm" in dic or "restart_tran_fourpdm" in dic or "tran_fourpdm" in dic:
+        
+        pdm_type = 3 if "restart_tran_threepdm" in dic or "tran_threepdm" in dic else 4
+
+        assert nroots != 1
+        brar, ketr = range(nroots), range(nroots)
+        if "tran_bra_range" in dic:
+            tbr = [int(x) for x in dic["tran_bra_range"].split()]
+            brar = range(*tbr)
+        if "tran_ket_range" in dic:
+            tkr = [int(x) for x in dic["tran_ket_range"].split()]
+            ketr = range(*tkr)
+        for iroot in brar:
+            for jroot in ketr:
+                _print('----- root = %3d -> %3d / %3d -----' %
+                       (jroot, iroot, nroots))
+                if "tran_triangular" in dic:
+                    if iroot < jroot:
+                        continue
+                tx = time.perf_counter()
+                if len(mps_tags) > 1:
+                    simps, simps_info, _ = get_mps_from_tags(iroot)
+                    sjmps, sjmps_info, _ = get_mps_from_tags(jroot)
+                elif "statespecific" in dic:
+                    simps, simps_info, _ = get_state_specific_mps(
+                        iroot, mps_info)
+                    sjmps, sjmps_info, _ = get_state_specific_mps(
+                        jroot, mps_info)
+                else:
+                    simps, simps_info, _ = split_mps(iroot, mps, mps_info)
+                    sjmps, sjmps_info, _ = split_mps(jroot, mps, mps_info)
+                if jroot == iroot:
+                    sjmps = simps
+                dm = do_npdm(simps, sjmps, pdm_type=pdm_type)
+                if MPI is None or MPI.rank == 0:
+                    np.save(scratch + "/%dpdm-%d-%d.npy" % (pdm_type, iroot, jroot), dm)
+                _print("tran %dpdm finished" % pdm_type, time.perf_counter() - tx)
             if MPI is None or MPI.rank == 0:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 

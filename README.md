@@ -93,8 +93,8 @@ Features
     * Time evolution
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
-    * 1PDM / 2PDM
-    * Transition 1PDM
+    * 1PDM / 2PDM / 3PDM / 4PDM
+    * Transition 1PDM / 2PDM / 3PDM / 4PDM
     * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
@@ -174,6 +174,7 @@ References
 ### Particle Density Matrix
 
 * Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. https://doi.org/10.1063/1.2883976.
+* Guo, S., Watson, M. A., Hu, W., Sun, Q., Chan, G. K. L. N-electron valence state perturbation theory based on a density matrix renormalization group reference function, with applications to the chromium dimer and a trimer model of poly (p-phenylenevinylene). *Journal of Chemical Theory and Computation* 2016, **12**, 1583-1591. https://doi.org/10.1021/acs.jctc.5b01225
 
 ### Multi-Reference Correlation Theories
 

@@ -54,8 +54,8 @@ Features
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
 * Particle Density Matrix (1-site / 2-site)
-    * 1PDM / 2PDM
-    * Transition 1PDM
+    * 1PDM / 2PDM / 3PDM / 4PDM
+    * Transition 1PDM / 2PDM / 3PDM / 4PDM
     * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition

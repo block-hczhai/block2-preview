@@ -158,11 +158,27 @@ onepdm / restart\_onepdm
 twopdm / restart\_twopdm
     Two-particle density matrix calculation on the DMRG optimized MPS or reloaded MPS.
 
+threepdm / restart\_threepdm
+    Three-particle density matrix calculation on the DMRG optimized MPS or reloaded MPS.
+    Cannot be used together with ``conventional_npdm``.
+
+fourpdm / restart\_fourpdm
+    Four-particle density matrix calculation on the DMRG optimized MPS or reloaded MPS.
+    Cannot be used together with ``conventional_npdm``.
+
 tran\_onepdm / restart\_tran\_onepdm
     One-particle transition density matrix among a set of MPSs.
 
 tran\_twopdm / restart\_tran\_twopdm
     Two-particle transition density matrix among a set of MPSs.
+
+tran\_threepdm / restart\_tran\_threepdm
+    Three-particle transition density matrix among a set of MPSs.
+    Cannot be used together with ``conventional_npdm``.
+
+tran\_fourpdm / restart\_tran\_fourpdm
+    Four-particle transition density matrix among a set of MPSs.
+    Cannot be used together with ``conventional_npdm``.
 
 tran\_oh / restart\_tran\_oh
     Operator overlap between each pair in a set of MPSs.
@@ -289,9 +305,21 @@ big\_site
     with no big sites.
 
 expt\_algo\_type
-    Optional. Followed by a string ``auto``, ``fast``, or ``lowmem``. Default is ``auto``.
+    Optional. Followed by a string ``auto``, ``fast``, ``normal``, ``symbolfree``, or ``lowmem``. Default is ``auto``.
     This keyword can only be used with density matrix or transition density matrix calculations.
-    The default is ``auto``. ``lowmem`` uses less memory, but the complexity can be higher.
+    ``auto`` is ``fast`` if ``conventional_npdm`` is not given, or ``symbolfree`` if ``conventional_npdm`` is given.
+    ``normal`` uses less memory compared to ``fast``, but the complexity can be higher.
+    ``lowmem`` uses less memory compared to ``symbolfree``, but the complexity can be higher.
+    ``symbolfree`` is in general more efficient than ``fast`` and ``normal``,
+    but it is only available if ``conventional_npdm`` is not given.
+    For 3- and 4-particle density matrices, when this keyword is not ``auto`` or ``symbolfree``,
+    it may consume a significant large amount of memory to store the symbols.
+
+conventional\_npdm
+    Optional, mainly for backward compatibility. If given, will use the conventional manual npdm code.
+    This is only available for 1- and 2- particle density matrices.
+    For most cases, the conventional manual code is slower.
+    For soc 1-particle density matrix, only the conventional manual code is available.
 
 simple\_parallel
     Optional. Followed by an empty string (same as ``ij``) or ``ij`` or ``kl``. When this keyword is not given,

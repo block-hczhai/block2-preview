@@ -47,7 +47,9 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "tran_bra_range", "tran_ket_range", "tran_triangular", "use_hybrid_complex",
               "mem_ratio", "min_mpo_mem", "qc_mpo_type", "full_integral", "skip_inact_ext_sites",
               "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale", "check_dav_tol",
-              "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff"}
+              "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff",
+              "conventional_npdm", "threepdm", "fourpdm", "restart_threepdm", "restart_fourpdm",
+              "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -58,8 +60,9 @@ DYN_CORR_KEYS = {"dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt", "casci", "mrre
 MRPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij", "nevpt2-rs", "nevpt2-ijr",
              "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"}
 
-RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_oh",
+RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_threepdm", "restart_fourpdm", "restart_oh",
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
+                "restart_tran_threepdm", "restart_tran_fourpdm",
                 "restart_tran_oh", "restart_tran_oh", "statespecific",
                 "restart_copy_mps", "restart_sample", "orbital_rotation"}
 
@@ -223,8 +226,8 @@ def parse(fname):
     diff = set(dic.keys()) - KNOWN_KEYS
     if len(diff) != 0:
         raise ValueError("Unrecognized keys (%s)" % diff)
-    if "zerodot" in dic and ("twodot_to_onedot" in dic or "twodot" in dic):
-        raise ValueError("zerodot conflicits with twodot_to_onedot/twodot.")
+    if "zerodot" in dic and "twodot" in dic:
+        raise ValueError("zerodot conflicits with twodot.")
     if "onedot" in dic and ("twodot_to_onedot" in dic or "twodot" in dic):
         raise ValueError("onedot conflicits with twodot_to_onedot/twodot.")
     if "mem" in dic and (not dic["mem"][-1] in ['g', 'G']):
