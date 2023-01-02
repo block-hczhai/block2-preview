@@ -307,7 +307,7 @@ big\_site
 expt\_algo\_type
     Optional. Followed by a string ``auto``, ``fast``, ``normal``, ``symbolfree``, or ``lowmem``. Default is ``auto``.
     This keyword can only be used with density matrix or transition density matrix calculations.
-    ``auto`` is ``fast`` if ``conventional_npdm`` is not given, or ``symbolfree`` if ``conventional_npdm`` is given.
+    ``auto`` is ``fast`` if ``conventional_npdm`` is given, or ``symbolfree`` if ``conventional_npdm`` is not given.
     ``normal`` uses less memory compared to ``fast``, but the complexity can be higher.
     ``lowmem`` uses less memory compared to ``symbolfree``, but the complexity can be higher.
     ``symbolfree`` is in general more efficient than ``fast`` and ``normal``,

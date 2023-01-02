@@ -519,13 +519,6 @@ The 2-particle density matrix file can be loaded using the following python scri
     >>> print(_2pdm.shape)
     (3, 26, 26, 26, 26)
 
-where the three components (in both the non-spin-adapted and spin-adapted mode)
-with indicies :math:`[:, p, q, r, s]` are for
-:math:`\langle a^\dagger_{p\alpha} a^\dagger_{q\alpha} a_{r\alpha} a_{s\alpha} \rangle`,
-:math:`\langle a^\dagger_{p\alpha} a^\dagger_{q\beta} a_{r\beta} a_{s\alpha} \rangle`,
-and :math:`\langle a^\dagger_{p\beta} a^\dagger_{q\beta} a_{r\beta} a_{s\beta} \rangle`,
-respectively.
-
 .. highlight:: bash
 
 The following input file computes the energy and 2-particle density matrix for two
@@ -558,12 +551,12 @@ The 2-particle density matrix file for the first state can be loaded using the f
     (3, 26, 26, 26, 26)
 
 The 1-particle density matrix (in both the non-spin-adapted and spin-adapted mode) is stored as an array with the shape :math:`[2,n,n]`,
-where the two components with indicies :math:`[:,a,b]` are for
+where ``n`` is the number of spatial orbitals, and the two components with indicies :math:`[:,a,b]` are for
 :math:`\langle a^\dagger_{a\alpha} a_{b\alpha} \rangle`, and :math:`\langle a^\dagger_{a\beta} a_{b\beta} \rangle`,
 respectively.
 
 The 2-particle density matrix (in both the non-spin-adapted and spin-adapted mode) is stored as an array with the shape :math:`[3,n,n,n,n]`,
-where the two components with indicies :math:`[:,a,b,c,d]` are for
+where the three components with indicies :math:`[:,a,b,c,d]` are for
 :math:`\langle a^\dagger_{a\alpha} a^\dagger_{b\alpha} a_{c\alpha} a_{d\alpha} \rangle`,
 :math:`\langle a^\dagger_{a\alpha} a^\dagger_{b\beta} a_{c\beta} a_{d\alpha} \rangle`,
 and :math:`\langle a^\dagger_{a\beta} a^\dagger_{b\beta} a_{c\beta} a_{d\beta} \rangle`,
@@ -574,7 +567,7 @@ with the shape :math:`[n,n,n,n,n,n]`, defined as
 
 .. math::
 
-    \text{3pdm}[a, b, c, d, e, f] = \sum_{\sigma\tau\lambda}
+    \text{3pdm}[a, b, c, d, e, f] := \sum_{\sigma\tau\lambda}
         a^\dagger_{a\sigma} a^\dagger_{b\tau} a^\dagger_{c\lambda} a_{d\lambda} a_{e\tau} a_{f\sigma}
 
 The 3-particle density matrix in the non-spin-adapted mode is stored as an array with the shape :math:`[4,n,n,n,n,n,n]`,
@@ -590,7 +583,7 @@ with the shape :math:`[n,n,n,n,n,n,n,n]`, defined as
 
 .. math::
 
-    \text{4pdm}[a, b, c, d, e, f, g, h] = \sum_{\sigma\tau\lambda\mu}
+    \text{4pdm}[a, b, c, d, e, f, g, h] := \sum_{\sigma\tau\lambda\mu}
         a^\dagger_{a\sigma} a^\dagger_{b\tau} a^\dagger_{c\lambda} a^\dagger_{d\mu} a_{e\mu}a_{f\lambda} a_{g\tau} a_{h\sigma}
 
 The 4-particle density matrix in the non-spin-adapted mode is stored as an array with the shape :math:`[5,n,n,n,n,n,n,n,n]`,
@@ -604,9 +597,9 @@ respectively.
 
 In the general spin orbital mode (with the keyword ``use_general_spin``), the 1-, 2-, 3-, and 4-particle density matrices are stored
 with the shape :math:`[1,n,n]`, :math:`[1,n,n,n,n]`, :math:`[1,n,n,n,n,n,n]`, and :math:`[1,n,n,n,n,n,n,n,n]` respectively,
-where ``n`` is the number of spin orbitals. The content is the expectation value for :math:`\langle a^\dagger_{a} a_{b}`,
-:math:`\langle a^\dagger_{a} a^\dagger_{b} a_{c} a_{d}`, :math:`\langle a^\dagger_{a} a^\dagger_{b} a^\dagger_{c} a_{d} a_{e} a_{f}`,
-and :math:`\langle a^\dagger_{a} a^\dagger_{b} a^\dagger_{c} a^\dagger_{d} a_{e} a_{f} a_{g} a_{h}`, respectively.
+where ``n`` is the number of spin orbitals. The content is the expectation value for :math:`\langle a^\dagger_{a} a_{b} \rangle`,
+:math:`\langle a^\dagger_{a} a^\dagger_{b} a_{c} a_{d} \rangle`, :math:`\langle a^\dagger_{a} a^\dagger_{b} a^\dagger_{c} a_{d} a_{e} a_{f} \rangle`,
+and :math:`\langle a^\dagger_{a} a^\dagger_{b} a^\dagger_{c} a^\dagger_{d} a_{e} a_{f} a_{g} a_{h} \rangle`, respectively.
 
 .. highlight:: bash
 
