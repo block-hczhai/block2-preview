@@ -1629,6 +1629,7 @@ class DMRGDriver:
         soc=False,
         site_type=0,
         algo_type=None,
+        su2_coupling=None,
         iprint=0,
     ):
         bw = self.bw
@@ -1676,9 +1677,11 @@ class DMRGDriver:
         self.align_mps_center(mbra, mket)
 
         if SymmetryTypes.SU2 in bw.symm_type:
+            if su2_coupling is None:
+                su2_coupling = "((C+%s)1+D)0"
             op_str = "(C+D)0"
             for _ in range(pdm_type - 1):
-                op_str = "((C+%s)1+D)0" % op_str
+                op_str = su2_coupling % op_str
             perm = bw.b.SpinPermScheme.initialize_su2(pdm_type * 2, op_str, True)
             perms = bw.b.VectorSpinPermScheme([perm])
         elif SymmetryTypes.SZ in bw.symm_type:

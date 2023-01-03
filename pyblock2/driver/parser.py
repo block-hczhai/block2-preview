@@ -49,7 +49,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "proj_weights", "proj_mps_tags", "single_prec", "integral_rescale", "check_dav_tol",
               "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff",
               "conventional_npdm", "threepdm", "fourpdm", "restart_threepdm", "restart_fourpdm",
-              "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm"}
+              "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm",
+              "restart_nevpt2_npdm"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

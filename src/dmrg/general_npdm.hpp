@@ -613,7 +613,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     for (auto &rr : scheme->perms[r.first]->data[r.second])
                         mshape += (lcnt * rcnt) * rr.second.size();
             }
-            if (parallel_rule == nullptr)
+            if (parallel_rule == nullptr || parallel_rule->comm->size == 1)
                 pmshape = mshape;
             else
                 for (int i = 0; i < scheme->middle_blocking.size(); i++) {
@@ -684,7 +684,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                  scheme->perms[r.first]->data[r.second])
                                 mshape += (lcnt * rcnt) * rr.second.size();
                     }
-                if (parallel_rule == nullptr)
+                if (parallel_rule == nullptr || parallel_rule->comm->size == 1)
                     pmshape = mshape;
                 else
                     for (int i = 0; i < scheme->last_middle_blocking.size();
