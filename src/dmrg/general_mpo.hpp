@@ -346,9 +346,7 @@ template <typename FL> struct GeneralFCIDUMP {
             vector<vector<int>> idx_patidx(kk);
             if (indices.size() == 0)
                 continue;
-            vector<uint16_t> idx_idx(nn);
-            vector<uint16_t> idx_pat(nn);
-            vector<uint16_t> idx_mat(max(1, nn));
+            vector<uint16_t> idx_idx(nn), idx_pat(nn), idx_mat(nn);
             for (size_t i = 0; i < (nn == 0 ? 1 : indices[ix].size());
                  i += (nn == 0 ? 1 : nn)) {
                 for (int j = 0; j < nn; j++)
@@ -358,7 +356,8 @@ template <typename FL> struct GeneralFCIDUMP {
                          return this->indices[ix][i + x] <
                                 this->indices[ix][i + y];
                      });
-                idx_mat[0] = 0;
+                if (nn >= 1)
+                    idx_mat[0] = 0;
                 for (int j = 1; j < nn; j++)
                     idx_mat[j] =
                         idx_mat[j - 1] + (indices[ix][i + idx_idx[j]] !=

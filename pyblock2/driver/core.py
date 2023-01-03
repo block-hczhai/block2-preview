@@ -1820,7 +1820,9 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
 
-    def adjust_mps(self, ket, dot=1):
+    def adjust_mps(self, ket, dot=None):
+        if dot is None:
+            dot = ket.dot
         bw = self.bw
         if ket.center == 0 and dot == 2:
             if self.mpi is not None:
