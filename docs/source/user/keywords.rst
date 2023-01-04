@@ -223,6 +223,17 @@ stopt\_sampling
     Third step of stochastic perturbative DMRG. Followed by an integer as the number of CSF / determinants to be sampled.
     If any of the first and second step is done in the non-spin-adapted mode, the determinants will be sampled and this step must also be in the non-spin-adapted mode. Otherwise, CSF will be sampled if the keyword ``nonspinadapted`` is given, and determinants will be sampled if the keyword ``nonspinadapted`` is not given.
 
+restart\_nevpt2\_npdm
+    Compute 1-4 PDM for DMRG-SC-NEVPT2. If there are multiple roots, the calculation will be performed for all roots.
+    The 1-4PDM will be used to compute the SC-NEVPT2 intermediate Eqs. (A16) and (A22) in the spin-free NEVPT2 paper.
+    Only the two SC-NEVPT2 intermediates will be written into the disk.
+
+restart\_mps\_nevpt
+    Followed by three integers, representing the number of active, inactive, and external orbitals.
+    Compute the ``V_i`` and ``V_a`` correlation energy in DMRG-SC-NEVPT2 using MPS compression.
+    Only the spin-adapted version is implemented. If there are multiple roots, the keyword ``nevpt_state_num`` is
+    required to set which root should be used to compute the correlation energy.
+
 Calculation Modifiers
 ---------------------
 
@@ -375,6 +386,10 @@ full\_integral
     ``mrrept2-r``), the two-electron integral elements with more than two virtual indices will be set to zero.
     This should save some MPO contruction time, without affecting the sweep time cost and accuracy.
     If this keyword is given, the full integral elements will be used for constructing MPO.
+
+nevpt\_state\_num
+    Followed by a single integer, the index of the root (counting from zero) used for SC-NEVPT2.
+    Only useful for the calculation type ``restart_mps_nevpt``.
 
 Uncontracted Dynamic Correlation
 --------------------------------
