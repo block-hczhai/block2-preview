@@ -415,3 +415,75 @@ This will generate the following output (the nuclear gradient at the initial geo
     Currently, gradients for UCASSCF is not supported in ``pyscf``.
     The geometry optimization part requires an additional module called ``geomeTRIC``,
     which can be installed via ``pip install geometric``.
+
+DMRG-SC-NEVPT2
+--------------
+
+.. highlight:: python3
+
+The following is an example python script for a DMRG-SC-NEVPT2 calculation (with explicit 4pdm) using ``block2``: ::
+
+    from pyscf import gto, scf, mcscf, mrpt, dmrgscf, lib
+    import os
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-10)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 8
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+
+    mc.fcisolver.conv_tol = 1e-14
+    mc.canonicalization = True
+    mc.natorb = True
+    mc.run()
+
+    sc = mrpt.NEVPT(mc).run()
+
+The alternative faster ``compress_approx`` approach using MPS compression is also supported: ::
+
+    from pyscf import gto, scf, mcscf, mrpt, dmrgscf, lib
+    import os
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.BLOCKEXE_COMPRESS_NEVPT = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-10)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 8
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+
+    mc.fcisolver.conv_tol = 1e-14
+    mc.canonicalization = True
+    mc.natorb = True
+    mc.run()
+
+    sc = mrpt.NEVPT(mc).compress_approx(maxM=200).run()
+
+.. note ::
+
+    The first "4pdm" approach is not supported by ``StackBlock``, but it is supported in the old ``Block`` code.
+    The second "compression" approach is supported by ``StackBlock``.
+    ``Block2`` supports both approaches.
+
+    When using the second approach, it will generate a warning saying that ``BLOCKEXE_COMPRESS_NEVPT`` must be
+    a serially compiled version. Please ignore this warning for ``block2``.
+    For ``block2``, it is okay to set ``BLOCKEXE`` and ``BLOCKEXE_COMPRESS_NEVPT`` to the same file.
+    ``BLOCKEXE_COMPRESS_NEVPT`` can be compiled with or without MPI.
+    So only a single version of ``block2main`` is required. If you want to use MPI, please set both
+    ``BLOCKEXE`` and ``BLOCKEXE_COMPRESS_NEVPT`` to the same ``block2main`` and compile ``block2`` with MPI,
+    or use ``pip install block2-mpi``, and then set an appropriate ``MPIPREFIX``.

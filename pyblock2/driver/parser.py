@@ -50,7 +50,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff",
               "conventional_npdm", "threepdm", "fourpdm", "restart_threepdm", "restart_fourpdm",
               "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm",
-              "restart_nevpt2_npdm"}
+              "restart_nevpt2_npdm", "restart_mps_nevpt", "nevpt_state_num"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -65,7 +65,8 @@ RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_threepdm", "restart
                 "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
                 "restart_tran_threepdm", "restart_tran_fourpdm",
                 "restart_tran_oh", "restart_tran_oh", "statespecific",
-                "restart_copy_mps", "restart_sample", "orbital_rotation"}
+                "restart_copy_mps", "restart_sample", "orbital_rotation",
+                "restart_nevpt2_npdm", "restart_mps_nevpt"}
 
 GAOPT_KEYS = {"maxcomm", "maxgen", "maxcell",
               "cloning", "mutation", "elite", "scale", "method"}
