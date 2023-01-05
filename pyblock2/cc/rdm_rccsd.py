@@ -17,7 +17,7 @@
 #
 
 """
-Spin-free CCSD rdm in general orbitals with equations derived on the fly.
+Spin-free CCSD rdm with equations derived on the fly.
 """
 
 try:

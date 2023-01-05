@@ -249,7 +249,7 @@ class WickGCCSD(gccsd.GCCSD):
                                 tol=self.conv_tol_normt,
                                 verbose=self.verbose)
         return self.l1, self.l2
-    
+
     def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, **kwargs):
         from pyblock2.cc.rdm_gccsd import wick_make_rdm1
         if t1 is None: t1 = self.t1

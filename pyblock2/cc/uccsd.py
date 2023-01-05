@@ -1,6 +1,6 @@
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
-#  Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+#  Copyright (C) 2020-2023 Huanchen Zhai <hczhai@caltech.edu>
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -474,6 +474,24 @@ class WickUCCSD(uccsd.UCCSD):
                                 verbose=self.verbose)
         return self.l1, self.l2
 
+    def make_rdm1(self, t1=None, t2=None, l1=None, l2=None, **kwargs):
+        from pyblock2.cc.rdm_uccsd import wick_make_rdm1
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if l1 is None: l1, l2 = self.solve_lambda(t1, t2)
+        return wick_make_rdm1(self, t1, t2, l1, l2, **kwargs)
+
+    def make_rdm2(self, t1=None, t2=None, l1=None, l2=None, **kwargs):
+        from pyblock2.cc.rdm_uccsd import wick_make_rdm2
+        if t1 is None: t1 = self.t1
+        if t2 is None: t2 = self.t2
+        if l1 is None: l1 = self.l1
+        if l2 is None: l2 = self.l2
+        if l1 is None: l1, l2 = self.solve_lambda(t1, t2)
+        return wick_make_rdm2(self, t1, t2, l1, l2, **kwargs)
+
 UCCSD = WickUCCSD
 
 if __name__ == "__main__":
@@ -487,10 +505,17 @@ if __name__ == "__main__":
     print('E-ip (right) = ', ccsd.ipccsd()[0])
     print('E-ea (right) = ', ccsd.eaccsd()[0])
     l1, l2 = ccsd.solve_lambda()
+    dm1 = ccsd.make_rdm1()
+    dm2 = ccsd.make_rdm2()
     wccsd = WickUCCSD(mf).run()
     print('E(T) = ', wccsd.ccsd_t())
     print('E-ee = ', wccsd.eomee_ccsd()[0])
     print('E-ip (right) = ', wccsd.ipccsd()[0])
     print('E-ea (right) = ', wccsd.eaccsd()[0])
     wl1, wl2 = wccsd.solve_lambda()
-    print('lambda diff = ', np.linalg.norm(np.array(l1) - np.array(wl1)), np.linalg.norm(np.array(l2) - np.array(wl2)))
+    print('lambda diff1 = ', [np.linalg.norm(np.array(l) - np.array(wl)) for l, wl in zip(l1, wl1)])
+    print('lambda diff2 = ', [np.linalg.norm(np.array(l) - np.array(wl)) for l, wl in zip(l2, wl2)])
+    wdm1 = wccsd.make_rdm1()
+    wdm2 = wccsd.make_rdm2()
+    print('dm diff1 = ', [np.linalg.norm(np.array(dm) - np.array(wdm)) for dm, wdm in zip(dm1, wdm1)])
+    print('dm diff2 = ', [np.linalg.norm(np.array(dm) - np.array(wdm)) for dm, wdm in zip(dm2, wdm2)])
