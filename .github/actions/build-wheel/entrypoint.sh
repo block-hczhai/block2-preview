@@ -37,6 +37,10 @@ if [ "${PARALLEL}" = "mpi" ]; then
     export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
     /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mpi4py
     sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
+    sed -i "/intel-openmp/d" setup.py
+    sed -i "/pybind11/d" setup.py
+    sed -i "/mkl-include/d" setup.py
+    sed -i "/cmake>/d" setup.py
     sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
     sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmpi", "libopen-pal", "libopen-rte"]): continue' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")

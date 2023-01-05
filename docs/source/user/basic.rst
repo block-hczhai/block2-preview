@@ -123,12 +123,20 @@ The following input file can be used to compute the ground state energy: ::
 .. note ::
 
     Note that the integral file ``C2.CAS.PVDZ.FCIDUMP.ORIG`` should be in the working direcotry.
-    By default, the orbitals will be reordered using the ``fiedler`` method.
+    By default, the orbitals will be reordered using the ``fiedler`` method. One can optionally
+    add the keyword ``noreorder`` to avoid orbital reordering.
 
     ``num_thrds`` indicates the number of OpenMP threads (shared-memory parallelism) to use.
 
-    ``hf_occ integral`` has no effects in ``block2``, but it is required in ``StackBlock`.
+    ``hf_occ integral`` has no effects in ``block2``, but it is required in ``StackBlock``.
     If this line appear, ``block2main`` will try to write some output files in a stackblock-compatible format.
+
+    By default, the calculation will be done in the spin-adapted mode, which is the most efficient.
+    One can optionally add the keyword ``nonspinadapted`` to use the non-spin-adapted mode.
+
+    The keyword ``prefix <scratch dir>`` can be used to set a folder for storing scratch files.
+    If running in a HPC supercomputer, it is highly recommended to use the high IO speed scratch space
+    (instead of the "home" storage) to achieve high performance.
 
     Lines start with ``!`` in the input file will be ignored. [#note1]_
 
