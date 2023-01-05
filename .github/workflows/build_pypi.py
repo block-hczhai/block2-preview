@@ -1,7 +1,7 @@
 
 """Build github pages for PYPI indexing."""
 
-import sys, os, json
+import sys, os, json, time
 from urllib.request import urlopen
 
 REPO_URL = sys.argv[1]
@@ -22,6 +22,7 @@ for d in json.loads(urlopen(main_url).read()):
         if package_name not in data:
             data[package_name] = {}
         data[package_name][name] = download_url
+    time.sleep(1)
 
 page = """<!DOCTYPE html>
 <html>
