@@ -118,13 +118,17 @@ The following input file can be used to compute the ground state energy: ::
     schedule default
     maxM 500
     maxiter 30
+    num_thrds 16
 
 .. note ::
 
     Note that the integral file ``C2.CAS.PVDZ.FCIDUMP.ORIG`` should be in the working direcotry.
     By default, the orbitals will be reordered using the ``fiedler`` method.
 
-.. note ::
+    ``num_thrds`` indicates the number of OpenMP threads (shared-memory parallelism) to use.
+
+    ``hf_occ integral`` has no effects in ``block2``, but it is required in ``StackBlock`.
+    If this line appear, ``block2main`` will try to write some output files in a stackblock-compatible format.
 
     Lines start with ``!`` in the input file will be ignored. [#note1]_
 
@@ -503,12 +507,12 @@ The following input file computes the energy and 2-particle density matrix for t
     spin 0
     irrep 1
 
-    hf_occ integral
     schedule default
     maxM 500
     maxiter 30
 
     twopdm
+    num_thrds 16
     
 .. highlight:: python3
 
@@ -533,12 +537,12 @@ state-averaged A\ :sub:`1g` states: ::
     nroots 2
     weights 0.5 0.5
 
-    hf_occ integral
     schedule default
     maxM 500
     maxiter 30
 
     twopdm
+    num_thrds 16
     
 .. highlight:: python3
 
@@ -624,12 +628,12 @@ state-averaged A\ :sub:`1g` states: ::
     nroots 2
     weights 0.5 0.5
 
-    hf_occ integral
     schedule default
     maxM 500
     maxiter 30
 
     tran_twopdm
+    num_thrds 16
 
 .. note ::
 
@@ -648,12 +652,12 @@ refined A\ :sub:`1g` states: ::
     weights 0.5 0.5
     statespecific
 
-    hf_occ integral
     schedule default
     maxM 500
     maxiter 30
 
     tran_twopdm
+    num_thrds 16
 
 The transition density matrices between states with different point group irreducible representations are also available by simply
 adding the keyword ``tran_twopdm`` after the corresponding multi-target state-averaged calculation. [#note1]_
