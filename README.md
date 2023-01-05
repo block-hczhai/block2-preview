@@ -106,15 +106,17 @@ Features
     * Block-sparse (outer) / dense (inner)
     * Block-sparse (outer) / elementwise-sparse (CSR, inner)
 * Fermionic MPS algebra (non-spin-adapted only)
-* Determinant/CSF overlap sampling
+* Determinant/CSF coefficients of MPS
 * Multi-level parallel DMRG
     * Parallelism over sites (2-site only)
     * Parallelism over sum of MPOs (non-spin-adapted only)
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
-* DMRG-CASSCF (pyscf interface)
+* DMRG-CASSCF / DMRG-sc-NEVPT2 (pyscf interface)
     * Nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
+    * DMRG-sc-NEVPT2 (pyscf interface, classical approach)
+    * DMRG-sc-MPS-NEVPT2 (pyscf interface, MPS compression approximation)
 * Stochastic perturbative DMRG
 * DMRG with Spin-Orbit Coupling (SOC)
     * 1-step approach (full complex one-MPO and hybrid real/complex two-MPO schemes)

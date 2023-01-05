@@ -169,7 +169,10 @@ def init_pdms(mc, pdm_eqs, root=None):
             "E1": E1, "E2": E2, "E3": E3, **dict(zip(dm_names, dms)),
             "deltaAA": np.eye(mc.ncas)
         })
-        return E1, E2, E3, None
+        E4 = None
+        if hasattr(mc.fcisolver, 'executable') and mc.fcisolver.executable.strip().endswith('block2main'):
+            E4 = mc.fcisolver.make_rdm4(xci, mc.ncas, mc.nelecas, restart=True)
+        return E1, E2, E3, E4
     else:
         dms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', xci, xci, mc.ncas, mc.nelecas)
         dm_names = ["dm1AA", "dm2AAAA", "dm3AAAAAA", "dm4AAAAAAAA"]

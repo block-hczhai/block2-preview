@@ -487,3 +487,188 @@ The alternative faster ``compress_approx`` approach using MPS compression is als
     So only a single version of ``block2main`` is required. If you want to use MPI, please set both
     ``BLOCKEXE`` and ``BLOCKEXE_COMPRESS_NEVPT`` to the same ``block2main`` and compile ``block2`` with MPI,
     or use ``pip install block2-mpi``, and then set an appropriate ``MPIPREFIX``.
+
+DMRG-IC-NEVPT2
+--------------
+
+.. highlight:: python3
+
+The following is an example python script for SC-NEVPT2 / IC-NEVPT2 with equations derived on the fly
+(using the FCI solver): ::
+
+    import numpy
+    from pyscf import gto, scf, mcscf
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+    mc.fcisolver.conv_tol = 1e-14
+    mc.conv_tol = 1e-11
+    mc.canonicalization = True
+    mc.run()
+
+    from pyblock2.icmr.scnevpt2 import WickSCNEVPT2
+    wsc = WickSCNEVPT2(mc).run()
+
+    from pyblock2.icmr.icnevpt2_full import WickICNEVPT2
+    wic = WickICNEVPT2(mc).run()
+
+.. highlight:: text
+
+This will generate the following output: ::
+
+    $ grep 'E(WickSCNEVPT2)' nevpt2.out
+    E(WickSCNEVPT2) = -149.9578403403482  E_corr_pt = -0.2491825691128931
+    $ grep 'E(WickICNEVPT2)' nevpt2.out
+    E(WickICNEVPT2) = -149.9601376470851  E_corr_pt = -0.2514798758497859
+
+.. highlight:: python3
+
+The above example can also run with the ``block2`` DMRG solver: ::
+
+    import numpy
+    from pyscf import gto, scf, mcscf, dmrgscf, lib
+    import os
+
+    if not os.path.exists(lib.param.TMPDIR):
+        os.mkdir(lib.param.TMPDIR)
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-14)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 28
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+
+    # set very tight thresholds for small system
+    mc.fcisolver.scheduleSweeps = [0, 4, 8, 12, 16]
+    mc.fcisolver.scheduleMaxMs = [250, 500, 500, 500, 500]
+    mc.fcisolver.scheduleTols = [1e-08, 1e-10, 1e-12, 1e-12, 1e-12]
+    mc.fcisolver.scheduleNoises = [0.0001, 0.0001, 5e-05, 5e-05, 0.0]
+    mc.fcisolver.maxIter = 30
+    mc.fcisolver.twodot_to_onedot = 20
+    mc.fcisolver.block_extra_keyword = ['singlet_embedding', 'full_fci_space', 'fp_cps_cutoff 0', 'cutoff 0']
+
+    mc.fcisolver.conv_tol = 1e-14
+    mc.conv_tol = 1e-11
+    mc.canonicalization = True
+    mc.run()
+
+    from pyblock2.icmr.scnevpt2 import WickSCNEVPT2
+    wsc = WickSCNEVPT2(mc).run()
+
+    from pyblock2.icmr.icnevpt2_full import WickICNEVPT2
+    wic = WickICNEVPT2(mc).run()
+
+.. highlight:: text
+
+This will generate the following output: ::
+
+    $ grep 'E(WickSCNEVPT2)' dmrg-nevpt2.out
+    E(WickSCNEVPT2) = -149.9578400627551  E_corr_pt = -0.2491822915198339
+    $ grep 'E(WickICNEVPT2)' dmrg-nevpt2.out
+    E(WickICNEVPT2) = -149.9601376425396  E_corr_pt = -0.2514798713043632
+
+DMRG-FIC-MRCISD
+---------------
+
+.. highlight:: python3
+
+The following is an example python script for fully internally contractd MRCISD with equations derived on the fly
+(using the FCI solver): ::
+
+    # need first import numpy (before pyblock2)
+    # otherwise the numpy multi-threading may not work
+    import numpy
+
+    from pyscf import gto, scf, mcscf
+    from pyblock2.icmr.icmrcisd_full import WickICMRCISD
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='6-31g', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+    mc.fcisolver.conv_tol = 1e-14
+    mc.conv_tol = 1e-11
+    mc.run()
+
+    mol.verbose = 5
+    wsc = WickICMRCISD(mc).run()
+
+.. highlight:: text
+
+This will generate the following output: ::
+
+    $ grep 'CASSCF energy' mrci.out 
+    CASSCF energy = -149.636563280267
+    $ grep 'WickICMRCISD' mrci.out
+    E(WickICMRCISD)   = -149.7792742741091  E_corr_ci = -0.1427109938418027
+    E(WickICMRCISD+Q) = -149.7858102349944  E_corr_ci = -0.1492469547270254
+
+.. highlight:: python3
+
+Similarly, we can do DMRG-FIC-MRCISD: ::
+
+    # need first import numpy (before pyblock2)
+    # otherwise the numpy multi-threading may not work
+    import numpy
+
+    from pyscf import gto, scf, mcscf, dmrgscf, lib
+    from pyblock2.icmr.icmrcisd_full import WickICMRCISD
+    import os
+
+    if not os.path.exists(lib.param.TMPDIR):
+        os.mkdir(lib.param.TMPDIR)
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='6-31g', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    mc = mcscf.CASSCF(mf, 6, 8)
+
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-14)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 28
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+
+    # set very tight thresholds for small system
+    mc.fcisolver.scheduleSweeps = [0, 4, 8, 12, 16]
+    mc.fcisolver.scheduleMaxMs = [250, 500, 500, 500, 500]
+    mc.fcisolver.scheduleTols = [1e-08, 1e-10, 1e-12, 1e-12, 1e-12]
+    mc.fcisolver.scheduleNoises = [0.0001, 0.0001, 5e-05, 5e-05, 0.0]
+    mc.fcisolver.maxIter = 30
+    mc.fcisolver.twodot_to_onedot = 20
+    mc.fcisolver.block_extra_keyword = ['singlet_embedding', 'full_fci_space', 'fp_cps_cutoff 0', 'cutoff 0']
+
+    mc.fcisolver.conv_tol = 1e-14
+    mc.conv_tol = 1e-11
+    mc.run()
+
+    mol.verbose = 5
+    wsc = WickICMRCISD(mc).run()
+
+.. highlight:: text
+
+This will generate the following output: ::
+
+    $ grep 'CASSCF energy' dmrg-mrci.out 
+    CASSCF energy = -149.636563280264
+    $ grep 'WickICMRCISD' dmrg-mrci.out
+    E(WickICMRCISD)   = -149.7792742857885  E_corr_ci = -0.1427110055241769
+    E(WickICMRCISD+Q) = -149.785810250064  E_corr_ci = -0.1492469697996863
+
+.. note ::
+
+    The current FIC-MRCI / DMRG-FIC-MRCI implementation requires the explicit construction of the MRCI Hamiltonian,
+    which is not practical for production runs.
