@@ -582,7 +582,7 @@ DMRG-FIC-MRCISD
 
 .. highlight:: python3
 
-The following is an example python script for fully internally contractd MRCISD with equations derived on the fly
+The following is an example python script for fully internally contracted MRCISD with equations derived on the fly
 (using the FCI solver): ::
 
     # need first import numpy (before pyblock2)

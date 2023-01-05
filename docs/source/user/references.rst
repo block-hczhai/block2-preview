@@ -65,6 +65,12 @@ Particle Density Matrix
 * Ghosh, D., Hachmann, J., Yanai, T., Chan, G. K. L. Orbital optimization in the density matrix renormalization group, with applications to polyenes and β-carotene. *The Journal of Chemical Physics* 2008, **128**, 144117. doi: `10.1063/1.2883976 <https://doi.org/10.1063/1.2883976>`_
 * Guo, S., Watson, M. A., Hu, W., Sun, Q., Chan, G. K. L. N-electron valence state perturbation theory based on a density matrix renormalization group reference function, with applications to the chromium dimer and a trimer model of poly (p-phenylenevinylene). *Journal of Chemical Theory and Computation* 2016, **12**, 1583-1591. doi: `10.1021/acs.jctc.5b01225 <https://doi.org/10.1021/acs.jctc.5b01225>`_
 
+DMRG-SC-NEVPT2
+--------------
+
+* Roemelt, M., Guo, S., Chan, G. K. L. A projected approximation to strongly contracted N-electron valence perturbation theory for DMRG wavefunctions. *The Journal of Chemical Physics* 2016, **144**, 204113. doi: `10.1063/1.4950757 <https://doi.org/10.1063/1.4950757>`_
+* Sokolov, A. Y., Guo, S., Ronca, E., Chan, G. K. L. Time-dependent N-electron valence perturbation theory with matrix product state reference wavefunctions for large active spaces and basis sets: Applications to the chromium dimer and all-trans polyenes. *The Journal of Chemical Physics* 2017, **146**, 244102. doi: `10.1063/1.4986975 <https://doi.org/10.1063/1.4986975>`_
+
 Multi-Reference Correlation Theories
 ------------------------------------
 
