@@ -62,7 +62,7 @@ mem_ratio
 
 min\_mpo\_mem
     Optional. Followed by auto, True, or False. If True, MPO building and simplification will cost much less memory.
-    But the computational cost will be higher due to IO cost. Default is auto, which is True if number of orbitals is >= 80.
+    But the computational cost will be higher due to IO cost. Default is auto, which is True if number of orbitals is >= 120.
 
 qc\_mpo\_type
     Optional. Followed by auto (default), conventional, nc, or cn. The Hamiltonian MPO formalism type.
