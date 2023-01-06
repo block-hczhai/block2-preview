@@ -109,7 +109,7 @@ Features
 * Determinant/CSF coefficients of MPS
 * Multi-level parallel DMRG
     * Parallelism over sites (2-site only)
-    * Parallelism over sum of MPOs (non-spin-adapted only)
+    * Parallelism over sum of MPOs (distributed)
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
@@ -299,6 +299,10 @@ For `-DOMP_LIB=TBB`, nested openMP + TBB MKL is okay.
 
 `-DTBB=ON` can be combined with any `-DOMP_LIB=...`.
 
+### Complex mode
+
+For complex integrals / spin-orbit coupling (SOC), extra options ``-DUSE_COMPLEX=ON`` and ``-DUSE_SG=ON`` are required (and the compilation time will increase).
+
 ### Maximal bond dimension
 
 The default maximal allowed bond dimension per symmetry block is `65535`.
@@ -319,8 +323,8 @@ enables debug flags.
 
 ### Supported operating systems and compilers
 
-* Linux + gcc 9.2.0 + MKL 2019
-* MacOS 10.15 + Apple clang 12.0 + MKL 2021 (MKL 2019 required for `pip install`)
+* Linux + gcc 9.2.0 + MKL 2021.4
+* MacOS 10.15 + Apple clang 12.0 + MKL 2021 (MKL 2021.4 required for `pip install`)
 * MacOS 10.15 + icpc 2021.1 + MKL 2021
 * Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021
 

@@ -127,6 +127,11 @@ The following will use tbb mkl library ::
 
 ``-DTBB=ON`` can be combined with any ``-DOMP_LIB=...``.
 
+Complex mode
+^^^^^^^^^^^^
+
+For complex integrals / spin-orbit coupling (SOC), extra options ``-DUSE_COMPLEX=ON`` and ``-DUSE_SG=ON`` are required (and the compilation time will increase).
+
 Maximal bond dimension
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -182,7 +187,7 @@ the same ``mpich`` library.
 Supported operating systems and compilers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* Linux + gcc 9.2.0 + MKL 2019
+* Linux + gcc 9.2.0 + MKL 2021.4
 * MacOS 10.15 + Apple clang 12.0 + MKL 2021
 * MacOS 10.15 + icpc 2021.1 + MKL 2021
 * Windows 10 + Visual Studio 2019 (MSVC 14.28) + MKL 2021

@@ -70,7 +70,7 @@ Features
 * Determinant/CSF coefficients of MPS
 * Multi-level parallel DMRG
     * Parallelism over sites (2-site only)
-    * Parallelism over sum of MPOs (non-spin-adapted only)
+    * Parallelism over sum of MPOs (distributed)
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)

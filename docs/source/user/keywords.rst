@@ -452,7 +452,7 @@ twodot
     Default. Using the two-site DMRG algorithm.
 
 twodot\_to\_onedot
-    Followed by a single number to indicate the sweep iteration when to switch from the two-site DMRG algorithm to the two-site DMRG algorithm. The sweep iteration is counted from zero.
+    Followed by a single number to indicate the sweep iteration when to switch from the two-site DMRG algorithm to the one-site DMRG algorithm. The sweep iteration is counted from zero.
 
 schedule
     Optional. Followed by the word ``default`` or a multi-line DMRG schedule with the last line being ``end``.
