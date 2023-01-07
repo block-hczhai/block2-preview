@@ -83,6 +83,10 @@ template <typename FL> struct COOSparseMat {
             else
                 data[idx2.back()].second += data[ii].second;
         mat.nnz = (MKL_INT)idx2.size();
+        if ((size_t)mat.nnz != idx2.size())
+            throw runtime_error(
+                "NNZ " + Parsing::to_string(idx2.size()) +
+                " exceeds MKL_INT. Rebuild with -DUSE_MKL64=ON.");
         assert(mat.nnz != mat.size());
         mat.alloc = make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
         mat.allocate();

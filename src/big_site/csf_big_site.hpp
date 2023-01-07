@@ -1123,6 +1123,10 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             else
                 data[idx2.back()].second += data[ii].second;
         mat.nnz = (MKL_INT)idx2.size();
+        if ((size_t)mat.nnz != idx2.size())
+            throw runtime_error(
+                "NNZ " + Parsing::to_string(idx2.size()) +
+                " exceeds MKL_INT. Rebuild with -DUSE_MKL64=ON.");
         if (mat.nnz < mat.size() &&
             mat.nnz <= csf_space->sparse_max_nonzero_ratio * mat.size()) {
             mat.allocate();
@@ -1167,6 +1171,10 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             else
                 data_rev[idx2.back()] += data_rev[ii];
         mat.nnz = (MKL_INT)idx2.size();
+        if ((size_t)mat.nnz != idx2.size())
+            throw runtime_error(
+                "NNZ " + Parsing::to_string(idx2.size()) +
+                " exceeds MKL_INT. Rebuild with -DUSE_MKL64=ON.");
         if (mat.nnz < mat.size() &&
             mat.nnz <= csf_space->sparse_max_nonzero_ratio * mat.size()) {
             mat.allocate();
