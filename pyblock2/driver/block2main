@@ -2664,7 +2664,8 @@ if not pre_run:
                 for cd in op_str])
         
         _print("npdm string =", op_str)
-        npdm_prule = ParallelRuleSimple(b.ParallelSimpleTypes.Nothing, MPI)
+        if MPI is not None:
+            npdm_prule = ParallelRuleSimple(b.ParallelSimpleTypes.Nothing, MPI)
 
         scheme = b.NPDMScheme(perms)
         symbol_free = (algo_type & ExpectationAlgorithmTypes.SymbolFree) or \

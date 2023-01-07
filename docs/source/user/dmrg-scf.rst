@@ -19,6 +19,7 @@ If it is installed using ``pip``, one also needs to create a file named ``settin
     $ PYSCFHOME=$(pip show pyscf-dmrgscf | grep 'Location' | tr ' ' '\n' | tail -n 1)
     $ wget https://raw.githubusercontent.com/pyscf/dmrgscf/master/pyscf/dmrgscf/settings.py.example
     $ mv settings.py.example ${PYSCFHOME}/pyscf/dmrgscf/settings.py
+    $ chmod +x ${PYSCFHOME}/pyscf/dmrgscf/nevpt_mpi.py
 
 Here we also assume that you have installed ``block2`` either using ``pip`` or manually.
 
@@ -487,6 +488,11 @@ The alternative faster ``compress_approx`` approach using MPS compression is als
     So only a single version of ``block2main`` is required. If you want to use MPI, please set both
     ``BLOCKEXE`` and ``BLOCKEXE_COMPRESS_NEVPT`` to the same ``block2main`` and compile ``block2`` with MPI,
     or use ``pip install block2-mpi``, and then set an appropriate ``MPIPREFIX``.
+
+    The second "compression" approach requires the ``mpi4py`` python package. Make sure ``import mpi4py`` works in
+    python before trying this example. Also, make sure that the file ``${PYSCFHOME}/pyscf/dmrgscf/nevpt_mpi.py``
+    has the ``execute`` permission. You can do ``chmod +x ${PYSCFHOME}/pyscf/dmrgscf/nevpt_mpi.py``
+    to fix the permission.
 
 DMRG-IC-NEVPT2
 --------------
