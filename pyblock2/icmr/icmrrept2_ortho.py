@@ -25,15 +25,15 @@ need internal contraction module of block2.
 A orthogonal basis is used in CG method.
 """
 
+import numpy as np
+import time
+
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation, WickTensorTypes
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
     from block2 import MapStrPWickTensorExpr, MapStrStr
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
-
-import numpy as np
-import time
 
 try:
     from . import eri_helper, dmrg_helper
@@ -63,28 +63,11 @@ def _sum_indices(expr, idxs):
             term.ctr_indices.add(idx)
     return expr
 
-def _remove_ie_deltas(expr):
-    new_terms = []
-    for term in expr.terms:
-        xfound = False
-        for wt in term.tensors:
-            if wt.type == WickTensorTypes.KroneckerDelta:
-                found = False
-                for wi in wt.indices:
-                    if (wi.types & WickIndexTypes.External) != WickIndexTypes.Nothing \
-                        or (wi.types & WickIndexTypes.Inactive) != WickIndexTypes.Nothing:
-                        found = True
-                xfound = xfound or found
-        if not xfound:
-            new_terms.append(term)
-    expr.terms = expr.terms.__class__(new_terms)
-    return expr
-
 P, PT, PD, DEF = init_parsers() # parsers
 SP = lambda x: x.expand().add_spin_free_trans_symm().remove_external().simplify()
 SPR = lambda x: x.expand().add_spin_free_trans_symm().remove_external().remove_inactive().simplify()
 Comm = lambda b, h, k, idxs: SP(_sum_indices(b.conjugate() * (h ^ k), idxs))
-Norm = lambda b, k: _remove_ie_deltas(SP(b.conjugate() * k))
+Norm = lambda b, k: SP(b.conjugate() * k)
 Rhs = lambda b, k: SPR(b.conjugate() * k)
 
 # See J. Chem. Theory Comput. 15, 2291 (2019) Eq. (11)
@@ -124,20 +107,15 @@ for k, eq in enumerate(pdm_eqs):
 
 # def of ic-mrrept2 sub-spaces
 sub_spaces = {
-    "ijrs+": "E1[r,i] E1[s,j] \n + E1[s,i] E1[r,j]",
-    "ijrs-": "E1[r,i] E1[s,j] \n - E1[s,i] E1[r,j]",
-    "rsiap+": "E1[r,i] E1[s,a] \n + E1[s,i] E1[r,a]",
-    "rsiap-": "E1[r,i] E1[s,a] \n - E1[s,i] E1[r,a]",
-    "ijrap+": "E1[r,j] E1[a,i] \n + E1[r,i] E1[a,j]",
-    "ijrap-": "E1[r,j] E1[a,i] \n - E1[r,i] E1[a,j]",
-    "rsabpq+": "E1[r,b] E1[s,a] \n + E1[s,b] E1[r,a]",
-    "rsabpq-": "E1[r,b] E1[s,a] \n - E1[s,b] E1[r,a]",
-    "ijabpq+": "E1[b,i] E1[a,j] \n + E1[b,j] E1[a,i]",
-    "ijabpq-": "E1[b,i] E1[a,j] \n - E1[b,j] E1[a,i]",
-    "irabpq1": "E1[r,i] E1[a,b]",
-    "irabpq2": "E1[a,i] E1[r,b]",
-    "rabcpqg*": "E1[r,b] E1[a,c]",
-    "iabcpqg*": "E1[b,i] E1[a,c]"
+    "ijrskltu*": "E1[r,i] E1[s,j]",
+    "rsiatukp*": "E1[r,i] E1[s,a]",
+    "ijrakltp*": "E1[r,j] E1[a,i]",
+    "rsabtupq*": "E1[r,b] E1[s,a]",
+    "ijabklpq*": "E1[b,i] E1[a,j]",
+    "irabktpq1": "E1[r,i] E1[a,b]",
+    "irabktpq2": "E1[a,i] E1[r,b]",
+    "rabctdef*": "E1[r,b] E1[a,c]",
+    "iabckdef*": "E1[b,i] E1[a,c]"
 }
 
 ener_eqs = {} # Hamiltonian expectations
@@ -154,12 +132,12 @@ for key, expr in sub_spaces.items():
     bra = ket.index_map(MapStrStr(ket_bra_map))
     rhhk_eqs[key] = Rhs(bra, hfull)
     norm_eqs[key] = Norm(bra, ket)
-    act_idxs = x.terms[0].tensors[0].indices[9 - l:4]
-    ener_eqs[key] = Comm(bra, hd, ket * x, act_idxs)
+    x_idxs = x.terms[0].tensors[0].indices
+    ener_eqs[key] = Comm(bra, hd, ket * x, x_idxs)
     if key[-1] in "12":
         ket2 = P(sub_spaces[key[:-1] + ('1' if key[-1] == '2' else '2')])
         x2 = P("x%s[%s]" % ('' if key[-1] == '2' else '2', key[:4]))
-        ener2_eqs[key] = Comm(bra, hd, ket2 * x2, act_idxs)
+        ener2_eqs[key] = Comm(bra, hd, ket2 * x2, x_idxs)
         norm2_eqs[key] = Norm(bra, ket2)
 
 allowed_perms = {"AAAA", "EAAA", "EAIA", "EAAI", "AAIA", "EEIA",
@@ -190,27 +168,6 @@ for eq in [*ener_eqs.values(), *ener2_eqs.values(), *rhhk_eqs.values()]:
 def _key_idx(key):
     t = [WickIndexTypes.Inactive, WickIndexTypes.Active, WickIndexTypes.External]
     return [t.index(wi.types) for wi in PT("x[%s]" % key).indices]
-
-def _grid_restrict(key, grid, restrict_cas, no_eq):
-    ixx = []
-    wis = PT("x[%s]" % key).indices
-    contig = lambda a, b: b == chr(ord(a) + 1)
-    for i, wi in enumerate(wis):
-        if not restrict_cas and wi.types == WickIndexTypes.Active:
-            continue
-        if i != 0 and wis[i].types == wis[i - 1].types:
-            if wi.types == WickIndexTypes.Active:
-                if not contig(wis[i - 1].name, wis[i].name):
-                    continue
-                if i + 1 < len(wis) and contig(wis[i].name, wis[i + 1].name):
-                    continue
-                if i - 2 >= 0 and contig(wis[i - 2].name, wis[i - 1].name):
-                    continue
-            if no_eq:
-                ixx.append(grid[i - 1] < grid[i])
-            else:
-                ixx.append(grid[i - 1] <= grid[i])
-    return np.bitwise_and.reduce(ixx)
 
 def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, iprint=False):
     r = -axop(x) + b
@@ -292,8 +249,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
     niter = 0
     for key in sub_spaces:
         t = time.perf_counter()
-        l = len(key)
-        skey = key[:9 - l]
+        skey = key[:4].split('a')[0]
         if E4 is None and "abc" in key:
             irkmap = {'i': 'aaac', 'r': 'aaav'}
             ic.sub_eners[skey] = dmrg_helper.dmrg_response_singles(mc, eris, E1,
@@ -304,8 +260,8 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             continue
         if key[-1] == '2':
             continue
-        rkey = key[:9 - l] + key[4 - l:-1]
-        nkey = key[9 - l:-1]
+        rkey = key[:-1][4:]
+        nkey = key[:-1][4:] + key[:-1][:4]
         xindex = "".join(["IAE"[i] for i in _key_idx(rkey)])
         s = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(nkey)])
         b = np.zeros([[ncore, ncas, nvirt][ix] for ix in _key_idx(rkey)])
@@ -337,9 +293,9 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sb = sb.reshape((2, *s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
             def trans_forth(g, sf=sf):
-                return np.einsum("v%s,v%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
+                return np.einsum("v%s,v%sx->x" % (rkey, rkey), g, sf, optimize=True)
             def trans_back(g, sb=sb):
-                return np.einsum("%sx,v%sx->v%s" % (key[:9 - l], key[4 - l:-1], rkey), g, sb, optimize=True)
+                return np.einsum("x,v%sx->v%s" % (rkey, rkey), g, sb, optimize=True)
             xdot = lambda a, b: (trans_back(a) * trans_back(b)).sum()
             def axop(ppx, eqs=pt2_axeqs, xid=xindex):
                 px = trans_back(ppx)
@@ -361,22 +317,12 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sb = sb.reshape((*s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, **mdict })
             def trans_forth(g, sf=sf):
-                return np.einsum("%s,%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
+                return np.einsum("%s,%sx->x" % (rkey, rkey), g, sf, optimize=True)
             def trans_back(g, sb=sb):
-                return np.einsum("%sx,%sx->%s" % (key[:9 - l], key[4 - l:-1], rkey), g, sb, optimize=True)
-            if 9 - len(key) >= 2:
-                grid = np.indices(b.shape, dtype=np.int16)
-                idx = _grid_restrict(rkey, grid, key[-1] in '+-', key[-1] == '-')
-            else:
-                idx = slice(None)
-            if len(key) - 5 == 2 and key[-1] in '+-':
-                ridx = ~idx
-            else:
-                ridx = slice(0)
-            xdot = lambda a, b, idx=idx: (trans_back(a)[idx] * trans_back(b)[idx]).sum()
-            def axop(px, eqs=pt2_axeqs, xid=xindex, ridx=ridx):
+                return np.einsum("x,%sx->%s" % (rkey, rkey), g, sb, optimize=True)
+            xdot = lambda a, b: (trans_back(a) * trans_back(b)).sum()
+            def axop(px, eqs=pt2_axeqs, xid=xindex):
                 x = trans_back(px)
-                x[ridx] = 0
                 ax = np.zeros_like(x)
                 exec(eqs, globals(), { "x" + xid: x, "ax": ax, **mdict })
                 return trans_forth(ax)
@@ -428,41 +374,14 @@ if __name__ == "__main__":
 
     from pyscf import gto, scf, mcscf
 
-    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2)
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='6-31g', spin=2)
     mf = scf.RHF(mol).run(conv_tol=1E-20)
 
     # Example 1 - single state
     mc = mcscf.CASSCF(mf, 6, 8)
     mc.fcisolver.conv_tol = 1e-14
     mc.run()
-    wsc = WickICMRREPT2(mc).run()
-    # converged SCF energy = -149.608181589162
-    # CASSCF energy = -149.708657771221
-    # E(WickICMRREPT2) = -150.0162455392724  E_corr_pt = -0.3075877680517728
-
-    # Example 2 - CASCI multi-state
-    mc2 = mcscf.CASCI(mf, 6, 8)
-    mc2.fcisolver.nroots = 3
-    mc2.fcisolver.conv_tol = 1e-14
-    mc2.canonicalization = True
-    mc2.kernel(mc.mo_coeff)
-    # [ -149.708657771221 -149.480534726188 -149.480534726188 ]
-
-    wsc = WickICMRREPT2(mc2).run(root=0)
-    wsc = WickICMRREPT2(mc2).run(root=1)
-    wsc = WickICMRREPT2(mc2).run(root=2)
-    # [ -0.3072831603857041 -0.301737869046007 -0.3018189555282041 ]
-
-    # Example 3 - CASSCF state-average
-    mc = mcscf.CASSCF(mf, 6, 8)
-    mc.state_average_([1 / 3] * 3)
-    mc.fcisolver.conv_tol = 1e-14
-    mc.canonicalization = True
-    mc.run()
-    # [ -149.706807304716 -149.484319800832 -149.484319800828 ]
-    wsc = WickICMRREPT2(mc).run(root=0)
-    wsc = WickICMRREPT2(mc).run(root=1)
-    wsc = WickICMRREPT2(mc).run(root=2)
-    # E(WickICMRREPT2) = -150.0147593908998  E_corr_pt = -0.3079520861841749
-    # E(WickICMRREPT2) = -149.7801934111490  E_corr_pt = -0.2958736103171785
-    # E(WickICMRREPT2) = -149.7801590818412  E_corr_pt = -0.2958392810134889
+    wsc = WickICMRREPT2(mc).set(iprint=True).run()
+    # converged SCF energy = -149.528026672327
+    # CASSCF energy = -149.63656327982
+    # E(WickICMRREPT2) = -149.7947264253112  E_corr_pt = -0.15816314549156
