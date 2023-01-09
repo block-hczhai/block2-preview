@@ -74,8 +74,6 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
              const vector<uint8_t> &orb_sym = vector<uint8_t>())
         : n_orbs(n_orbs), is_right(is_right), n_max_elec(n_max_elec) {
         assert((int)orb_sym.size() == n_orbs || orb_sym.size() == 0);
-        if (n_orbs == 0)
-            return;
         combinatorics = make_shared<Combinatorics>(n_orbs);
         vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
         S vacuum, target(S::invalid);
@@ -113,6 +111,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
             x->collect();
         }
         basis = x;
+        if (n_orbs == 0)
+            return;
         qs.resize(basis->n);
         qs_idxs.resize(basis->n + 1, 0);
         for (int i = 0; i < basis->n; i++) {
