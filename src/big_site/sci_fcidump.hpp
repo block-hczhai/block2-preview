@@ -55,8 +55,11 @@ template <typename FL> struct COOSparseMat {
     MKL_INT m, n;
     vector<pair<pair<MKL_INT, MKL_INT>, FL>> data;
     COOSparseMat() {}
-    void resize(MKL_INT m, MKL_INT n) { this->m = m, this->n = n; }
-    void reserve(size_t n) { data.resize(n); }
+    void resize(MKL_INT m, MKL_INT n) {
+        this->m = m, this->n = n;
+        data.clear();
+    }
+    void reserve(size_t n) { data.reserve(n); }
     FL &insert(MKL_INT i, MKL_INT j) {
         data.push_back(make_pair(make_pair(i, j), 0));
         return data.back().second;
