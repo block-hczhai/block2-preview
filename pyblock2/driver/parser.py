@@ -50,7 +50,7 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff",
               "conventional_npdm", "threepdm", "fourpdm", "restart_threepdm", "restart_fourpdm",
               "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm",
-              "restart_nevpt2_npdm", "restart_mps_nevpt", "nevpt_state_num"}
+              "restart_nevpt2_npdm", "restart_mps_nevpt", "nevpt_state_num", "openmolcas"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}

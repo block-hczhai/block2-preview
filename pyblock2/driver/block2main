@@ -411,6 +411,7 @@ prefix = dic.get("prefix", "./nodex/")
 restart_dir = dic.get("restart_dir", None)
 mps_dir = dic.get("mps_dir", None)
 stackblock_compat = dic.get("hf_occ", None) == "integral"
+openmolcas_compat = "openmolcas" in dic
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
 if stackblock_compat:
     n_threads = int(dic.get("num_thrds", 1))
@@ -581,7 +582,7 @@ if MPI is None or MPI.rank == 0:
     if mps_dir is not None and not os.path.isdir(mps_dir):
         os.makedirs(mps_dir)
     scratch = prefix if mps_dir is None else mps_dir
-    if stackblock_compat:
+    if stackblock_compat or openmolcas_compat:
         if mps_dir is None and "prefix" not in dic:
             scratch = "./node0"
         else:
@@ -591,7 +592,7 @@ if MPI is None or MPI.rank == 0:
     os.environ['TMPDIR'] = scratch
 else:
     scratch = prefix if mps_dir is None else mps_dir
-    if stackblock_compat:
+    if stackblock_compat or openmolcas_compat:
         if mps_dir is None and "prefix" not in dic:
             scratch = "./node0"
         else:
@@ -1227,6 +1228,13 @@ if "conn_centers" in dic:
     prule = prule.split(MPI.size // (len(conn_centers) + 1))
 else:
     conn_centers = None
+
+if "hf_occ" in dic and dic["hf_occ"] != "integral" and \
+    len(dic["hf_occ"].split()) == n_sites and "occ" not in dic:
+    dic["warmup"] = "occ"
+    dic["occ"] = dic["hf_occ"]
+    if "cbias" not in dic:
+        dic["cbias"] = 0.2
 
 if dic.get("warmup", None) == "occ":
     _print("using occ init")
@@ -2246,6 +2254,10 @@ if not pre_run:
                 with open(os.path.join(scratch + "/dmrg.e"), "wb") as f:
                     import struct
                     f.write(struct.pack('d' * nroots, *dmrg_energies))
+            if openmolcas_compat:
+                with open(os.path.join(scratch + "/../block.energy"), "w") as f:
+                    for enx in dmrg_energies:
+                        f.write("%25.12f\n" % enx)
 
         if "twodot_to_onedot" in dic:
             dot = 1
@@ -2395,6 +2407,11 @@ if not pre_run:
                 with open(os.path.join(scratch + "/dmrg.e"), "wb") as f:
                     import struct
                     f.write(struct.pack('d' * nroots, *dmrg_energies))
+            if openmolcas_compat:
+                dmrg_energies = [E_dmrg] if nroots == 1 else list(sweep_energies[-1])
+                with open(os.path.join(scratch + "/../block.energy"), "w") as f:
+                    for enx in dmrg_energies:
+                        f.write("%25.12f\n" % enx)
             np.save(scratch + "/bond_dims.npy", bdims)
             np.save(scratch + "/sweep_energies.npy", sweep_energies)
             np.save(scratch + "/discarded_weights.npy", discarded_weights)
@@ -3103,7 +3120,7 @@ if not pre_run:
                 dm = do_npdm(mps, mps, pdm_type=2)
             if MPI is None or MPI.rank == 0:
                 np.save(scratch + "/2pdm.npy", dm)
-                if stackblock_compat:
+                if stackblock_compat or openmolcas_compat:
                     xdm = (dm[0] + dm[2] + 2 * dm[1]) / 2
                     save_npdm_stackblock_format(xdm, "spatial_twopdm.0.0.txt")
                 mps_info.save_data(scratch + '/mps_info.bin')
@@ -3124,7 +3141,7 @@ if not pre_run:
                     dm = do_npdm(smps, smps, pdm_type=2)
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/2pdm-%d-%d.npy" % (iroot, iroot), dm)
-                    if stackblock_compat:
+                    if stackblock_compat or openmolcas_compat:
                         xdm = (dm[0] + dm[2] + 2 * dm[1]) / 2
                         save_npdm_stackblock_format(xdm, "spatial_twopdm.%d.%d.txt" % (iroot, iroot))
                     smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
@@ -3187,11 +3204,11 @@ if not pre_run:
             for pdm_type, pdm_name in zip(pdm_types, pdm_names):
                 dm = do_npdm(mps, mps, pdm_type=pdm_type)
                 if MPI is None or MPI.rank == 0:
-                    if stackblock_compat and pdm_type == 3:
+                    if (stackblock_compat or openmolcas_compat) and pdm_type == 3:
                         # with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, 0, 0), "wb") as f:
                         #     np.save(f, dm)
                         save_npdm_stackblock_format(dm, "spatial_%s.%d.%d.txt" % (pdm_name, 0, 0))
-                    elif stackblock_compat and pdm_type == 4:
+                    elif (stackblock_compat or openmolcas_compat) and pdm_type == 4:
                         with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, 0, 0), 'wb') as f:
                             f.seek(109)
                             dm.tofile(f)
@@ -3212,11 +3229,11 @@ if not pre_run:
                 for pdm_type, pdm_name in zip(pdm_types, pdm_names):
                     dm = do_npdm(smps, smps, pdm_type=pdm_type)
                     if MPI is None or MPI.rank == 0:
-                        if stackblock_compat and pdm_type == 3:
+                        if (stackblock_compat or openmolcas_compat) and pdm_type == 3:
                             # with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, iroot, iroot), "wb") as f:
                             #     np.save(f, dm)
                             save_npdm_stackblock_format(dm, "spatial_%s.%d.%d.txt" % (pdm_name, iroot, iroot))
-                        elif stackblock_compat and pdm_type == 4:
+                        elif (stackblock_compat or openmolcas_compat) and pdm_type == 4:
                             with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, iroot, iroot), 'wb') as f:
                                 f.seek(109)
                                 dm.tofile(f)
