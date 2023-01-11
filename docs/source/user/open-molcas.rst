@@ -14,6 +14,11 @@ Preparation
 First, make sure ``block2`` is installed correctly (either compiled manually or installed using ``pip``,
 and for ``pip`` the version of block2 should be ``>=0.5.1rc17``),
 so that the command ``which block2main`` can print a valid file path to ``block2main``.
+
+For example, the required ``block2`` can be installed using ``pip`` as: ::
+
+    pip install block2>=0.5.1rc17 --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+
 Then we need to compile an OpenMOLCAS with the ``block2`` interface.
 The source code of the required OpenMOLCAS code can be found in https://github.com/hczhai/OpenMolcas, which is
 a slightly modified version of https://github.com/quanp/OpenMolcas (the OpenMOLCAS interface for the ``block 1.5`` and ``StackBlock``).
@@ -124,7 +129,7 @@ The MOLCAS ordering of irreps of D2h is: ::
 
     ag b3u b2u b1g b1u b2g b3g au
 
-These information can help us setting the ``Inactive`` and ``Ras2`` in the MOLCAS inputfile.
+This information can help us setting the ``Inactive`` and ``Ras2`` in the MOLCAS inputfile.
 
 From the ``pyscf`` output we have: ::
 
@@ -145,7 +150,7 @@ DMRG-CASPT2
 -----------
 
 The following is an example input file for CASPT2 calculation after DMRGSCF for a O2 triplet state.
-The cumulant approximation of 4PDM is used for CASPT2. Note that the IPEA shift = 0.25 is used by default.
+The cumulant approximation of 4PDM is used for CASPT2. Note that the IPEA shift = 0.25 is used by default. ::
 
     &GATEWAY
         Title
