@@ -41,7 +41,7 @@ template <typename FL>
 inline void fd_write_line(ostream &os, FL x, uint16_t i = 0, uint16_t j = 0,
                           uint16_t k = 0, uint16_t l = 0) {
     os << fixed << setprecision(16);
-    os << setw(20) << x << setw(4) << i << setw(4) << j << setw(4) << k
+    os << setw(24) << x << setw(4) << i << setw(4) << j << setw(4) << k
        << setw(4) << l << endl;
 };
 
@@ -49,7 +49,7 @@ template <typename FL>
 inline void fd_write_line(ostream &os, complex<FL> x, uint16_t i = 0,
                           uint16_t j = 0, uint16_t k = 0, uint16_t l = 0) {
     os << fixed << setprecision(16);
-    os << setw(20) << real(x) << setw(20) << imag(x) << setw(4) << i << setw(4)
+    os << setw(24) << real(x) << setw(20) << imag(x) << setw(4) << i << setw(4)
        << j << setw(4) << k << setw(4) << l << endl;
 };
 
