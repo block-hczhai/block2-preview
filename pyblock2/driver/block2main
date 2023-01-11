@@ -1561,7 +1561,8 @@ else:
     forward = mps.center == 0
 
 if mps is not None:
-    _print("MPS = ", mps.canonical_form, mps.center, mps.dot, mps.info.target)
+    _print("MPS = ", mps.canonical_form, mps.center, mps.dot,
+        mps.info.target if nroots == 1 else list(mps.info.targets))
     _print("GS INIT MPS BOND DIMS = ", ''.join(
         ["%6d" % x.n_states_total for x in mps_info.left_dims]))
 

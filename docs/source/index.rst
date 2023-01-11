@@ -78,6 +78,7 @@ Features
     * Nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
     * DMRG-sc-NEVPT2 (pyscf interface, classical approach)
     * DMRG-sc-MPS-NEVPT2 (pyscf interface, MPS compression approximation)
+    * DMRG-cu-CASPT2 (openMOLCAS interface)
 * DMRG with Spin-Orbit Coupling (SOC)
     * 1-step approach (full complex one-MPO and hybrid real/complex two-MPO schemes)
     * 2-step approach
@@ -107,6 +108,7 @@ Features
    user/advanced
    user/keywords
    user/dmrg-scf
+   user/open-molcas
    user/mps-io
    user/references
 

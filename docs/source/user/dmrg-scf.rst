@@ -3,8 +3,8 @@
 
 .. _user_dmrgscf:
 
-DMRGSCF
-=======
+DMRGSCF (pyscf)
+===============
 
 In this section we explain how to use ``block2`` (and optionally ``StackBlock``) and ``pyscf`` for ``DMRGSCF`` (CASSCF with DMRG as the active space solver).
 
@@ -493,6 +493,10 @@ The alternative faster ``compress_approx`` approach using MPS compression is als
     python before trying this example. Also, make sure that the file ``${PYSCFHOME}/pyscf/dmrgscf/nevpt_mpi.py``
     has the ``execute`` permission. You can do ``chmod +x ${PYSCFHOME}/pyscf/dmrgscf/nevpt_mpi.py``
     to fix the permission.
+
+    Note that for the second "compression" approach, if you need to add any extra keywords for the DMRG solver,
+    such as ``singlet_embedding``, you need to add it using ``mc.fcisolver.block_extra_keyword`` instead of
+    ``mc.fcisolver.extraline``.
 
 DMRG-IC-NEVPT2
 --------------
