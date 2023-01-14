@@ -40,6 +40,7 @@ Then one can run OpenMolcas using the following command: ::
     MOLCAS=$MOLCASHOME/install MOLCAS_WORKDIR=/content/tmp pymolcas test.in
 
 Where ``test.in`` is an OpenMolcas input file.
+Sometimes you may need to add the ``--not-here`` option to ``pymolcas`` if it cannot find the ``molcas`` executable.
 
 DMRGSCF
 -------
@@ -144,13 +145,78 @@ From the ``openMOLCAS`` output we have: ::
     ::    RASSCF root number  1 Total energy:   -149.60818159
     ::    RASSCF root number  1 Total energy:   -149.70865773
 
-Which is consistent.
+Note that in the ``openMOLCAS`` output, the first line is actually the SCF (ROHF) energy,
+and the second line is the CASSCF energy. So they are consistent.
+
+DMRG-cu-CASPT2
+--------------
+
+The following is an example input file for CASPT2 calculation after DMRGSCF for a O2 triplet state.
+In this example, the cumulant approximation of 4PDM is used for CASPT2.
+Note that the IPEA shift = 0.25 is used by default. ::
+
+    &GATEWAY
+        Title
+        O2 Molecule
+        Coord
+        2
+
+        O 0 0 -0.6035
+        O 0 0 0.6035
+        Basis set
+        CC-PVDZ
+
+    &SEWARD
+
+    &SCF
+        Spin = 1
+
+    &RASSCF
+        Spin
+        3
+        Symmetry
+        4
+        nActEl
+        2 0 0
+        Inactive
+        3 1 1 0 2 0 0 0
+        Ras2
+        0 0 0 0 0 1 1 0
+        CIROOT = 1 1 ; 1
+
+    &RASSCF
+        Spin
+        3
+        Symmetry
+        4
+        nActEl
+        8 0 0
+        Inactive
+        2 0 0 0 2 0 0 0
+        Ras2
+        1 1 1 0 1 1 1 0
+        CIROOT = 1 1 ; 1
+        CISOlver = BLOCK
+        DMRG = 1000
+        3RDM
+        NO4R
+
+    &CASPT2
+        MULT = 1 1
+        CUMU
+
+The keyword ``NO4R`` is required in the ``RASSCF`` section to avoid spending time on computing 4pdms.
+
+This will generate the following output: ::
+
+    $ grep '::    CASPT2' o2.out 
+    ::    CASPT2 Root  1     Total energy:   -149.97055932
 
 DMRG-CASPT2
 -----------
 
 The following is an example input file for CASPT2 calculation after DMRGSCF for a O2 triplet state.
-The cumulant approximation of 4PDM is used for CASPT2. Note that the IPEA shift = 0.25 is used by default. ::
+In this example, the exact 4PDM is computed and used. ::
 
     &GATEWAY
         Title
@@ -198,10 +264,98 @@ The cumulant approximation of 4PDM is used for CASPT2. Note that the IPEA shift 
         3RDM
 
     &CASPT2
+        BLOCK
         MULT = 1 1
-        CUMU
+
+In the above example, we use the keyword ``BLOCK`` to replace the old keyword ``CUMU``
+so that the cumulant approximation is not used.
+
+.. note ::
+
+    By default there will be frozen orbitals in the CASPT2 treatment. One can add ::
+
+        FROZEN
+        0 0 0 0 0 0 0 0
+
+    in the CASPT2 section in the above example to avoid frozen orbitals.
 
 This will generate the following output: ::
 
     $ grep '::    CASPT2' o2.out 
-    ::    CASPT2 Root  1     Total energy:   -149.97055932
+    ::    CASPT2 Root  1     Total energy:   -149.96959847
+
+State-Average
+-------------
+
+The following is an example input file for state-averaged DMRGSCF for three states,
+and then the CASPT2 treatment of each of the three states.
+In this example, the exact 4PDM is computed and used. ::
+
+    &GATEWAY
+        Title
+        O2 Molecule
+        Coord
+        2
+
+        O 0 0 -0.6035
+        O 0 0 0.6035
+        Basis set
+        CC-PVDZ
+
+    &SEWARD
+
+    &SCF
+        Spin = 1
+
+    &RASSCF
+        Spin
+        3
+        Symmetry
+        4
+        nActEl
+        2 0 0
+        Inactive
+        3 1 1 0 2 0 0 0
+        Ras2
+        0 0 0 0 0 1 1 0
+        CIROOT = 1 1 ; 1
+
+    &RASSCF
+        Spin
+        3
+        Symmetry
+        4
+        nActEl
+        8 0 0
+        Inactive
+        2 0 0 0 2 0 0 0
+        Ras2
+        1 1 1 0 1 1 1 0
+        CIROOT = 3 3 1
+        CISOlver = BLOCK
+        DMRG = 1000
+        3RDM
+
+    &CASPT2
+        BLOCK
+        MULT = 1 1
+
+    &CASPT2
+        BLOCK
+        MULT = 1 2
+
+    &CASPT2
+        BLOCK
+        MULT = 1 3
+
+From the output we have: ::
+
+    $ grep '::    RASSCF' o2.out
+    ::    RASSCF root number  1 Total energy:   -149.60818159
+    ::    RASSCF root number  1 Total energy:   -149.69063345
+    ::    RASSCF root number  2 Total energy:   -149.09370540
+    ::    RASSCF root number  3 Total energy:   -148.86158577
+    $ grep '::    CASPT2' o2.out 
+    ::    CASPT2 Root  1     Total energy:   -149.96175902
+    ::    CASPT2 Root  1     Total energy:   -149.39685470
+    ::    CASPT2 Root  1     Total energy:   -149.13012648

@@ -50,7 +50,8 @@ KNOWN_KEYS = {"nelec", "spin", "hf_occ", "schedule", "maxiter",
               "simple_parallel", "release_integral", "condense_mpo", "svd_eps", "svd_cutoff",
               "conventional_npdm", "threepdm", "fourpdm", "restart_threepdm", "restart_fourpdm",
               "tran_threepdm", "tran_fourpdm", "restart_tran_threepdm", "restart_tran_fourpdm",
-              "restart_nevpt2_npdm", "restart_mps_nevpt", "nevpt_state_num", "openmolcas"}
+              "restart_nevpt2_npdm", "restart_mps_nevpt", "nevpt_state_num", "openmolcas",
+              "fock_fourpdm", "restart_fock_fourpdm", "fock_matrix"}
 
 REORDER_KEYS = {"noreorder", "fiedler", "reorder", "gaopt", "nofiedler",
                 "irrep_reorder"}
@@ -62,7 +63,7 @@ MRPT_KEYS = {"nevpt2", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij", "nevpt
              "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r"}
 
 RESTART_KEYS = {"restart_onepdm", "restart_twopdm", "restart_threepdm", "restart_fourpdm", "restart_oh",
-                "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm",
+                "restart_correlation", "restart_tran_onepdm", "restart_tran_twopdm", "restart_fock_fourpdm",
                 "restart_tran_threepdm", "restart_tran_fourpdm",
                 "restart_tran_oh", "restart_tran_oh", "statespecific",
                 "restart_copy_mps", "restart_sample", "orbital_rotation",

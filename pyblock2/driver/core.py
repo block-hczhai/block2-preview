@@ -780,6 +780,11 @@ class DMRGDriver:
         elif algo_type is not None and MPOAlgorithmTypes.CN in algo_type:
             mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.CN, "HQC")
         elif algo_type is None or MPOAlgorithmTypes.Conventional in algo_type:
+            if hamil.n_sites == 2:
+                print(
+                    "MPOAlgorithmTypes.Conventional with only 2 sites may cause error!"
+                    + "Please use MPOAlgorithmTypes.NC instead!"
+                )
             mpo = bw.bs.MPOQC(hamil, bw.b.QCTypes.Conventional, "HQC")
         else:
             raise RuntimeError("Invalid conventional mpo algo type:", algo_type)

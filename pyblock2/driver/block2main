@@ -413,10 +413,10 @@ mps_dir = dic.get("mps_dir", None)
 stackblock_compat = dic.get("hf_occ", None) == "integral"
 openmolcas_compat = "openmolcas" in dic
 restart_dir_per_sweep = dic.get("restart_dir_per_sweep", None)
-if stackblock_compat:
+if stackblock_compat and not openmolcas_compat:
     n_threads = int(dic.get("num_thrds", 1))
 else:
-    n_threads = int(dic.get("num_thrds", 28))
+    n_threads = int(dic.get("num_thrds", Global.threading.n_threads_global))
 mkl_threads = int(dic.get("mkl_thrds", 1))
 bond_dims, dav_thrds, noises, site_dependent_bdims = dic["schedule"]
 if max([len(x) for x in site_dependent_bdims]) == 0:
@@ -663,7 +663,7 @@ if "use_hybrid_complex" in dic:
             prule_cpx_h1e = ParallelRuleQCCPX(MPI)
         prule_one_body_cpx_h1e = ParallelRuleOneBodyQCCPX(MPI)
 
-def read_nevpt2_compress_fcidump(fn, ncas, ncore, nvirt):
+def read_fcidump_header(fn):
 
     with open(fn, 'r') as f:
         ff = f.read().lower()
@@ -689,6 +689,41 @@ def read_nevpt2_compress_fcidump(fn, ncas, ncore, nvirt):
     for k, v in cont_dict.items():
         if ',' in v:
             cont_dict[k] = v.split(',')
+    
+    return cont_dict, ints
+
+def read_fock_fcidump(fn):
+
+    cont_dict, ints = read_fcidump_header(fn)
+
+    n_sites = int(cont_dict.get('nact'))
+
+    data = []
+    dtype = float
+    for l in ints.split('\n'):
+        ll = l.strip()
+        if len(ll) == 0 or ll.strip()[0] == '!':
+            continue
+        ll = ll.split()
+        assert len(ll) == 3 or len(ll) == 4
+        if len(ll) == 3:
+            d = float(ll[0])
+            i, j = [int(x) for x in ll[1:]]
+        else:
+            dtype = np.complex128
+            d = float(ll[0]) + float(ll[1]) * 1j
+            i, j = [int(x) for x in ll[2:]]
+        data.append((i, j, d))
+    fock = np.zeros((n_sites, ) * 2, dtype=dtype)
+    for i, j, d in data:
+        fock[i - 1, j - 1] = d
+        fock[j - 1, i - 1] = d
+
+    return n_sites, fock
+
+def read_nevpt2_compress_fcidump(fn, ncas, ncore, nvirt):
+
+    cont_dict, ints = read_fcidump_header(fn)
 
     n_sites = int(cont_dict.get('norb'))
     twos = int(cont_dict.get('ms2', 0))
@@ -2115,6 +2150,8 @@ if not pre_run:
             and "restart_correlation" not in dic and "restart_tran_twopdm" not in dic \
             and "restart_oh" not in dic and "restart_twopdm" not in dic \
             and "restart_threepdm" not in dic and "restart_fourpdm" not in dic \
+            and "restart_tran_threepdm" not in dic and "restart_tran_fourpdm" not in dic \
+            and "restart_fock_fourpdm" not in dic \
             and "restart_nevpt2_npdm" not in dic and "restart_mps_nevpt" not in dic \
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
             and "restart_copy_mps" not in dic and "restart_sample" not in dic:
@@ -2270,6 +2307,7 @@ if not pre_run:
             and "restart_tran_onepdm" not in dic and "restart_tran_oh" not in dic \
             and "restart_threepdm" not in dic and "restart_tran_threepdm" not in dic \
             and "restart_fourpdm" not in dic and "restart_tran_fourpdm" not in dic \
+            and "restart_fock_fourpdm" not in dic \
             and "restart_nevpt2_npdm" not in dic and "restart_mps_nevpt" not in dic \
             and "restart_copy_mps" not in dic and "restart_sample" not in dic \
             and "delta_t" not in dic and "compression" not in dic and "stopt_sampling" not in dic:
@@ -3190,13 +3228,19 @@ if not pre_run:
             if MPI is None or MPI.rank == 0:
                 simps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)
 
-    # THREEPDM / FOURPDM
-    if "restart_threepdm" in dic or "threepdm" in dic or "restart_fourpdm" in dic or "fourpdm" in dic:
+    # THREEPDM / FOURPDM / FOCK_FOURPDM
+    if "restart_threepdm" in dic or "threepdm" in dic or "restart_fourpdm" in dic or "fourpdm" in dic \
+         or "restart_fock_fourpdm" in dic or "fock_fourpdm" in dic:
 
         pdm_types, pdm_names = [], []
         if "restart_fourpdm" in dic or "fourpdm" in dic:
             pdm_types.append(4)
             pdm_names.append("fourpdm")
+        if "restart_fock_fourpdm" in dic or "fock_fourpdm" in dic:
+            pdm_types.append(4)
+            pdm_names.append("fock_fourpdm")
+            assert "fock_matrix" in dic
+            fock = read_fock_fcidump(dic["fock_matrix"])[1]
         if "restart_threepdm" in dic or "threepdm" in dic:
             pdm_types.append(3)
             pdm_names.append("threepdm")
@@ -3210,9 +3254,14 @@ if not pre_run:
                         #     np.save(f, dm)
                         save_npdm_stackblock_format(dm, "spatial_%s.%d.%d.txt" % (pdm_name, 0, 0))
                     elif (stackblock_compat or openmolcas_compat) and pdm_type == 4:
-                        with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, 0, 0), 'wb') as f:
-                            f.seek(109)
-                            dm.tofile(f)
+                        if pdm_name == "fourpdm":
+                            with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, 0, 0), 'wb') as f:
+                                f.seek(109)
+                                dm.tofile(f)
+                        elif pdm_name == "fock_fourpdm":
+                            fdm = np.einsum('ijklmnop,lm', dm, fock, optimize=True)
+                            dm = None
+                            save_npdm_stackblock_format(fdm, "%s.%d.%d.txt" % (pdm_name, 0, 0))
                     np.save(scratch + "/%dpdm.npy" % pdm_type, dm)
             if MPI is None or MPI.rank == 0:
                 mps_info.save_data(scratch + '/mps_info.bin')
@@ -3235,9 +3284,14 @@ if not pre_run:
                             #     np.save(f, dm)
                             save_npdm_stackblock_format(dm, "spatial_%s.%d.%d.txt" % (pdm_name, iroot, iroot))
                         elif (stackblock_compat or openmolcas_compat) and pdm_type == 4:
-                            with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, iroot, iroot), 'wb') as f:
-                                f.seek(109)
-                                dm.tofile(f)
+                            if pdm_name == "fourpdm":
+                                with open(scratch + "/spatial_%s.%d.%d.bin" % (pdm_name, iroot, iroot), 'wb') as f:
+                                    f.seek(109)
+                                    dm.tofile(f)
+                            elif pdm_name == "fock_fourpdm":
+                                fdm = np.einsum('ijklmnop,lm', dm, fock, optimize=True)
+                                dm = None
+                                save_npdm_stackblock_format(fdm, "%s.%d.%d.txt" % (pdm_name, iroot, iroot))
                 if MPI is None or MPI.rank == 0:
                     np.save(scratch + "/%dpdm-%d-%d.npy" % (pdm_type, iroot, iroot), dm)
                     smps_info.save_data(scratch + '/mps_info-%d.bin' % iroot)

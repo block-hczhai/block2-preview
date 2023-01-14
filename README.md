@@ -113,10 +113,12 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
-* DMRG-CASSCF / DMRG-sc-NEVPT2 (pyscf interface)
-    * Nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
+* DMRG-CASSCF / NEVPT2 / CASPT2
+    * DMRG-CASSCF (pyscf / openMOLCAS interface)
+    * DMRG-CASSCF nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
     * DMRG-sc-NEVPT2 (pyscf interface, classical approach)
     * DMRG-sc-MPS-NEVPT2 (pyscf interface, MPS compression approximation)
+    * DMRG-CASPT2 (openMOLCAS interface)
     * DMRG-cu-CASPT2 (openMOLCAS interface)
 * Stochastic perturbative DMRG
 * DMRG with Spin-Orbit Coupling (SOC)
@@ -183,6 +185,12 @@ References
 
 * Roemelt, M., Guo, S., Chan, G. K. L. A projected approximation to strongly contracted N-electron valence perturbation theory for DMRG wavefunctions. *The Journal of Chemical Physics* 2016, **144**, 204113. https://doi.org/10.1063/1.4950757.
 * Sokolov, A. Y., Guo, S., Ronca, E., Chan, G. K. L. Time-dependent N-electron valence perturbation theory with matrix product state reference wavefunctions for large active spaces and basis sets: Applications to the chromium dimer and all-trans polyenes. *The Journal of Chemical Physics* 2017, **146**, 244102. https://doi.org/10.1063/1.4986975.
+
+### DMRG-CASPT2
+
+* Kurashige, Y., Yanai, T. Second-order perturbation theory with a density matrix renormalization group self-consistent field reference function: Theory and application to the study of chromium dimer. *The Journal of Chemical Physics* 2011, **135**, 094104. https://doi.org/10.1063/1.3629454.
+* Wouters, S., Van Speybroeck, V., Van Neck, D. DMRG-CASPT2 study of the longitudinal static second hyperpolarizability of all-trans polyenes. *The Journal of Chemical Physics* 2016, **145**, 054120. https://doi.org/10.1063/1.4959817.
+* Nakatani, N., Guo, S. Density matrix renormalization group (DMRG) method as a common tool for large active-space CASSCF/CASPT2 calculations. *The Journal of Chemical Physics* 2017, **146**, 094102. https://doi.org/10.1063/1.4976644.
 
 ### Multi-Reference Correlation Theories
 

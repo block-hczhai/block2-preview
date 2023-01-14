@@ -71,6 +71,13 @@ DMRG-SC-NEVPT2
 * Roemelt, M., Guo, S., Chan, G. K. L. A projected approximation to strongly contracted N-electron valence perturbation theory for DMRG wavefunctions. *The Journal of Chemical Physics* 2016, **144**, 204113. doi: `10.1063/1.4950757 <https://doi.org/10.1063/1.4950757>`_
 * Sokolov, A. Y., Guo, S., Ronca, E., Chan, G. K. L. Time-dependent N-electron valence perturbation theory with matrix product state reference wavefunctions for large active spaces and basis sets: Applications to the chromium dimer and all-trans polyenes. *The Journal of Chemical Physics* 2017, **146**, 244102. doi: `10.1063/1.4986975 <https://doi.org/10.1063/1.4986975>`_
 
+DMRG-CASPT2
+-----------
+
+* Kurashige, Y., Yanai, T. Second-order perturbation theory with a density matrix renormalization group self-consistent field reference function: Theory and application to the study of chromium dimer. *The Journal of Chemical Physics* 2011, **135**, 094104. doi: `10.1063/1.3629454 <https://doi.org/10.1063/1.3629454>`_
+* Wouters, S., Van Speybroeck, V., Van Neck, D. DMRG-CASPT2 study of the longitudinal static second hyperpolarizability of all-trans polyenes. *The Journal of Chemical Physics* 2016, **145**, 054120. doi: `10.1063/1.4959817 <https://doi.org/10.1063/1.4959817>`_
+* Nakatani, N., Guo, S. Density matrix renormalization group (DMRG) method as a common tool for large active-space CASSCF/CASPT2 calculations. *The Journal of Chemical Physics* 2017, **146**, 094102. doi: `10.1063/1.4976644 <https://doi.org/10.1063/1.4976644>`_
+
 Multi-Reference Correlation Theories
 ------------------------------------
 
