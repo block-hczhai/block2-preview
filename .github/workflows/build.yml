@@ -191,13 +191,23 @@ jobs:
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
           gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
-          # gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
-          # gsed -i "/intel-openmp/d" setup.py
-          # export OMPROOT=$(brew --prefix libomp)
-          # echo ${OMPROOT}
+          # if use mkl, will need iomp5
+          gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
+          gsed -i "/mkl/d" setup.py
+          gsed -i "/intel-openmp/d" setup.py
+          gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+          export OMPROOT=$(brew --prefix libomp)
+          echo ${OMPROOT}
           cmake --version
-          python -m pip install wheel
+          python -m pip install wheel delocate
           python -m pip wheel . -w ./dist --no-deps
+          export DYLD_LIBRARY_PATH=$(python -c "import site;print(':'.join(x+'/../..' for x in site.getsitepackages()))")
+          # prevent delocating libomp
+          export DELO_PY=$(cat $(which delocate-wheel) | head -1 | awk -F'!' '{print $2}')
+          export DELO_DE=$(${DELO_PY} -c "from delocate import delocating;print(delocating.__file__)")
+          gsed -i '/r_ed_base = base/a \        if "libomp" in required: needs_delocating.add(required); continue' ${DELO_DE}
+          gsed -i '/new_install_name =/a \            if "libomp" in required: new_install_name = "/usr/local/opt/libomp/lib/libomp.dylib"' ${DELO_DE}
+          delocate-wheel -k dist/*.whl
 
       - name: build wheels (macos-arm64)
         if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest' && matrix.plat == 'arm64'
