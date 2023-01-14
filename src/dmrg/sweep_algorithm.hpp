@@ -1741,7 +1741,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M' ||
                 me->ket->canonical_form[i] == 'J' ||
-                me->ket->canonical_form[i] == 'T')
+                me->ket->canonical_form[i] == 'T' ||
+                me->ket->canonical_form[i + 1] == 'J' ||
+                me->ket->canonical_form[i + 1] == 'T')
                 it = update_multi_two_dot(i, forward, bond_dim, noise,
                                           davidson_conv_thrd);
             else
@@ -5365,7 +5367,9 @@ struct Expect {
             if (me->ket->canonical_form[i] == 'M' ||
                 me->ket->canonical_form[i + 1] == 'M' ||
                 me->ket->canonical_form[i] == 'J' ||
-                me->ket->canonical_form[i] == 'T')
+                me->ket->canonical_form[i] == 'T' ||
+                me->ket->canonical_form[i + 1] == 'J' ||
+                me->ket->canonical_form[i + 1] == 'T')
                 it = update_multi_two_dot(i, forward, propagate, bra_bond_dim,
                                           ket_bond_dim);
             else

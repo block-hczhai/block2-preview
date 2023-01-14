@@ -1202,7 +1202,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         bra->canonical_form[center] == 'C' ? 'S' : 'T';
                 fuse_center = mpo->schemer == nullptr
                                   ? end_site - 2
-                                  : mpo->schemer->right_trans_site;
+                                  : min((uint16_t)(end_site - 2),
+                                        mpo->schemer->right_trans_site);
                 frame_<FP>()->reset(1);
                 if (envs[center - 1]->left != nullptr && center - 1 != 0)
                     frame_<FP>()->load_data(
