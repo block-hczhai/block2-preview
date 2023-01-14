@@ -2,6 +2,7 @@ build/
 build_test/
 build_seq/
 build_ic/
+install/
 docs/build/
 my_test/
 tmp/
