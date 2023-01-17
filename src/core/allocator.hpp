@@ -667,7 +667,7 @@ template <typename FL> struct DataFrame {
 /** Global variable for accessing global stack memory and file I/O in scratch
  * space. */
 template <typename FL> inline shared_ptr<DataFrame<FL>> &frame_() {
-    static shared_ptr<DataFrame<FL>> frame;
+    static shared_ptr<DataFrame<FL>> frame = nullptr;
     return frame;
 }
 

@@ -198,6 +198,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             plshapes = lshapes, prshapes = rshapes;
         MPO<S, FL>::npdm_parallel_center = parallel_center;
         if (iprint) {
+            cout << endl;
             cout << "Build NPDM MPO | Nsites = " << setw(5) << n_sites
                  << " | Nmaxops = " << setw(2) << scheme->n_max_ops
                  << " | SymbolFree = " << (symbol_free ? "T" : "F")

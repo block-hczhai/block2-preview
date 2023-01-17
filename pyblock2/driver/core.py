@@ -1835,7 +1835,6 @@ class DMRGDriver:
             if ket.canonical_form[ket.center] in "ST":
                 ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
             ket.save_data()
-            forward = True
             if self.mpi is not None:
                 self.mpi.barrier()
             ket.load_mutable()
@@ -1893,7 +1892,10 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
         assert isinstance(ket, bw.bs.MultiMPS)
-        iket = ket.extract(iroot, tag + "@TMP")
+        if len(ket.info.targets) == 1:
+            iket = ket.extract(iroot, tag + "@TMP")
+        else:
+            iket = ket.extract(iroot, tag)
         if self.mpi is not None:
             self.mpi.barrier()
         if len(iket.info.targets) == 1:
@@ -1944,15 +1946,20 @@ class DMRGDriver:
 
     def expectation(self, bra, mpo, ket, iprint=0):
         bw = self.bw
-        bond_dim = max(bra.info.bond_dim, ket.info.bond_dim)
-        self.align_mps_center(bra, ket)
-        me = bw.bs.MovingEnvironment(mpo, bra, ket, "EXPT")
+        mbra = bra.deep_copy("EXPE-BRA@TMP")
+        if bra != ket:
+            mket = ket.deep_copy("EXPE-KET@TMP")
+        else:
+            mket = mbra
+        bond_dim = max(mbra.info.bond_dim, mket.info.bond_dim)
+        self.align_mps_center(mbra, mket)
+        me = bw.bs.MovingEnvironment(mpo, mbra, mket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         me.init_environments(iprint >= 2)
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         expect.iprint = iprint
-        ex = expect.solve(False, ket.center != 0)
+        ex = expect.solve(False, mket.center != 0)
 
         if self.clean_scratch:
             me.remove_partition_files()

@@ -22,6 +22,7 @@
 
 #include "dmrg/archived_mpo.hpp"
 #include "dmrg/determinant.hpp"
+#include "dmrg/dmrg_driver.hpp"
 #include "dmrg/effective_functions.hpp"
 #include "dmrg/effective_hamiltonian.hpp"
 #include "dmrg/general_mpo.hpp"

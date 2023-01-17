@@ -26,6 +26,7 @@
 #include "../core/fp_codec.hpp"
 #include "../core/hamiltonian.hpp"
 #include "../core/integral.hpp"
+#include "../core/iterative_matrix_functions.hpp"
 #include "../core/spin_permutation.hpp"
 #include "mpo.hpp"
 #include <array>
@@ -270,7 +271,8 @@ template <typename FL> struct GeneralFCIDUMP {
     }
     // array must have the min strides == 1
     void add_sum_term(const FL *vals, size_t len, const vector<int> &shape,
-                      const vector<size_t> &strides, FP cutoff = (FP)0.0) {
+                      const vector<size_t> &strides, FP cutoff = (FP)0.0,
+                      FL factor = (FL)1.0) {
         int ntg = threading->activate_global();
         vector<size_t> lens(ntg + 1, 0);
         const size_t plen = len / ntg + !!(len % ntg);
@@ -278,7 +280,7 @@ template <typename FL> struct GeneralFCIDUMP {
         {
             int tid = threading->get_thread_id();
             for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
-                lens[tid] += (abs(vals[i]) > cutoff);
+                lens[tid] += (abs(factor * vals[i]) > cutoff);
         }
         lens[ntg] = accumulate(&lens[0], &lens[ntg], (size_t)0);
         indices.push_back(vector<uint16_t>(lens[ntg] * shape.size()));
@@ -290,11 +292,11 @@ template <typename FL> struct GeneralFCIDUMP {
             for (int i = 0; i < tid; i++)
                 istart += lens[i];
             for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
-                if (abs(vals[i]) > cutoff) {
+                if (abs(factor * vals[i]) > cutoff) {
                     for (int j = 0; j < (int)shape.size(); j++)
                         indices.back()[istart * shape.size() + j] =
                             i / strides[j] % shape[j];
-                    data.back()[istart] = vals[i];
+                    data.back()[istart] = factor * vals[i];
                     istart++;
                 }
             for (int i = 0; i < tid + 1; i++)
@@ -1660,6 +1662,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         MPO<S, FL>::op = dynamic_pointer_cast<OpElement<S, FL>>(h_op);
         MPO<S, FL>::left_vacuum = left_vacuum;
         if (iprint) {
+            cout << endl;
             cout << "Build MPO | Nsites = " << setw(5) << n_sites
                  << " | Nterms = " << setw(10) << n_terms
                  << " | Algorithm = " << algo_type

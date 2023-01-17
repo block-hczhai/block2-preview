@@ -2276,6 +2276,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         mps_quanta.clear();
         bool converged;
         FPS energy_difference;
+        if (iprint >= 1)
+            cout << endl;
         for (int iw = 0; iw < n_sweeps; iw++) {
             isweep = iw;
             if (iprint >= 1)
@@ -4162,6 +4164,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
         discarded_weights.clear();
         bool converged;
         FLS target_difference;
+        if (iprint >= 1)
+            cout << endl;
         for (int iw = 0; iw < n_sweeps; iw++) {
             if (iprint >= 1) {
                 cout << "Sweep = " << setw(4) << iw
@@ -5453,7 +5457,8 @@ struct Expect {
             x.clear();
         if (propagate) {
             if (iprint >= 1) {
-                cout << "Expectation | Direction = " << setw(8)
+                cout << endl
+                     << "Expectation | Direction = " << setw(8)
                      << (forward ? "forward" : "backward")
                      << " | BRA bond dimension = " << setw(4)
                      << (uint32_t)bra_bond_dim
@@ -5637,7 +5642,7 @@ struct Expect {
                        : me->n_sites;
         for (int ix = 0; ix < ixed; ix++) {
             vector<pair<shared_ptr<OpExpr<S>>, FLX>> &v = expectations[ix];
-            if (iprint) {
+            if (iprint >= 2) {
                 cout << " Site = " << setw(5) << ix << " .. ";
                 cout.flush();
             }
@@ -5659,7 +5664,7 @@ struct Expect {
                                 ((size_t)op->site_index[3]);
                     (*r[ii]->data)[kk] += v[i].second;
                 }
-            if (iprint) {
+            if (iprint >= 2) {
                 tsite = current.get_time();
                 cout << " T = " << fixed << setprecision(3) << tsite;
                 cout << endl;
