@@ -11,7 +11,8 @@ In this section we explain how to use ``block2`` (and optionally ``StackBlock``)
 Preparation
 -----------
 
-One should first install the pyscf extension called ``dmrgscf``, which can be obtained from
+``pyscf`` can be installed using ``pip install pyscf``.
+One also needs to install the pyscf extension called ``dmrgscf``, which can be obtained from
 `https://github.com/pyscf/dmrgscf <https://github.com/pyscf/dmrgscf>`_.
 If it is installed using ``pip``, one also needs to create a file named ``settings.py`` under the ``dmrgscf`` folder, as follows: ::
 

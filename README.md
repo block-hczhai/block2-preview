@@ -113,13 +113,14 @@ Features
     * Parallelism over operators (distributed/shared memory)
     * Parallelism over symmetry sectors (shared memory)
     * Parallelism within dense matrix multiplications (MKL)
-* DMRG-CASSCF / NEVPT2 / CASPT2
-    * DMRG-CASSCF (pyscf / openMOLCAS interface)
+* DMRG-CASSCF and contracted dynamic correlation
+    * DMRG-CASSCF (pyscf / openMOLCAS / forte interface)
     * DMRG-CASSCF nuclear gradients and geometry optimization (pyscf interface, RHF reference only)
     * DMRG-sc-NEVPT2 (pyscf interface, classical approach)
     * DMRG-sc-MPS-NEVPT2 (pyscf interface, MPS compression approximation)
     * DMRG-CASPT2 (openMOLCAS interface)
     * DMRG-cu-CASPT2 (openMOLCAS interface)
+    * DMRG-MRDSRG (forte interface)
 * Stochastic perturbative DMRG
 * DMRG with Spin-Orbit Coupling (SOC)
     * 1-step approach (full complex one-MPO and hybrid real/complex two-MPO schemes)
