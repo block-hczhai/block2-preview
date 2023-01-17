@@ -272,7 +272,8 @@ template <typename FL> struct GeneralFCIDUMP {
     // array must have the min strides == 1
     void add_sum_term(const FL *vals, size_t len, const vector<int> &shape,
                       const vector<size_t> &strides, FP cutoff = (FP)0.0,
-                      FL factor = (FL)1.0) {
+                      FL factor = (FL)1.0,
+                      const vector<int> &orb_sym = vector<int>()) {
         int ntg = threading->activate_global();
         vector<size_t> lens(ntg + 1, 0);
         const size_t plen = len / ntg + !!(len % ntg);
@@ -291,14 +292,28 @@ template <typename FL> struct GeneralFCIDUMP {
             size_t istart = 0;
             for (int i = 0; i < tid; i++)
                 istart += lens[i];
-            for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
-                if (abs(factor * vals[i]) > cutoff) {
-                    for (int j = 0; j < (int)shape.size(); j++)
-                        indices.back()[istart * shape.size() + j] =
-                            i / strides[j] % shape[j];
-                    data.back()[istart] = factor * vals[i];
-                    istart++;
-                }
+            if (orb_sym.size() == 0) {
+                for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
+                    if (abs(factor * vals[i]) > cutoff) {
+                        for (int j = 0; j < (int)shape.size(); j++)
+                            indices.back()[istart * shape.size() + j] =
+                                i / strides[j] % shape[j];
+                        data.back()[istart] = factor * vals[i];
+                        istart++;
+                    }
+            } else {
+                for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
+                    if (abs(factor * vals[i]) > cutoff) {
+                        int irrep = 0;
+                        for (int j = 0; j < (int)shape.size(); j++) {
+                            indices.back()[istart * shape.size() + j] =
+                                i / strides[j] % shape[j];
+                            irrep ^= orb_sym[i / strides[j] % shape[j]];
+                        }
+                        data.back()[istart] = factor * vals[i] * (FL)(!irrep);
+                        istart++;
+                    }
+            }
             for (int i = 0; i < tid + 1; i++)
                 istart -= lens[i];
             assert(istart == 0);
