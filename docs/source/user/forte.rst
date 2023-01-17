@@ -28,7 +28,7 @@ First, we need to build and install the C++ library of ``block2``. This can be d
     cd ../..
 
 After this, you will be able to find the block2 include files in ``${BLOCK2_DIR}/include/`` and ``libblock2.so`` in ``${BLOCK2_DIR}/lib64/``.
-The ``block2Config.cmake`` file can be found found in ``${BLOCK2_DIR}/share/cmake/block2/``.
+The ``block2Config.cmake`` file can be found in ``${BLOCK2_DIR}/share/cmake/block2/``.
 
 Second, we need to build `psi4 <https://github.com/psi4/psi4>`_. Make sure an ``eigen3`` library is available in the system,
 which can be installed using ``apt install libeigen3-dev`` or ``conda install -c omnia eigen3``. If you use the ``conda`` package,
@@ -238,7 +238,7 @@ State-Average
 
 .. highlight:: python3
 
-The following is an example input file for state-averaged DMRGSCF for three states: ::
+The following is an example python script for state-averaged DMRGSCF for three states: ::
 
     import psi4
     import forte
