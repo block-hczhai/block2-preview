@@ -220,6 +220,15 @@ struct WickPermutation {
     static vector<WickPermutation> two_symmetric() {
         return vector<WickPermutation>{WickPermutation({1, 0}, false)};
     }
+    // symmetry of amplitudes of canonical transformation theory
+    static vector<WickPermutation> two_anti_symmetric() {
+        return vector<WickPermutation>{WickPermutation({1, 0}, true)};
+    }
+    // symmetry of amplitudes of canonical transformation theory
+    static vector<WickPermutation> four_anti_symmetric() {
+        return vector<WickPermutation>{WickPermutation({2, 3, 0, 1}, true),
+                                       WickPermutation({1, 0, 3, 2}, false)};
+    }
     // chem =  vijkl Ci Ck Dl Dj
     static vector<WickPermutation> qc_chem() {
         return vector<WickPermutation>{WickPermutation({2, 3, 0, 1}, false),
@@ -331,46 +340,65 @@ struct WickTensor {
         for (char c : tex_expr)
             if (c == '_' || c == '[')
                 is_name = false;
-            else if (c == ',' || c == ' ')
+            else if (c == ',')
                 continue;
-            else if (string("{}]").find(c) == string::npos && is_name)
-                name.push_back(c);
-            else if (string("{}]").find(c) == string::npos && !is_name)
+            else if (c == ' ' && !is_name)
                 indices.push_back(c);
+            else if (string("{}]").find(c) == string::npos && is_name) {
+                if (c != ' ')
+                    name.push_back(c);
+            } else if (string("{}]").find(c) == string::npos && !is_name)
+                indices.push_back(c);
+            else if (c == ']' || c == '}')
+                break;
+        int index_len = 0;
+        if (indices.find(' ') != string::npos) {
+            size_t last = 0;
+            size_t index = indices.find_first_of(' ', last);
+            while (index != string::npos) {
+                if (index > last)
+                    index_len++;
+                last = index + 1;
+                index = indices.find_first_of(' ', last);
+            }
+            if (indices.length() > last)
+                index_len++;
+        } else
+            index_len = (int)indices.size();
         vector<WickPermutation> perms;
-        if (perm_map.count(make_pair(name, (int)indices.size())))
-            perms = perm_map.at(make_pair(name, (int)indices.size()));
+        if (perm_map.count(make_pair(name, index_len)))
+            perms = perm_map.at(make_pair(name, index_len));
         WickTensorTypes tensor_type = WickTensorTypes::Tensor;
-        if (name == "C" && indices.size() == 1)
+        if (name == "C" && index_len == 1)
             tensor_type = WickTensorTypes::CreationOperator;
-        else if (name == "D" && indices.size() == 1)
+        else if (name == "D" && index_len == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
         // the number indicates the summed spin label
         else if (name[0] == 'C' && name.length() >= 2 && name[1] >= '0' &&
-                 name[1] <= '9' && indices.size() == 1)
+                 name[1] <= '9' && index_len == 1)
             tensor_type = WickTensorTypes::CreationOperator;
         else if (name[0] == 'D' && name.length() >= 2 && name[1] >= '0' &&
-                 name[1] <= '9' && indices.size() == 1)
+                 name[1] <= '9' && index_len == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
         // for external usage
-        else if ((name == "Ca" || name == "Cb") && indices.size() == 1)
+        else if ((name == "Ca" || name == "Cb") && index_len == 1)
             tensor_type = WickTensorTypes::CreationOperator;
-        else if ((name == "Da" || name == "Db") && indices.size() == 1)
+        else if ((name == "Da" || name == "Db") && index_len == 1)
             tensor_type = WickTensorTypes::DestroyOperator;
         else if (name[0] == 'E' && name.length() == 2 &&
-                 indices.size() == (int)(name[1] - '0') * 2) {
+                 index_len == (int)(name[1] - '0') * 2) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
             perms = WickPermutation::pair_symmetric((int)(name[1] - '0'));
-        } else if (name[0] == 'E' && name.length() == indices.size() + 1 &&
+        } else if (name[0] == 'E' && name.length() == index_len + 1 &&
                    all_of(name.begin() + 1, name.end(),
                           [](const char &c) { return c == 'C' || c == 'D'; })) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
             perms = WickPermutation::non_symmetric();
         } else if (name[0] == 'R' && name.length() == 2 &&
-                   indices.size() == (int)(name[1] - '0') * 2) {
+                   index_len == (int)(name[1] - '0') * 2) {
             tensor_type = WickTensorTypes::SpinFreeOperator;
             perms = WickPermutation::pair_symmetric((int)(name[1] - '0'), true);
-        } else if (name == "delta" && indices.size() == 2) {
+        } else if (name == "delta" && index_len == 2) {
             tensor_type = WickTensorTypes::KroneckerDelta;
             perms = WickPermutation::two_symmetric();
         }
@@ -551,6 +579,10 @@ struct WickTensor {
             factor = -factor;
         return x;
     }
+    // ctr_maps : first is a map from given index name to abstract index
+    // second int is 1 / -1 indicating whether it is negative
+    // new_idx is the number of abstract indices already used in any map in
+    // ctr_maps
     vector<pair<map<WickIndex, int>, int>>
     sort_gen_maps(const WickTensor &ref, const set<WickIndex> &ctr_idxs,
                   const vector<pair<map<WickIndex, int>, int>> &ctr_maps,
@@ -572,6 +604,9 @@ struct WickTensor {
                                                  : new_map.at(wi)) +
                                                 '0');
                     }
+                // ref is a already sorted tensor, we want to find all possible
+                // index name to abstract index maps to get that tensor
+                // but only contracted indices are allowed to be freely changed
                 if (z.indices == ref.indices) {
                     new_map.insert(ctr_map.first.begin(), ctr_map.first.end());
                     new_maps.insert(make_pair(new_map, perm.negative
@@ -587,6 +622,8 @@ struct WickTensor {
                     const vector<pair<map<WickIndex, int>, int>> &ctr_maps,
                     int &new_idx) const {
         int kidx = new_idx;
+        // x is the final output
+        // first, we construct a tensor with no perm
         WickTensor x = *this;
         map<WickIndex, int> new_map;
         assert(ctr_maps.size() != 0);
@@ -599,6 +636,12 @@ struct WickTensor {
                                          : new_map.at(wi)) +
                                         '0');
             }
+        // second, try all perms, get the tensor with abstract indices
+        // x = min(z)
+        // get the one with the smallest abstract indices
+        // but here we do not need to know the name to abstract map
+        // the name to abstract map may have multiple possibilities
+        // which will be generaated in the next step
         for (auto &perm : perms) {
             WickTensor zz = *this * perm;
             for (auto &ctr_map : ctr_maps) {
@@ -747,24 +790,27 @@ struct WickString {
             char c = tex_expr[idx];
             if (c == '}' || c == '|' || c == '>')
                 break;
-            else if (c == ' ')
-                continue;
             else
                 sum_expr.push_back(c);
         }
+        vector<WickIndexTypes> ctr_idx_types;
         if (idx < tex_expr.length() && tex_expr[idx] == '|') {
-            for (; idx < tex_expr.length(); idx++)
+            for (idx++; idx < tex_expr.length(); idx++)
                 if (tex_expr[idx] == '>')
                     break;
+                else if (tex_expr[idx] == 'I')
+                    ctr_idx_types.push_back(WickIndexTypes::Inactive);
+                else if (tex_expr[idx] == 'A')
+                    ctr_idx_types.push_back(WickIndexTypes::Active);
+                else if (tex_expr[idx] == 'E')
+                    ctr_idx_types.push_back(WickIndexTypes::External);
         }
         if (idx < tex_expr.length() &&
             (tex_expr[idx] == '}' || tex_expr[idx] == '>'))
             idx++;
         for (; idx < tex_expr.length(); idx++) {
             char c = tex_expr[idx];
-            if (c == ' ')
-                continue;
-            else if (c == '}' || c == ']') {
+            if (c == '}' || c == ']') {
                 tensor_expr.push_back(c);
                 tensors.push_back(
                     WickTensor::parse(tensor_expr, idx_map, perm_map));
@@ -772,11 +818,28 @@ struct WickString {
             } else
                 tensor_expr.push_back(c);
         }
-        if (sum_expr != "")
-            ctr_idxs = WickIndex::parse_set_with_types(sum_expr, idx_map);
+        map<WickIndex, WickIndex> ctr_idx_type_adjust;
+        if (sum_expr != "") {
+            vector<WickIndex> v_ctr_idxs =
+                WickIndex::parse_with_types(sum_expr, idx_map);
+            if (ctr_idx_types.size() == v_ctr_idxs.size())
+                for (size_t i = 0; i < v_ctr_idxs.size(); i++) {
+                    auto &xct = ctr_idx_type_adjust[v_ctr_idxs[i]];
+                    v_ctr_idxs[i].types = ctr_idx_types[i];
+                    xct = v_ctr_idxs[i];
+                }
+            sort(v_ctr_idxs.begin(), v_ctr_idxs.end());
+            ctr_idxs = set<WickIndex>(v_ctr_idxs.begin(), v_ctr_idxs.end());
+        }
+        while (tensor_expr != "" && tensor_expr[0] == ' ')
+            tensor_expr = tensor_expr.substr(1);
         if (tensor_expr != "")
             tensors.push_back(
                 WickTensor::parse(tensor_expr, idx_map, perm_map));
+        for (auto &wt : tensors)
+            for (auto &wi : wt.indices)
+                if (ctr_idx_type_adjust.count(wi))
+                    wi = ctr_idx_type_adjust.at(wi);
         double xfac = 1.0;
         if (fac_expr == "-")
             xfac = -1;
@@ -1030,6 +1093,8 @@ struct WickString {
                                  ? a.name < b.name
                                  : a.indices.size() < b.indices.size();
                   });
+        // ot_tensor_groups is the accumulated count of size of each group
+        // each group has the tensors with the same name
         vector<int> ot_tensor_groups;
         for (int i = 0; i < (int)ot_tensors.size(); i++)
             if (i == 0 || (ot_tensors[i].name != ot_tensors[i - 1].name ||
@@ -1041,20 +1106,35 @@ struct WickString {
         vector<WickTensor> ot_sorted(ot_tensors.size());
         vector<pair<map<WickIndex, int>, int>> ctr_maps = {
             make_pair(map<WickIndex, int>(), 1)};
+        // loop over each group
         for (int ig = 0; ig < (int)ot_tensor_groups.size() - 1; ig++) {
+            // wta has the same size as the group
             vector<int> wta(ot_tensor_groups[ig + 1] - ot_tensor_groups[ig]);
             for (int j = 0; j < (int)wta.size(); j++)
                 wta[j] = ot_tensor_groups[ig] + j;
+            // wtb is the already sorted tensors with abstract contracted
+            // indices
+            // wta are the original tensors, wtb are the sorted tensors
             WickTensor *wtb = ot_sorted.data() + ot_tensor_groups[ig];
+            // we have j tensors with the same name
+            // we need to determine the best order of these tensors
             for (int j = 0; j < (int)wta.size(); j++) {
                 int jxx = -1, jixx = -1;
+                // we try all tensors to be put in the jth position
+                // the one with the smallest sorted index name will win
+                // jxx is the index of the selected tensor in the original list
+                // jixx / jidx / kidx denotes how many ctr_idx were consumed
                 for (int k = j; k < (int)wta.size(); k++) {
                     int jidx = kidx;
                     wtb[k] =
                         ot_tensors[wta[k]].sort(ctr_indices, ctr_maps, jidx);
+                    // if this one is smaller, use it
                     if (k == j || wtb[k].indices < wtb[j].indices)
                         wtb[j] = wtb[k], jxx = k, jixx = jidx;
                 }
+                // get original tensor in jxx of wta
+                // make it to be the sorted tensor in j of wtb
+                // but this time get all possible maps
                 ctr_maps = ot_tensors[wta[jxx]].sort_gen_maps(
                     wtb[j], ctr_indices, ctr_maps, kidx);
                 kidx = jixx;
@@ -1062,18 +1142,149 @@ struct WickString {
                     swap(wta[jxx], wta[j]);
             }
         }
-        for (auto &wt : cd_tensors) {
+        // now all ot_tensors are already in ot_sorted
+        // we add the remaining cd_tensors
+        bool is_sf_cd = cd_tensors.size() != 0;
+        for (auto &wt : cd_tensors)
+            if (wt.get_spin_tag() == -1) {
+                is_sf_cd = false;
+                break;
+            }
+        if (is_sf_cd) {
+            // sf_pri = map from undetermined ctr index to its appearance in
+            // which group and appeared how many times apppear earlier and then
+            // more times should have lower abstract index number
+            map<WickIndex, vector<pair<int, int>>> sf_pri;
+            // a list of undetermined ctr indices
+            vector<WickIndex> sf_ctr_idx;
+            // sf_idx_sorted = arg sort of sf_ctr_idx
+            // sf_idx_group_mp = from cd_tensor index to group index
+            vector<int> sf_idx_sorted, sf_idx_group_mp;
+            // first determine group index
+            for (int i = 0, k = 0; i < (int)cd_tensors.size(); i++) {
+                if (i != 0 &&
+                    (cd_tensors[i].name[0] != cd_tensors[i - 1].name[0] ||
+                     cd_tensors[i].indices[0].types !=
+                         cd_tensors[i - 1].indices[0].types))
+                    k++;
+                sf_idx_group_mp.push_back(k);
+            }
+            // fill sf_pri
+            for (int i = 0; i < (int)cd_tensors.size(); i++) {
+                auto &ix = cd_tensors[i].indices[0];
+                if (ctr_indices.count(ix) && !ctr_maps[0].first.count(ix)) {
+                    if (!sf_pri.count(ix)) {
+                        sf_pri[ix].push_back(make_pair(sf_idx_group_mp[i], 1));
+                        sf_ctr_idx.push_back(ix);
+                    } else if (sf_pri.at(ix).back().first == sf_idx_group_mp[i])
+                        sf_pri.at(ix).back().second++;
+                    else
+                        sf_pri.at(ix).push_back(
+                            make_pair(sf_idx_group_mp[i], 1));
+                }
+            }
+            // argsort sf_pri
+            for (size_t i = 0; i < sf_ctr_idx.size(); i++)
+                sf_idx_sorted[i] = i;
+            stable_sort(
+                sf_idx_sorted.begin(), sf_idx_sorted.end(),
+                [&sf_pri, &sf_ctr_idx](int i, int j) {
+                    vector<pair<int, int>> &fi = sf_pri.at(sf_ctr_idx[i]);
+                    vector<pair<int, int>> &fj = sf_pri.at(sf_ctr_idx[j]);
+                    for (size_t k = 0; k < min(fi.size(), fj.size()); k++)
+                        if (fi[k].first != fj[k].first)
+                            return fi[k].first < fj[k].first;
+                        else if (fi[k].second != fj[k].second)
+                            return fi[k].second > fj[k].second;
+                    return fi.size() > fj.size();
+                });
+            // determine abstract index based on sorted sf_pri
             int jidx = kidx;
-            ot_sorted.push_back(wt.sort(ctr_indices, ctr_maps, kidx));
-            ctr_maps =
-                wt.sort_gen_maps(ot_sorted.back(), ctr_indices, ctr_maps, jidx);
+            for (int i = 0; i < (int)sf_idx_sorted.size(); i++) {
+                auto &ix = sf_ctr_idx[sf_idx_sorted[i]];
+                ctr_maps[0].first[ix] = jidx;
+            }
+            // change indices in the cd_tensors
+            for (int i = 0; i < (int)cd_tensors.size(); i++) {
+                auto &wi = cd_tensors[i].indices[0];
+                if (ctr_maps[0].first.count(wi))
+                    wi.name = string(1, ctr_maps[0].first.at(wi) + '0');
+            }
+            // cd_tensor_groups is the accumulated count of size of each group
+            // each group has the tensors with the same name and same sub_space
+            vector<int> cd_tensor_groups;
+            for (int i = 0; i < (int)cd_tensors.size(); i++)
+                if (i == 0 ||
+                    (cd_tensors[i].name[0] != cd_tensors[i - 1].name[0] ||
+                     cd_tensors[i].indices[0].types !=
+                         cd_tensors[i - 1].indices[0].types))
+                    cd_tensor_groups.push_back(i);
+            cd_tensor_groups.push_back(cd_tensors.size());
+            // loop over each group
+            uint8_t arg_sign = 0;
+            int new_spin_tag = 0;
+            map<int, int> spin_tag_mp;
+            for (int ig = 0; ig < (int)cd_tensor_groups.size() - 1; ig++) {
+                // wta has the same size as the group
+                vector<int> arg_idx(cd_tensor_groups[ig + 1] -
+                                    cd_tensor_groups[ig]);
+                // arg sort within each group
+                for (size_t i = 0; i < arg_idx.size(); i++)
+                    arg_idx[i] = i + cd_tensor_groups[ig];
+                stable_sort(arg_idx.begin(), arg_idx.end(),
+                            [&cd_tensors](int i, int j) {
+                                return cd_tensors[i].indices <
+                                       cd_tensors[j].indices;
+                            });
+                // fermion sign
+                for (int i = 0; i < (int)arg_idx.size(); i++)
+                    for (int j = i + 1; j < (int)arg_idx.size(); j++)
+                        arg_sign ^= (arg_idx[j] < arg_idx[i]);
+                // spin tag and push into sorted list
+                for (int i = 0; i < (int)arg_idx.size(); i++) {
+                    WickTensor &wt = cd_tensors[arg_idx[i]];
+                    int old_spin_tag = wt.get_spin_tag();
+                    if (!spin_tag_mp.count(old_spin_tag))
+                        spin_tag_mp[old_spin_tag] = new_spin_tag++;
+                    wt.set_spin_tag(spin_tag_mp.at(old_spin_tag));
+                    ot_sorted.push_back(wt);
+                }
+            }
+            kidx = jidx;
+            ctr_maps[0].second =
+                arg_sign ? -ctr_maps[0].second : ctr_maps[0].second;
+        } else {
+            for (auto &wt : cd_tensors) {
+                int jidx = kidx;
+                // now ctr_maps should contain all possible info to determine
+                // the abstract index unless there is ctr_idx only in cd_tensors
+                ot_sorted.push_back(wt.sort(ctr_indices, ctr_maps, kidx));
+                ctr_maps = wt.sort_gen_maps(ot_sorted.back(), ctr_indices,
+                                            ctr_maps, jidx);
+            }
         }
-        assert(kidx == (int)ctr_maps[0].first.size() &&
-               kidx == (int)ctr_indices.size());
+        // this should always be true
+        assert(kidx == (int)ctr_maps[0].first.size());
         set<WickIndex> xctr_idxs;
         for (auto wi : ctr_indices) {
-            wi.name = string(1, ctr_maps[0].first.at(wi) + '0');
+            if (ctr_maps[0].first.count(wi))
+                wi.name = string(1, ctr_maps[0].first.at(wi) + '0');
             xctr_idxs.insert(wi);
+        }
+        // here we assume that ctr_indices do not have more indices than all
+        // indices in the tensors
+        if (kidx != (int)ctr_indices.size()) {
+            cout << "string = " << *this << endl;
+            cout << "ctr indices = ";
+            for (auto &x : xctr_idxs)
+                cout << x << " ";
+            cout << endl;
+            cout << "used ctr indices = " << kidx << endl;
+            cout << "sorted tensors = ";
+            for (auto &x : ot_sorted)
+                cout << x << " ";
+            cout << endl;
+            assert(false);
         }
         return WickString(ot_sorted, xctr_idxs, xfactor * ctr_maps[0].second);
     }
@@ -1387,11 +1598,19 @@ struct WickExpr {
               map<pair<string, int>, vector<WickPermutation>>()) {
         vector<WickString> terms;
         stringstream exx;
-        for (auto &c : expr)
+        for (int ic = 0; ic < (int)expr.length(); ic++) {
+            auto &c = expr[ic];
             if (c == '+' || c == '-')
                 exx << "\n" << c;
-            else
+            else if (c == '(') {
+                exx << "\n" << c;
+                for (ic++; ic < (int)expr.length() && expr[ic] != ')'; ic++)
+                    if (expr[ic] != ' ')
+                        exx << expr[ic];
+                ic--;
+            } else
                 exx << c;
+        }
         string tex_expr = exx.str();
         size_t index = tex_expr.find_first_of("\n\r", 0);
         size_t last = 0;
@@ -1759,12 +1978,37 @@ struct WickExpr {
             int max_tag = (int)cd_tensors.size() + 1, spin_tag = 0;
             for (int i = 0; i < (int)cd_tensors.size(); i++)
                 cd_tensors[i].set_spin_tag(max_tag);
+            vector<pair<int, int>> spin_tag_cd_idx;
             for (int i = 0; i < (int)cd_tensors.size(); i++)
                 if (cd_tensors[i].get_spin_tag() == max_tag) {
                     cd_tensors[i].set_spin_tag(spin_tag);
                     cd_tensors[cd_idx_map[i]].set_spin_tag(spin_tag);
+                    if (cd_tensors[i].name[0] == 'C')
+                        spin_tag_cd_idx.push_back(make_pair(i, cd_idx_map[i]));
+                    else
+                        spin_tag_cd_idx.push_back(make_pair(cd_idx_map[i], i));
                     spin_tag++;
                 }
+            vector<int> spin_tag_idx(spin_tag), rev_spin_tag_idx(spin_tag);
+            for (int i = 0; i < spin_tag; i++)
+                spin_tag_idx[i] = i;
+            stable_sort(
+                spin_tag_idx.begin(), spin_tag_idx.end(),
+                [&spin_tag_cd_idx, &cd_tensors](int i, int j) {
+                    return cd_tensors[spin_tag_cd_idx[i].first].indices !=
+                                   cd_tensors[spin_tag_cd_idx[j].first].indices
+                               ? cd_tensors[spin_tag_cd_idx[i].first].indices <
+                                     cd_tensors[spin_tag_cd_idx[j].first]
+                                         .indices
+                               : cd_tensors[spin_tag_cd_idx[i].second].indices <
+                                     cd_tensors[spin_tag_cd_idx[j].second]
+                                         .indices;
+                });
+            for (int i = 0; i < spin_tag; i++)
+                rev_spin_tag_idx[spin_tag_idx[i]] = i;
+            for (int i = 0; i < (int)cd_tensors.size(); i++)
+                cd_tensors[i].set_spin_tag(
+                    rev_spin_tag_idx[cd_tensors[i].get_spin_tag()]);
         }
         int ot_count = (int)ot_tensors.size();
         // all possible pairs
@@ -1844,30 +2088,49 @@ struct WickExpr {
                                 return cd_tensors[i] < cd_tensors[j];
                             });
                 if (sf_type && !no_unctr_sf_inact) {
+                    // the previous guarentees that we can sort
+                    // the first and the second half separately
                     int n_sf = tensor_idxs.size() / 2;
+                    stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
+                                [&cd_tensors](int i, int j) {
+                                    int ki = (cd_tensors[i].indices[0].types &
+                                              WickIndexTypes::Active) !=
+                                             WickIndexTypes::None;
+                                    int kj = (cd_tensors[j].indices[0].types &
+                                              WickIndexTypes::Active) !=
+                                             WickIndexTypes::None;
+                                    return ki < kj;
+                                });
+                    int n_act = 0;
+                    for (auto &ti : tensor_idxs)
+                        n_act +=
+                            (cd_tensors[ti].indices[0].types &
+                             WickIndexTypes::Active) != WickIndexTypes::None;
+                    // only when there are no active indices, fermi_type_compare
+                    // is stable
                     stable_sort(
-                        tensor_idxs.begin(), tensor_idxs.begin() + n_sf,
+                        tensor_idxs.begin(),
+                        tensor_idxs.begin() + min(n_sf * 2 - n_act, n_sf),
                         [&cd_tensors](int i, int j) {
                             int fc =
                                 cd_tensors[i].fermi_type_compare(cd_tensors[j]);
                             int ispin = cd_tensors[i].get_spin_tag();
                             int jspin = cd_tensors[j].get_spin_tag();
-                            return cd_tensors[i].type != cd_tensors[j].type &&
-                                           fc != 0
+                            return fc != 0
                                        ? (fc == -1)
                                        : (ispin != jspin
                                               ? ispin < jspin
                                               : cd_tensors[i] < cd_tensors[j]);
                         });
                     stable_sort(
-                        tensor_idxs.begin() + n_sf, tensor_idxs.end(),
+                        tensor_idxs.begin() + min(n_sf * 2 - n_act, n_sf),
+                        tensor_idxs.begin() + (n_sf * 2 - n_act),
                         [&cd_tensors](int i, int j) {
                             int fc =
                                 cd_tensors[i].fermi_type_compare(cd_tensors[j]);
                             int ispin = cd_tensors[i].get_spin_tag();
                             int jspin = cd_tensors[j].get_spin_tag();
-                            return cd_tensors[i].type != cd_tensors[j].type &&
-                                           fc != 0
+                            return fc != 0
                                        ? (fc == -1)
                                        : (ispin != jspin
                                               ? ispin > jspin
