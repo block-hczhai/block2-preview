@@ -1635,6 +1635,7 @@ class DMRGDriver:
         site_type=0,
         algo_type=None,
         su2_coupling=None,
+        simulated_parallel=0,
         iprint=0,
     ):
         bw = self.bw
@@ -1650,37 +1651,7 @@ class DMRGDriver:
 
         if self.mpi is not None:
             self.mpi.barrier()
-
-        mket = ket.deep_copy("PDM-KET@TMP")
-        mpss = [mket]
-        if bra is not None and bra != ket:
-            mbra = bra.deep_copy("PDM-BRA@TMP")
-            mpss.append(mbra)
-        else:
-            mbra = mket
-
-        for mps in mpss:
-            if mps.dot == 2 and site_type != 2:
-                mps.dot = 1
-                if mps.center == mps.n_sites - 2:
-                    mps.center = mps.n_sites - 1
-                    mps.canonical_form = mps.canonical_form[:-1] + "S"
-                elif mps.center == 0:
-                    mps.canonical_form = "K" + mps.canonical_form[1:]
-                else:
-                    assert False
-                mps.save_data()
-
-            if self.mpi is not None:
-                self.mpi.barrier()
-
-            mps.load_mutable()
-            mps.info.bond_dim = max(
-                mps.info.bond_dim, mps.info.get_max_bond_dimension()
-            )
-
-        self.align_mps_center(mbra, mket)
-
+        
         if SymmetryTypes.SU2 in bw.symm_type:
             if su2_coupling is None:
                 su2_coupling = "((C+%s)1+D)0"
@@ -1710,48 +1681,153 @@ class DMRGDriver:
         if iprint >= 3:
             for perm in perms:
                 print(perm)
+        
+        if simulated_parallel != 0 and self.mpi is not None:
+            raise RuntimeError("Cannot simulate parallel in parallel mode!")
+        
+        sp_size = 1 if simulated_parallel == 0 else simulated_parallel
+        sp_file_names = []
 
-        scheme = bw.b.NPDMScheme(perms)
-        pmpo = bw.bs.GeneralNPDMMPO(
-            self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
-        )
-        pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
-        if self.mpi:
-            pmpo.parallel_rule = self.prule
-        pmpo.build()
+        for sp_rank in range(sp_size):
 
-        pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.Rule(), False, False)
-        if self.mpi:
-            pmpo = bw.bs.ParallelMPO(pmpo, self.prule)
+            if iprint >= 1 and simulated_parallel != 0:
+                print("simulated parallel rank =", sp_rank)
 
-        pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
-        pme.init_environments(iprint >= 2)
-        pme.cached_contraction = True
-        expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
-        if site_type == 0:
-            expect.zero_dot_algo = True
-        if NPDMAlgorithmTypes.SymbolFree in algo_type:
-            expect.algo_type = bw.b.ExpectationAlgorithmTypes.SymbolFree
-            if NPDMAlgorithmTypes.LowMem in algo_type:
-                expect.algo_type = (
-                    expect.algo_type | bw.b.ExpectationAlgorithmTypes.LowMem
+            mket = ket.deep_copy("PDM-KET@TMP")
+            mpss = [mket]
+            if bra is not None and bra != ket:
+                mbra = bra.deep_copy("PDM-BRA@TMP")
+                mpss.append(mbra)
+            else:
+                mbra = mket
+
+            for mps in mpss:
+                if mps.dot == 2 and site_type != 2:
+                    mps.dot = 1
+                    if mps.center == mps.n_sites - 2:
+                        mps.center = mps.n_sites - 1
+                        mps.canonical_form = mps.canonical_form[:-1] + "S"
+                    elif mps.center == 0:
+                        mps.canonical_form = "K" + mps.canonical_form[1:]
+                    else:
+                        assert False
+                    mps.save_data()
+
+                if self.mpi is not None:
+                    self.mpi.barrier()
+
+                mps.load_mutable()
+                mps.info.bond_dim = max(
+                    mps.info.bond_dim, mps.info.get_max_bond_dimension()
                 )
-            if NPDMAlgorithmTypes.Compressed in algo_type:
-                expect.algo_type = (
-                    expect.algo_type | bw.b.ExpectationAlgorithmTypes.Compressed
-                )
-        elif NPDMAlgorithmTypes.Normal in algo_type:
-            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
-        elif NPDMAlgorithmTypes.Fast in algo_type:
-            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Fast
-        else:
-            expect.algo_type = bw.b.ExpectationAlgorithmTypes.Automatic
 
-        expect.iprint = iprint
-        expect.solve(True, mket.center == 0)
+            self.align_mps_center(mbra, mket)
 
-        if self.clean_scratch:
-            expect.me.remove_partition_files()
+            scheme = bw.b.NPDMScheme(perms)
+            pmpo = bw.bs.GeneralNPDMMPO(
+                self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
+            )
+            pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
+            if self.mpi:
+                pmpo.parallel_rule = self.prule
+            if simulated_parallel != 0:
+                sp_rule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, 
+                    bw.bs.ParallelCommunicator(sp_size, sp_rank, 0))
+                assert sp_rule.is_root()
+                pmpo.parallel_rule = sp_rule
+            pmpo.build()
+
+            pmpo = bw.bs.SimplifiedMPO(pmpo, bw.bs.Rule(), False, False)
+            if self.mpi:
+                pmpo = bw.bs.ParallelMPO(pmpo, self.prule)
+            if simulated_parallel != 0:
+                pmpo = bw.bs.ParallelMPO(pmpo, sp_rule)
+
+            pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
+            pme.init_environments(iprint >= 2)
+            pme.cached_contraction = True
+            expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
+            if site_type == 0:
+                expect.zero_dot_algo = True
+            if NPDMAlgorithmTypes.SymbolFree in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.SymbolFree
+                if NPDMAlgorithmTypes.LowMem in algo_type:
+                    expect.algo_type = (
+                        expect.algo_type | bw.b.ExpectationAlgorithmTypes.LowMem
+                    )
+                if NPDMAlgorithmTypes.Compressed in algo_type:
+                    expect.algo_type = (
+                        expect.algo_type | bw.b.ExpectationAlgorithmTypes.Compressed
+                    )
+            elif NPDMAlgorithmTypes.Normal in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
+            elif NPDMAlgorithmTypes.Fast in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Fast
+            else:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Automatic
+
+            expect.iprint = iprint
+            expect.solve(True, mket.center == 0)
+
+            if simulated_parallel != 0:
+                if NPDMAlgorithmTypes.Compressed in algo_type or \
+                    expect.algo_type == bw.b.ExpectationAlgorithmTypes.Automatic:
+                    sp_file_names.append(pme.get_npdm_fragment_filename(-1)[:-2] + "%d.fpc")
+                else:
+                    sp_file_names.append(pme.get_npdm_fragment_filename(-1)[:-2] + "%d.npy")
+
+            if self.clean_scratch:
+                expect.me.remove_partition_files()
+        
+        if simulated_parallel != 0:
+
+            if iprint >= 1 and simulated_parallel != 0:
+                print("simulated parallel accumulate files...")
+
+            scheme = bw.b.NPDMScheme(perms)
+            pmpo = bw.bs.GeneralNPDMMPO(
+                self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
+            )
+            # recover the default serial prefix
+            sp_rule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, 
+                bw.bs.ParallelCommunicator(1, 0, 0))
+            pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
+            pmpo.build()
+            pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM-SUM")
+
+            fp_codec = bw.b.DoubleFPCodec()
+            for i in range(self.n_sites - 1):
+                data = 0
+                if sp_file_names[0][-4:] == ".fpc":
+                    for j in range(sp_size):
+                        data = data + fp_codec.load(sp_file_names[j] % i)
+                    fp_codec.save(pme.get_npdm_fragment_filename(i) + ".fpc", data)
+                else:
+                    for j in range(sp_size):
+                        data = data + np.load(sp_file_names[j] % i)
+                    np.save(pme.get_npdm_fragment_filename(i) + ".npy", data)
+            
+            expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
+            if site_type == 0:
+                expect.zero_dot_algo = True
+            if NPDMAlgorithmTypes.SymbolFree in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.SymbolFree
+                if NPDMAlgorithmTypes.LowMem in algo_type:
+                    expect.algo_type = (
+                        expect.algo_type | bw.b.ExpectationAlgorithmTypes.LowMem
+                    )
+                if NPDMAlgorithmTypes.Compressed in algo_type:
+                    expect.algo_type = (
+                        expect.algo_type | bw.b.ExpectationAlgorithmTypes.Compressed
+                    )
+            elif NPDMAlgorithmTypes.Normal in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Normal
+            elif NPDMAlgorithmTypes.Fast in algo_type:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Fast
+            else:
+                expect.algo_type = bw.b.ExpectationAlgorithmTypes.Automatic
+
+            expect.iprint = iprint
 
         npdms = list(expect.get_npdm())
 
