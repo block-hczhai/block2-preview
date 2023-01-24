@@ -755,6 +755,9 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                        &MovingEnvironment<S, FL, FLS>::cached_info)
         .def_readwrite("cached_contraction",
                        &MovingEnvironment<S, FL, FLS>::cached_contraction)
+        .def_readwrite(
+            "fused_contraction_rotation",
+            &MovingEnvironment<S, FL, FLS>::fused_contraction_rotation)
         .def("left_contract_rotate",
              &MovingEnvironment<S, FL, FLS>::left_contract_rotate)
         .def("right_contract_rotate",

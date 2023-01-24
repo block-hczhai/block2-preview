@@ -1636,6 +1636,8 @@ class DMRGDriver:
         algo_type=None,
         su2_coupling=None,
         simulated_parallel=0,
+        fused_contraction_rotation=True,
+        cutoff=1e-24,
         iprint=0,
     ):
         bw = self.bw
@@ -1651,7 +1653,7 @@ class DMRGDriver:
 
         if self.mpi is not None:
             self.mpi.barrier()
-        
+
         if SymmetryTypes.SU2 in bw.symm_type:
             if su2_coupling is None:
                 su2_coupling = "((C+%s)1+D)0"
@@ -1681,10 +1683,10 @@ class DMRGDriver:
         if iprint >= 3:
             for perm in perms:
                 print(perm)
-        
+
         if simulated_parallel != 0 and self.mpi is not None:
             raise RuntimeError("Cannot simulate parallel in parallel mode!")
-        
+
         sp_size = 1 if simulated_parallel == 0 else simulated_parallel
         sp_file_names = []
 
@@ -1731,8 +1733,10 @@ class DMRGDriver:
             if self.mpi:
                 pmpo.parallel_rule = self.prule
             if simulated_parallel != 0:
-                sp_rule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, 
-                    bw.bs.ParallelCommunicator(sp_size, sp_rank, 0))
+                sp_rule = bw.bs.ParallelRuleSimple(
+                    bw.b.ParallelSimpleTypes.Nothing,
+                    bw.bs.ParallelCommunicator(sp_size, sp_rank, 0),
+                )
                 assert sp_rule.is_root()
                 pmpo.parallel_rule = sp_rule
             pmpo.build()
@@ -1744,9 +1748,15 @@ class DMRGDriver:
                 pmpo = bw.bs.ParallelMPO(pmpo, sp_rule)
 
             pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM")
+            if fused_contraction_rotation:
+                pme.cached_contraction = False
+                pme.fused_contraction_rotation = True
+            else:
+                pme.cached_contraction = True
+                pme.fused_contraction_rotation = False
             pme.init_environments(iprint >= 2)
-            pme.cached_contraction = True
             expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
+            expect.cutoff = cutoff
             if site_type == 0:
                 expect.zero_dot_algo = True
             if NPDMAlgorithmTypes.SymbolFree in algo_type:
@@ -1770,15 +1780,21 @@ class DMRGDriver:
             expect.solve(True, mket.center == 0)
 
             if simulated_parallel != 0:
-                if NPDMAlgorithmTypes.Compressed in algo_type or \
-                    expect.algo_type == bw.b.ExpectationAlgorithmTypes.Automatic:
-                    sp_file_names.append(pme.get_npdm_fragment_filename(-1)[:-2] + "%d.fpc")
+                if (
+                    NPDMAlgorithmTypes.Compressed in algo_type
+                    or expect.algo_type == bw.b.ExpectationAlgorithmTypes.Automatic
+                ):
+                    sp_file_names.append(
+                        pme.get_npdm_fragment_filename(-1)[:-2] + "%d.fpc"
+                    )
                 else:
-                    sp_file_names.append(pme.get_npdm_fragment_filename(-1)[:-2] + "%d.npy")
+                    sp_file_names.append(
+                        pme.get_npdm_fragment_filename(-1)[:-2] + "%d.npy"
+                    )
 
             if self.clean_scratch:
                 expect.me.remove_partition_files()
-        
+
         if simulated_parallel != 0:
 
             if iprint >= 1 and simulated_parallel != 0:
@@ -1789,8 +1805,9 @@ class DMRGDriver:
                 self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
             )
             # recover the default serial prefix
-            sp_rule = bw.bs.ParallelRuleSimple(bw.b.ParallelSimpleTypes.Nothing, 
-                bw.bs.ParallelCommunicator(1, 0, 0))
+            sp_rule = bw.bs.ParallelRuleSimple(
+                bw.b.ParallelSimpleTypes.Nothing, bw.bs.ParallelCommunicator(1, 0, 0)
+            )
             pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
             pmpo.build()
             pme = bw.bs.MovingEnvironment(pmpo, mbra, mket, "NPDM-SUM")
@@ -1806,7 +1823,7 @@ class DMRGDriver:
                     for j in range(sp_size):
                         data = data + np.load(sp_file_names[j] % i)
                     np.save(pme.get_npdm_fragment_filename(i) + ".npy", data)
-            
+
             expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
             if site_type == 0:
                 expect.zero_dot_algo = True

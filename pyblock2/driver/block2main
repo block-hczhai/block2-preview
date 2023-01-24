@@ -2737,13 +2737,15 @@ if not pre_run:
             pmpo = ParallelMPO(pmpo, npdm_prule)
         
         pme = MovingEnvironment(pmpo, bmps, kmps, "NPDM")
-        pme.cached_contraction = cached_contraction
+        pme.cached_contraction = False
+        pme.fused_contraction_rotation = True
         pme.save_partition_info = True
         pme.init_environments(outputlevel >= 2)
 
         expect = XExpect(pme, bmps.info.bond_dim, kmps.info.bond_dim)
-        expect.zero_dot_algo = "zerodot" in dic
+        expect.zero_dot_algo = True
         expect.algo_type = algo_type
+        expect.cutoff = float(dic.get("cutoff", 1E-24))
         expect.iprint = max(min(outputlevel, 3), 0)
         expect.solve(True, kmps.center == 0)
         expect.me.remove_partition_files()

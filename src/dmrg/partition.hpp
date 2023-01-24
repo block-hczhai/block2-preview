@@ -200,6 +200,24 @@ template <typename S, typename FL> struct Partition {
         }
         return opt;
     }
+    // copy operator tensor to heap memory
+    static shared_ptr<OperatorTensor<S, FL>>
+    deep_copy_build(const shared_ptr<OperatorTensor<S, FL>> &orig) {
+        shared_ptr<OperatorTensor<S, FL>> opt =
+            make_shared<OperatorTensor<S, FL>>(*orig);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        for (auto &p : orig->ops) {
+            shared_ptr<OpElement<S, FL>> op =
+                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+            opt->ops.at(op) = p.second->deep_copy(d_alloc);
+            opt->ops.at(op)->info = make_shared<SparseMatrixInfo<S>>(
+                p.second->info->deep_copy(i_alloc));
+        }
+        return opt;
+    }
     // Get all possible delta quantum numbers from the symbolic matrix of
     // operators
     static vector<S>

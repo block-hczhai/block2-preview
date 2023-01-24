@@ -506,7 +506,8 @@ template <typename S, typename FL> struct DMRGDriver {
              ExpectationAlgorithmTypes algo_type =
                  ExpectationAlgorithmTypes::SymbolFree |
                  ExpectationAlgorithmTypes::Compressed,
-             int iprint = 0) const {
+             int iprint = 0, FP cutoff = (FP)1E-24,
+             bool fused_contraction_rotation = true) const {
         shared_ptr<MPS<S, FL>> mket = ket->deep_copy("PDM-KET@TMP"), mbra;
         vector<shared_ptr<MPS<S, FL>>> mpss =
             vector<shared_ptr<MPS<S, FL>>>(1, mket);
@@ -575,7 +576,13 @@ template <typename S, typename FL> struct DMRGDriver {
 
         shared_ptr<MovingEnvironment<S, FL, FL>> pme =
             make_shared<MovingEnvironment<S, FL, FL>>(pmpo, mbra, mket, "NPDM");
-        pme->cached_contraction = true;
+        if (fused_contraction_rotation) {
+            pme->cached_contraction = true;
+            pme->fused_contraction_rotation = false;
+        } else {
+            pme->cached_contraction = false;
+            pme->fused_contraction_rotation = true;
+        }
         pme->init_environments(iprint >= 2);
         shared_ptr<Expect<S, FL, FL, FL>> dx =
             make_shared<Expect<S, FL, FL, FL>>(pme, mbra->info->bond_dim,
@@ -584,6 +591,7 @@ template <typename S, typename FL> struct DMRGDriver {
             dx->zero_dot_algo = true;
         dx->algo_type = algo_type;
         dx->iprint = iprint;
+        dx->cutoff = cutoff;
         dx->solve(true, mket->center == 0);
 
         if (clean_scratch)

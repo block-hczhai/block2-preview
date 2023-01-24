@@ -2177,6 +2177,7 @@ template <typename S, typename FL> struct TensorFunctions {
         c = dopt;
     }
     // c = a x b (dot)
+    // dot means it is from the dot block
     virtual void left_contract(const shared_ptr<OperatorTensor<S, FL>> &a,
                                const shared_ptr<OperatorTensor<S, FL>> &b,
                                shared_ptr<OperatorTensor<S, FL>> &c,
@@ -2222,6 +2223,7 @@ template <typename S, typename FL> struct TensorFunctions {
         }
     }
     // c = b (dot) x a
+    // dot means it is from the dot block
     virtual void right_contract(const shared_ptr<OperatorTensor<S, FL>> &a,
                                 const shared_ptr<OperatorTensor<S, FL>> &b,
                                 shared_ptr<OperatorTensor<S, FL>> &c,
@@ -2264,6 +2266,130 @@ template <typename S, typename FL> struct TensorFunctions {
                 });
             if (opf->seq->mode == SeqTypes::Auto)
                 opf->seq->auto_perform();
+        }
+    }
+    // c = mpst_bra x [ a x b (dot) ] x mpst_ket
+    // without consuming large memory of blocking
+    // need to make sure a and c are not in the same frame
+    virtual void
+    left_contract_rotate(const shared_ptr<OperatorTensor<S, FL>> &a,
+                         const shared_ptr<OperatorTensor<S, FL>> &b,
+                         const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+                         const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+                         shared_ptr<OperatorTensor<S, FL>> &ab,
+                         shared_ptr<OperatorTensor<S, FL>> &c,
+                         const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                         OpNamesSet delayed = OpNamesSet()) const {
+        if (frame_<FP>()->use_main_stack)
+            for (auto &p : ab->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                if (a == nullptr || !delayed(op->name))
+                    ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+            }
+        if (a == nullptr) {
+            left_assign(b, ab);
+            left_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            for (auto &p : c->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
+            shared_ptr<Symbolic<S>> exprs =
+                cexprs == nullptr ? a->lmat * b->lmat : cexprs;
+            assert(exprs->data.size() == ab->lmat->data.size());
+            // because of deallocation of the ab, we cannot use auto
+            assert(opf->seq->mode != SeqTypes::Auto);
+            parallel_for(
+                exprs->data.size(),
+                [&a, &b, &ab, &c, &mpst_bra, &mpst_ket, &exprs,
+                 &delayed](const shared_ptr<TensorFunctions> &tf, size_t i) {
+                    shared_ptr<OpElement<S, FL>> cop =
+                        dynamic_pointer_cast<OpElement<S, FL>>(
+                            ab->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(ab->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i] * ((FP)1.0 / cop->factor);
+                    if (!delayed(cop->name)) {
+                        if (!frame_<FP>()->use_main_stack) {
+                            // skip cached part
+                            if (ab->ops.at(op)->alloc != nullptr)
+                                return;
+                            ab->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<FP>>();
+                            ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+                        }
+                        tf->tensor_product(expr, a->ops, b->ops,
+                                           ab->ops.at(op));
+                        tf->opf->tensor_rotate(ab->ops.at(op), c->ops.at(op),
+                                               mpst_bra, mpst_ket, false);
+                        if (!frame_<FP>()->use_main_stack)
+                            ab->ops.at(op)->deallocate();
+                    }
+                });
+        }
+    }
+    // c = mpst_bra x [ b (dot) x a ] x mpst_ket
+    // without consuming large memory of blocking
+    // need to make sure a and c are not in the same frame
+    virtual void
+    right_contract_rotate(const shared_ptr<OperatorTensor<S, FL>> &a,
+                          const shared_ptr<OperatorTensor<S, FL>> &b,
+                          const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+                          const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+                          shared_ptr<OperatorTensor<S, FL>> &ab,
+                          shared_ptr<OperatorTensor<S, FL>> &c,
+                          const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                          OpNamesSet delayed = OpNamesSet()) const {
+        if (frame_<FP>()->use_main_stack)
+            for (auto &p : ab->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                if (a == nullptr || !delayed(op->name))
+                    ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+            }
+        if (a == nullptr) {
+            right_assign(b, ab);
+            right_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            for (auto &p : c->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
+            shared_ptr<Symbolic<S>> exprs =
+                cexprs == nullptr ? b->rmat * a->rmat : cexprs;
+            assert(exprs->data.size() == ab->rmat->data.size());
+            // because of deallocation of the ab, we cannot use auto
+            assert(opf->seq->mode != SeqTypes::Auto);
+            parallel_for(
+                exprs->data.size(),
+                [&a, &b, &ab, &c, &mpst_bra, &mpst_ket, &exprs,
+                 &delayed](const shared_ptr<TensorFunctions> &tf, size_t i) {
+                    shared_ptr<OpElement<S, FL>> cop =
+                        dynamic_pointer_cast<OpElement<S, FL>>(
+                            ab->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(ab->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i] * ((FP)1.0 / cop->factor);
+                    if (!delayed(cop->name)) {
+                        if (!frame_<FP>()->use_main_stack) {
+                            // skip cached part
+                            if (ab->ops.at(op)->alloc != nullptr)
+                                return;
+                            ab->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<FP>>();
+                            ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+                        }
+                        tf->tensor_product(expr, b->ops, a->ops,
+                                           ab->ops.at(op));
+                        tf->opf->tensor_rotate(ab->ops.at(op), c->ops.at(op),
+                                               mpst_bra, mpst_ket, true);
+                        if (!frame_<FP>()->use_main_stack)
+                            ab->ops.at(op)->deallocate();
+                    }
+                });
         }
     }
 };

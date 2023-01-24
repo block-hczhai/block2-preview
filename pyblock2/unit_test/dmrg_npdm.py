@@ -30,8 +30,13 @@ def site_type(request):
     return request.param
 
 
+@pytest.fixture(scope="module", params=[True, False])
+def fuse_ctrrot_type(request):
+    return request.param
+
+
 class TestNPDM:
-    def test_rhf(self, tmp_path, system_def, site_type, algo_type):
+    def test_rhf(self, tmp_path, system_def, site_type, algo_type, fuse_ctrrot_type):
         from pyscf import scf, fci
 
         mol, ncore, ncas, name = system_def
@@ -85,7 +90,9 @@ class TestNPDM:
 
         pdms = []
         for ip in range(1, porder + 1):
-            pdms.append(driver.get_npdm(ket, pdm_type=ip, algo_type=n_algo_type, site_type=site_type, iprint=2))
+            pdms.append(driver.get_npdm(ket, pdm_type=ip, algo_type=n_algo_type,
+                site_type=site_type, iprint=2,
+                fused_contraction_rotation=fuse_ctrrot_type))
 
         driver.finalize()
 

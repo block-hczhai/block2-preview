@@ -169,6 +169,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     // whether caching contracted opt (only available when
     // !frame_<FP>()->use_main_stack)
     bool cached_contraction = false;
+    // whether contraction and rotation should be done within one-step, without
+    // using large memory for blocking (only saving memory when no explicit
+    // left/right_contact is invoked, which is the case for zero-dot expt)
+    // fused_contraction_rotation = T conflicts with cached_contraction = T
+    bool fused_contraction_rotation = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
            tinfo = 0;
     Timer _t, _t2, _t3;
@@ -251,14 +256,25 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->offset = 0;
         }
-        // cached_opt might be partially delayed,
-        // so further contraction is still needed
-        mpo->tf->left_contract(envs[i - 1]->left, mpo->tensors[i - 1], new_left,
-                               mpo->left_operator_exprs.size() != 0
-                                   ? mpo->left_operator_exprs[i - 1]
-                                   : nullptr);
-        mpo->unload_tensor(i - 1);
-        mpo->unload_left_operators(i - 1);
+        shared_ptr<OperatorTensor<S, FL>> copied_left = nullptr;
+        size_t copied_mem = 0;
+        if (fused_contraction_rotation) {
+            if (envs[i - 1]->left != nullptr) {
+                copied_left =
+                    Partition<S, FL>::deep_copy_build(envs[i - 1]->left);
+                copied_mem = copied_left->get_total_memory();
+            }
+        } else {
+            // cached_opt might be partially delayed,
+            // so further contraction is still needed
+            mpo->tf->left_contract(envs[i - 1]->left, mpo->tensors[i - 1],
+                                   new_left,
+                                   mpo->left_operator_exprs.size() != 0
+                                       ? mpo->left_operator_exprs[i - 1]
+                                       : nullptr);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+        }
         tctr += _t.get_time();
         bra->load_tensor(i - 1);
         if (bra != ket)
@@ -282,8 +298,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             bra == ket
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
-        mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
-        size_t blocking_mem = new_left->get_total_memory();
+        if (!fused_contraction_rotation)
+            mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
+        else {
+            mpo->tf->left_contract_rotate(copied_left, mpo->tensors[i - 1], fbt,
+                                          fkt, new_left, envs[i]->left,
+                                          mpo->left_operator_exprs.size() != 0
+                                              ? mpo->left_operator_exprs[i - 1]
+                                              : nullptr);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+            copied_left = nullptr;
+        }
+        size_t blocking_mem = new_left->get_total_memory() + copied_mem;
         size_t renormal_mem = envs[i]->left->get_total_memory();
         if (!frame_<FP>()->use_main_stack)
             new_left->deallocate();
@@ -375,15 +402,25 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
                 ->offset = 0;
         }
-        // cached_opt might be partially delayed,
-        // so further contraction is still needed
-        mpo->tf->right_contract(envs[i + 1]->right, mpo->tensors[i + dot],
-                                new_right,
-                                mpo->right_operator_exprs.size() != 0
-                                    ? mpo->right_operator_exprs[i + dot]
-                                    : nullptr);
-        mpo->unload_tensor(i + dot);
-        mpo->unload_right_operators(i + dot);
+        shared_ptr<OperatorTensor<S, FL>> copied_right = nullptr;
+        size_t copied_mem = 0;
+        if (fused_contraction_rotation) {
+            if (envs[i + 1]->right != nullptr) {
+                copied_right =
+                    Partition<S, FL>::deep_copy_build(envs[i + 1]->right);
+                copied_mem = copied_right->get_total_memory();
+            }
+        } else {
+            // cached_opt might be partially delayed,
+            // so further contraction is still needed
+            mpo->tf->right_contract(envs[i + 1]->right, mpo->tensors[i + dot],
+                                    new_right,
+                                    mpo->right_operator_exprs.size() != 0
+                                        ? mpo->right_operator_exprs[i + dot]
+                                        : nullptr);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+        }
         tctr += _t.get_time();
         bra->load_tensor(i + dot);
         if (bra != ket)
@@ -407,8 +444,20 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             bra == ket
                 ? fbt
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
-        mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
-        size_t blocking_mem = new_right->get_total_memory();
+        if (!fused_contraction_rotation)
+            mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
+        else {
+            mpo->tf->right_contract_rotate(
+                copied_right, mpo->tensors[i + dot], fbt, fkt, new_right,
+                envs[i]->right,
+                mpo->right_operator_exprs.size() != 0
+                    ? mpo->right_operator_exprs[i + dot]
+                    : nullptr);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+            copied_right = nullptr;
+        }
+        size_t blocking_mem = new_right->get_total_memory() + copied_mem;
         size_t renormal_mem = envs[i]->right->get_total_memory();
         if (!frame_<FP>()->use_main_stack)
             new_right->deallocate();
@@ -1270,8 +1319,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             }
     }
     // Move the center site by one
-    virtual void move_to(int i, bool preserve_data = false) {
+    virtual pair<size_t, size_t> move_to(int i, bool preserve_data = false) {
         string new_data_name = "";
+        pair<size_t, size_t> pbr;
         // here the ialloc part is still needed even if we have cached
         // but consider two cases (for why it can be skipped):
         // 1. when center is delayed, then it is already in ialloc
@@ -1288,7 +1338,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 center != 0)
                 frame_<FP>()->load_data(1, get_left_partition_filename(center));
             // this will create left partition ++center (new_data_name)
-            left_contract_rotate(++center, preserve_data);
+            pbr = left_contract_rotate(++center, preserve_data);
             if (envs[center]->left != nullptr)
                 new_data_name = get_left_partition_filename(center);
             if (frame_<FP>()->minimal_disk_usage && !preserve_data &&
@@ -1304,7 +1354,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 frame_<FP>()->load_data(1,
                                         get_right_partition_filename(center));
             // this will create right partition --center (new_data_name)
-            right_contract_rotate(--center, preserve_data);
+            pbr = right_contract_rotate(--center, preserve_data);
             if (envs[center]->right != nullptr)
                 new_data_name = get_right_partition_filename(center);
             if (frame_<FP>()->minimal_disk_usage && !preserve_data &&
@@ -1464,6 +1514,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (new_data_name != "")
                 frame_<FP>()->load_data(1, new_data_name);
         }
+        return pbr;
     }
     // Contract left block for constructing effective Hamiltonian
     // site iL is the new site

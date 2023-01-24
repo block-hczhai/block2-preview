@@ -4374,6 +4374,7 @@ struct Expect {
     vector<FPS> wfn_spectra;
     size_t sweep_cumulative_nflop = 0;
     size_t sweep_max_eff_ham_size = 0;
+    pair<size_t, size_t> max_move_env_mem;
     double tex = 0, teff = 0, tmve = 0, tblk = 0;
     Timer _t, _t2;
     Expect(const shared_ptr<MovingEnvironment<S, FL, FLS>> &me,
@@ -4543,10 +4544,11 @@ struct Expect {
                 }
                 me->para_rule->comm->barrier();
             }
+            pair<size_t, size_t> pbr;
             if (forward) {
                 for (auto &mps : mpss)
                     mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
-                me->move_to(i + 1, true);
+                pbr = me->move_to(i + 1, true);
                 _t.get_time();
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseL, forward, false,
@@ -4570,7 +4572,7 @@ struct Expect {
             } else {
                 for (auto &mps : mpss)
                     mps->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
-                me->move_to(i - 1, true);
+                pbr = me->move_to(i - 1, true);
                 _t.get_time();
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, false,
@@ -4592,6 +4594,10 @@ struct Expect {
                         mps->unload_tensor(i - 1);
                     }
             }
+            if (max_move_env_mem.first + max_move_env_mem.second <=
+                pbr.first + pbr.second)
+                max_move_env_mem.first = pbr.first,
+                max_move_env_mem.second = pbr.second;
         } else {
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 for (int ip = 0; ip < (int)mpss.size(); ip++) {
@@ -5363,7 +5369,11 @@ struct Expect {
     Iteration blocking(int i, bool forward, bool propagate,
                        ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         _t2.get_time();
-        me->move_to(i);
+        pair<size_t, size_t> pbr = me->move_to(i);
+        if (max_move_env_mem.first + max_move_env_mem.second <=
+            pbr.first + pbr.second)
+            max_move_env_mem.first = pbr.first,
+            max_move_env_mem.second = pbr.second;
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<pair<shared_ptr<OpExpr<S>>, FLX>>(), 0, 0, 0, 0);
@@ -5404,6 +5414,7 @@ struct Expect {
     }
     void sweep(bool forward, ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
         teff = tex = tblk = tmve = 0;
+        max_move_env_mem.first = max_move_env_mem.second = 0;
         frame_<FPS>()->twrite = frame_<FPS>()->tread = frame_<FPS>()->tasync =
             0;
         frame_<FPS>()->fpwrite = frame_<FPS>()->fpread = 0;
@@ -5506,6 +5517,12 @@ struct Expect {
                      << " (" << (imain * 100 / (imain + iseco)) << "%)";
                 cout << " | Hmem = "
                      << Parsing::to_size_string(sweep_max_eff_ham_size *
+                                                sizeof(FL));
+                cout << " | MaxBmem = "
+                     << Parsing::to_size_string(max_move_env_mem.first *
+                                                sizeof(FL));
+                cout << " | MaxRmem = "
+                     << Parsing::to_size_string(max_move_env_mem.second *
                                                 sizeof(FL));
                 cout << endl;
                 cout << " | Tread = " << frame_<FPS>()->tread
