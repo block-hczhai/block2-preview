@@ -1030,7 +1030,7 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
         .def("deallocate", &OperatorTensor<S, FL>::deallocate)
         .def("copy", &OperatorTensor<S, FL>::copy)
         .def("deep_copy", &OperatorTensor<S, FL>::deep_copy,
-             py::arg("alloc") = nullptr);
+             py::arg("alloc") = nullptr, py::arg("ref_alloc") = nullptr);
 
     py::class_<DelayedOperatorTensor<S, FL>,
                shared_ptr<DelayedOperatorTensor<S, FL>>, OperatorTensor<S, FL>>(
@@ -2162,6 +2162,10 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
         .def_readwrite("size", &StackAllocator<FL>::size)
         .def_readwrite("used", &StackAllocator<FL>::used)
         .def_readwrite("shift", &StackAllocator<FL>::shift);
+
+    py::class_<TemporaryAllocator<FL>, shared_ptr<TemporaryAllocator<FL>>,
+               StackAllocator<FL>>(m, (name + "TemporaryAllocator").c_str())
+        .def(py::init<>());
 
     py::class_<FPCodec<FL>, shared_ptr<FPCodec<FL>>>(m,
                                                      (name + "FPCodec").c_str())

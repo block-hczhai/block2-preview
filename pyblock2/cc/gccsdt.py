@@ -28,7 +28,6 @@ except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
 import itertools
-from telnetlib import KERMIT
 import numpy as np
 
 

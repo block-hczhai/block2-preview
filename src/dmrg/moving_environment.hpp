@@ -257,11 +257,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ->offset = 0;
         }
         shared_ptr<OperatorTensor<S, FL>> copied_left = nullptr;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;
         size_t copied_mem = 0;
         if (fused_contraction_rotation) {
             if (envs[i - 1]->left != nullptr) {
-                copied_left =
-                    Partition<S, FL>::deep_copy_build(envs[i - 1]->left);
+                left_copy(i - 1, copied_infos, copied_left, false);
                 copied_mem = copied_left->get_total_memory();
             }
         } else {
@@ -403,11 +403,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ->offset = 0;
         }
         shared_ptr<OperatorTensor<S, FL>> copied_right = nullptr;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;
         size_t copied_mem = 0;
         if (fused_contraction_rotation) {
             if (envs[i + 1]->right != nullptr) {
-                copied_right =
-                    Partition<S, FL>::deep_copy_build(envs[i + 1]->right);
+                right_copy(i + dot, copied_infos, copied_right, false);
                 copied_mem = copied_right->get_total_memory();
             }
         } else {
@@ -1658,13 +1658,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     // Copy left-most left block for constructing effective Hamiltonian
     // block to the left of site iL is copied
-    void
-    left_copy(int iL,
-              vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-              shared_ptr<OperatorTensor<S, FL>> &new_left) {
+    void left_copy(
+        int iL, vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
+        shared_ptr<OperatorTensor<S, FL>> &new_left, bool need_load = true) {
         assert(envs[iL]->left != nullptr);
-        if (iL != 0)
+        if (iL != 0 && need_load)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
+        shared_ptr<Allocator<FP>> d_alloc =
+            make_shared<TemporaryAllocator<FP>>(frame_<FP>()->dallocs[1]->used);
         frame_<FP>()->activate(0);
         Partition<S, FL>::copy_op_infos(envs[iL]->left_op_infos, left_op_infos);
         if (cached_info.first == OpCachingTypes::LeftCopy &&
@@ -1672,9 +1673,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_left = cached_opt;
         else
             new_left = envs[iL]->left->deep_copy(
-                frame_<FP>()->use_main_stack
-                    ? nullptr
-                    : make_shared<VectorAllocator<FP>>());
+                frame_<FP>()->use_main_stack ? nullptr : d_alloc,
+                frame_<FP>()->dallocs[1]);
         for (auto &p : new_left->ops)
             p.second->info = Partition<S, FL>::find_op_info(
                 left_op_infos, p.second->info->delta_quantum);
@@ -1684,9 +1684,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     void
     right_copy(int iR,
                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-               shared_ptr<OperatorTensor<S, FL>> &new_right) {
+               shared_ptr<OperatorTensor<S, FL>> &new_right,
+               bool need_load = true) {
         assert(envs[iR - dot + 1]->right != nullptr);
-        frame_<FP>()->load_data(1, get_right_partition_filename(iR - dot + 1));
+        if (need_load)
+            frame_<FP>()->load_data(1,
+                                    get_right_partition_filename(iR - dot + 1));
+        shared_ptr<Allocator<FP>> d_alloc =
+            make_shared<TemporaryAllocator<FP>>(frame_<FP>()->dallocs[1]->used);
         frame_<FP>()->activate(0);
         Partition<S, FL>::copy_op_infos(envs[iR - dot + 1]->right_op_infos,
                                         right_op_infos);
@@ -1695,9 +1700,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_right = cached_opt;
         else
             new_right = envs[iR - dot + 1]->right->deep_copy(
-                frame_<FP>()->use_main_stack
-                    ? nullptr
-                    : make_shared<VectorAllocator<FP>>());
+                frame_<FP>()->use_main_stack ? nullptr : d_alloc,
+                frame_<FP>()->dallocs[1]);
         for (auto &p : new_right->ops)
             p.second->info = Partition<S, FL>::find_op_info(
                 right_op_infos, p.second->info->delta_quantum);

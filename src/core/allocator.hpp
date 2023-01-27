@@ -124,14 +124,14 @@ template <typename T> struct StackAllocator : Allocator<T> {
     StackAllocator(T *ptr, size_t max_size)
         : size(max_size), used(0), shift(0), data(ptr) {}
     /** Default constructor. */
-    StackAllocator() : size(0), used(0), shift(0), data(0) {}
+    StackAllocator() : size(0), used(0), shift(0), data(nullptr) {}
     /** Allocate a length n array.
      * @param n Number of elements in the array.
      * @return The allocated pointer.
      */
     T *allocate(size_t n) override {
         assert(shift == 0);
-        if (used + n >= size) {
+        if (used + n > size) {
             cout << "exceeding allowed memory"
                  << " (size=" << size << ", trying to allocate " << n << ") "
                  << (is_same<T, uint32_t>::value
@@ -182,6 +182,23 @@ template <typename T> struct StackAllocator : Allocator<T> {
         os << "SIZE=" << c.size << " PTR=" << c.data << " USED=" << c.used
            << " SHIFT=" << (long)c.shift << endl;
         return os;
+    }
+};
+
+/** Temporary stack memory allocator.
+ * @tparam T The type of the element in the array. */
+template <typename T> struct TemporaryAllocator : StackAllocator<T> {
+    /** Constructor.
+     * @param max_size Total size of the stack (in number of elements).
+     */
+    TemporaryAllocator(size_t max_size)
+        : StackAllocator<T>(new T[max_size], max_size) {}
+    /** Default constructor. */
+    TemporaryAllocator() : StackAllocator<T>() {}
+    /** Default destructor. */
+    ~TemporaryAllocator() {
+        if (StackAllocator<T>::data != nullptr)
+            delete[] StackAllocator<T>::data;
     }
 };
 

@@ -23,4 +23,5 @@
 template struct block2::Allocator<float>;
 template struct block2::StackAllocator<float>;
 template struct block2::VectorAllocator<float>;
+template struct block2::TemporaryAllocator<float>;
 template struct block2::DataFrame<float>;

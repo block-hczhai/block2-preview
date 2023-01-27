@@ -836,7 +836,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             if (a->lmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->lmat->data[i]);
                 bool req = true;
-                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                if (this->rule->get_parallel_type() & ParallelTypes::NewScheme)
                     req = this->rule->own(pa) || this->rule->repeat(pa) ||
                           this->rule->partial(pa);
                 else
@@ -894,7 +894,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             if (a->rmat->data[i]->get_type() != OpTypes::Zero) {
                 auto pa = abs_value(a->rmat->data[i]);
                 bool req = true;
-                if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                if (this->rule->get_parallel_type() & ParallelTypes::NewScheme)
                     req = this->rule->own(pa) || this->rule->repeat(pa) ||
                           this->rule->partial(pa);
                 else
@@ -1235,6 +1235,186 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                     this->opf->seq->auto_perform();
             };
             rule->distributed_apply(f, c->rmat->data, exprs->data, mats);
+        }
+    }
+    // c = mpst_bra x [ a x b (dot) ] x mpst_ket
+    void
+    left_contract_rotate(const shared_ptr<OperatorTensor<S, FL>> &a,
+                         const shared_ptr<OperatorTensor<S, FL>> &b,
+                         const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+                         const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+                         shared_ptr<OperatorTensor<S, FL>> &ab,
+                         shared_ptr<OperatorTensor<S, FL>> &c,
+                         const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                         OpNamesSet delayed = OpNamesSet()) const override {
+        if (a == nullptr) {
+            left_assign(b, ab);
+            left_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            shared_ptr<Symbolic<S>> exprs =
+                cexprs == nullptr ? a->lmat * b->lmat : cexprs;
+            assert(exprs->data.size() == c->lmat->data.size());
+            assert(rule->get_parallel_type() & ParallelTypes::NewScheme);
+            assert(opf->seq->mode != SeqTypes::Auto);
+            vector<shared_ptr<SparseMatrix<S, FL>>> mats(exprs->data.size());
+            for (size_t i = 0; i < exprs->data.size(); i++) {
+                shared_ptr<OpExpr<S>> op = abs_value(ab->lmat->data[i]);
+                if (!delayed(
+                        dynamic_pointer_cast<OpElement<S, FL>>(op)->name)) {
+                    if (!frame_<FP>()->use_main_stack) {
+                        // skip cached part
+                        if (ab->ops.at(op)->alloc != nullptr)
+                            continue;
+                        ab->ops.at(op)->alloc =
+                            make_shared<VectorAllocator<FP>>();
+                    }
+                    mats[i] = ab->ops.at(op);
+                }
+            }
+            vector<shared_ptr<OpExpr<S>>> local_exprs;
+            auto f =
+                [&local_exprs](const vector<shared_ptr<OpExpr<S>>> &exprs) {
+                    local_exprs = exprs;
+                };
+            rule->distributed_apply(f, ab->lmat->data, exprs->data, mats);
+            if (frame_<FP>()->use_main_stack)
+                for (size_t i = 0; i < local_exprs.size(); i++)
+                    if (local_exprs[i] != nullptr) {
+                        assert(mats[i]->data == nullptr);
+                        mats[i]->allocate(mats[i]->info);
+                    }
+            for (size_t i = 0; i < ab->lmat->data.size(); i++)
+                if (ab->lmat->data[i]->get_type() != OpTypes::Zero) {
+                    auto pa = abs_value(ab->lmat->data[i]);
+                    bool req = rule->available(pa);
+                    if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                        req = req || rule->partial(pa);
+                    if (req) {
+                        assert(c->ops.at(pa)->data == nullptr);
+                        c->ops.at(pa)->allocate(c->ops.at(pa)->info);
+                    }
+                }
+            bool repeat = true, no_repeat = !(rule->comm_type &
+                                              ParallelCommTypes::NonBlocking);
+            auto g = [&a, &b, &ab, &local_exprs, &mats, &c, &mpst_bra,
+                      &mpst_ket, this, &repeat,
+                      &no_repeat](const shared_ptr<TensorFunctions<S, FL>> &tf,
+                                  size_t i) {
+                if (ab->lmat->data[i]->get_type() != OpTypes::Zero) {
+                    auto pa = abs_value(ab->lmat->data[i]);
+                    bool req = true;
+                    if (this->rule->get_parallel_type() &
+                        ParallelTypes::NewScheme)
+                        req = this->rule->own(pa) || this->rule->repeat(pa) ||
+                              this->rule->partial(pa);
+                    else
+                        req = this->rule->own(pa) &&
+                              ((repeat && this->rule->repeat(pa)) ||
+                               (no_repeat && !this->rule->repeat(pa)));
+                    if (req) {
+                        assert(local_exprs[i] != nullptr);
+                        if (!frame_<FP>()->use_main_stack)
+                            mats[i]->allocate(mats[i]->info);
+                        tf->tensor_product(local_exprs[i], a->ops, b->ops,
+                                           mats[i]);
+                        tf->opf->tensor_rotate(mats[i], c->ops.at(pa), mpst_bra,
+                                               mpst_ket, false);
+                        if (!frame_<FP>()->use_main_stack)
+                            mats[i]->deallocate();
+                    }
+                }
+            };
+            parallel_for(c->lmat->data.size(), g);
+        }
+    }
+    // c = mpst_bra x [ b (dot) x a ] x mpst_ket
+    void
+    right_contract_rotate(const shared_ptr<OperatorTensor<S, FL>> &a,
+                          const shared_ptr<OperatorTensor<S, FL>> &b,
+                          const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+                          const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+                          shared_ptr<OperatorTensor<S, FL>> &ab,
+                          shared_ptr<OperatorTensor<S, FL>> &c,
+                          const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+                          OpNamesSet delayed = OpNamesSet()) const override {
+        if (a == nullptr) {
+            right_assign(b, ab);
+            right_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            shared_ptr<Symbolic<S>> exprs =
+                cexprs == nullptr ? b->rmat * a->rmat : cexprs;
+            assert(exprs->data.size() == c->rmat->data.size());
+            assert(rule->get_parallel_type() & ParallelTypes::NewScheme);
+            assert(opf->seq->mode != SeqTypes::Auto);
+            vector<shared_ptr<SparseMatrix<S, FL>>> mats(exprs->data.size());
+            for (size_t i = 0; i < exprs->data.size(); i++) {
+                shared_ptr<OpExpr<S>> op = abs_value(ab->rmat->data[i]);
+                if (!delayed(
+                        dynamic_pointer_cast<OpElement<S, FL>>(op)->name)) {
+                    if (!frame_<FP>()->use_main_stack) {
+                        // skip cached part
+                        if (ab->ops.at(op)->alloc != nullptr)
+                            continue;
+                        ab->ops.at(op)->alloc =
+                            make_shared<VectorAllocator<FP>>();
+                    }
+                    mats[i] = ab->ops.at(op);
+                }
+            }
+            vector<shared_ptr<OpExpr<S>>> local_exprs;
+            auto f =
+                [&local_exprs](const vector<shared_ptr<OpExpr<S>>> &exprs) {
+                    local_exprs = exprs;
+                };
+            rule->distributed_apply(f, ab->rmat->data, exprs->data, mats);
+            if (frame_<FP>()->use_main_stack)
+                for (size_t i = 0; i < local_exprs.size(); i++)
+                    if (local_exprs[i] != nullptr) {
+                        assert(mats[i]->data == nullptr);
+                        mats[i]->allocate(mats[i]->info);
+                    }
+            for (size_t i = 0; i < ab->rmat->data.size(); i++)
+                if (ab->rmat->data[i]->get_type() != OpTypes::Zero) {
+                    auto pa = abs_value(ab->rmat->data[i]);
+                    bool req = rule->available(pa);
+                    if (rule->get_parallel_type() & ParallelTypes::NewScheme)
+                        req = req || rule->partial(pa);
+                    if (req) {
+                        assert(c->ops.at(pa)->data == nullptr);
+                        c->ops.at(pa)->allocate(c->ops.at(pa)->info);
+                    }
+                }
+            bool repeat = true, no_repeat = !(rule->comm_type &
+                                              ParallelCommTypes::NonBlocking);
+            auto g = [&a, &b, &ab, &local_exprs, &mats, &c, &mpst_bra,
+                      &mpst_ket, this, &repeat,
+                      &no_repeat](const shared_ptr<TensorFunctions<S, FL>> &tf,
+                                  size_t i) {
+                if (ab->rmat->data[i]->get_type() != OpTypes::Zero) {
+                    auto pa = abs_value(ab->rmat->data[i]);
+                    bool req = true;
+                    if (this->rule->get_parallel_type() &
+                        ParallelTypes::NewScheme)
+                        req = this->rule->own(pa) || this->rule->repeat(pa) ||
+                              this->rule->partial(pa);
+                    else
+                        req = this->rule->own(pa) &&
+                              ((repeat && this->rule->repeat(pa)) ||
+                               (no_repeat && !this->rule->repeat(pa)));
+                    if (req) {
+                        assert(local_exprs[i] != nullptr);
+                        if (!frame_<FP>()->use_main_stack)
+                            mats[i]->allocate(mats[i]->info);
+                        tf->tensor_product(local_exprs[i], b->ops, a->ops,
+                                           mats[i]);
+                        tf->opf->tensor_rotate(mats[i], c->ops.at(pa), mpst_bra,
+                                               mpst_ket, true);
+                        if (!frame_<FP>()->use_main_stack)
+                            mats[i]->deallocate();
+                    }
+                }
+            };
+            parallel_for(c->rmat->data.size(), g);
         }
     }
 };

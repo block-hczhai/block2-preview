@@ -60,6 +60,7 @@ extern template struct block2::VectorAllocator<uint32_t>;
 extern template struct block2::Allocator<double>;
 extern template struct block2::StackAllocator<double>;
 extern template struct block2::VectorAllocator<double>;
+extern template struct block2::TemporaryAllocator<double>;
 extern template struct block2::DataFrame<double>;
 
 // archived_sparse_matrix.hpp
@@ -880,6 +881,7 @@ extern template struct block2::TensorFunctions<block2::SGB, complex<double>>;
 extern template struct block2::Allocator<float>;
 extern template struct block2::StackAllocator<float>;
 extern template struct block2::VectorAllocator<float>;
+extern template struct block2::TemporaryAllocator<float>;
 extern template struct block2::DataFrame<float>;
 
 // archived_sparse_matrix.hpp

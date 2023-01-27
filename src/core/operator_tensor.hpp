@@ -25,6 +25,7 @@
 #include "delayed_sparse_matrix.hpp"
 #include "sparse_matrix.hpp"
 #include "symbolic.hpp"
+#include "threading.hpp"
 #include <map>
 #include <memory>
 #include <unordered_map>
@@ -152,19 +153,27 @@ template <typename S, typename FL> struct OperatorTensor {
         return r;
     }
     shared_ptr<OperatorTensor>
-    deep_copy(const shared_ptr<Allocator<FP>> &alloc = nullptr) const {
+    deep_copy(const shared_ptr<Allocator<FP>> &alloc = nullptr,
+              const shared_ptr<Allocator<FP>> &ref_alloc = nullptr) const {
         shared_ptr<OperatorTensor> r = make_shared<OperatorTensor>();
         r->lmat = lmat, r->rmat = rmat;
+        vector<shared_ptr<OpExpr<S>>> op_keys;
         r->ops.reserve(ops.size());
+        op_keys.reserve(ops.size());
         for (auto &p : ops) {
             if (p.second->get_type() == SparseMatrixTypes::Normal) {
                 shared_ptr<SparseMatrix<S, FL>> mat =
                     make_shared<SparseMatrix<S, FL>>(alloc);
                 if (p.second->total_memory == 0)
                     mat->info = p.second->info;
-                else {
+                else if (p.second->alloc != ref_alloc) {
+                    mat->total_memory = p.second->total_memory;
+                    mat->info = p.second->info;
+                    mat->data = p.second->data;
+                    mat->alloc = p.second->alloc;
+                } else {
                     mat->allocate(p.second->info);
-                    mat->copy_data_from(p.second);
+                    op_keys.push_back(p.first);
                 }
                 mat->factor = p.second->factor;
                 r->ops[p.first] = mat;
@@ -185,6 +194,11 @@ template <typename S, typename FL> struct OperatorTensor {
             else
                 assert(false);
         }
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static, 20) num_threads(ntg)
+        for (int i = 0; i < (int)op_keys.size(); i++)
+            r->ops.at(op_keys[i])->copy_data_from(ops.at(op_keys[i]));
+        threading->activate_normal();
         return r;
     }
 };
