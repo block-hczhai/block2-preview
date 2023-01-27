@@ -23,6 +23,9 @@ with equations derived on the fly.
 need internal contraction module of block2.
 """
 
+import numpy as np
+import time
+
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
@@ -30,8 +33,6 @@ try:
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
-import numpy as np
-import time
 
 try:
     from . import eri_helper, dmrg_helper
@@ -113,7 +114,7 @@ for key, expr in sub_spaces.items():
     deno_fns[key] = lambda fii, fee, denos=denos: sum([dfn(fii, fee) for dfn in denos])
 
 
-from pyscf import lib
+from pyscf import lib, mcscf
 
 def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     if mc is None:
@@ -126,13 +127,30 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
     ic.mo_energy = mc.mo_energy
+    if not ic.canonicalized:
+        xci = mc.ci
+        if root is not None and (isinstance(xci, list) or isinstance(xci, range)):
+            if isinstance(mc.fcisolver, mcscf.addons.StateAverageFCISolver):
+                dm1 = mc.fcisolver.states_make_rdm1(xci, mc.ncas, mc.nelecas)[root]
+            else:
+                dm1 = mc.fcisolver.make_rdm1(xci[root], mc.ncas, mc.nelecas)
+            xci = xci[root]
+        else:
+            dm1 = mc.fcisolver.make_rdm1(xci, mc.ncas, mc.nelecas)
+        ic.mo_coeff, xci, ic.mo_energy = mc.canonicalize(
+            ic.mo_coeff, ci=xci, cas_natorb=False, casdm1=dm1,
+            verbose=ic.verbose)
+        if root is not None and isinstance(ic.ci, list):
+            ic.ci[root] = xci
+        elif root is not None:
+            ic.ci = xci
     if pdms is None:
         t = time.perf_counter()
         pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs, root=root)
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
@@ -194,11 +212,11 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
 class WickSCNEVPT2(lib.StreamObject):
     def __init__(self, mc):
         self._mc = mc
-        assert mc.canonicalization
         self._scf = mc._scf
         self.mol = self._scf.mol
         self.verbose = self.mol.verbose
         self.stdout = self.mol.stdout
+        self.canonicalized = False
         self.e_corr = None
 
     @property
@@ -226,12 +244,12 @@ if __name__ == "__main__":
     mc.fcisolver.conv_tol = 1e-14
     mc.canonicalization = True
     mc.run()
-    sc = mrpt.NEVPT(mc).set(canonicalized=True).run()
+    sc = mrpt.NEVPT(mc).run()
     wsc = WickSCNEVPT2(mc).run()
     # converged SCF energy = -149.608181589162
     # CASSCF energy = -149.708657770004
-    # E(WickSCNEVPT2) = -149.9578375745639  E_corr_pt = -0.2491798045596538
-    # E_corr(pyscf) = -0.249179804533910
+    # E(WickSCNEVPT2) = -149.9578381852564  E_corr_pt = -0.2491804151760018
+    # E_corr(pyscf) = -0.249180419805814
     # ref -149.708657773372 (casscf) -0.2491831156 (sc) -149.95784088897202 (tot-sc)
 
     # Example 2 - CASCI multi-state
@@ -242,15 +260,15 @@ if __name__ == "__main__":
     mc2.kernel(mc.mo_coeff)
     # [ -149.708657770004 -149.480535614204 -149.480535614204 ]
 
-    sc = mrpt.NEVPT(mc2, root=0).set(canonicalized=True).run()
-    sc = mrpt.NEVPT(mc2, root=1).set(canonicalized=True).run()
-    sc = mrpt.NEVPT(mc2, root=2).set(canonicalized=True).run()
-    # [ -0.249179840264890 -0.245255108987011 -0.245255066342682 ]
+    sc = mrpt.NEVPT(mc2, root=0).run()
+    sc = mrpt.NEVPT(mc2, root=1).run()
+    sc = mrpt.NEVPT(mc2, root=2).run()
+    # [ -0.249180123136442 -0.245294722085918 -0.245294767244671 ]
 
     wsc = WickSCNEVPT2(mc2).run(root=0)
     wsc = WickSCNEVPT2(mc2).run(root=1)
     wsc = WickSCNEVPT2(mc2).run(root=2)
-    # [ -0.249179840264885 -0.2452551089870089 -0.2452550663426834 ]
+    # [ -0.2491801231364459 -0.2452947220859165 -0.2452947672446744 ]
 
     # Example 3 - CASSCF state-average
     mc = mcscf.CASSCF(mf, 6, 8)
@@ -262,9 +280,9 @@ if __name__ == "__main__":
     wsc = WickSCNEVPT2(mc).run(root=0)
     wsc = WickSCNEVPT2(mc).run(root=1)
     wsc = WickSCNEVPT2(mc).run(root=2)
-    # E(WickSCNEVPT2) = -149.9567617925674  E_corr_pt = -0.2499544889955986
-    # E(WickSCNEVPT2) = -149.7252390131850  E_corr_pt = -0.2409192117816299
-    # E(WickSCNEVPT2) = -149.7252388904416  E_corr_pt = -0.2409190890441966
+    # E(WickSCNEVPT2) = -149.9566474118755  E_corr_pt = -0.2498401043435796
+    # E(WickSCNEVPT2) = -149.7252997698935  E_corr_pt = -0.2409799703938773
+    # E(WickSCNEVPT2) = -149.7252996696915  E_corr_pt = -0.2409798701919107
 
     # ref casscf = [ -149.706807583050 -149.484319661994 -149.484319661994 ]
     # ref 0 =  -0.2498431015 (SC) -0.2522554873 (PC) -149.956650684550 (TOT-SC)

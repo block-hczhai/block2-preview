@@ -25,15 +25,15 @@ need internal contraction module of block2.
 A orthogonal basis is used in CG method.
 """
 
+import numpy as np
+import time
+
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation, WickTensorTypes
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
     from block2 import MapStrPWickTensorExpr, MapStrStr
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
-
-import numpy as np
-import time
 
 try:
     from . import eri_helper, dmrg_helper
@@ -227,7 +227,7 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, 
         print("Error : linear solver (cg) not converged!")
     return func, x, xiter + 1
 
-from pyscf import lib
+from pyscf import lib, mcscf
 
 def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=None):
     if mc is None:
@@ -242,6 +242,23 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
     ic.mo_coeff = mo_coeff
     ic.ci = mc.ci
     ic.mo_energy = mc.mo_energy
+    if not ic.canonicalized:
+        xci = mc.ci
+        if root is not None and (isinstance(xci, list) or isinstance(xci, range)):
+            if isinstance(mc.fcisolver, mcscf.addons.StateAverageFCISolver):
+                dm1 = mc.fcisolver.states_make_rdm1(xci, mc.ncas, mc.nelecas)[root]
+            else:
+                dm1 = mc.fcisolver.make_rdm1(xci[root], mc.ncas, mc.nelecas)
+            xci = xci[root]
+        else:
+            dm1 = mc.fcisolver.make_rdm1(xci, mc.ncas, mc.nelecas)
+        ic.mo_coeff, xci, ic.mo_energy = mc.canonicalize(
+            ic.mo_coeff, ci=xci, cas_natorb=False, casdm1=dm1,
+            verbose=ic.verbose)
+        if root is not None and isinstance(ic.ci, list):
+            ic.ci[root] = xci
+        elif root is not None:
+            ic.ci = xci
     tt = time.perf_counter()
     if pdms is None:
         t = time.perf_counter()
@@ -249,7 +266,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
@@ -393,12 +410,12 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
 class WickICNEVPT2(lib.StreamObject):
     def __init__(self, mc):
         self._mc = mc
-        assert mc.canonicalization
         self._scf = mc._scf
         self.mol = self._scf.mol
         self.verbose = self.mol.verbose
         self.stdout = self.mol.stdout
         self.e_corr = None
+        self.canonicalized = False
         self.trunc_thrds = 1E-4
 
     @property

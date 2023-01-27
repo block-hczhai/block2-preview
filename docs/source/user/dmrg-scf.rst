@@ -499,6 +499,87 @@ The alternative faster ``compress_approx`` approach using MPS compression is als
     such as ``singlet_embedding``, you need to add it using ``mc.fcisolver.block_extra_keyword`` instead of
     ``mc.fcisolver.extraline``.
 
+DMRG-SC-NEVPT2 (Multi-State)
+----------------------------
+
+.. highlight:: python3
+
+The following is an example input file for state-averaged DMRGSCF for three states,
+and then the SC-NEVPT2 treatment of each of the three states. ::
+
+    import numpy as np
+    from pyscf import gto, scf, mcscf, mrpt, dmrgscf, lib
+    import os
+
+    dmrgscf.settings.BLOCKEXE = os.popen("which block2main").read().strip()
+    dmrgscf.settings.BLOCKEXE_COMPRESS_NEVPT = os.popen("which block2main").read().strip()
+    dmrgscf.settings.MPIPREFIX = ''
+
+    mol = gto.M(atom='O 0 0 0; O 0 0 1.207', basis='cc-pvdz', spin=2, verbose=4)
+    mf = scf.RHF(mol).run(conv_tol=1E-20)
+
+    # state average casscf
+    mc = mcscf.CASSCF(mf, 6, 8)
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-10)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 8
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+    mc.fcisolver.conv_tol = 1e-14
+    mc.fcisolver.nroots = 3
+    mc = mcscf.state_average_(mc, [1.0 / 3] * 3)
+    mc.kernel()
+    mf.mo_coeff = mc.mo_coeff
+
+    # need an extra casci before calling mrpt
+    mc = mcscf.CASCI(mf, 6, 8)
+    mc.fcisolver = dmrgscf.DMRGCI(mol, maxM=500, tol=1E-10)
+    mc.fcisolver.runtimeDir = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.scratchDirectory = os.path.abspath(lib.param.TMPDIR)
+    mc.fcisolver.threads = 8
+    mc.fcisolver.memory = int(mol.max_memory / 1000) # mem in GB
+    mc.fcisolver.conv_tol = 1e-14
+    mc.fcisolver.nroots = 3
+    mc.natorb = True
+    mc.kernel()
+
+    # canonicalization for each state
+    ms = [None] * mc.fcisolver.nroots
+    cs = [None] * mc.fcisolver.nroots
+    es = [None] * mc.fcisolver.nroots
+    for ir in range(mc.fcisolver.nroots):
+        ms[ir], cs[ir], es[ir] = mc.canonicalize(mc.mo_coeff, ci=mc.ci[ir], cas_natorb=False)
+
+    refs = [-149.956650684550, -149.725338427894, -149.725338427894]
+
+    # mrpt
+    for ir in range(mc.fcisolver.nroots):
+        mc.mo_coeff, mc.ci, mc.mo_energy = ms[ir], cs, es[ir]
+        mr = mrpt.nevpt2.NEVPT(mc).set(canonicalized=True).compress_approx(maxM=200).run(root=ir)
+        print('root =', ir, 'E =', mc.e_tot[ir] + mr.e_corr, 'diff =', mc.e_tot[ir] + mr.e_corr - refs[ir])
+
+.. highlight:: text
+
+This will generate the following output: ::
+
+    $ grep 'diff' multi.out
+    root = 0 E = -149.95664910937998 diff = 1.5751700175314909e-06
+    root = 1 E = -149.72529848179465 diff = 3.994609934920845e-05
+    root = 2 E = -149.7252985999243 diff = 3.9827969715133804e-05
+
+.. note ::
+
+    The above script should generate the same result if the explicit 4PDM approach is used,
+    by removing ``.compress_approx(maxM=200)``.
+
+    Changing ``mc.fcisolver`` to the default FCI active space solver should also generate the same result
+    (note that ``.compress_approx(maxM=200)`` is not supported by the FCI active space solver).
+
+    When the FCI active space solver is used, explicit canonicalization is also optional, namely,
+    one can also remove ``.set(canonicalized=True)`` and ``mc.mo_coeff, mc.ci, mc.mo_energy = ms[ir], cs, es[ir]``
+    and the result will still be the same.
+
+
 DMRG-IC-NEVPT2
 --------------
 
