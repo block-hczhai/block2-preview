@@ -170,7 +170,7 @@ template <typename S, typename FL> struct OperatorTensor {
                     mat->total_memory = p.second->total_memory;
                     mat->info = p.second->info;
                     mat->data = p.second->data;
-                    mat->alloc = p.second->alloc;
+                    mat->alloc = nullptr;
                 } else {
                     mat->allocate(p.second->info);
                     op_keys.push_back(p.first);
