@@ -577,11 +577,11 @@ template <typename S, typename FL> struct DMRGDriver {
         shared_ptr<MovingEnvironment<S, FL, FL>> pme =
             make_shared<MovingEnvironment<S, FL, FL>>(pmpo, mbra, mket, "NPDM");
         if (fused_contraction_rotation) {
-            pme->cached_contraction = true;
-            pme->fused_contraction_rotation = false;
-        } else {
             pme->cached_contraction = false;
             pme->fused_contraction_rotation = true;
+        } else {
+            pme->cached_contraction = true;
+            pme->fused_contraction_rotation = false;
         }
         pme->init_environments(iprint >= 2);
         shared_ptr<Expect<S, FL, FL, FL>> dx =
