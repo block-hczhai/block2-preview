@@ -20,7 +20,7 @@ import subprocess
 # -- Project information -----------------------------------------------------
 
 project = 'block2'
-copyright = '2021, Huanchen Zhai'
+copyright = '2023, Huanchen Zhai'
 author = 'Huanchen Zhai'
 
 
@@ -31,6 +31,7 @@ author = 'Huanchen Zhai'
 # ones.
 extensions = [
     "breathe",
+    "nbsphinx",
 ]
 
 breathe_projects = {"block2": "../build/doxygenxml/"}

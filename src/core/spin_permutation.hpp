@@ -1177,6 +1177,8 @@ struct SpinPermScheme {
         using R = SpinPermRecoupling;
         SU2CG cg;
         vector<uint8_t> cds;
+        if (spin_str.find('T') != string::npos)
+            return initialize_su2_old(nn, spin_str, is_npdm);
         spin_str = R::split_cds(spin_str, cds);
         bool heis = cds.size() != 0 && cds[0] == 2;
         int target_twos = R::get_target_twos(spin_str);

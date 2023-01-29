@@ -830,11 +830,14 @@ class DMRGDriver:
     def get_identity_mpo(self):
         return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize())
 
-    def unpack_g2e(self, g2e):
+    def unpack_g2e(self, g2e, n_sites=None):
         import numpy as np
 
+        if n_sites is None:
+            n_sites = self.n_sites
+
         if g2e.ndim == 1:
-            m = self.n_sites * (self.n_sites + 1) // 2
+            m = n_sites * (n_sites + 1) // 2
             xtril = np.tril_indices(m)
             r = np.zeros((m ** 2,), dtype=g2e.dtype)
             r[xtril[0] * m + xtril[1]] = g2e
@@ -842,7 +845,7 @@ class DMRGDriver:
             g2e = r.reshape((m, m))
 
         if g2e.ndim == 2:
-            m = self.n_sites
+            m = n_sites
             xtril = np.tril_indices(m)
             r = np.zeros((m ** 2, m ** 2), dtype=g2e.dtype)
             r[(xtril[0] * m + xtril[1])[:, None], xtril[0] * m + xtril[1]] = g2e

@@ -3,15 +3,11 @@ Global Settings
 ===============
 
 In **block2**, we try to minimize the use of global variables.
-Two global variables have been used for controlling global settings such as stack memory,
-scartch folder and threading schemes.
+Two global variables (``frame_()`` and ``threading_()``) have been used for controlling
+global settings such as stack memory, scartch folder and threading schemes.
 
 Note that in ``block2`` the distributed parallelization scheme is handled
 locally.
-
-.. doxygendefine:: frame
-
-.. doxygendefine:: threading
 
 Threading
 ---------
@@ -24,6 +20,8 @@ Threading
     :members:
 
 .. doxygenfunction:: block2::threading_
+
+.. doxygendefine:: threading
 
 Allocators
 ----------
@@ -42,8 +40,6 @@ Allocators
 .. doxygenfunction:: block2::dalloc_
 
 .. doxygendefine:: ialloc
-
-.. doxygendefine:: dalloc
 
 Data Frame
 ----------
