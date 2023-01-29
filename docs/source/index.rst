@@ -19,6 +19,8 @@ The block2 code is developed and maintained in Garnet Chan group at Caltech.
 
 Documentation: https://block2.readthedocs.io/en/latest/
 
+Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hubbard.html
+
 Source code: https://github.com/block-hczhai/block2-preview
 
 Contributors
@@ -115,6 +117,18 @@ Features
    user/forte
    user/mps-io
    user/references
+
+.. raw:: latex
+
+   \chapter{Python Interface Tutorial}
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Python Interface Tutorial
+
+   tutorial/hubbard
+   tutorial/heisenberg
+   tutorial/qc-hamiltonians
 
 .. raw:: latex
 

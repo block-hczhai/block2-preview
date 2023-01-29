@@ -54,7 +54,7 @@ One can install ``block2`` using ``pip``:
 
   where ``<version>`` can be some development version number like ``0.5.1rc14``.
 
-To run a DMRG calculation, please use the following command:
+To run a DMRG calculation using the cmmand line interface, please use the following command:
 
     block2main dmrg.conf > dmrg.out
 
@@ -63,6 +63,8 @@ where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` cont
 For DMRGSCF calculation, please have a look at the [documentation](https://block2.readthedocs.io/en/latest/user/dmrg-scf.html).
 
 Documentation: https://block2.readthedocs.io/en/latest/
+
+Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hubbard.html
 
 Source code: https://github.com/block-hczhai/block2-preview
 
