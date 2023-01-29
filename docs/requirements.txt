@@ -1,4 +1,5 @@
 sphinx==3.5.3
 sphinx-rtd-theme==0.5.2
 breathe==4.29.1
+nbsphinx==0.8.12
 Jinja2<3.1
