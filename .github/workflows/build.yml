@@ -303,7 +303,7 @@ jobs:
           rm -r dist
           echo ${TAG_STRING:11}
           sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-          sed -i "s/name='block2'/name='block2-mpi'/g" setup.py
+          sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
           sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           python -m build --sdist
 
@@ -370,7 +370,7 @@ jobs:
           rm -r dist
           echo ${TAG_STRING:11}
           sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-          sed -i "s/name='block2'/name='block2-mpi'/g" setup.py
+          sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
           sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           python -m build --sdist
 
