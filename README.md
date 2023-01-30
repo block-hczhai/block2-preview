@@ -24,7 +24,7 @@ Main contributors:
 
 If you find this package useful for your scientific research, please cite the work as:
 
- - Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116, doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
+ - Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116, doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
 
 For the large site code, please cite
 
@@ -43,7 +43,7 @@ One can install ``block2`` using ``pip``:
 
       pip install block2-mpi
 
-* Binary format is prepared via ``pip`` for python 3.6, 3.7, 3.8, and 3.9 with macOS (no-MPI) or Linux (no-MPI/openMPI). If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source (for example, ``pip install block2 --no-binary block2``).
+* Binary format is prepared via ``pip`` for python 3.7, 3.8, 3.9, and 3.10 with macOS (x86 and arm64, no-MPI) or Linux (no-MPI/openMPI). If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source (for example, ``pip install block2 --no-binary block2``).
 
 * One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``, but its dependence on mpi library can sometimes be difficult to deal with. Some guidance for resolving environment problems can be found in issue [#7](https://github.com/block-hczhai/block2-preview/issues/7) and [here](https://block2.readthedocs.io/en/latest/user/installation.html#installation-with-anaconda).
 
@@ -54,7 +54,7 @@ One can install ``block2`` using ``pip``:
 
   where ``<version>`` can be some development version number like ``0.5.1rc14``.
 
-To run a DMRG calculation using the cmmand line interface, please use the following command:
+To run a DMRG calculation using the command line interface, please use the following command:
 
     block2main dmrg.conf > dmrg.out
 
@@ -153,7 +153,7 @@ References
 * Chan, G. K.-L. An algorithm for large scale density matrix renormalization group calculations. *The Journal of Chemical Physics* 2004, **120**, 3172–3178. https://doi.org/10.1063/1.1638734.
 * Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group  algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102. https://doi.org/10.1063/1.4955108.
 * Stoudenmire, E.; White, S. R. Real-space parallel density matrix renormalization group. *Physical Review B* 2013, **87**, 155137. https://doi.org/10.1103/PhysRevB.87.155137.
-* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. https://doi.org/10.1063/5.0050902.
+* Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. https://doi.org/10.1063/5.0050902.
 
 ### Spin-Orbit Coupling
 

@@ -4,7 +4,7 @@ References
 
 A detailed description of the parallel DMRG algorithm implemented in **block2** can be found in the following paper
 
-* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+* Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
 Please cite this paper if you find **block2** useful in your research.
 For the large site code, please cite 
@@ -28,7 +28,7 @@ Parallelization
 * Chan, G. K.-L. An algorithm for large scale density matrix renormalization group calculations. *The Journal of Chemical Physics* 2004, **120**, 3172–3178. doi: `10.1063/1.1638734 <https://doi.org/10.1063/1.1638734>`_
 * Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group  algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102. doi: `10.1063/1.4955108 <https://doi.org/10.1063/1.4955108>`_
 * Stoudenmire, E.; White, S. R. Real-space parallel density matrix renormalization group. *Physical Review B* 2013, **87**, 155137. doi: `10.1103/PhysRevB.87.155137 <https://doi.org/10.1103/PhysRevB.87.155137>`_
-* Zhai, H., Chan, G. K. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. doi: `10.1063/5.0050902 <https://doi.org/10.1063/5.0050902>`_
+* Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. doi: `10.1063/5.0050902 <https://doi.org/10.1063/5.0050902>`_
 
 Spin-Orbit Coupling
 -------------------

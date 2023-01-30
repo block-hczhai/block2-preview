@@ -56,6 +56,7 @@ jobs:
       - name: build gtest (linux)
         if: matrix.os == 'ubuntu-20.04'
         run: |
+          lscpu
           sudo apt-get install libgtest-dev
           cd /usr/src/gtest
           sudo cmake CMakeLists.txt
