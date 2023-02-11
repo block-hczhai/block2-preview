@@ -265,6 +265,8 @@ if __name__ == "__main__":
     sc = mrpt.NEVPT(mc2, root=2).run()
     # [ -0.249180123136442 -0.245294722085918 -0.245294767244671 ]
 
+    mc2.kernel(mc.mo_coeff)
+
     wsc = WickSCNEVPT2(mc2).run(root=0)
     wsc = WickSCNEVPT2(mc2).run(root=1)
     wsc = WickSCNEVPT2(mc2).run(root=2)

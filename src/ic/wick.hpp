@@ -1698,10 +1698,12 @@ struct WickExpr {
                 x.factor));
             for (auto &wt : r.terms.back().tensors) {
                 for (auto &wi : wt.indices)
-                    for (auto &wii : xctr_idxs[i])
-                        if (wi.with_no_types() == wii.with_no_types() &&
+                    for (int j = 0; j < (int)xctr_idxs[i].size(); j++) {
+                        auto &wii = xctr_idxs[i][j];
+                        if (wi == vidxs.at(j) &&
                             (wi.types & wii.types) != WickIndexTypes::None)
                             wi = wii;
+                    }
                 if (wt.perms.size() == 0)
                     r.terms.back().factor = 0;
             }
