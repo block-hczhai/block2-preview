@@ -1392,6 +1392,107 @@ class DMRGDriver:
             self.mpi.barrier()
         return ener
 
+    def td_dmrg(
+        self,
+        mpo,
+        ket,
+        delta_t=None,
+        target_t=None,
+        final_mps_tag=None,
+        te_type="rk4",
+        n_steps=None,
+        bond_dims=None,
+        n_sub_sweeps=2,
+        normalize_mps=False,
+        hermitian=False,
+        iprint=0,
+        cutoff=1e-20,
+    ):
+        bw = self.bw
+        import numpy as np
+
+        if n_steps is None:
+            n_steps = int(abs(target_t) / abs(delta_t) + 0.1)
+        elif target_t is None:
+            target_t = n_steps * delta_t
+        elif delta_t is None:
+            delta_t = target_t / n_steps
+
+        assert np.abs(abs(n_steps * delta_t) - abs(target_t)) < 1e-10
+        is_imag_te = abs(np.imag(delta_t)) < 1e-10
+
+        if iprint:
+            print(
+                "Time Evolution  DELTA T = RE %15.8f + IM %15.8f"
+                % (np.real(delta_t), np.imag(delta_t))
+            )
+            print(
+                "Time Evolution TARGET T = RE %15.8f + IM %15.8f"
+                % (np.real(target_t), np.imag(target_t))
+            )
+            print("Time Evolution   NSTEPS = %10d" % n_steps)
+
+        mket = ket.deep_copy("TD-KET@TMP")
+
+        me = bw.bs.MovingEnvironment(mpo, mket, mket, "TDDMRG")
+        me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        me.cached_contraction = True
+        me.init_environments(iprint >= 2)
+
+        if bond_dims is None:
+            bond_dims = [mket.info.bond_dim]
+
+        te = bw.bs.TimeEvolution(
+            me,
+            bw.b.VectorUBond(bond_dims),
+            bw.b.TETypes.RK4 if te_type == "rk4" else bw.b.TETypes.TangentSpace,
+        )
+        te.hermitian = hermitian
+        te.iprint = iprint
+        te.n_sub_sweeps = 1
+        if te.mode != bw.b.TETypes.TangentSpace:
+            te.n_sub_sweeps = n_sub_sweeps
+        te.normalize_mps = normalize_mps
+        te.cutoff = cutoff
+
+        te_times = []
+        te_energies = []
+        te_normsqs = []
+        te_discarded_weights = []
+        for i in range(n_steps):
+            if te.mode == bw.b.TETypes.TangentSpace:
+                te.solve(2, delta_t / 2, mket.center == 0)
+            else:
+                te.solve(1, delta_t, mket.center == 0)
+            if is_imag_te and iprint:
+                print(
+                    "T = %10.5f <E> = %20.15f <Norm^2> = %20.15f"
+                    % ((i + 1) * delta_t, te.energies[-1], te.normsqs[-1])
+                )
+            elif iprint:
+                print(
+                    "T = RE %10.5f + IM %10.5f <E> = %20.15f <Norm^2> = %20.15f"
+                    % (
+                        (i + 1) * np.real(delta_t),
+                        (i + 1) * np.imag(delta_t),
+                        te.energies[-1],
+                        te.normsqs[-1],
+                    )
+                )
+            te_times.append((i + 1) * delta_t)
+            te_energies.append(te.energies[-1])
+            te_normsqs.append(te.normsqs[-1])
+            te_discarded_weights.append(te.discarded_weights[-1])
+
+        from collections import namedtuple
+
+        TEResult = namedtuple("TEResult", ["times", "energies", "normsqs", "dws"])
+        self._te = TEResult(te_times, te_energies, te_normsqs, te_discarded_weights)
+
+        return mket.deep_copy(
+            "TD-" + ket.info.tag if final_mps_tag is None else final_mps_tag
+        )
+
     def get_dmrg_results(self):
         import numpy as np
 
@@ -2011,6 +2112,8 @@ class DMRGDriver:
         tol=1e-8,
         bond_dims=None,
         bra_bond_dims=None,
+        noises=None,
+        noise_mpo=None,
         cutoff=1e-24,
         iprint=0,
     ):
@@ -2022,13 +2125,27 @@ class DMRGDriver:
         if bra_bond_dims is None:
             bra_bond_dims = [bra.info.bond_dim]
         self.align_mps_center(bra, ket)
+        if noises is not None and noises[0] != 0:
+            pme = bw.bs.MovingEnvironment(noise_mpo, bra, bra, "PERT-CPS")
+            pme.init_environments(iprint >= 2)
+        else:
+            pme = None
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "MULT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
-        me.cached_contraction = True
+        me.cached_contraction = pme is None # not allowed by perturbative noise
         me.init_environments(iprint >= 2)
-        cps = bw.bs.Linear(
-            me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims)
-        )
+        if noises is None or noises[0] == 0:
+            cps = bw.bs.Linear(
+                pme, me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims)
+            )
+        else:
+            cps = bw.bs.Linear(
+                pme, me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims),
+                bw.VectorFP(noises),
+            )
+        if pme is not None:
+            cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+            cps.eq_type = bw.b.EquationTypes.PerturbativeCompression
         cps.iprint = iprint
         cps.cutoff = cutoff
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
