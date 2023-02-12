@@ -64,6 +64,16 @@ html_logo = '_static/block2-logo-white.png'
 primary_domain = "cpp"
 highlight_language = "cpp"
 
+latex_elements = {
+    'papersize': 'letterpaper',
+    'pointsize': '11pt',
+    'preamble': r'''
+        \usepackage{charter}
+        \usepackage[defaultsans]{lato}
+        \usepackage{inconsolata}
+    '''
+}
+
 def generate_doxygen_xml(app):
     build_dir = os.path.join(app.confdir, "build")
     if not os.path.exists(build_dir):
