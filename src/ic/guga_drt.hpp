@@ -18,7 +18,12 @@
  *
  */
 
-/** Distinct Row Table in The Graphical Unitary Group Approach (GUGA). */
+/** Distinct Row Table in The Graphical Unitary Group Approach (GUGA).
+ *
+ * Reference:
+ *    [QCDES] Gonzalez, L., & Lindh, R. (Eds.). (2021). Quantum Chemistry
+ * and Dynamics of Excited States: Methods and Applications. John Wiley & Sons.
+ */
 
 #pragma once
 

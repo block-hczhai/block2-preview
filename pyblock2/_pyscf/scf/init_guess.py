@@ -158,8 +158,13 @@ def get_metal_init_guess(
     for ia in atom_idxs:
         orbs = orb if isinstance(orb, list) else [orb]
         for orx in orbs:
-            idx = mol.search_ao_label("%d %s %s.*" % (ia, mol.atom_symbol(ia), orx))
+            if orx.startswith(mol.atom_symbol(ia) + ' '):
+                label = "%d %s.*" % (ia, orx)
+            else:
+                label = "%d %s %s.*" % (ia, mol.atom_symbol(ia), orx)
+            idx = mol.search_ao_label(label)
             idxs.append(idx)
+            logger.info(scf.RHF(mol), "ORB = %s IDX = %s", label, idx)
 
     ld = lo.orth_ao(mol, "lowdin", pre_orth_ao="SCF")
     dl0 = transform_rdm1_to_mo(dm0, ld, rmf.get_ovlp())
