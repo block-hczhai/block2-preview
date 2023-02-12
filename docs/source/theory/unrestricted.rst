@@ -1,9 +1,4 @@
 
-.. only:: html
-
-    .. math::
-        \require{mediawiki-texvc}
-
 DMRG Quantum Chemistry Hamiltonian in Unrestricted Spatial Orbitals
 ===================================================================
 

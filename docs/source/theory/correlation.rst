@@ -1,9 +1,4 @@
 
-.. only:: html
-
-    .. math::
-        \require{mediawiki-texvc}
-
 Diagonal Two-Particle Density Matrix
 ====================================
 

@@ -1,9 +1,4 @@
 
-.. only:: html
-
-    .. math::
-        \require{mediawiki-texvc}
-
 Sum MPO Formalism in Unrestricted Spatial Orbitals
 ==================================================
 

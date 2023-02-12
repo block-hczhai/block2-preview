@@ -1,9 +1,4 @@
 
-.. only:: html
-
-    .. math::
-        \require{mediawiki-texvc}
-
 Spin-Adapted DMRG Quantum Chemistry Hamiltonian
 ===============================================
 
