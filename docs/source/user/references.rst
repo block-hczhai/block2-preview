@@ -46,7 +46,12 @@ Finite-Temperature DMRG
 -----------------------
 
 * Feiguin, A. E., White, S. R. Finite-temperature density matrix renormalization using an enlarged Hilbert space. *Physical Review B* 2005, **72**, 220401. doi: `10.1103/PhysRevB.72.220401 <https://doi.org/10.1103/PhysRevB.72.220401>`_
+
+Time-Dependent DMRG
+-------------------
+
 * Feiguin, A. E., White, S. R. Time-step targeting methods for real-time dynamics using the density matrix renormalization group. *Physical Review B* 2005, **72**, 020404. doi: `10.1103/PhysRevB.72.020404 <https://doi.org/10.1103/PhysRevB.72.020404>`_
+* Haegeman, J., Lubich, C., Oseledets, I., Vandereycken, B., Verstraete, F. Unifying time evolution and optimization with matrix product states. *Physical Review B* 2016, **94**, 165116. doi: `10.1103/PhysRevB.94.165116 <https://doi.org/10.1103/PhysRevB.94.165116>`_
 
 Linear Response
 ---------------
