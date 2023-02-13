@@ -476,14 +476,26 @@ The alternative faster ``compress_approx`` approach using MPS compression is als
 
     sc = mrpt.NEVPT(mc).compress_approx(maxM=200).run()
 
+.. highlight:: text
+
+This will generate the following output (for ``compress_approx`` approach): ::
+
+    $ grep 'CASSCF energy' sc-nevpt2.out
+    CASSCF energy = -149.708657771219
+    $ grep 'Nevpt2 Energy' sc-nevpt2.out
+    Nevpt2 Energy = -0.249182302692906
+
+So the total NEVPT2 energy using the ``compress_approx`` approach is ``-149.708657771219 + -0.249182302692906 = -149.9578400739119``.
+
 .. note ::
 
     The first "4pdm" approach is not supported by ``StackBlock``, but it is supported in the old ``Block`` code.
     The second "compression" approach is supported by ``StackBlock``.
     ``Block2`` supports both approaches.
 
-    When using the second approach, it will generate a warning saying that ``BLOCKEXE_COMPRESS_NEVPT`` must be
-    a serially compiled version. Please ignore this warning for ``block2``.
+    When using the second approach, it will generate a warning saying that ``WARN: DMRG executable file for
+    nevptsolver is the same to the executable file for DMRG solver. If they are both compiled by MPI compilers,
+    they may cause error or random results in DMRG-NEVPT calculation.``. Please ignore this warning for ``block2``.
     For ``block2``, it is okay to set ``BLOCKEXE`` and ``BLOCKEXE_COMPRESS_NEVPT`` to the same file.
     ``BLOCKEXE_COMPRESS_NEVPT`` can be compiled with or without MPI.
     So only a single version of ``block2main`` is required. If you want to use MPI, please set both
