@@ -50,7 +50,7 @@ First we save a non-parallelized MPO using the following script: ::
     import os
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -118,7 +118,7 @@ and ``FCIDUMP``: ::
     import os
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -221,7 +221,7 @@ The following script generates and saves the parallelized MPO for 7 mpi processs
     import psutil
     import os
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
 
     mpo = MPO(0)
     mpo.load_data('mpo.bin')
@@ -277,7 +277,7 @@ The following script is used for parallel DMRG with 7 mpi processsors
 
     MPI = MPICommunicator()
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global // MPI.size
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
