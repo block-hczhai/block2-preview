@@ -190,7 +190,7 @@ Now we are ready to do a DMRG in the old basis to find the ground-state MPS in t
     import numpy as np
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -357,7 +357,7 @@ Then, for big-site MPO/MPS, the following script can be used: ::
     import numpy as np
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,

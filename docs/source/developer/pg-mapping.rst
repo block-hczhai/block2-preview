@@ -38,7 +38,7 @@ First we do a ground state calculation using D\ :sub:`2h` point group: ::
     import numpy as np
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
@@ -184,7 +184,7 @@ The script is basically the same (except the exchange between C\ :sub:`2v` and D
     import numpy as np
     SX = SU2
 
-    Global.frame = DataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
+    Global.frame = DoubleDataFrame(10 * 1024 ** 2, 10 * 1024 ** 3, "nodex")
     n_threads = Global.threading.n_threads_global
     Global.threading = Threading(
         ThreadingTypes.OperatorBatchedGEMM | ThreadingTypes.Global,
