@@ -748,7 +748,10 @@ struct SpinPermPattern {
             else
                 pp.back().second++;
         uint16_t maxx = pp.back().first + 1;
+        // find the max one and its count
         vector<uint16_t> ha(x.size(), maxx);
+        // i = number of max one
+        // ha = all possible lists of the max one and undetermined ones (maxx)
         for (uint16_t i = 1; i <= pp.back().second; i++) {
             vector<uint16_t> hb;
             for (int j = 0, k; j < (int)ha.size(); j += x.size()) {
