@@ -708,7 +708,7 @@ struct SpinRecoupling {
         if (split_idx == nn)
             ref_mid = (int)ref_split_idx.size() - 1;
         map<string, double> r = x;
-        if (split_idx != -1) {
+        if (split_idx != -1 && split_idx != -2) {
             // handle npdm split
             int ii = 0, ir = 0;
             for (int i = ref_mid; i < (int)ref_split_idx.size(); i++) {
@@ -722,12 +722,19 @@ struct SpinRecoupling {
                 r = recouple(r, ii, ref_split_idx[i], cg, heis);
                 ii = get_level(r.begin()->first, ii).left_idx;
             }
-        } else {
+        } else if (split_idx == -1) {
             // handle hamiltonian split
             int ii = 0, ir = 0;
             for (auto &rr : ref_split_idx) {
                 r = recouple(r, ii, rr - ir, cg, heis);
                 ii = get_level(r.begin()->first, ii).mid_idx, ir = rr;
+            }
+        } else if (split_idx == -2) {
+            // handle drt hamiltonian split
+            int ii = 0;
+            for (int i = (int)ref_split_idx.size() - 1; i >= 0; i--) {
+                r = recouple(r, ii, ref_split_idx[i], cg, heis);
+                ii = get_level(r.begin()->first, ii).left_idx;
             }
         }
         return r;
@@ -869,10 +876,10 @@ struct SpinPermPattern {
             SpinPermRecoupling::initialize(nn, target_twos, heis ? 2 : 1);
         vector<SpinPermTensor> ts(pp.size());
         for (int i = 0; i < (int)pp.size(); i++) {
-            if (split_idx != -1 && !ref_split) {
+            if (split_idx != -1 && split_idx != -2 && !ref_split) {
                 if (SpinPermRecoupling::find_split_index(pp[i]) != split_idx)
                     continue;
-            } else if (split_idx != -1) {
+            } else if (split_idx != -1 && split_idx != -2) {
                 // handle npdm split
                 if (ref_split_idx.size() != 0) {
                     if (split_idx < nn && SpinPermRecoupling::find_split_index(
@@ -896,12 +903,20 @@ struct SpinPermPattern {
                                     act_split_right_idx.begin()))
                         continue;
                 }
-            } else if (ref_split) {
+            } else if (ref_split && split_idx == -1) {
                 vector<uint16_t> act_split_idx =
                     SpinPermRecoupling::find_split_indices_from_left(pp[i]);
                 if (act_split_idx.size() < ref_split_idx.size() ||
                     !equal(ref_split_idx.begin(), ref_split_idx.end(),
                            act_split_idx.begin()))
+                    continue;
+            } else if (ref_split && split_idx == -2) {
+                vector<uint16_t> act_split_idx =
+                    SpinPermRecoupling::find_split_indices_from_right(pp[i]);
+                if (act_split_idx.size() < ref_split_idx.size() ||
+                    !equal(ref_split_idx.begin(), ref_split_idx.end(),
+                           act_split_idx.begin() +
+                               (act_split_idx.size() - ref_split_idx.size())))
                     continue;
             }
             ts[i] = SpinPermRecoupling::make_tensor(pp[i], indices, cds, cg);
@@ -1175,7 +1190,8 @@ struct SpinPermScheme {
         return r;
     }
     static SpinPermScheme initialize_su2(int nn, string spin_str,
-                                         bool is_npdm = false) {
+                                         bool is_npdm = false,
+                                         bool is_drt = false) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg;
@@ -1192,7 +1208,7 @@ struct SpinPermScheme {
         map<pair<int, vector<uint16_t>>, int> unique_data;
         int xi = spat.count() - 1;
         vector<uint16_t> xrr = spat[xi];
-        int xq = is_npdm ? spat.get_split_index(xi) : -1;
+        int xq = is_npdm ? spat.get_split_index(xi) : (is_drt ? -2 : -1);
         vector<string> unique_strs =
             SpinPermPattern::get_unique(cds, xrr, target_twos, xq, true);
         r.index_patterns[xi] = xrr;
@@ -1272,7 +1288,7 @@ struct SpinPermScheme {
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
             int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
-            int iq = is_npdm ? spat.get_split_index(i) : -1;
+            int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
             vector<map<string, double>> recouples(unique_strs.size());
             map<string, int> map_unique_strs;
             for (int iu = 0; iu < (int)unique_strs.size(); iu++) {

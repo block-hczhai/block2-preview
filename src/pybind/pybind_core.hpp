@@ -2086,7 +2086,7 @@ template <typename S = void> void bind_io(py::module &m) {
                     py::arg("is_npdm") = false)
         .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
                     py::arg("nn"), py::arg("spin_str"),
-                    py::arg("is_npdm") = false)
+                    py::arg("is_npdm") = false, py::arg("is_drt") = false)
         .def("to_str", &SpinPermScheme::to_str);
 
     py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,
