@@ -191,24 +191,28 @@ class Block2Wrapper:
             self.brs = b.su2
             self.SX = b.SU2
             self.VectorSX = b.VectorSU2
+            self.VectorVectorSX = b.VectorVectorSU2
         elif SymmetryTypes.SZ in symm_type:
             self.bs = self.bx.sz
             self.bcs = self.bc.sz if self.bc is not None else None
             self.brs = b.sz
             self.SX = b.SZ
             self.VectorSX = b.VectorSZ
+            self.VectorVectorSX = b.VectorVectorSZ
         elif SymmetryTypes.SGF in symm_type:
             self.bs = self.bx.sgf
             self.bcs = self.bc.sgf if self.bc is not None else None
             self.brs = b.sgf
             self.SX = b.SGF
             self.VectorSX = b.VectorSGF
+            self.VectorVectorSX = b.VectorVectorSGF
         elif SymmetryTypes.SGB in symm_type:
             self.bs = self.bx.sgb
             self.bcs = self.bc.sgb if self.bc is not None else None
             self.brs = b.sgb
             self.SX = b.SGB
             self.VectorSX = b.VectorSGB
+            self.VectorVectorSX = b.VectorVectorSGB
 
 
 class DMRGDriver:

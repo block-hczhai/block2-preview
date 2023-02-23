@@ -101,19 +101,19 @@ void bind_fl_sci_big_site_fock(py::module &m) {
         // vv setter
         .def_property(
             "qnIdxBra", nullptr,
-            (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
+            (void(SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
                 SCIFockBigSite<S, FL>::setQnIdxBra)
         .def_property(
             "qnIdxKet", nullptr,
-            (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
+            (void(SCIFockBigSite<S, FL>::*)(const std::vector<int> &)) &
                 SCIFockBigSite<S, FL>::setQnIdxKet)
         .def("setQnIdxBra",
-             (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
-                                              const std::vector<char> &)) &
+             (void(SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
+                                             const std::vector<char> &)) &
                  SCIFockBigSite<S, FL>::setQnIdxBra)
         .def("setQnIdxKet",
-             (void (SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
-                                              const std::vector<char> &)) &
+             (void(SCIFockBigSite<S, FL>::*)(const std::vector<int> &,
+                                             const std::vector<char> &)) &
                  SCIFockBigSite<S, FL>::setQnIdxKet)
         .def_readwrite("qnIdxBraH", &SCIFockBigSite<S, FL>::qnIdxBraH)
         .def_readwrite("qnIdxKetH", &SCIFockBigSite<S, FL>::qnIdxKetH)
@@ -148,6 +148,7 @@ template <typename S, typename FL> void bind_fl_csf_big_site(py::module &m) {
         .def_readwrite("qs", &CSFSpace<S, FL>::qs)
         .def_readwrite("qs_idxs", &CSFSpace<S, FL>::qs_idxs)
         .def_readwrite("n_unpaired", &CSFSpace<S, FL>::n_unpaired)
+        .def_readwrite("n_unpaired_idxs", &CSFSpace<S, FL>::n_unpaired_idxs)
         .def_readwrite("n_unpaired_shapes", &CSFSpace<S, FL>::n_unpaired_shapes)
         .def_readwrite("csfs", &CSFSpace<S, FL>::csfs)
         .def_readwrite("csf_idxs", &CSFSpace<S, FL>::csf_idxs)
@@ -167,6 +168,9 @@ template <typename S, typename FL> void bind_fl_csf_big_site(py::module &m) {
                       const std::vector<uint8_t> &>())
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
                       const std::vector<uint8_t> &, int>())
+        .def(py::init<shared_ptr<CSFSpace<S, FL>>,
+                      const shared_ptr<FCIDUMP<FL>> &,
+                      const vector<uint8_t> &>())
         .def("fill_csr_matrix", &CSFBigSite<S, FL>::fill_csr_matrix)
         .def("build_site_op", &CSFBigSite<S, FL>::build_site_op)
         .def_readwrite("fcidump", &CSFBigSite<S, FL>::fcidump)

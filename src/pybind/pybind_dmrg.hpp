@@ -1883,20 +1883,90 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
 
 template <typename S, typename FL> void bind_fl_general(py::module &m) {
 
+    struct PyGeneralHamiltonian : GeneralHamiltonian<S, FL> {
+        typedef GeneralHamiltonian<S, FL> super_t;
+        typedef unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> mp_str_t;
+        using GeneralHamiltonian<S, FL>::GeneralHamiltonian;
+        shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const override {
+            PYBIND11_OVERRIDE(shared_ptr<StateInfo<S>>, super_t, get_site_basis,
+                              m);
+        }
+        void init_site_ops() override {
+            PYBIND11_OVERRIDE(void, super_t, init_site_ops, );
+        }
+        void get_site_string_ops(uint16_t m, mp_str_t &ops) override {
+            pybind11::gil_scoped_acquire gil;
+            pybind11::function py_method =
+                pybind11::get_override(this, "get_site_string_ops");
+            if (py_method) {
+                py::object rops = py_method(m, ops);
+                ops = rops.template cast<mp_str_t>();
+            } else
+                super_t::get_site_string_ops(m, ops);
+        }
+        vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                             const vector<uint16_t> &term_l,
+                                             S left_vacuum) override {
+            PYBIND11_OVERRIDE(vector<vector<S>>, super_t, init_string_quanta,
+                              exprs, term_l, left_vacuum);
+        }
+        pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
+                                     const uint16_t *idxs,
+                                     uint16_t k) const override {
+            pybind11::gil_scoped_acquire gil;
+            pybind11::function py_method =
+                pybind11::get_override(this, "get_string_quanta");
+            if (py_method) {
+                vector<uint16_t> vidxs(idxs, idxs + expr.length());
+                py::object r = py_method(ref, expr, vidxs, k);
+                return r.template cast<pair<S, S>>();
+            } else
+                return super_t::get_string_quanta(ref, expr, idxs, k);
+        }
+        S get_string_quantum(const string &expr,
+                             const uint16_t *idxs) const override {
+            pybind11::gil_scoped_acquire gil;
+            pybind11::function py_method =
+                pybind11::get_override(this, "get_string_quantum");
+            if (py_method) {
+                vector<uint16_t> vidxs(idxs, idxs + expr.length());
+                py::object r = py_method(expr, vidxs);
+                return r.cast<S>();
+            } else
+                return super_t::get_string_quantum(expr, idxs);
+        }
+        void deallocate() override {
+            PYBIND11_OVERRIDE(void, super_t, deallocate, );
+        }
+    };
+
     py::class_<GeneralHamiltonian<S, FL>, shared_ptr<GeneralHamiltonian<S, FL>>,
-               Hamiltonian<S, FL>>(m, "GeneralHamiltonian")
+               Hamiltonian<S, FL>, PyGeneralHamiltonian>(m,
+                                                         "GeneralHamiltonian")
         .def(py::init<>())
         .def(py::init<S, int>())
         .def(py::init<S, int, const vector<typename S::pg_t> &>())
         .def(py::init<S, int, const vector<typename S::pg_t> &, int>())
+        .def_readwrite("site_norm_ops",
+                       &GeneralHamiltonian<S, FL>::site_norm_ops)
         .def("get_site_basis", &GeneralHamiltonian<S, FL>::get_site_basis)
         .def("init_site_ops", &GeneralHamiltonian<S, FL>::init_site_ops)
         .def("get_site_string_ops",
              &GeneralHamiltonian<S, FL>::get_site_string_ops)
-        .def("deallocate", &GeneralHamiltonian<S, FL>::deallocate)
-        .def_static("init_string_quanta",
-                    &GeneralHamiltonian<S, FL>::init_string_quanta)
-        .def_static("get_sub_expr", &GeneralHamiltonian<S, FL>::get_sub_expr);
+        .def("init_string_quanta",
+             &GeneralHamiltonian<S, FL>::init_string_quanta)
+        .def("get_string_quanta",
+             [](GeneralHamiltonian<S, FL> *self, const vector<S> &ref,
+                const string &expr, const vector<uint16_t> &idxs, uint16_t k) {
+                 return self->get_string_quanta(ref, expr, idxs.data(), k);
+             })
+        .def("get_string_quantum",
+             [](GeneralHamiltonian<S, FL> *self, const string &expr,
+                const vector<uint16_t> &idxs) {
+                 return self->get_string_quantum(expr, idxs.data());
+             })
+        .def_static("get_sub_expr", &GeneralHamiltonian<S, FL>::get_sub_expr)
+        .def("deallocate", &GeneralHamiltonian<S, FL>::deallocate);
 
     py::class_<GeneralMPO<S, FL>, shared_ptr<GeneralMPO<S, FL>>, MPO<S, FL>>(
         m, "GeneralMPO")

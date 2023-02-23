@@ -74,8 +74,11 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<double>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, double>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<long long int, long long int>, double>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<SZ>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SZ>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SZ>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
@@ -99,6 +102,8 @@ PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(
+    vector<unordered_map<string, shared_ptr<SparseMatrix<SZ, double>>>>);
+PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, double>>,
@@ -108,6 +113,7 @@ PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<double>>>>>);
 // SU2
 PYBIND11_MAKE_OPAQUE(vector<SU2>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
@@ -131,6 +137,8 @@ PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(
+    vector<unordered_map<string, shared_ptr<SparseMatrix<SU2, double>>>>);
+PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, double>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, double>>,
@@ -143,18 +151,25 @@ PYBIND11_MAKE_OPAQUE(vector<map<string, string>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
 // SZK
 PYBIND11_MAKE_OPAQUE(vector<SZK>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SZK>>);
 // SU2K
 PYBIND11_MAKE_OPAQUE(vector<SU2K>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SU2K>>);
 // SGF
 PYBIND11_MAKE_OPAQUE(vector<SGF>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SGF>>);
 // SGB
 PYBIND11_MAKE_OPAQUE(vector<SGB>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SGB>>);
 
 #ifdef _USE_COMPLEX
 // complex
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<long long int, long long int>, complex<double>>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<double>>>>);
@@ -168,6 +183,9 @@ PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<
+        unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -191,6 +209,9 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
+    vector<
+        unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<double>>>>>);
+PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, complex<double>>>,
@@ -213,6 +234,8 @@ PYBIND11_MAKE_OPAQUE(vector<vector<vector<complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<float>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<float>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, float>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<long long int, long long int>, float>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, float>>>);
@@ -224,6 +247,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SZ, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<unordered_map<string, shared_ptr<SparseMatrix<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SZ>>, shared_ptr<SparseMatrix<SZ, float>>,
@@ -243,6 +268,8 @@ PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(
+    vector<unordered_map<string, shared_ptr<SparseMatrix<SU2, float>>>>);
+PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>>);
 PYBIND11_MAKE_OPAQUE(
     map<shared_ptr<OpExpr<SU2>>, shared_ptr<SparseMatrix<SU2, float>>,
@@ -256,6 +283,9 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GTensor<complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, complex<float>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<pair<pair<long long int, long long int>, complex<float>>>);
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<float>>>>);
@@ -269,6 +299,9 @@ PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<
+        unordered_map<string, shared_ptr<SparseMatrix<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -291,6 +324,9 @@ PYBIND11_MAKE_OPAQUE(
     map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    vector<
+        unordered_map<string, shared_ptr<SparseMatrix<SU2, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<map<OpNames, shared_ptr<SparseMatrix<SU2, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -903,6 +939,9 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         m, "MapOpNamesSpMat");
     py::bind_map<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>(
         m, "MapStrSpMat");
+    py::bind_vector<
+        vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>>(
+        m, "VectorMapStrSpMat");
     py::bind_map<
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>>(
         m, "MapOpExprSpMat");
@@ -2665,6 +2704,15 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
     py::bind_vector<vector<vector<shared_ptr<GTensor<FL>>>>>(
         m, "VectorVectorTensor");
 
+    py::bind_vector<vector<pair<pair<int, int>, FL>>>(m, "VectorPPIntFL");
+    py::bind_vector<vector<pair<pair<long long int, long long int>, FL>>>(
+        m, "VectorPPLLIntFL");
+
+    if (sizeof(MKL_INT) == sizeof(int))
+        m.attr("VectorPPMKLIntFL") = m.attr("VectorPPIntFL");
+    else if (sizeof(MKL_INT) == sizeof(long long int))
+        m.attr("VectorPPMKLIntFL") = m.attr("VectorPPLLIntFL");
+
     py::class_<GCSRMatrixFunctions<FL>>(m, "CSRMatrixFunctions");
 
     py::class_<GDiagonalMatrix<FL>, shared_ptr<GDiagonalMatrix<FL>>>(
@@ -3115,6 +3163,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SZ::to_str);
 
     py::bind_vector<vector<SZ>>(m, "VectorSZ");
+    py::bind_vector<vector<vector<SZ>>>(m, "VectorVectorSZ");
 
     py::class_<SU2>(m, "SU2")
         .def(py::init<>())
@@ -3150,6 +3199,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SU2::to_str);
 
     py::bind_vector<vector<SU2>>(m, "VectorSU2");
+    py::bind_vector<vector<vector<SU2>>>(m, "VectorVectorSU2");
 
     py::class_<SGF>(m, "SGF")
         .def(py::init<>())
@@ -3184,6 +3234,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SGF::to_str);
 
     py::bind_vector<vector<SGF>>(m, "VectorSGF");
+    py::bind_vector<vector<vector<SGF>>>(m, "VectorVectorSGF");
 
     py::class_<SGB>(m, "SGB")
         .def(py::init<>())
@@ -3218,6 +3269,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SGB::to_str);
 
     py::bind_vector<vector<SGB>>(m, "VectorSGB");
+    py::bind_vector<vector<vector<SGB>>>(m, "VectorVectorSGB");
 
     py::class_<SZK>(m, "SZK")
         .def(py::init<>())
@@ -3255,6 +3307,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SZK::to_str);
 
     py::bind_vector<vector<SZK>>(m, "VectorSZK");
+    py::bind_vector<vector<vector<SZK>>>(m, "VectorVectorSZK");
 
     py::class_<SU2K>(m, "SU2K")
         .def(py::init<>())
@@ -3294,6 +3347,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def("__repr__", &SU2K::to_str);
 
     py::bind_vector<vector<SU2K>>(m, "VectorSU2K");
+    py::bind_vector<vector<vector<SU2K>>>(m, "VectorVectorSU2K");
 }
 
 #ifdef _EXPLICIT_TEMPLATE

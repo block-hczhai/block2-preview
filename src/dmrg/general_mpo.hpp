@@ -584,7 +584,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
                    ? SiteBasis<S>::get(orb_sym[m])
                    : SiteBasis<S>::get(orb_sym[m], orb_sym[m + n_sites]);
     }
-    void init_site_ops() {
+    virtual void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -715,7 +715,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             }
         }
     }
-    void get_site_string_ops(
+    virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -743,9 +743,9 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             }
         }
     }
-    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
-                                                const vector<uint16_t> &term_l,
-                                                S left_vacuum) {
+    virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                 const vector<uint16_t> &term_l,
+                                                 S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -770,8 +770,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         }
         return r;
     }
-    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
-                                 const uint16_t *idxs, uint16_t k) const {
+    virtual pair<S, S> get_string_quanta(const vector<S> &ref,
+                                         const string &expr,
+                                         const uint16_t *idxs,
+                                         uint16_t k) const {
         S l = ref[k], r = ref.back() - l;
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
             typename S::pg_t ipg = orb_sym[idxs[j]];
@@ -868,7 +870,7 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         else // heisenberg spin model
             return make_shared<StateInfo<S>>(S(twos, twos, orb_sym[m]));
     }
-    void init_site_ops() {
+    virtual void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1007,15 +1009,15 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
             return r;
         }
     }
-    void get_site_string_ops(
+    virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
         for (auto &p : ops)
             p.second = get_site_string_op(m, p.first);
     }
-    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
-                                                const vector<uint16_t> &term_l,
-                                                S left_vacuum) {
+    virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                 const vector<uint16_t> &term_l,
+                                                 S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1, S(0, 0, 0));
@@ -1082,8 +1084,10 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
         }
         return r;
     }
-    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
-                                 const uint16_t *idxs, uint16_t k) const {
+    virtual pair<S, S> get_string_quanta(const vector<S> &ref,
+                                         const string &expr,
+                                         const uint16_t *idxs,
+                                         uint16_t k) const {
         S l = ref[k], r = ref.back() - l;
         for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
             if (expr[j] != 'C' && expr[j] != 'D')
@@ -1177,7 +1181,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
     virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
         return SiteBasis<S>::get(orb_sym[m]);
     }
-    void init_site_ops() {
+    virtual void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1243,7 +1247,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
                     op_prims.at(orb_sym[m])[t]->data);
             }
     }
-    void get_site_string_ops(
+    virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1271,9 +1275,9 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
             }
         }
     }
-    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
-                                                const vector<uint16_t> &term_l,
-                                                S left_vacuum) {
+    virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                 const vector<uint16_t> &term_l,
+                                                 S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -1292,8 +1296,10 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
         }
         return r;
     }
-    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
-                                 const uint16_t *idxs, uint16_t k) const {
+    virtual pair<S, S> get_string_quanta(const vector<S> &ref,
+                                         const string &expr,
+                                         const uint16_t *idxs,
+                                         uint16_t k) const {
         S l = ref[k], r = ref.back() - l;
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
             typename S::pg_t ipg = orb_sym[idxs[j]];
@@ -1387,7 +1393,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         b->sort_states();
         return b;
     }
-    void init_site_ops() {
+    virtual void init_site_ops() {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1453,7 +1459,7 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                     op_prims.at(orb_sym[m])[t]->data);
             }
     }
-    void get_site_string_ops(
+    virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1481,9 +1487,9 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
             }
         }
     }
-    static vector<vector<S>> init_string_quanta(const vector<string> &exprs,
-                                                const vector<uint16_t> &term_l,
-                                                S left_vacuum) {
+    virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                 const vector<uint16_t> &term_l,
+                                                 S left_vacuum) {
         vector<vector<S>> r(exprs.size());
         for (size_t ix = 0; ix < exprs.size(); ix++) {
             r[ix].resize(term_l[ix] + 1);
@@ -1505,8 +1511,10 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         }
         return r;
     }
-    pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
-                                 const uint16_t *idxs, uint16_t k) const {
+    virtual pair<S, S> get_string_quanta(const vector<S> &ref,
+                                         const string &expr,
+                                         const uint16_t *idxs,
+                                         uint16_t k) const {
         S l = ref[k], r = ref.back() - l;
         for (uint16_t j = 0; j < (uint16_t)expr.length(); j++) {
             typename S::pg_t ipg = orb_sym[idxs[j]];
@@ -1652,8 +1660,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             n_terms += (LL)afd->data[ix].size();
         }
         vector<vector<S>> quanta_ref =
-            GeneralHamiltonian<S, FL>::init_string_quanta(afd->exprs, term_l,
-                                                          left_vacuum);
+            hamil->init_string_quanta(afd->exprs, term_l, left_vacuum);
         S qh = hamil->vacuum, actual_qh = qh;
         left_vacuum = hamil->vacuum;
         for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
