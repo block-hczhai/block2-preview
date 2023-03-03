@@ -884,6 +884,7 @@ class DMRGDriver:
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
         block_max_length=False,
+        add_ident=True,
         iprint=1,
     ):
         import numpy as np
@@ -1118,6 +1119,7 @@ class DMRGDriver:
             disjoint_all_blocks=disjoint_all_blocks,
             disjoint_multiplier=disjoint_multiplier,
             block_max_length=block_max_length,
+            add_ident=add_ident,
         )
 
     def get_mpo(
@@ -1136,6 +1138,7 @@ class DMRGDriver:
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
         block_max_length=False,
+        add_ident=True,
     ):
         bw = self.bw
         import time
@@ -1181,7 +1184,8 @@ class DMRGDriver:
                 self.mpi.barrier()
 
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
-        mpo = bw.bs.IdentityAddedMPO(mpo)
+        if add_ident:
+            mpo = bw.bs.IdentityAddedMPO(mpo)
         if self.mpi:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
