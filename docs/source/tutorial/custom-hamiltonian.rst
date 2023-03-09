@@ -32,15 +32,15 @@ The matrix representation of ``N`` is given in the ``init_site_ops`` method. ::
 
         def __init__(self, vacuum, n_sites, orb_sym):
             GH.__init__(self)
-            self.opf = driver.bw.bs.OperatorFunctions(driver.bw.bs.CG())
+            self.opf = driver.bw.bs.OperatorFunctions(driver.bw.brs.CG())
             self.vacuum = vacuum
             self.n_sites = n_sites
             self.orb_sym = orb_sym
-            self.basis = driver.bw.bs.VectorStateInfo([
+            self.basis = driver.bw.brs.VectorStateInfo([
                 self.get_site_basis(m) for m in range(self.n_sites)
             ])
-            self.site_op_infos = driver.bw.bs.VectorVectorPLMatInfo([
-                driver.bw.bs.VectorPLMatInfo() for _ in range(self.n_sites)
+            self.site_op_infos = driver.bw.brs.VectorVectorPLMatInfo([
+                driver.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
             ])
             self.site_norm_ops = driver.bw.bs.VectorMapStrSpMat([
                 driver.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
@@ -49,7 +49,7 @@ The matrix representation of ``N`` is given in the ``init_site_ops`` method. ::
 
         def get_site_basis(self, m):
             """Single site states."""
-            bz = driver.bw.bs.StateInfo()
+            bz = driver.bw.brs.StateInfo()
             bz.allocate(4)
             bz.quanta[0] = driver.bw.SX(0, 0, 0)
             bz.quanta[1] = driver.bw.SX(1, 1, self.orb_sym[m])
@@ -77,7 +77,7 @@ The matrix representation of ``N`` is given in the ``init_site_ops`` method. ::
                     for s in range(-max_s_even, max_s_even + 1, 2):
                         qs.add(driver.bw.SX(n, s, 0))
                 for q in sorted(qs):
-                    mat = driver.bw.bs.SparseMatrixInfo(i_alloc)
+                    mat = driver.bw.brs.SparseMatrixInfo(i_alloc)
                     mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
                     self.site_op_infos[m].append((q, mat))
 

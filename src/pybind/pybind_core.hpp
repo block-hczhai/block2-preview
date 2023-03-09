@@ -42,6 +42,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<long double>);
 PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
+PYBIND11_MAKE_OPAQUE(vector<complex<long double>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<string>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
@@ -51,8 +52,10 @@ PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 3>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<long double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<complex<double>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<complex<long double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<vector<complex<long double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, int>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<long long int, int>>);
@@ -1352,6 +1355,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<complex<double>>>(m, "VectorComplexDouble");
+    py::bind_vector<vector<complex<long double>>>(m, "VectorComplexLDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<string>>(m, "VectorString");
     py::bind_vector<vector<vector<uint8_t>>>(m, "VectorVectorUInt8");
@@ -1361,11 +1365,15 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<vector<long double>>>(m, "VectorVectorLDouble");
     py::bind_vector<vector<vector<complex<double>>>>(
         m, "VectorVectorComplexDouble");
+    py::bind_vector<vector<vector<complex<long double>>>>(
+        m, "VectorVectorComplexLDouble");
     py::bind_vector<vector<vector<int>>>(m, "VectorVectorInt");
     py::bind_vector<vector<vector<vector<double>>>>(m,
                                                     "VectorVectorVectorDouble");
     py::bind_vector<vector<vector<vector<complex<double>>>>>(
         m, "VectorVectorVectorComplexDouble");
+    py::bind_vector<vector<vector<vector<complex<long double>>>>>(
+        m, "VectorVectorVectorComplexLDouble");
     py::bind_map<unordered_map<int, int>>(m, "MapIntInt");
     py::bind_vector<vector<unordered_map<int, int>>>(m, "VectorMapIntInt");
     py::bind_map<unordered_map<int, pair<int, int>>>(m, "MapIntPIntInt");
