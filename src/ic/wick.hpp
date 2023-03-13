@@ -44,23 +44,28 @@ namespace block2 {
 enum struct WickIndexTypes : uint8_t {
     None = 0,
     Inactive = 1,
-    Active = 2,
-    External = 4,
-    Alpha = 8,
-    Beta = 16,
-    AlphaBeta = 8 | 16,
-    InactiveAlpha = 8 | 1,
-    ActiveAlpha = 8 | 2,
-    ExternalAlpha = 8 | 4,
-    InactiveBeta = 16 | 1,
-    ActiveBeta = 16 | 2,
-    ExternalBeta = 16 | 4,
+    Active = 2, // active ordered as external
+    Single = 4, // single ordered as inactive
+    External = 8,
+    Alpha = 16,
+    Beta = 32,
+    ActiveSingle = 2 | 4,
+    AlphaBeta = 16 | 32,
+    InactiveAlpha = 16 | 1,
+    ActiveAlpha = 16 | 2,
+    ExternalAlpha = 16 | 8,
+    InactiveBeta = 32 | 1,
+    ActiveBeta = 32 | 2,
+    ExternalBeta = 32 | 8,
 };
 
 inline string to_str(const WickIndexTypes c) {
-    const static string repr[] = {"N", "I", "A", "IA", "E", "EI", "EA", "EIA",
-                                  "A", "i", "a", "ia", "e", "ei", "ea", "eia",
-                                  "B", "I", "A", "IA", "E", "EI", "EA", "EIA"};
+    const static string repr[] = {
+        "N",   "I",    "A",  "IA",  "S",   "IS",   "AS",  "IAS", "E",  "EI",
+        "EA",  "EIA",  "ES", "EIS", "EAS", "EIAS", "A",   "i",   "a",  "ia",
+        "s",   "is",   "as", "ias", "e",   "ei",   "ea",  "eia", "es", "eis",
+        "eas", "eias", "B",  "I",   "A",   "IA",   "S",   "IS",  "AS", "IAS",
+        "E",   "EI",   "EA", "EIA", "ES",  "EIS",  "EAS", "EIAS"};
     return repr[(uint8_t)c];
 }
 
@@ -423,9 +428,9 @@ struct WickTensor {
     }
     // -1 = less than; +1 = greater than; 0 = equal to
     int fermi_type_compare(const WickTensor &other) const noexcept {
-        const WickIndexTypes mask = WickIndexTypes::Inactive |
-                                    WickIndexTypes::Active |
-                                    WickIndexTypes::External;
+        const WickIndexTypes mask =
+            WickIndexTypes::Inactive | WickIndexTypes::Active |
+            WickIndexTypes::Single | WickIndexTypes::External;
         WickIndexTypes x_type = indices.size() == 0 ? WickIndexTypes::None
                                                     : indices[0].types & mask;
         WickIndexTypes y_type = other.indices.size() == 0
@@ -802,6 +807,8 @@ struct WickString {
                     ctr_idx_types.push_back(WickIndexTypes::Inactive);
                 else if (tex_expr[idx] == 'A')
                     ctr_idx_types.push_back(WickIndexTypes::Active);
+                else if (tex_expr[idx] == 'S')
+                    ctr_idx_types.push_back(WickIndexTypes::Single);
                 else if (tex_expr[idx] == 'E')
                     ctr_idx_types.push_back(WickIndexTypes::External);
         }
@@ -1665,12 +1672,12 @@ struct WickExpr {
     static WickExpr split_index_types(const WickString &x) {
         vector<WickIndex> vidxs(x.ctr_indices.begin(), x.ctr_indices.end());
         vector<vector<WickIndex>> xctr_idxs = {vidxs};
-        WickIndexTypes check_mask = WickIndexTypes::Inactive |
-                                    WickIndexTypes::Active |
-                                    WickIndexTypes::External;
-        vector<WickIndexTypes> check_types = {WickIndexTypes::Inactive,
-                                              WickIndexTypes::Active,
-                                              WickIndexTypes::External};
+        WickIndexTypes check_mask =
+            WickIndexTypes::Inactive | WickIndexTypes::Active |
+            WickIndexTypes::Single | WickIndexTypes::External;
+        vector<WickIndexTypes> check_types = {
+            WickIndexTypes::Inactive, WickIndexTypes::Active,
+            WickIndexTypes::Single, WickIndexTypes::External};
         for (int i = 0; i < (int)vidxs.size(); i++) {
             int k = 0, nk = xctr_idxs.size();
             for (int j = 0; j < (int)check_types.size(); j++)
@@ -1942,6 +1949,7 @@ struct WickExpr {
                                     });
         vector<WickTensor> cd_tensors, ot_tensors;
         vector<int> cd_idx_map, n_inactive_idxs_a, n_inactive_idxs_b;
+        vector<uint8_t> single_idxs_mask, cur_single_idxs_mask;
         int init_sign = 0, final_sign = 0;
         cd_tensors.reserve(x.tensors.size());
         ot_tensors.reserve(x.tensors.size());
@@ -2020,6 +2028,8 @@ struct WickExpr {
         if (sf_type) {
             n_inactive_idxs_a.resize(cd_tensors.size() + 1, 0);
             n_inactive_idxs_b.resize(cd_tensors.size() + 1, 0);
+            single_idxs_mask.resize(cd_tensors.size());
+            cur_single_idxs_mask.resize(cd_tensors.size());
         }
         for (int i = 0; i < (int)cd_tensors.size(); i++) {
             ctr_cd_idxs[i] = (int)ctr_idxs.size();
@@ -2034,6 +2044,9 @@ struct WickExpr {
                         if ((tij & WickIndexTypes::Inactive) !=
                             WickIndexTypes::None)
                             n_inactive_idxs_a[i] = n_inactive_idxs_b[j] = 1;
+                        if ((tij & WickIndexTypes::Single) !=
+                            WickIndexTypes::None)
+                            single_idxs_mask[i] = single_idxs_mask[j] = 1;
                     }
                 }
             } else {
@@ -2063,7 +2076,8 @@ struct WickExpr {
             n_inactive_idxs_b[i] += n_inactive_idxs_b[i + 1];
         vector<pair<int, int>> que;
         vector<pair<int, int>> cur_idxs(cd_tensors.size());
-        vector<int8_t> cur_idxs_mask(cd_tensors.size(), 0);
+        vector<int8_t> cur_idxs_mask(cd_tensors.size(), 0),
+            level_single_mask(cd_tensors.size(), 0);
         vector<int> tensor_idxs(cd_tensors.size()), rev_idxs(cd_tensors.size());
         vector<int> cd_idx_map_rev(cd_tensors.size());
         vector<int> acc_sign(cd_tensors.size() + 1);
@@ -2096,18 +2110,18 @@ struct WickExpr {
                     stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                                 [&cd_tensors](int i, int j) {
                                     int ki = (cd_tensors[i].indices[0].types &
-                                              WickIndexTypes::Active) !=
+                                              WickIndexTypes::ActiveSingle) !=
                                              WickIndexTypes::None;
                                     int kj = (cd_tensors[j].indices[0].types &
-                                              WickIndexTypes::Active) !=
+                                              WickIndexTypes::ActiveSingle) !=
                                              WickIndexTypes::None;
                                     return ki < kj;
                                 });
                     int n_act = 0;
                     for (auto &ti : tensor_idxs)
-                        n_act +=
-                            (cd_tensors[ti].indices[0].types &
-                             WickIndexTypes::Active) != WickIndexTypes::None;
+                        n_act += (cd_tensors[ti].indices[0].types &
+                                  WickIndexTypes::ActiveSingle) !=
+                                 WickIndexTypes::None;
                     // only when there are no active indices, fermi_type_compare
                     // is stable
                     stable_sort(
@@ -2138,6 +2152,19 @@ struct WickExpr {
                                               ? ispin > jspin
                                               : cd_tensors[i] < cd_tensors[j]);
                         });
+                    stable_sort(
+                        tensor_idxs.begin() + (n_sf * 2 - n_act),
+                        tensor_idxs.end(), [&cd_tensors](int i, int j) {
+                            int fc =
+                                cd_tensors[i].fermi_type_compare(cd_tensors[j]);
+                            int ispin = cd_tensors[i].get_spin_tag();
+                            int jspin = cd_tensors[j].get_spin_tag();
+                            return fc != 0
+                                       ? (fc == -1)
+                                       : (ispin != jspin
+                                              ? ispin > jspin
+                                              : cd_tensors[i] < cd_tensors[j]);
+                        });
                 }
                 // sign for reordering tensors to the normal order
                 for (int i = 0; i < (int)tensor_idxs.size(); i++)
@@ -2152,7 +2179,7 @@ struct WickExpr {
             int l = que.back().first, j = que.back().second, k = 0;
             que.pop_back();
             int a, b, c, d, n_inact_a = 0, n_inact_b = 0;
-            double inact_fac = 1.0;
+            int inact_fac = 1, single_inact_fac = 1;
             if (l != -1) {
                 cur_idxs[l] = ctr_idxs[j];
                 k = ctr_cd_idxs[ctr_idxs[j].first + 1];
@@ -2161,9 +2188,14 @@ struct WickExpr {
             ot_tensors.resize(ot_count + l + 1);
             memset(cur_idxs_mask.data(), 0,
                    sizeof(int8_t) * cur_idxs_mask.size());
-            if (sf_type)
+            memset(level_single_mask.data(), 0,
+                   sizeof(int8_t) * level_single_mask.size());
+            if (sf_type) {
                 memcpy(cd_idx_map_rev.data(), cd_idx_map.data(),
                        sizeof(int) * cd_idx_map.size());
+                memcpy(cur_single_idxs_mask.data(), single_idxs_mask.data(),
+                       sizeof(uint8_t) * single_idxs_mask.size());
+            }
             if (l != -1) {
                 tie(c, d) = cur_idxs[l];
                 bool skip = false;
@@ -2187,7 +2219,15 @@ struct WickExpr {
                             n_inactive_idxs_a[a] - n_inactive_idxs_a[a + 1];
                         n_inact_b +=
                             n_inactive_idxs_b[b] - n_inactive_idxs_b[b + 1];
-                        inact_fac *= 1 << (cd_idx_map_rev[a] == b);
+                        inact_fac *= 1 << ((cd_idx_map_rev[a] == b) &
+                                           !cur_single_idxs_mask[a]);
+                        single_inact_fac *= 1 << (level_single_mask[i] =
+                                                      (cd_idx_map_rev[a] == b) &
+                                                      cur_single_idxs_mask[a]);
+                        cur_single_idxs_mask[cd_idx_map_rev[a]] |=
+                            cur_single_idxs_mask[b];
+                        cur_single_idxs_mask[cd_idx_map_rev[b]] |=
+                            cur_single_idxs_mask[a];
                         cd_idx_map_rev[cd_idx_map_rev[a]] = cd_idx_map_rev[b];
                         cd_idx_map_rev[cd_idx_map_rev[b]] = cd_idx_map_rev[a];
                     }
@@ -2203,7 +2243,15 @@ struct WickExpr {
                         n_inact_b + n_inactive_idxs_b[d + 1] <
                             n_inactive_idxs_b[0])
                         continue;
-                    inact_fac *= 1 << (cd_idx_map_rev[c] == d);
+                    inact_fac *= 1 << ((cd_idx_map_rev[c] == d) &
+                                       !cur_single_idxs_mask[c]);
+                    single_inact_fac *=
+                        1 << (level_single_mask[l] = (cd_idx_map_rev[c] == d) &
+                                                     cur_single_idxs_mask[c]);
+                    cur_single_idxs_mask[cd_idx_map_rev[c]] |=
+                        cur_single_idxs_mask[d];
+                    cur_single_idxs_mask[cd_idx_map_rev[d]] |=
+                        cur_single_idxs_mask[c];
                     cd_idx_map_rev[cd_idx_map_rev[c]] = cd_idx_map_rev[d];
                     cd_idx_map_rev[cd_idx_map_rev[d]] = cd_idx_map_rev[c];
                 }
@@ -2269,14 +2317,64 @@ struct WickExpr {
                                     .set_spin_tag(spin_tag);
                                 spin_tag++;
                             }
+                    for (int i = 0; i <= l; i++) {
+                        tie(a, b) = cur_idxs[i];
+                        if (level_single_mask[i]) {
+                            cd_tensors[a].set_spin_tag(spin_tag);
+                            cd_tensors[b].set_spin_tag(spin_tag);
+                            spin_tag++;
+                        }
+                    }
                 }
                 for (int i = 0; i < (int)tensor_idxs.size(); i++)
                     if (!cur_idxs_mask[tensor_idxs[i]])
                         ot_tensors.push_back(cd_tensors[tensor_idxs[i]]);
             }
+            if (single_inact_fac != 1) {
+                // 0 = delta; 1 = 0.5 ab + 0.5 ba
+                for (int ix = 1, lx = 1; ix < single_inact_fac; ix++) {
+                    for (int i = 0, kx = ix; i <= l; i++)
+                        if (level_single_mask[i])
+                            lx <<= (kx & 1), kx >>= 1;
+                    for (int jx = 0; jx < lx; jx++) {
+                        vector<WickTensor> f_tensors(
+                            ot_tensors.begin(), ot_tensors.begin() + ot_count);
+                        for (int i = 0, kx = ix, lx = jx; i <= l;
+                             kx >>= level_single_mask[i++])
+                            if (level_single_mask[i]) {
+                                if (!(kx & 1))
+                                    f_tensors.push_back(
+                                        ot_tensors[ot_count + i]);
+                            } else
+                                f_tensors.push_back(ot_tensors[ot_count + i]);
+                        for (int i = 0, kx = ix, mx = jx; i <= l;
+                             kx >>= level_single_mask[i++])
+                            if (level_single_mask[i] && (kx & 1)) {
+                                tie(a, b) = cur_idxs[i];
+                                if (mx & 1) {
+                                    f_tensors.push_back(cd_tensors[a]);
+                                    f_tensors.push_back(cd_tensors[b]);
+                                } else {
+                                    f_tensors.push_back(cd_tensors[b]);
+                                    f_tensors.push_back(cd_tensors[a]);
+                                }
+                                mx >>= 1;
+                            }
+                        for (int i = 0; i < (int)tensor_idxs.size(); i++)
+                            if (!cur_idxs_mask[tensor_idxs[i]])
+                                f_tensors.push_back(cd_tensors[tensor_idxs[i]]);
+                        r.terms.push_back(WickString(
+                            f_tensors, x.ctr_indices,
+                            (1.0 / lx) * inact_fac *
+                                ((acc_sign[l + 2] ^ final_sign) ? -x.factor
+                                                                : x.factor)));
+                    }
+                }
+                single_inact_fac = 1;
+            }
             r.terms.push_back(WickString(
                 ot_tensors, x.ctr_indices,
-                inact_fac *
+                inact_fac * single_inact_fac *
                     ((acc_sign[l + 2] ^ final_sign) ? -x.factor : x.factor)));
         }
         return r;

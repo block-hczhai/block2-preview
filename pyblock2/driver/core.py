@@ -1,4 +1,3 @@
-
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
 #  Copyright (C) 2022 Huanchen Zhai <hczhai@caltech.edu>
 #
@@ -873,6 +872,7 @@ class DMRGDriver:
         post_integral_cutoff=1e-20,
         algo_type=None,
         normal_order_ref=None,
+        normal_order_single_ref=None,
         normal_order_wick=True,
         symmetrize=True,
         sum_mpo_mod=-1,
@@ -1048,9 +1048,15 @@ class DMRGDriver:
                     b.add_term(k, x, v)
         else:
             if SymmetryTypes.SU2 in bw.symm_type:
-                h1es, g2es, ecore = NormalOrder.make_su2(
-                    h1e, g2e, ecore, normal_order_ref, normal_order_wick
-                )
+                if normal_order_single_ref is not None:
+                    assert normal_order_wick
+                    h1es, g2es, ecore = WickNormalOrder.make_su2_open_shell(
+                        h1e, g2e, ecore, normal_order_ref, normal_order_single_ref
+                    )
+                else:
+                    h1es, g2es, ecore = NormalOrder.make_su2(
+                        h1e, g2e, ecore, normal_order_ref, normal_order_wick
+                    )
             elif SymmetryTypes.SZ in bw.symm_type:
                 h1es, g2es, ecore = NormalOrder.make_sz(
                     h1e, g2e, ecore, normal_order_ref, normal_order_wick
@@ -2141,7 +2147,7 @@ class DMRGDriver:
             pme = None
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "MULT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
-        me.cached_contraction = pme is None # not allowed by perturbative noise
+        me.cached_contraction = pme is None  # not allowed by perturbative noise
         me.init_environments(iprint >= 2)
         if noises is None or noises[0] == 0:
             cps = bw.bs.Linear(
@@ -2149,7 +2155,10 @@ class DMRGDriver:
             )
         else:
             cps = bw.bs.Linear(
-                pme, me, bw.b.VectorUBond(bra_bond_dims), bw.b.VectorUBond(bond_dims),
+                pme,
+                me,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(bond_dims),
                 bw.VectorFP(noises),
             )
         if pme is not None:
@@ -2868,6 +2877,98 @@ class WickNormalOrder:
         return dts[2], dts[4], const_es
 
     @staticmethod
+    def make_su2_open_shell(h1e, g2e, const_e, cidx, midx, iprint=1):
+        import block2 as b
+        import numpy as np
+
+        if iprint:
+            print("-- Normal order (su2 open shell) using Wick's theorem")
+
+        try:
+            idx_map = b.MapWickIndexTypesSet()
+        except ImportError:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
+
+        idx_map[b.WickIndexTypes.Inactive] = b.WickIndex.parse_set("pqrsijklmno")
+        idx_map[b.WickIndexTypes.External] = b.WickIndex.parse_set("pqrsabcdefg")
+        idx_map[b.WickIndexTypes.Single] = b.WickIndex.parse_set("pqrsrstuvwx")
+        perm_map = b.MapPStrIntVectorWickPermutation()
+        perm_map[("v", 4)] = b.WickPermutation.qc_chem()
+
+        P = lambda x: b.WickExpr.parse(x, idx_map, perm_map)
+        h = P("SUM <pq> h[pq] E1[p,q] + 0.5 SUM <pqrs> v[prqs] E2[pq,rs]")
+        eq = h.expand(-1, False, False).simplify()
+
+        WickSpinAdaptation.adjust_spin_coupling(eq)
+        exprs = WickSpinAdaptation.get_eq_exprs(eq)
+
+        dts = {}
+        const_es = const_e
+        tensor_d = {"h": h1e, "v": g2e}
+
+        is_inactive = (
+            lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
+        )
+        is_single = lambda x: (x & b.WickIndexTypes.Single) != b.WickIndexTypes.Nothing
+
+        def ix(x):
+            p = {"I": cidx, "S": midx, "E": ~cidx & ~midx}
+            r = np.outer(p[x[0]], p[x[1]])
+            for i in range(2, len(x)):
+                r = np.outer(r, p[x[i]])
+            return r.reshape((len(cidx),) * len(x))
+
+        def tx(x, ix):
+            for ig, ii in enumerate(ix):
+                idx = (slice(None),) * ig
+                idx += (
+                    cidx
+                    if is_inactive(ii.types)
+                    else (midx if is_single(ii.types) else ~cidx & ~midx),
+                )
+                x = x[idx]
+            return x
+
+        xiter = 0
+        for term, (wf, wex) in zip(eq.terms, exprs):
+            if len(wex) != 0 and wex not in dts:
+                op_len = wex.count("C") + wex.count("D")
+                if op_len not in dts:
+                    dts[op_len] = {}
+                if wex not in dts[op_len]:
+                    dts[op_len][wex] = np.zeros((len(cidx),) * op_len, dtype=h1e.dtype)
+                dtx = dts[op_len][wex]
+            tensors = []
+            opidx = []
+            result = ""
+            mask = ""
+            f = term.factor * wf
+            for t in term.tensors:
+                if t.type == b.WickTensorTypes.Tensor:
+                    tensors.append(tx(tensor_d[t.name], t.indices))
+                    opidx.append("".join([i.name for i in t.indices]))
+                else:
+                    mask += (
+                        "I"
+                        if is_inactive(t.indices[0].types)
+                        else ("S" if is_single(t.indices[0].types) else "E")
+                    )
+                    result += t.indices[0].name
+            np_str = ",".join(opidx) + "->" + result
+            if 0 not in [x.size for x in tensors]:
+                ts = f * np.einsum(np_str, *tensors, optimize=True)
+                if len(wex) == 0:
+                    const_es += ts
+                else:
+                    dtx[ix(mask)] += ts.flatten()
+            if iprint:
+                xr = ("%20.15f" % const_es) if wex == "" else wex
+                print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
+            xiter += 1
+        assert sorted(dts.keys()) == [2, 4]
+        return dts[2], dts[4], const_es
+
+    @staticmethod
     def make_sz(h1e, g2e, const_e, cidx, iprint=1):
         import block2 as b
         import numpy as np
@@ -3068,7 +3169,9 @@ class WickNormalOrder:
 
 
 class ExprBuilder:
-    def __init__(self, bw=Block2Wrapper()):
+    def __init__(self, bw=None):
+        if bw is None:
+            bw = Block2Wrapper()
         self.data = bw.bx.GeneralFCIDUMP()
         if SymmetryTypes.SU2 in bw.symm_type:
             self.data.elem_type = bw.b.ElemOpTypes.SU2
