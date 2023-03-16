@@ -331,14 +331,15 @@ template <typename FL> struct GeneralFCIDUMP {
     shared_ptr<GeneralFCIDUMP>
     adjust_order(const vector<shared_ptr<SpinPermScheme>> &schemes =
                      vector<shared_ptr<SpinPermScheme>>(),
-                 bool merge = true, FP cutoff = (FP)0.0) const {
+                 bool merge = true, bool is_drt = false,
+                 FP cutoff = (FP)0.0) const {
         vector<shared_ptr<SpinPermScheme>> psch = schemes;
         if (psch.size() < exprs.size()) {
             psch.resize(exprs.size(), nullptr);
             for (size_t ix = 0; ix < exprs.size(); ix++)
                 psch[ix] = make_shared<SpinPermScheme>(
                     exprs[ix], elem_type == ElemOpTypes::SU2,
-                    elem_type != ElemOpTypes::SGB);
+                    elem_type != ElemOpTypes::SGB, false, is_drt);
         }
         unordered_map<string, int> r_str_mp;
         vector<vector<uint16_t>> r_indices;

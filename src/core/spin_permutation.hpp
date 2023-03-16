@@ -966,10 +966,10 @@ struct SpinPermScheme {
     int8_t left_vacuum;
     SpinPermScheme() {}
     SpinPermScheme(string spin_str, bool su2 = true, bool is_fermion = true,
-                   bool is_npdm = false) {
+                   bool is_npdm = false, bool is_drt = false) {
         int nn = SpinPermRecoupling::count_cds(spin_str);
         SpinPermScheme r =
-            su2 ? SpinPermScheme::initialize_su2(nn, spin_str, is_npdm)
+            su2 ? SpinPermScheme::initialize_su2(nn, spin_str, is_npdm, is_drt)
                 : SpinPermScheme::initialize_sz(nn, spin_str, is_fermion);
         index_patterns = r.index_patterns;
         data = r.data;

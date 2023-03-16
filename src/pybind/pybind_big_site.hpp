@@ -178,6 +178,87 @@ template <typename S, typename FL> void bind_fl_csf_big_site(py::module &m) {
         .def_readwrite("is_right", &CSFBigSite<S, FL>::is_right);
 }
 
+template <typename S> void bind_drt_big_site(py::module &m) {
+
+    py::class_<DRT<S, ElemOpTypes::SU2>, shared_ptr<DRT<S, ElemOpTypes::SU2>>>(
+        m, "DRT")
+        .def_readwrite("abc", &DRT<S, ElemOpTypes::SU2>::abc)
+        .def_readwrite("pgs", &DRT<S, ElemOpTypes::SU2>::pgs)
+        .def_readwrite("orb_sym", &DRT<S, ElemOpTypes::SU2>::orb_sym)
+        .def_readwrite("jds", &DRT<S, ElemOpTypes::SU2>::jds)
+        .def_readwrite("xs", &DRT<S, ElemOpTypes::SU2>::xs)
+        .def_readwrite("n_sites", &DRT<S, ElemOpTypes::SU2>::n_sites)
+        .def_readwrite("n_init_qs", &DRT<S, ElemOpTypes::SU2>::n_init_qs)
+        .def(py::init<>())
+        .def(py::init<int16_t, int16_t, int16_t>())
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t>())
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t,
+                      const vector<typename S::pg_t> &>())
+        .def(py::init<int, S>())
+        .def(py::init<int, S, const vector<typename S::pg_t> &>())
+        .def(py::init<int, const vector<S> &>())
+        .def(py::init<int, const vector<S> &,
+                      const vector<typename S::pg_t> &>())
+        .def_property_readonly("n_rows", &DRT<S, ElemOpTypes::SU2>::n_rows)
+        .def("initialize", &DRT<S, ElemOpTypes::SU2>::initialize)
+        .def("__getitem__", &DRT<S, ElemOpTypes::SU2>::operator[], py::arg("i"))
+        .def("index", &DRT<S, ElemOpTypes::SU2>::index)
+        .def("__len__", &DRT<S, ElemOpTypes::SU2>::size)
+        .def("get_basis", &DRT<S, ElemOpTypes::SU2>::get_basis)
+        .def("__repr__", &DRT<S, ElemOpTypes::SU2>::to_str);
+
+    py::class_<HDRT<S, ElemOpTypes::SU2>,
+               shared_ptr<HDRT<S, ElemOpTypes::SU2>>>(m, "HDRT")
+        .def_readwrite("qs", &HDRT<S, ElemOpTypes::SU2>::qs)
+        .def_readwrite("pgs", &HDRT<S, ElemOpTypes::SU2>::pgs)
+        .def_readwrite("orb_sym", &HDRT<S, ElemOpTypes::SU2>::orb_sym)
+        .def_readwrite("jds", &HDRT<S, ElemOpTypes::SU2>::jds)
+        .def_readwrite("xs", &HDRT<S, ElemOpTypes::SU2>::xs)
+        .def_readwrite("n_sites", &HDRT<S, ElemOpTypes::SU2>::n_sites)
+        .def_readwrite("n_init_qs", &HDRT<S, ElemOpTypes::SU2>::n_init_qs)
+        .def_readwrite("nd", &HDRT<S, ElemOpTypes::SU2>::nd)
+        .def_readwrite("d_map", &HDRT<S, ElemOpTypes::SU2>::d_map)
+        .def_readwrite("d_step", &HDRT<S, ElemOpTypes::SU2>::d_step)
+        .def_readwrite("d_expr", &HDRT<S, ElemOpTypes::SU2>::d_expr)
+        .def(py::init<>())
+        .def(py::init<int, const vector<pair<S, pair<int16_t, int16_t>>> &>())
+        .def(py::init<int, const vector<pair<S, pair<int16_t, int16_t>>> &,
+                      const vector<typename S::pg_t> &>())
+        .def_property_readonly("n_rows", &HDRT<S, ElemOpTypes::SU2>::n_rows)
+        .def("initialize_steps", &HDRT<S, ElemOpTypes::SU2>::initialize_steps)
+        .def("initialize", &HDRT<S, ElemOpTypes::SU2>::initialize)
+        .def("__getitem__", &HDRT<S, ElemOpTypes::SU2>::operator[],
+             py::arg("i"))
+        .def("index", &HDRT<S, ElemOpTypes::SU2>::index)
+        .def("__len__", &HDRT<S, ElemOpTypes::SU2>::size)
+        .def("fill_data",
+             &HDRT<S, ElemOpTypes::SU2>::template fill_data<double>)
+        .def("__repr__", &HDRT<S, ElemOpTypes::SU2>::to_str);
+}
+
+template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
+
+    py::class_<DRTBigSite<S, FL>, shared_ptr<DRTBigSite<S, FL>>,
+               BigSite<S, FL>>(m, "DRTBigSite")
+        .def(py::init<S, bool, int, const vector<typename S::pg_t> &,
+                      const shared_ptr<GeneralFCIDUMP<FL>> &>())
+        .def(py::init<S, bool, int, const vector<typename S::pg_t> &,
+                      const shared_ptr<GeneralFCIDUMP<FL>> &, int>())
+        .def("get_site_op_infos", &DRTBigSite<S, FL>::get_site_op_infos)
+        .def("prepare_factors", &DRTBigSite<S, FL>::prepare_factors)
+        .def("fill_csr_matrix", &DRTBigSite<S, FL>::fill_csr_matrix)
+        .def("build_hamiltonian_matrix",
+             &DRTBigSite<S, FL>::build_hamiltonian_matrix)
+        .def_readwrite("fcidump", &DRTBigSite<S, FL>::fcidump)
+        .def_readwrite("drt", &DRTBigSite<S, FL>::drt)
+        .def_readwrite("hdrt", &DRTBigSite<S, FL>::hdrt)
+        .def_readwrite("ints", &DRTBigSite<S, FL>::ints)
+        .def_readwrite("site_matrices", &DRTBigSite<S, FL>::site_matrices)
+        .def_readwrite("factors", &DRTBigSite<S, FL>::factors)
+        .def_readwrite("factor_strides", &DRTBigSite<S, FL>::factor_strides)
+        .def_readwrite("is_right", &DRTBigSite<S, FL>::is_right);
+}
+
 template <typename S, typename FL>
 void bind_fl_hamiltonian_big_site(py::module &m) {
 

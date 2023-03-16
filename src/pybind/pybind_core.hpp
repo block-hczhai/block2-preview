@@ -1340,6 +1340,30 @@ void bind_trans_state_info_spin_specific(py::module &m,
           &TransStateInfo<T, S>::backward_connection);
 }
 
+template <typename T, int L> void bind_array_fixed(py::module &m,const string& name) {
+
+    py::class_<array<T, L>>(m, name.c_str())
+        .def("__setitem__",
+             [](array<T, L> *self, size_t i, int t) { (*self)[i] = t; })
+        .def("__getitem__",
+             [](array<T, L> *self, size_t i) { return (*self)[i]; })
+        .def("__len__", [](array<T, L> *self) { return self->size(); })
+        .def("__repr__",
+             [](array<T, L> *self) {
+                 stringstream ss;
+                 ss << "(LEN=" << self->size() << ")[";
+                 for (auto x : *self)
+                     ss << x << ",";
+                 ss << "]";
+                 return ss.str();
+             })
+        .def("__iter__", [](array<T, L> *self) {
+            return py::make_iterator<
+                py::return_value_policy::reference_internal, T *, T *,
+                T &>(&(*self)[0], &(*self)[0] + self->size());
+        });
+}
+
 template <typename S = void> void bind_data(py::module &m) {
 
     py::bind_vector<vector<int>>(m, "VectorInt");
@@ -1412,52 +1436,14 @@ template <typename S = void> void bind_data(py::module &m) {
             ss << "]";
             return ss.str();
         });
-
-    py::class_<array<int, 4>>(m, "Array4Int")
-        .def("__setitem__",
-             [](array<int, 4> *self, size_t i, int t) { (*self)[i] = t; })
-        .def("__getitem__",
-             [](array<int, 4> *self, size_t i) { return (*self)[i]; })
-        .def("__len__", [](array<int, 4> *self) { return self->size(); })
-        .def("__repr__",
-             [](array<int, 4> *self) {
-                 stringstream ss;
-                 ss << "(LEN=" << self->size() << ")[";
-                 for (auto x : *self)
-                     ss << x << ",";
-                 ss << "]";
-                 return ss.str();
-             })
-        .def("__iter__", [](array<int, 4> *self) {
-            return py::make_iterator<
-                py::return_value_policy::reference_internal, int *, int *,
-                int &>(&(*self)[0], &(*self)[0] + self->size());
-        });
+    
+    bind_array_fixed<int, 4>(m, "Array4Int");
+    bind_array_fixed<int16_t, 3>(m, "Array3Int16");
+    bind_array_fixed<int16_t, 6>(m, "Array6Int16");
 
     py::bind_vector<vector<array<int, 4>>>(m, "VectorArray4Int");
-
-    py::class_<array<int16_t, 3>>(m, "Array3Int16")
-        .def("__setitem__",
-             [](array<int16_t, 3> *self, size_t i, int t) { (*self)[i] = t; })
-        .def("__getitem__",
-             [](array<int16_t, 3> *self, size_t i) { return (*self)[i]; })
-        .def("__len__", [](array<int, 4> *self) { return self->size(); })
-        .def("__repr__",
-             [](array<int16_t, 3> *self) {
-                 stringstream ss;
-                 ss << "(LEN=" << self->size() << ")[";
-                 for (auto x : *self)
-                     ss << x << ",";
-                 ss << "]";
-                 return ss.str();
-             })
-        .def("__iter__", [](array<int16_t, 3> *self) {
-            return py::make_iterator<
-                py::return_value_policy::reference_internal, int16_t *,
-                int16_t *, int16_t &>(&(*self)[0], &(*self)[0] + self->size());
-        });
-
     py::bind_vector<vector<array<int16_t, 3>>>(m, "VectorArray3Int16");
+    py::bind_vector<vector<array<int16_t, 6>>>(m, "VectorArray6Int16");
 
     bind_array<uint8_t>(m, "ArrayUInt8")
         .def("__str__", [](Array<uint8_t> *self) {
@@ -1501,6 +1487,8 @@ template <typename S = void> void bind_data(py::module &m) {
         }));
     py::bind_vector<vector<map<string, string>>>(m, "VectorMapStrStr");
     py::bind_vector<vector<pair<string, string>>>(m, "VectorPStrStr");
+    py::bind_vector<vector<pair<string, int8_t>>>(m, "VectorPStrInt8");
+    py::bind_map<map<pair<string, int8_t>, int>>(m, "MapPStrInt8Int");
 }
 
 template <typename S = void> void bind_types(py::module &m) {
@@ -2121,6 +2109,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<string, bool>())
         .def(py::init<string, bool, bool>())
         .def(py::init<string, bool, bool, bool>())
+        .def(py::init<string, bool, bool, bool, bool>())
         .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
         .def_readwrite("data", &SpinPermScheme::data)
         .def_readwrite("is_su2", &SpinPermScheme::is_su2)

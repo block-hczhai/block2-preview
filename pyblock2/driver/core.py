@@ -3236,9 +3236,9 @@ class ExprBuilder:
             self.data.data[i] = self.bw.VectorFL(d * np.array(ix))
         return self
 
-    def finalize(self, adjust_order=True, merge=True):
+    def finalize(self, adjust_order=True, merge=True, is_drt=False):
         if adjust_order:
-            self.data = self.data.adjust_order(merge=merge)
+            self.data = self.data.adjust_order(merge=merge, is_drt=is_drt)
         elif merge:
             self.data.merge_terms()
         return self.data

@@ -1862,7 +1862,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                     py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order", &GeneralFCIDUMP<FL>::adjust_order,
              py::arg("schemes") = vector<shared_ptr<SpinPermScheme>>(),
-             py::arg("merge") = true,
+             py::arg("merge") = true, py::arg("is_drt") = false,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("merge_terms", &GeneralFCIDUMP<FL>::merge_terms,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
