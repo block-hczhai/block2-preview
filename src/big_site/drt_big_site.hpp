@@ -699,7 +699,13 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                     fcidump->exprs[ix], false, true)));
         hdrt->initialize_steps(schemes);
         hdrt->initialize();
-        ints = hdrt->fill_data(fcidump->exprs, fcidump->indices, fcidump->data);
+        shared_ptr<vector<vector<LL>>> hint_idxs =
+            fill_integral_data(hdrt, schemes, fcidump->exprs, fcidump->indices);
+        ints = make_shared<vector<FL>>(hdrt->size(), (FL)0.0);
+        for (size_t ix = 0; ix < fcidump->data.size(); ix++)
+            for (size_t i = 0; i < fcidump->data[ix].size(); i++)
+                (*ints)[(*hint_idxs)[ix][i]] += fcidump->data[ix][i];
+        hint_idxs = nullptr;
         site_matrices.resize(drt->n_sites);
         for (int i = 0; i < drt->n_sites; i++) {
             for (int d = 0; d < hdrt->nd; d++)
@@ -712,6 +718,112 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         prepare_factors();
     }
     virtual ~DRTBigSite() = default;
+    static shared_ptr<vector<vector<LL>>>
+    fill_integral_data(const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt,
+                       const vector<shared_ptr<SpinPermScheme>> &schemes,
+                       const vector<string> &exprs,
+                       const vector<vector<uint16_t>> &indices) {
+        map<string, map<vector<uint16_t>, int>> expr_mp;
+        for (const auto &scheme : schemes)
+            for (int i = 0; i < (int)scheme->data.size(); i++)
+                for (const auto &d : scheme->data[i])
+                    for (const auto &dex : d.second)
+                        if (!expr_mp[dex.second].count(
+                                scheme->index_patterns[i]))
+                            expr_mp[dex.second][scheme->index_patterns[i]] = 0;
+        int im = 0;
+        for (auto &m : expr_mp)
+            for (auto &mm : m.second)
+                mm.second = im++;
+        vector<vector<int16_t>> ds(im);
+        vector<map<typename S::pg_t, pair<int, LL>>> jis(im);
+        for (auto &m : expr_mp)
+            for (auto &mm : m.second) {
+                im = mm.second;
+                for (int k = 0, n = (int)mm.first.size(), l; k < n; k = l) {
+                    for (l = k; l < n && mm.first[k] == mm.first[l];)
+                        l++;
+                    string x = SpinPermRecoupling::get_sub_expr(m.first, k, l);
+                    int8_t dq =
+                        SpinPermRecoupling::get_target_twos(
+                            SpinPermRecoupling::get_sub_expr(m.first, 0, l)) -
+                        SpinPermRecoupling::get_target_twos(
+                            SpinPermRecoupling::get_sub_expr(m.first, 0, k));
+                    if (!hdrt->d_map.count(make_pair(x, dq)))
+                        throw runtime_error("expr not found : " + x +
+                                            " dq = " + string(1, '0' + dq) +
+                                            " expr = " + m.first);
+                    ds[im].push_back(hdrt->d_map.at(make_pair(x, dq)));
+                }
+                array<int16_t, 5> iq = hdrt->qs.back();
+                for (int k = 0; k < (int)ds[im].size(); k++)
+                    iq = array<int16_t, 5>{
+                        (int16_t)(iq[0] + hdrt->d_step[ds[im][k]][0]),
+                        (int16_t)(iq[1] + hdrt->d_step[ds[im][k]][1]),
+                        (int16_t)(iq[2] + hdrt->d_step[ds[im][k]][2]),
+                        (int16_t)(iq[3] + hdrt->d_step[ds[im][k]][3]),
+                        (int16_t)(iq[4] + hdrt->d_step[ds[im][k]][4])};
+                iq[0] = (int16_t)hdrt->n_sites;
+                LL i = 0;
+                for (int j = 0; j < hdrt->n_init_qs; j++) {
+                    if (iq == hdrt->qs[j])
+                        jis[im][hdrt->pgs[j]] = make_pair(j, i);
+                    i += hdrt->xs[j * (hdrt->nd + 1) + hdrt->nd];
+                }
+            }
+        vector<vector<pair<int, LL>>> hjumps(
+            hdrt->n_rows(), vector<pair<int, LL>>{make_pair(0, 0)});
+        for (int j = hdrt->n_rows() - 1, k; j >= 0; j--) {
+            hjumps[j][0].first = j;
+            if ((k = hdrt->jds[j * hdrt->nd + 0]) != 0) {
+                hjumps[j].insert(hjumps[j].end(), hjumps[k].begin(),
+                                 hjumps[k].end());
+                const LL x = hdrt->xs[j * (hdrt->nd + 1) + 0];
+                for (int l = 1; l < (int)hjumps[j].size(); l++)
+                    hjumps[j][l].second += x;
+            }
+        }
+        shared_ptr<vector<vector<LL>>> r =
+            make_shared<vector<vector<LL>>>(exprs.size());
+        int ntg = threading->activate_global();
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            const string &expr = exprs[ix];
+            const int nn = SpinPermRecoupling::count_cds(expr);
+            const map<vector<uint16_t>, int> &xmp = expr_mp.at(expr);
+            (*r)[ix].resize(indices[ix].size() / nn);
+#pragma omp parallel for schedule(static, 100) num_threads(ntg)
+            for (size_t ip = 0; ip < indices[ix].size(); ip += nn) {
+                vector<uint16_t> idx(indices[ix].begin() + ip,
+                                     indices[ix].begin() + ip + nn);
+                vector<uint16_t> idx_mat(nn);
+                if (nn >= 1)
+                    idx_mat[0] = 0;
+                for (int j = 1; j < nn; j++)
+                    idx_mat[j] = idx_mat[j - 1] + (idx[j] != idx[j - 1]);
+                typename S::pg_t ipg = hdrt->pgs.back();
+                for (auto &x : idx)
+                    ipg = S::pg_mul(ipg, hdrt->orb_sym[x]);
+                int im = xmp.at(idx_mat), j = jis[im].at(ipg).first,
+                    k = hdrt->n_sites - 1;
+                LL i = jis[im].at(ipg).second;
+                vector<int16_t> &xds = ds[im];
+                for (int l = nn - 1, g, m = (int)xds.size() - 1; l >= 0;
+                     l = g, m--, k--) {
+                    for (g = l; g >= 0 && idx[g] == idx[l];)
+                        g--;
+                    i += hjumps[j][k - idx[l]].second;
+                    j = hjumps[j][k - idx[l]].first;
+                    i += hdrt->xs[j * (hdrt->nd + 1) + xds[m]];
+                    j = hdrt->jds[j * hdrt->nd + xds[m]];
+                    k = idx[l];
+                }
+                i += hjumps[j][k + 1].second;
+                (*r)[ix][ip / nn] = i;
+            }
+        }
+        threading->activate_normal();
+        return r;
+    }
     vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
     get_site_op_infos(const vector<uint8_t> &orb_sym) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
@@ -963,6 +1075,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             }
             fill_csr_matrix(col_idxs, values, *mat->csr_data[im]);
         }
+        threading->activate_normal();
     }
     void get_site_ops(
         uint16_t m,
