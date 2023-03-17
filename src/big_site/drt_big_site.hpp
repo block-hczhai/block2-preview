@@ -785,146 +785,184 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                              ((((bk + dk - 1) & 1) & (dq & 1))
                                               << 1));
     }
-    void fill_csr_matrix(vector<pair<pair<MKL_INT, MKL_INT>, FL>> &data,
+    void fill_csr_matrix(const vector<vector<MKL_INT>> &col_idxs,
+                         const vector<vector<FL>> &values,
                          GCSRMatrix<FL> &mat) const {
         const FP sparse_max_nonzero_ratio = 0.25;
-        const size_t n = data.size();
         assert(mat.data == nullptr);
         assert(mat.alloc != nullptr);
-        vector<size_t> idx(n), idx2;
-        for (size_t i = 0; i < n; i++)
-            idx[i] = i;
-
-        sort(idx.begin(), idx.end(), [&data](size_t i, size_t j) {
-            return data[i].first < data[j].first;
-        });
-        for (auto ii : idx)
-            if (idx2.empty() || data[ii].first != data[idx2.back()].first)
-                idx2.push_back(ii);
-            else
-                data[idx2.back()].second += data[ii].second;
-        mat.nnz = (MKL_INT)idx2.size();
-        if ((size_t)mat.nnz != idx2.size())
+        size_t nnz = 0;
+        for (auto &xv : values)
+            nnz += xv.size();
+        mat.nnz = (MKL_INT)nnz;
+        if ((size_t)mat.nnz != nnz)
             throw runtime_error(
-                "NNZ " + Parsing::to_string(idx2.size()) +
+                "NNZ " + Parsing::to_string(nnz) +
                 " exceeds MKL_INT. Rebuild with -DUSE_MKL64=ON.");
         if (mat.nnz < mat.size() &&
             mat.nnz <= sparse_max_nonzero_ratio * mat.size()) {
             mat.allocate();
-            MKL_INT cur_row = -1;
-            for (size_t k = 0; k < idx2.size(); k++) {
-                while (data[idx2[k]].first.first != cur_row)
-                    mat.rows[++cur_row] = k;
-                mat.data[k] = data[idx2[k]].second,
-                mat.cols[k] = data[idx2[k]].first.second;
+            for (size_t i = 0, k = 0; i < values.size(); i++) {
+                mat.rows[i] = (MKL_INT)k;
+                memcpy(&mat.data[k], &values[i][0],
+                       sizeof(FL) * values[i].size());
+                memcpy(&mat.cols[k], &col_idxs[i][0],
+                       sizeof(MKL_INT) * col_idxs[i].size());
+                k += values[i].size();
             }
-            while (mat.m != cur_row)
-                mat.rows[++cur_row] = mat.nnz;
-        } else if (mat.nnz < mat.size()) {
+            mat.rows[values.size()] = mat.nnz;
+        } else {
             mat.nnz = mat.size();
             mat.allocate();
-            for (size_t k = 0; k < idx2.size(); k++)
-                mat.data[data[idx2[k]].first.second +
-                         data[idx2[k]].first.first * mat.n] =
-                    data[idx2[k]].second;
-        } else {
-            mat.allocate();
-            for (size_t k = 0; k < idx2.size(); k++)
-                mat.data[k] = data[idx2[k]].second;
+            for (size_t i = 0; i < values.size(); i++)
+                for (size_t j = 0; j < values[i].size(); j++)
+                    mat.data[col_idxs[i][j] + i * mat.n] = values[i][j];
         }
     }
     void build_hamiltonian_matrix(
         const shared_ptr<CSRSparseMatrix<S, FL>> &mat) const {
-        vector<int> jh[2], jbra[2], jket[2];
-        vector<LL> ph[2], pbra[2], pket[2];
-        vector<FL> hv[2];
-        int pi = 0;
-        for (int i = 0; i < hdrt->n_init_qs; i++) {
-            jh[pi].push_back(i);
-            ph[pi].push_back(
-                i != 0 ? ph[pi].back() +
-                             hdrt->xs[(i - 1) * (hdrt->nd + 1) + hdrt->nd]
-                       : 0);
-            jbra[pi].push_back(0);
-            pbra[pi].push_back(0);
-            jket[pi].push_back(0);
-            pket[pi].push_back(0);
-            hv[pi].push_back((FL)1.0);
-        }
-        for (int k = drt->n_sites - 1; k >= 0; k--, pi ^= 1) {
-            int xd = 0;
-            for (int d = 0; d < hdrt->nd; d++)
-                xd += (int)site_matrices[k][d].data.size();
-            const size_t hsz = hv[pi].size() * xd;
-            jh[pi ^ 1].reserve(hsz), jh[pi ^ 1].clear();
-            ph[pi ^ 1].reserve(hsz), ph[pi ^ 1].clear();
-            jbra[pi ^ 1].reserve(hsz), jbra[pi ^ 1].clear();
-            pbra[pi ^ 1].reserve(hsz), pbra[pi ^ 1].clear();
-            jket[pi ^ 1].reserve(hsz), jket[pi ^ 1].clear();
-            pket[pi ^ 1].reserve(hsz), pket[pi ^ 1].clear();
-            hv[pi ^ 1].reserve(hsz), hv[pi ^ 1].clear();
-            for (size_t j = 0; j < jh[pi].size(); j++)
-                for (int d = 0; d < hdrt->nd; d++) {
-                    const int jhv = hdrt->jds[jh[pi][j] * hdrt->nd + d];
-                    if (jhv != 0)
-                        for (size_t md = 0;
-                             md < (int)site_matrices[k][d].data.size(); md++) {
-                            const int16_t dbra =
-                                site_matrices[k][d].indices[md].first;
-                            const int16_t dket =
-                                site_matrices[k][d].indices[md].second;
-                            const int jbv = drt->jds[jbra[pi][j]][dbra];
-                            const int jkv = drt->jds[jket[pi][j]][dket];
-                            if (jbv != 0 && jkv != 0) {
-                                const int16_t bfq = drt->abc[jbra[pi][j]][1];
-                                const int16_t kfq = drt->abc[jket[pi][j]][1];
-                                const int16_t biq = drt->abc[jbv][1];
-                                const int16_t kiq = drt->abc[jkv][1];
-                                const int16_t mdq = site_matrices[k][d].dq;
-                                const int16_t mfq = hdrt->qs[jh[pi][j]][2];
-                                const int16_t miq = hdrt->qs[jhv][2];
-                                const FL f =
-                                    (*factors)[bfq * factor_strides[0] +
-                                               (biq - bfq + 1) *
-                                                   factor_strides[1] +
-                                               kfq * factor_strides[2] +
-                                               (kiq - kfq + 1) *
-                                                   factor_strides[3] +
-                                               mfq * factor_strides[4] +
-                                               miq * factor_strides[5] +
-                                               mdq * factor_strides[6]];
-                                if (abs(f) < abs((FL)1E-14))
-                                    continue;
-                                jbra[pi ^ 1].push_back(jbv);
-                                jket[pi ^ 1].push_back(jkv);
-                                jh[pi ^ 1].push_back(jhv);
-                                pbra[pi ^ 1].push_back(
-                                    drt->xs[jbra[pi][j]][dbra] + pbra[pi][j]);
-                                pket[pi ^ 1].push_back(
-                                    drt->xs[jket[pi][j]][dket] + pket[pi][j]);
-                                ph[pi ^ 1].push_back(
-                                    hdrt->xs[jh[pi][j] * (hdrt->nd + 1) + d] +
-                                    ph[pi][j]);
-                                hv[pi ^ 1].push_back(
-                                    f * hv[pi][j] *
-                                    site_matrices[k][d].data[md]);
-                            }
-                        }
+        int ntg = threading->activate_global();
+        vector<vector<vector<int>>> jh(ntg, vector<vector<int>>(2));
+        vector<vector<vector<int>>> jket(ntg, vector<vector<int>>(2));
+        vector<vector<vector<LL>>> ph(ntg, vector<vector<LL>>(2));
+        vector<vector<vector<LL>>> pket(ntg, vector<vector<LL>>(2));
+        vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
+        for (int im = 0; im < mat->info->n; im++) {
+            vector<vector<vector<
+                vector<pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>>
+                hm(drt->n_sites,
+                   vector<vector<vector<
+                       pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>(4));
+            vector<vector<size_t>> max_d(drt->n_sites, vector<size_t>(4, 0));
+            vector<int> kjis(drt->n_sites);
+            for (int k = drt->n_sites - 1, ji = 0, jj; k >= 0; k--, ji = jj) {
+                for (jj = ji; hdrt->qs[jj][0] == k + 1;)
+                    jj++;
+                kjis[k] = ji;
+                for (int dbra = 0; dbra < 4; dbra++) {
+                    hm[k][dbra].resize(jj - ji);
+                    for (int jk = ji; jk < jj; jk++) {
+                        for (int d = 0; d < hdrt->nd; d++)
+                            if (hdrt->jds[jk * hdrt->nd + d] != 0)
+                                for (size_t md = 0;
+                                     md < (int)site_matrices[k][d].data.size();
+                                     md++)
+                                    if (site_matrices[k][d].indices[md].first ==
+                                        dbra)
+                                        hm[k][dbra][jk - ji].push_back(
+                                            make_pair(
+                                                make_pair(
+                                                    site_matrices[k][d].dq,
+                                                    site_matrices[k][d]
+                                                        .indices[md]
+                                                        .second),
+                                                make_pair(d, site_matrices[k][d]
+                                                                 .data[md])));
+                        max_d[k][dbra] =
+                            max(max_d[k][dbra], hm[k][dbra][jk - ji].size());
+                    }
                 }
+            }
+            vector<vector<MKL_INT>> col_idxs(drt->xs[im].back());
+            vector<vector<FL>> values(drt->xs[im].back());
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+            for (LL ibra = 0; ibra < drt->xs[im].back(); ibra++) {
+                const int tid = threading->get_thread_id();
+                int pi = 0, pj = pi ^ 1, jbra = im;
+                vector<vector<int>> &xjh = jh[tid], &xjk = jket[tid];
+                vector<vector<LL>> &xph = ph[tid], &xpk = pket[tid];
+                vector<vector<FL>> &xhv = hv[tid];
+                xjh[pi].clear(), xph[pi].clear(), xjk[pi].clear();
+                xpk[pi].clear(), xhv[pi].clear();
+                for (int i = 0; i < hdrt->n_init_qs; i++) {
+                    xjh[pi].push_back(i), xjk[pi].push_back(im);
+                    xph[pi].push_back(
+                        i != 0
+                            ? xph[pi].back() +
+                                  hdrt->xs[(i - 1) * (hdrt->nd + 1) + hdrt->nd]
+                            : 0);
+                    xpk[pi].push_back(0), xhv[pi].push_back((FL)1.0);
+                }
+                LL pbra = ibra;
+                for (int k = drt->n_sites - 1; k >= 0; k--, pi ^= 1, pj ^= 1) {
+                    const int16_t dbra =
+                        (int16_t)(upper_bound(drt->xs[jbra].begin(),
+                                              drt->xs[jbra].end(), pbra) -
+                                  1 - drt->xs[jbra].begin());
+                    pbra -= drt->xs[jbra][dbra];
+                    const int jbv = drt->jds[jbra][dbra];
+                    const size_t hsz = xhv[pi].size() * max_d[k][dbra];
+                    xjh[pj].reserve(hsz), xjh[pj].clear();
+                    xph[pj].reserve(hsz), xph[pj].clear();
+                    xjk[pj].reserve(hsz), xjk[pj].clear();
+                    xpk[pj].reserve(hsz), xpk[pj].clear();
+                    xhv[pj].reserve(hsz), xhv[pj].clear();
+                    for (size_t j = 0; j < xjh[pi].size(); j++)
+                        for (const auto &md :
+                             hm[k][dbra][xjh[pi][j] - kjis[k]]) {
+                            const int16_t d = md.second.first;
+                            const int jhv =
+                                hdrt->jds[xjh[pi][j] * hdrt->nd + d];
+                            const int16_t dket = md.first.second;
+                            const int jkv = drt->jds[xjk[pi][j]][dket];
+                            if (jkv == 0)
+                                continue;
+                            const int16_t bfq = drt->abc[jbra][1];
+                            const int16_t kfq = drt->abc[xjk[pi][j]][1];
+                            const int16_t biq = drt->abc[jbv][1];
+                            const int16_t kiq = drt->abc[jkv][1];
+                            const int16_t mdq = md.first.first;
+                            const int16_t mfq = hdrt->qs[xjh[pi][j]][2];
+                            const int16_t miq = hdrt->qs[jhv][2];
+                            const FL f =
+                                (*factors)[bfq * factor_strides[0] +
+                                           (biq - bfq + 1) * factor_strides[1] +
+                                           kfq * factor_strides[2] +
+                                           (kiq - kfq + 1) * factor_strides[3] +
+                                           mfq * factor_strides[4] +
+                                           miq * factor_strides[5] +
+                                           mdq * factor_strides[6]];
+                            if (abs(f) < abs((FL)1E-14))
+                                continue;
+                            xjk[pj].push_back(jkv);
+                            xjh[pj].push_back(jhv);
+                            xpk[pj].push_back(drt->xs[xjk[pi][j]][dket] +
+                                              xpk[pi][j]);
+                            xph[pj].push_back(
+                                hdrt->xs[xjh[pi][j] * (hdrt->nd + 1) + d] +
+                                xph[pi][j]);
+                            xhv[pj].push_back(f * xhv[pi][j] *
+                                              md.second.second);
+                        }
+                    jbra = jbv;
+                }
+                vector<LL> idxs;
+                idxs.reserve(xhv[pi].size());
+                for (LL i = 0; i < (LL)xhv[pi].size(); i++)
+                    idxs.push_back(i);
+                sort(idxs.begin(), idxs.end(), [&xpk, pi](LL a, LL b) {
+                    return xpk[pi][a] < xpk[pi][b];
+                });
+                LL xn = idxs.size() > 0;
+                for (LL i = 1; i < (LL)idxs.size(); i++)
+                    xn += (xpk[pi][idxs[i]] != xpk[pi][idxs[i - 1]]);
+                col_idxs[ibra].reserve(xn);
+                values[ibra].reserve(xn);
+                for (auto ii : idxs) {
+                    if ((int)xpk[pi][ii] != col_idxs[ibra].back() ||
+                        col_idxs[ibra].size() == 0) {
+                        col_idxs[ibra].push_back((int)xpk[pi][ii]);
+                        values[ibra].push_back(xhv[pi][ii] *
+                                               (*ints)[xph[pi][ii]]);
+                    } else
+                        values[ibra].back() +=
+                            xhv[pi][ii] * (*ints)[xph[pi][ii]];
+                }
+                assert(values[ibra].size() == xn &&
+                       col_idxs[ibra].size() == xn);
+            }
+            fill_csr_matrix(col_idxs, values, *mat->csr_data[im]);
         }
-        jbra[pi] = vector<int>(), jbra[pi ^ 1] = vector<int>();
-        jket[pi] = vector<int>(), jket[pi ^ 1] = vector<int>();
-        jh[pi] = vector<int>(), jh[pi ^ 1] = vector<int>();
-        pbra[pi ^ 1] = vector<LL>(), pket[pi ^ 1] = vector<LL>();
-        ph[pi ^ 1] = vector<LL>(), hv[pi ^ 1] = vector<FL>();
-        vector<pair<pair<MKL_INT, MKL_INT>, FL>> rv;
-        rv.reserve(hv[pi].size());
-        for (size_t j = 0; j < hv[pi].size(); j++)
-            rv.push_back(
-                make_pair(make_pair((MKL_INT)pbra[pi][j], (MKL_INT)pket[pi][j]),
-                          hv[pi][j] * (*ints)[ph[pi][j]]));
-        assert(mat->info->n == 1);
-        fill_csr_matrix(rv, *mat->csr_data[0]);
     }
     void get_site_ops(
         uint16_t m,
