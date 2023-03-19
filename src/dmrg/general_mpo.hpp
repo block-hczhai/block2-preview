@@ -157,7 +157,7 @@ template <typename FL> struct GeneralFCIDUMP {
     vector<vector<FL>> data;
     ElemOpTypes elem_type;
     bool order_adjusted = false;
-    GeneralFCIDUMP() {}
+    GeneralFCIDUMP() : elem_type(ElemOpTypes::SU2) {}
     GeneralFCIDUMP(ElemOpTypes elem_type) : elem_type(elem_type) {}
     virtual ~GeneralFCIDUMP() = default;
     static shared_ptr<GeneralFCIDUMP>

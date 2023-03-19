@@ -204,6 +204,8 @@ template <typename S> void bind_drt_big_site(py::module &m) {
         .def("__getitem__", &DRT<S, ElemOpTypes::SU2>::operator[], py::arg("i"))
         .def("index", &DRT<S, ElemOpTypes::SU2>::index)
         .def("__len__", &DRT<S, ElemOpTypes::SU2>::size)
+        .def("q_index", &DRT<S, ElemOpTypes::SU2>::q_index)
+        .def("q_range", &DRT<S, ElemOpTypes::SU2>::q_range)
         .def("get_basis", &DRT<S, ElemOpTypes::SU2>::get_basis)
         .def("__repr__", &DRT<S, ElemOpTypes::SU2>::to_str);
 
@@ -240,20 +242,23 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
 
     py::class_<DRTBigSite<S, FL>, shared_ptr<DRTBigSite<S, FL>>,
                BigSite<S, FL>>(m, "DRTBigSite")
-        .def(py::init<S, bool, int, const vector<typename S::pg_t> &,
-                      const shared_ptr<GeneralFCIDUMP<FL>> &>())
-        .def(py::init<S, bool, int, const vector<typename S::pg_t> &,
-                      const shared_ptr<GeneralFCIDUMP<FL>> &, int>())
+        .def(py::init<const vector<S> &, bool, int,
+                      const vector<typename S::pg_t> &>())
+        .def(py::init<const vector<S> &, bool, int,
+                      const vector<typename S::pg_t> &,
+                      const shared_ptr<FCIDUMP<FL>> &>())
+        .def(py::init<const vector<S> &, bool, int,
+                      const vector<typename S::pg_t> &,
+                      const shared_ptr<FCIDUMP<FL>> &, int>())
+        .def_static("get_target_quanta", &DRTBigSite<S, FL>::get_target_quanta)
         .def("get_site_op_infos", &DRTBigSite<S, FL>::get_site_op_infos)
         .def("prepare_factors", &DRTBigSite<S, FL>::prepare_factors)
         .def("fill_csr_matrix", &DRTBigSite<S, FL>::fill_csr_matrix)
-        .def("build_hamiltonian_matrix",
-             &DRTBigSite<S, FL>::build_hamiltonian_matrix)
+        .def_readwrite("n_total_orbs", &DRTBigSite<S, FL>::n_total_orbs)
+        .def_readwrite("cutoff", &DRTBigSite<S, FL>::cutoff)
         .def_readwrite("fcidump", &DRTBigSite<S, FL>::fcidump)
+        .def_readwrite("gfd", &DRTBigSite<S, FL>::gfd)
         .def_readwrite("drt", &DRTBigSite<S, FL>::drt)
-        .def_readwrite("hdrt", &DRTBigSite<S, FL>::hdrt)
-        .def_readwrite("ints", &DRTBigSite<S, FL>::ints)
-        .def_readwrite("site_matrices", &DRTBigSite<S, FL>::site_matrices)
         .def_readwrite("factors", &DRTBigSite<S, FL>::factors)
         .def_readwrite("factor_strides", &DRTBigSite<S, FL>::factor_strides)
         .def_readwrite("is_right", &DRTBigSite<S, FL>::is_right);

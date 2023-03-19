@@ -954,6 +954,9 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
     py::bind_vector<vector<vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>>>(
         m, "VectorVectorPSSTensor");
 
+    py::bind_vector<vector<pair<S, pair<int16_t, int16_t>>>>(
+        m, "VectorPSPInt16Int16");
+
     py::class_<SparseMatrixGroup<S, FL>, shared_ptr<SparseMatrixGroup<S, FL>>>(
         m, "SparseMatrixGroup")
         .def(py::init<>())
@@ -1340,7 +1343,8 @@ void bind_trans_state_info_spin_specific(py::module &m,
           &TransStateInfo<T, S>::backward_connection);
 }
 
-template <typename T, int L> void bind_array_fixed(py::module &m,const string& name) {
+template <typename T, int L>
+void bind_array_fixed(py::module &m, const string &name) {
 
     py::class_<array<T, L>>(m, name.c_str())
         .def("__setitem__",
@@ -1359,8 +1363,8 @@ template <typename T, int L> void bind_array_fixed(py::module &m,const string& n
              })
         .def("__iter__", [](array<T, L> *self) {
             return py::make_iterator<
-                py::return_value_policy::reference_internal, T *, T *,
-                T &>(&(*self)[0], &(*self)[0] + self->size());
+                py::return_value_policy::reference_internal, T *, T *, T &>(
+                &(*self)[0], &(*self)[0] + self->size());
         });
 }
 
@@ -1436,7 +1440,7 @@ template <typename S = void> void bind_data(py::module &m) {
             ss << "]";
             return ss.str();
         });
-    
+
     bind_array_fixed<int, 4>(m, "Array4Int");
     bind_array_fixed<int16_t, 3>(m, "Array3Int16");
     bind_array_fixed<int16_t, 6>(m, "Array6Int16");
@@ -2007,7 +2011,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("racah", &SU2CG::racah, py::arg("ta"), py::arg("tb"),
              py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
         .def("transpose_cg", &SU2CG::transpose_cg, py::arg("td"), py::arg("tl"),
-             py::arg("tr"));
+             py::arg("tr"))
+        .def("phase", &SU2CG::phase, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"));
 
     py::class_<SpinPermTerm, shared_ptr<SpinPermTerm>>(m, "SpinPermTerm")
         .def(py::init<>())

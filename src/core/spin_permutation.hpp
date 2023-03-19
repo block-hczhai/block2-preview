@@ -1314,13 +1314,13 @@ struct SpinPermScheme {
                 vector<pair<double, string>> &udq = r.data[i].at(perm);
                 vector<pair<double, string>> &ref_udq = r.data[xi].at(perm);
                 vector<uint8_t> tcds;
-                map<string, double> r;
+                map<string, double> pr;
                 for (auto &mr : ref_udq) {
                     string k = R::split_cds(mr.second, tcds);
                     for (auto &rr : recouples[map_unique_strs.at(k)])
-                        r[rr.first] += rr.second * mr.first;
+                        pr[rr.first] += rr.second * mr.first;
                 }
-                for (auto &mr : r)
+                for (auto &mr : pr)
                     if (abs(mr.second) > 1E-12)
                         udq.push_back(make_pair(
                             mr.second, R::make_with_cds(mr.first, tcds)));
