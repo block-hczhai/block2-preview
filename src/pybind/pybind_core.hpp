@@ -747,6 +747,8 @@ template <typename S> void bind_sparse(py::module &m) {
         m, "VectorVectorPLMatInfo");
     py::bind_vector<vector<shared_ptr<SparseMatrixInfo<S>>>>(m,
                                                              "VectorSpMatInfo");
+    py::bind_vector<vector<pair<S, pair<int16_t, int16_t>>>>(
+        m, "VectorPSPInt16Int16");
 }
 
 template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
@@ -953,9 +955,6 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         m, "VectorPSSTensor");
     py::bind_vector<vector<vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>>>(
         m, "VectorVectorPSSTensor");
-
-    py::bind_vector<vector<pair<S, pair<int16_t, int16_t>>>>(
-        m, "VectorPSPInt16Int16");
 
     py::class_<SparseMatrixGroup<S, FL>, shared_ptr<SparseMatrixGroup<S, FL>>>(
         m, "SparseMatrixGroup")
