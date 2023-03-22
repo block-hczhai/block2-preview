@@ -240,6 +240,20 @@ template <typename S> void bind_drt_big_site(py::module &m) {
 
 template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
 
+    py::class_<HDRTScheme<S, FL>, shared_ptr<HDRTScheme<S, FL>>>(m,
+                                                                 "HDRTScheme")
+        .def(py::init<const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &,
+                      const vector<shared_ptr<SpinPermScheme>> &>())
+        .def("sort_integral", &HDRTScheme<S, FL>::sort_integral)
+        .def("sort_npdm", &HDRTScheme<S, FL>::sort_npdm)
+        .def_readwrite("hdrt", &HDRTScheme<S, FL>::hdrt)
+        .def_readwrite("schemes", &HDRTScheme<S, FL>::schemes)
+        .def_readwrite("expr_mp", &HDRTScheme<S, FL>::expr_mp)
+        .def_readwrite("hjumps", &HDRTScheme<S, FL>::hjumps)
+        .def_readwrite("ds", &HDRTScheme<S, FL>::ds)
+        .def_readwrite("jis", &HDRTScheme<S, FL>::jis)
+        .def_readwrite("n_patterns", &HDRTScheme<S, FL>::n_patterns);
+
     py::class_<DRTBigSite<S, FL>, shared_ptr<DRTBigSite<S, FL>>,
                BigSite<S, FL>>(m, "DRTBigSite")
         .def(py::init<const vector<S> &, bool, int,
@@ -253,6 +267,8 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
         .def_static("get_target_quanta", &DRTBigSite<S, FL>::get_target_quanta)
         .def("get_site_op_infos", &DRTBigSite<S, FL>::get_site_op_infos)
         .def("prepare_factors", &DRTBigSite<S, FL>::prepare_factors)
+        .def("fill_csr_matrix_from_coo",
+             &DRTBigSite<S, FL>::fill_csr_matrix_from_coo)
         .def("fill_csr_matrix", &DRTBigSite<S, FL>::fill_csr_matrix)
         .def_readwrite("n_total_orbs", &DRTBigSite<S, FL>::n_total_orbs)
         .def_readwrite("cutoff", &DRTBigSite<S, FL>::cutoff)

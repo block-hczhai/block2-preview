@@ -2141,6 +2141,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("count_left", &NPDMCounter::count_left)
         .def("init_left", &NPDMCounter::init_left)
         .def("next_left", &NPDMCounter::next_left)
+        .def("find_left", &NPDMCounter::find_left)
         .def("count_right", &NPDMCounter::count_right)
         .def("init_right", &NPDMCounter::init_right)
         .def("index_right", &NPDMCounter::index_right)

@@ -1380,6 +1380,14 @@ struct NPDMCounter {
         else
             return dp[(int)g.size()][k + 1];
     }
+    // idx is pattern
+    uint32_t find_left(int k, const vector<uint16_t> &idx) {
+        uint32_t rr = 0;
+        for (int i = 0, r = 1; i < (int)idx.size(); i++)
+            if (i == 0 || idx[i - 1] != idx[i])
+                rr += dp[r++][idx[i]];
+        return rr;
+    }
     bool init_left(const vector<uint16_t> &pattern, int k, bool f,
                    vector<uint16_t> &r) const {
         r.clear();
