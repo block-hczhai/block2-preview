@@ -157,7 +157,7 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Huanchen Zhai, Henrik R. Larsson, Seunghoon Lee, and Zhi-Hao Cui",
-    author_email="hczhai@ucla.edu",
+    author_email="hczhai.ok@gmail.com",
     url="https://github.com/block-hczhai/block2-preview",
     install_requires=[
         "mkl==2021.4",
