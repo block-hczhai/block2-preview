@@ -403,3 +403,22 @@ void bind_fl_dmrg_big_site(py::module &m) {
         .def_readwrite("delta_e", &DMRGBigSiteAQCC<S, FL, FLS>::delta_e)
         .def_readwrite("ref_energy", &DMRGBigSiteAQCC<S, FL, FLS>::ref_energy);
 }
+
+#ifdef _EXPLICIT_TEMPLATE
+
+extern template void bind_fl_big_site<SZ, double>(py::module &m);
+extern template void bind_fl_hamiltonian_big_site<SZ, double>(py::module &m);
+extern template void bind_fl_dmrg_big_site<SZ, double, double>(py::module &m);
+
+extern template void bind_fl_big_site<SU2, double>(py::module &m);
+extern template void bind_fl_hamiltonian_big_site<SU2, double>(py::module &m);
+extern template void bind_fl_dmrg_big_site<SU2, double, double>(py::module &m);
+
+extern template void bind_fl_sci_big_site_fock<SZ, double>(py::module &m);
+
+extern template void bind_fl_csf_big_site<SU2, double>(py::module &m);
+
+extern template void bind_drt_big_site<SU2>(py::module &m);
+extern template void bind_fl_drt_big_site<SU2, double>(py::module &m);
+
+#endif

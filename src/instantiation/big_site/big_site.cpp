@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2023 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,17 +18,12 @@
  *
  */
 
-#pragma once
+#include "../block2_big_site.hpp"
 
-#include "big_site/big_site.hpp"
-#include "big_site/csf_big_site.hpp"
-#include "big_site/drt_big_site.hpp"
-#include "big_site/qc_hamiltonian_big_site.hpp"
-#include "big_site/sci_fcidump.hpp"
-#include "big_site/sci_fock_big_site.hpp"
-#include "big_site/sci_fock_determinant.hpp"
-#include "big_site/sweep_algorithm_big_site.hpp"
+template struct block2::BigSite<block2::SZ, double>;
+template struct block2::SimplifiedBigSite<block2::SZ, double>;
+template struct block2::ParallelBigSite<block2::SZ, double>;
 
-#ifdef _EXPLICIT_TEMPLATE
-#include "instantiation/block2_big_site.hpp"
-#endif
+template struct block2::BigSite<block2::SU2, double>;
+template struct block2::SimplifiedBigSite<block2::SU2, double>;
+template struct block2::ParallelBigSite<block2::SU2, double>;
