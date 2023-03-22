@@ -137,7 +137,7 @@ if "single_prec" in dic and "use_complex" not in dic:
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite
     except ImportError:
         pass
 elif "single_prec" in dic and "use_complex" in dic:
@@ -199,7 +199,7 @@ elif "single_prec" in dic and "use_complex" in dic:
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite
     except ImportError:
         pass
 elif "use_complex" not in dic:
@@ -285,7 +285,7 @@ elif "use_complex" not in dic:
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite
     except ImportError:
         pass
 else:
@@ -372,7 +372,7 @@ else:
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite
     except ImportError:
         pass
 
@@ -467,6 +467,7 @@ for dyn_key in ["dmrgfci", "mrci", "mrcis", "mrcisd", "mrcisdt",
         elif dynamic_corr_method[0] == 'mrrept2':
             dynamic_corr_method[0] = 'mrrept2sd'
         break
+ghamil = None
 big_site_method = dic.get("big_site", None)
 n_cas = 0
 qc_mpo_trans_center = -1
@@ -1188,6 +1189,14 @@ if pre_run or not no_pre_run:
             assert "nonspinadapted" not in dic
             big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
             big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, orb_sym[-n_external:])
+        elif big_site_method == "drt":
+            assert "nonspinadapted" not in dic
+            left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, abs(xl[-1]), orb_sym[:n_inactive])
+            right_iqs = DRTBigSite.get_target_quanta(True, n_external, abs(xr[-1]), orb_sym[-n_external:])
+            big_left_orig = DRTBigSite(left_iqs, False, n_inactive,
+                orb_sym[:n_inactive], fcidump, max(outputlevel, 0))
+            big_right_orig = DRTBigSite(right_iqs, True, n_external,
+                orb_sym[-n_external:], fcidump, max(outputlevel, 0))
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -2864,7 +2873,7 @@ if not pre_run:
                 if MPI is not None:
                     MPI.barrier()
 
-            if conv_npdm:
+            if conv_npdm or ghamil is None:
                 dm = do_onepdm(mps, mps)
             else:
                 dm = do_npdm(mps, mps, pdm_type=1)
@@ -3918,6 +3927,14 @@ if not pre_run:
                     xl[-1]), False, fd_zero, orb_sym[:n_inactive])
                 big_right_orig = CSFBigSite(n_external, abs(
                     xr[-1]), True, fd_zero, orb_sym[-n_external:])
+            elif big_site_method == "drt":
+                assert "nonspinadapted" not in dic
+                left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, abs(xl[-1]), orb_sym[:n_inactive])
+                right_iqs = DRTBigSite.get_target_quanta(True, n_external, abs(xr[-1]), orb_sym[-n_external:])
+                big_left_orig = DRTBigSite(left_iqs, False, n_inactive,
+                    orb_sym[:n_inactive], fd_zero, max(outputlevel, 0))
+                big_right_orig = DRTBigSite(right_iqs, True, n_external,
+                    orb_sym[-n_external:], fd_zero, max(outputlevel, 0))
             else:
                 raise NotImplementedError
             big_left = SimplifiedBigSite(big_left_orig, simpl_rule)

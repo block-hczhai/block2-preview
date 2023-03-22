@@ -956,22 +956,25 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
         const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
         info[S(0)] = nullptr;
-        for (auto ipg : orb_sym) {
-            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
-                for (int s = 1; s <= max_s_odd; s += 2) {
-                    info[S(n, s, ipg)] = nullptr;
-                    info[S(n, s, S::pg_inv(ipg))] = nullptr;
+        set<uint8_t> all_orb_sym(orb_sym.begin(), orb_sym.end());
+        for (int i = 0; i < max_n; i++) {
+            set<uint8_t> old_orb_sym = all_orb_sym;
+            for (auto ipg : old_orb_sym) {
+                if (i == 0)
+                    all_orb_sym.insert(S::pg_inv(ipg));
+                for (auto jpg : orb_sym) {
+                    all_orb_sym.insert(S::pg_mul(ipg, jpg));
+                    all_orb_sym.insert(S::pg_mul(ipg, S::pg_inv(jpg)));
                 }
-            for (auto jpg : orb_sym)
-                for (int n = -max_n_even; n <= max_n_even; n += 2)
-                    for (int s = 0; s <= max_s_even; s += 2) {
-                        info[S(n, s, S::pg_mul(ipg, jpg))] = nullptr;
-                        info[S(n, s, S::pg_mul(ipg, S::pg_inv(jpg)))] = nullptr;
-                        info[S(n, s, S::pg_mul(S::pg_inv(ipg), jpg))] = nullptr;
-                        info[S(n, s,
-                               S::pg_mul(S::pg_inv(ipg), S::pg_inv(jpg)))] =
-                            nullptr;
-                    }
+            }
+        }
+        for (auto ipg : all_orb_sym) {
+            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                for (int s = 1; s <= max_s_odd; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
+            for (int n = -max_n_even; n <= max_n_even; n += 2)
+                for (int s = 0; s <= max_s_even; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
         }
         for (auto &p : info) {
             p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
@@ -1113,23 +1116,23 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         vector<vector<vector<pair<MKL_INT, MKL_INT>>>> pbk(
             ntg, vector<vector<pair<MKL_INT, MKL_INT>>>(2));
         vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
-        for (int im = 0; im < mats[0]->info->n; im++) {
-            S opdq = mats[0]->info->delta_quantum;
-            S qbra = mats[0]->info->quanta[im].get_bra(opdq);
-            S qket = mats[0]->info->quanta[im].get_ket();
-            // SU2 and fermion factor for exchange:
-            //   ket x op -> op x ket when is_right
-            FL xf = is_right
-                        ? (FL)(SU2Matrix<FL>::cg().phase(
-                                   opdq.twos(), qket.twos(), qbra.twos()) *
-                               (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
-                        : (FL)1.0;
-            int imb = drt->q_index(qbra), imk = drt->q_index(qket);
-            assert(mats[0]->info->n_states_bra[im] == drt->xs[imb].back());
-            assert(mats[0]->info->n_states_ket[im] == drt->xs[imk].back());
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-            for (int it = 0; it < (int)mats.size(); it++) {
+        for (int it = 0; it < (int)mats.size(); it++) {
+            for (int im = 0; im < mats[it]->info->n; im++) {
                 const int tid = threading->get_thread_id();
+                S opdq = mats[it]->info->delta_quantum;
+                S qbra = mats[it]->info->quanta[im].get_bra(opdq);
+                S qket = mats[it]->info->quanta[im].get_ket();
+                // SU2 and fermion factor for exchange:
+                //   ket x op -> op x ket when is_right
+                FL xf = is_right
+                            ? (FL)(SU2Matrix<FL>::cg().phase(
+                                       opdq.twos(), qket.twos(), qbra.twos()) *
+                                   (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
+                            : (FL)1.0;
+                int imb = drt->q_index(qbra), imk = drt->q_index(qket);
+                assert(mats[it]->info->n_states_bra[im] == drt->xs[imb].back());
+                assert(mats[it]->info->n_states_ket[im] == drt->xs[imk].back());
                 int pi = 0, pj = pi ^ 1;
                 vector<vector<pair<MKL_INT, MKL_INT>>> &xpbk = pbk[tid];
                 vector<vector<int>> &xjb = jbra[tid], &xjk = jket[tid];
@@ -1214,166 +1217,185 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         vector<vector<vector<LL>>> ph(ntg, vector<vector<LL>>(2));
         vector<vector<vector<LL>>> pket(ntg, vector<vector<LL>>(2));
         vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
-        for (int im = 0; im < mats[0]->info->n; im++) {
-            S opdq = mats[0]->info->delta_quantum;
-            S qbra = mats[0]->info->quanta[im].get_bra(opdq);
-            S qket = mats[0]->info->quanta[im].get_ket();
-            // SU2 and fermion factor for exchange:
-            //   ket x op -> op x ket when is_right
-            FL xf = is_right
-                        ? (FL)(SU2Matrix<FL>::cg().phase(
-                                   opdq.twos(), qket.twos(), qbra.twos()) *
-                               (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
-                        : (FL)1.0;
-            int imb = drt->q_index(qbra), imk = drt->q_index(qket);
-            assert(mats[0]->info->n_states_bra[im] == drt->xs[imb].back());
-            assert(mats[0]->info->n_states_ket[im] == drt->xs[imk].back());
-            vector<vector<vector<
-                vector<pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>>
-                hm(drt->n_sites,
-                   vector<vector<vector<
-                       pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>(4));
-            vector<vector<size_t>> max_d(drt->n_sites, vector<size_t>(4, 0));
-            vector<int> kjis(drt->n_sites);
-            for (int k = drt->n_sites - 1, ji = 0, jj; k >= 0; k--, ji = jj) {
-                for (jj = ji; hdrt->qs[jj][0] == k + 1;)
-                    jj++;
-                kjis[k] = ji;
-                for (int dbra = 0; dbra < 4; dbra++) {
-                    hm[k][dbra].resize(jj - ji);
-                    for (int jk = ji; jk < jj; jk++) {
-                        for (int d = 0; d < hdrt->nd; d++)
-                            if (hdrt->jds[jk * hdrt->nd + d] != 0)
-                                for (size_t md = 0;
-                                     md < (int)site_matrices[k][d].data.size();
-                                     md++)
-                                    if (site_matrices[k][d].indices[md].first ==
-                                        dbra)
-                                        hm[k][dbra][jk - ji].push_back(
-                                            make_pair(
+        map<S, vector<size_t>> dq_mats;
+        for (size_t it = 0; it < mats.size(); it++)
+            dq_mats[mats[it]->info->delta_quantum].push_back(it);
+        for (auto &dqm : dq_mats) {
+            const auto &rep_mat = mats[dqm.second[0]];
+            for (int im = 0; im < rep_mat->info->n; im++) {
+                S opdq = rep_mat->info->delta_quantum;
+                S qbra = rep_mat->info->quanta[im].get_bra(opdq);
+                S qket = rep_mat->info->quanta[im].get_ket();
+                // SU2 and fermion factor for exchange:
+                //   ket x op -> op x ket when is_right
+                FL xf = is_right
+                            ? (FL)(SU2Matrix<FL>::cg().phase(
+                                       opdq.twos(), qket.twos(), qbra.twos()) *
+                                   (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
+                            : (FL)1.0;
+                int imb = drt->q_index(qbra), imk = drt->q_index(qket);
+                assert(rep_mat->info->n_states_bra[im] == drt->xs[imb].back());
+                assert(rep_mat->info->n_states_ket[im] == drt->xs[imk].back());
+                vector<vector<vector<
+                    vector<pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>>
+                    hm(drt->n_sites,
+                       vector<vector<vector<
+                           pair<pair<int16_t, int16_t>, pair<int16_t, FL>>>>>(
+                           4));
+                vector<vector<size_t>> max_d(drt->n_sites,
+                                             vector<size_t>(4, 0));
+                vector<int> kjis(drt->n_sites);
+                for (int k = drt->n_sites - 1, ji = 0, jj; k >= 0;
+                     k--, ji = jj) {
+                    for (jj = ji; hdrt->qs[jj][0] == k + 1;)
+                        jj++;
+                    kjis[k] = ji;
+                    for (int dbra = 0; dbra < 4; dbra++) {
+                        hm[k][dbra].resize(jj - ji);
+                        for (int jk = ji; jk < jj; jk++) {
+                            for (int d = 0; d < hdrt->nd; d++)
+                                if (hdrt->jds[jk * hdrt->nd + d] != 0)
+                                    for (size_t md = 0;
+                                         md <
+                                         (int)site_matrices[k][d].data.size();
+                                         md++)
+                                        if (site_matrices[k][d]
+                                                .indices[md]
+                                                .first == dbra)
+                                            hm[k][dbra][jk - ji].push_back(
                                                 make_pair(
-                                                    site_matrices[k][d].dq,
-                                                    site_matrices[k][d]
-                                                        .indices[md]
-                                                        .second),
-                                                make_pair(d, site_matrices[k][d]
-                                                                 .data[md])));
-                        max_d[k][dbra] =
-                            max(max_d[k][dbra], hm[k][dbra][jk - ji].size());
+                                                    make_pair(
+                                                        site_matrices[k][d].dq,
+                                                        site_matrices[k][d]
+                                                            .indices[md]
+                                                            .second),
+                                                    make_pair(
+                                                        d, site_matrices[k][d]
+                                                               .data[md])));
+                            max_d[k][dbra] = max(max_d[k][dbra],
+                                                 hm[k][dbra][jk - ji].size());
+                        }
                     }
                 }
-            }
-            vector<vector<vector<MKL_INT>>> col_idxs(
-                mats.size(), vector<vector<MKL_INT>>(drt->xs[imb].back()));
-            vector<vector<vector<FL>>> values(
-                mats.size(), vector<vector<FL>>(drt->xs[imb].back()));
+                vector<vector<vector<MKL_INT>>> col_idxs(
+                    dqm.second.size(),
+                    vector<vector<MKL_INT>>(drt->xs[imb].back()));
+                vector<vector<vector<FL>>> values(
+                    dqm.second.size(), vector<vector<FL>>(drt->xs[imb].back()));
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-            for (LL ibra = 0; ibra < drt->xs[imb].back(); ibra++) {
-                const int tid = threading->get_thread_id();
-                int pi = 0, pj = pi ^ 1, jbra = imb;
-                vector<vector<int>> &xjh = jh[tid], &xjk = jket[tid];
-                vector<vector<LL>> &xph = ph[tid], &xpk = pket[tid];
-                vector<vector<FL>> &xhv = hv[tid];
-                xjh[pi].clear(), xph[pi].clear(), xjk[pi].clear();
-                xpk[pi].clear(), xhv[pi].clear();
-                for (int i = 0; i < hdrt->n_init_qs; i++) {
-                    xjh[pi].push_back(i), xjk[pi].push_back(imk);
-                    xph[pi].push_back(
-                        i != 0
-                            ? xph[pi].back() +
-                                  hdrt->xs[(i - 1) * (hdrt->nd + 1) + hdrt->nd]
-                            : 0);
-                    xpk[pi].push_back(0), xhv[pi].push_back(xf);
+                for (LL ibra = 0; ibra < drt->xs[imb].back(); ibra++) {
+                    const int tid = threading->get_thread_id();
+                    int pi = 0, pj = pi ^ 1, jbra = imb;
+                    vector<vector<int>> &xjh = jh[tid], &xjk = jket[tid];
+                    vector<vector<LL>> &xph = ph[tid], &xpk = pket[tid];
+                    vector<vector<FL>> &xhv = hv[tid];
+                    xjh[pi].clear(), xph[pi].clear(), xjk[pi].clear();
+                    xpk[pi].clear(), xhv[pi].clear();
+                    for (int i = 0; i < hdrt->n_init_qs; i++) {
+                        xjh[pi].push_back(i), xjk[pi].push_back(imk);
+                        xph[pi].push_back(
+                            i != 0 ? xph[pi].back() +
+                                         hdrt->xs[(i - 1) * (hdrt->nd + 1) +
+                                                  hdrt->nd]
+                                   : 0);
+                        xpk[pi].push_back(0), xhv[pi].push_back(xf);
+                    }
+                    LL pbra = ibra;
+                    for (int k = drt->n_sites - 1; k >= 0;
+                         k--, pi ^= 1, pj ^= 1) {
+                        const int16_t dbra =
+                            (int16_t)(upper_bound(drt->xs[jbra].begin(),
+                                                  drt->xs[jbra].end(), pbra) -
+                                      1 - drt->xs[jbra].begin());
+                        pbra -= drt->xs[jbra][dbra];
+                        const int jbv = drt->jds[jbra][dbra];
+                        const size_t hsz = xhv[pi].size() * max_d[k][dbra];
+                        xjh[pj].reserve(hsz), xjh[pj].clear();
+                        xph[pj].reserve(hsz), xph[pj].clear();
+                        xjk[pj].reserve(hsz), xjk[pj].clear();
+                        xpk[pj].reserve(hsz), xpk[pj].clear();
+                        xhv[pj].reserve(hsz), xhv[pj].clear();
+                        for (size_t j = 0; j < xjh[pi].size(); j++)
+                            for (const auto &md :
+                                 hm[k][dbra][xjh[pi][j] - kjis[k]]) {
+                                const int16_t d = md.second.first;
+                                const int jhv =
+                                    hdrt->jds[xjh[pi][j] * hdrt->nd + d];
+                                const int16_t dket = md.first.second;
+                                const int jkv = drt->jds[xjk[pi][j]][dket];
+                                if (jkv == 0)
+                                    continue;
+                                const int16_t bfq = drt->abc[jbra][1];
+                                const int16_t kfq = drt->abc[xjk[pi][j]][1];
+                                const int16_t biq = drt->abc[jbv][1];
+                                const int16_t kiq = drt->abc[jkv][1];
+                                const int16_t mdq = md.first.first;
+                                const int16_t mfq = hdrt->qs[xjh[pi][j]][2];
+                                const int16_t miq = hdrt->qs[jhv][2];
+                                const FL f =
+                                    (*factors)[bfq * factor_strides[0] +
+                                               (biq - bfq + 1) *
+                                                   factor_strides[1] +
+                                               kfq * factor_strides[2] +
+                                               (kiq - kfq + 1) *
+                                                   factor_strides[3] +
+                                               mfq * factor_strides[4] +
+                                               miq * factor_strides[5] +
+                                               mdq * factor_strides[6]];
+                                if (abs(f) < (FP)1E-14)
+                                    continue;
+                                xjk[pj].push_back(jkv);
+                                xjh[pj].push_back(jhv);
+                                xpk[pj].push_back(drt->xs[xjk[pi][j]][dket] +
+                                                  xpk[pi][j]);
+                                xph[pj].push_back(
+                                    hdrt->xs[xjh[pi][j] * (hdrt->nd + 1) + d] +
+                                    xph[pi][j]);
+                                xhv[pj].push_back(f * xhv[pi][j] *
+                                                  md.second.second);
+                            }
+                        jbra = jbv;
+                    }
+                    vector<LL> idxs;
+                    idxs.reserve(xhv[pi].size());
+                    for (LL i = 0; i < (LL)xhv[pi].size(); i++)
+                        idxs.push_back(i);
+                    sort(idxs.begin(), idxs.end(), [&xpk, pi](LL a, LL b) {
+                        return xpk[pi][a] < xpk[pi][b];
+                    });
+                    LL xn = idxs.size() > 0;
+                    for (LL i = 1; i < (LL)idxs.size(); i++)
+                        xn += (xpk[pi][idxs[i]] != xpk[pi][idxs[i - 1]]);
+                    for (size_t it = 0; it < dqm.second.size(); it++) {
+                        col_idxs[it][ibra].reserve(xn);
+                        values[it][ibra].reserve(xn);
+                    }
+                    for (size_t it = 0; it < dqm.second.size(); it++) {
+                        for (LL i = 0; i < (LL)idxs.size(); i++)
+                            if (i == 0 ||
+                                (xpk[pi][idxs[i]] != xpk[pi][idxs[i - 1]] &&
+                                 abs(values[it][ibra].back()) > cutoff)) {
+                                col_idxs[it][ibra].push_back(
+                                    (int)xpk[pi][idxs[i]]);
+                                values[it][ibra].push_back(
+                                    xhv[pi][idxs[i]] *
+                                    (*ints[dqm.second[it]])[xph[pi][idxs[i]]]);
+                            } else {
+                                col_idxs[it][ibra].back() =
+                                    (int)xpk[pi][idxs[i]];
+                                values[it][ibra].back() +=
+                                    xhv[pi][idxs[i]] *
+                                    (*ints[dqm.second[it]])[xph[pi][idxs[i]]];
+                            }
+                        assert(col_idxs[it][ibra].size() <= xn &&
+                               values[it][ibra].size() <= xn);
+                    }
                 }
-                LL pbra = ibra;
-                for (int k = drt->n_sites - 1; k >= 0; k--, pi ^= 1, pj ^= 1) {
-                    const int16_t dbra =
-                        (int16_t)(upper_bound(drt->xs[jbra].begin(),
-                                              drt->xs[jbra].end(), pbra) -
-                                  1 - drt->xs[jbra].begin());
-                    pbra -= drt->xs[jbra][dbra];
-                    const int jbv = drt->jds[jbra][dbra];
-                    const size_t hsz = xhv[pi].size() * max_d[k][dbra];
-                    xjh[pj].reserve(hsz), xjh[pj].clear();
-                    xph[pj].reserve(hsz), xph[pj].clear();
-                    xjk[pj].reserve(hsz), xjk[pj].clear();
-                    xpk[pj].reserve(hsz), xpk[pj].clear();
-                    xhv[pj].reserve(hsz), xhv[pj].clear();
-                    for (size_t j = 0; j < xjh[pi].size(); j++)
-                        for (const auto &md :
-                             hm[k][dbra][xjh[pi][j] - kjis[k]]) {
-                            const int16_t d = md.second.first;
-                            const int jhv =
-                                hdrt->jds[xjh[pi][j] * hdrt->nd + d];
-                            const int16_t dket = md.first.second;
-                            const int jkv = drt->jds[xjk[pi][j]][dket];
-                            if (jkv == 0)
-                                continue;
-                            const int16_t bfq = drt->abc[jbra][1];
-                            const int16_t kfq = drt->abc[xjk[pi][j]][1];
-                            const int16_t biq = drt->abc[jbv][1];
-                            const int16_t kiq = drt->abc[jkv][1];
-                            const int16_t mdq = md.first.first;
-                            const int16_t mfq = hdrt->qs[xjh[pi][j]][2];
-                            const int16_t miq = hdrt->qs[jhv][2];
-                            const FL f =
-                                (*factors)[bfq * factor_strides[0] +
-                                           (biq - bfq + 1) * factor_strides[1] +
-                                           kfq * factor_strides[2] +
-                                           (kiq - kfq + 1) * factor_strides[3] +
-                                           mfq * factor_strides[4] +
-                                           miq * factor_strides[5] +
-                                           mdq * factor_strides[6]];
-                            if (abs(f) < (FP)1E-14)
-                                continue;
-                            xjk[pj].push_back(jkv);
-                            xjh[pj].push_back(jhv);
-                            xpk[pj].push_back(drt->xs[xjk[pi][j]][dket] +
-                                              xpk[pi][j]);
-                            xph[pj].push_back(
-                                hdrt->xs[xjh[pi][j] * (hdrt->nd + 1) + d] +
-                                xph[pi][j]);
-                            xhv[pj].push_back(f * xhv[pi][j] *
-                                              md.second.second);
-                        }
-                    jbra = jbv;
-                }
-                vector<LL> idxs;
-                idxs.reserve(xhv[pi].size());
-                for (LL i = 0; i < (LL)xhv[pi].size(); i++)
-                    idxs.push_back(i);
-                sort(idxs.begin(), idxs.end(), [&xpk, pi](LL a, LL b) {
-                    return xpk[pi][a] < xpk[pi][b];
-                });
-                LL xn = idxs.size() > 0;
-                for (LL i = 1; i < (LL)idxs.size(); i++)
-                    xn += (xpk[pi][idxs[i]] != xpk[pi][idxs[i - 1]]);
-                for (size_t it = 0; it < ints.size(); it++) {
-                    col_idxs[it][ibra].reserve(xn);
-                    values[it][ibra].reserve(xn);
-                }
-                for (size_t it = 0; it < ints.size(); it++) {
-                    for (LL i = 0; i < (LL)idxs.size(); i++)
-                        if (i == 0 ||
-                            (xpk[pi][idxs[i]] != xpk[pi][idxs[i - 1]] &&
-                             abs(values[it][ibra].back()) > cutoff)) {
-                            col_idxs[it][ibra].push_back((int)xpk[pi][idxs[i]]);
-                            values[it][ibra].push_back(
-                                xhv[pi][idxs[i]] *
-                                (*ints[it])[xph[pi][idxs[i]]]);
-                        } else {
-                            col_idxs[it][ibra].back() = (int)xpk[pi][idxs[i]];
-                            values[it][ibra].back() +=
-                                xhv[pi][idxs[i]] *
-                                (*ints[it])[xph[pi][idxs[i]]];
-                        }
-                    assert(col_idxs[it][ibra].size() <= xn &&
-                           values[it][ibra].size() <= xn);
+                for (size_t it = 0; it < dqm.second.size(); it++) {
+                    fill_csr_matrix(col_idxs[it], values[it],
+                                    *mats[dqm.second[it]]->csr_data[im]);
                 }
             }
-            for (size_t it = 0; it < ints.size(); it++)
-                fill_csr_matrix(col_idxs[it], values[it],
-                                *mats[it]->csr_data[im]);
         }
         threading->activate_normal();
     }
@@ -1442,9 +1464,9 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 cout << expr << " ";
             cout << "]"
                  << " NTERMS = " << hdrt->size() << endl;
-            if (iprint >= 2)
+            if (iprint >= 3)
                 cout << "    HDRT = " << endl << hdrt->to_str() << endl;
-            if (iprint >= 3) {
+            if (iprint >= 4) {
                 cout << "    HDRT TERMS = " << endl;
                 for (LL ih = 0; ih < hdrt->size(); ih++) {
                     auto hterm = (*hdrt)[ih];
@@ -1725,9 +1747,20 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 cout << std_exprs[ix]
                      << (ix == std_exprs.size() - 1 ? " " : " + ");
             cout << "] NTERMS = " << hdrt->size() << endl;
+            if (iprint >= 3)
+                cout << "    HDRT = " << endl << hdrt->to_str() << endl;
+            if (iprint >= 4) {
+                cout << "    HDRT TERMS = " << endl;
+                for (LL ih = 0; ih < hdrt->size(); ih++) {
+                    auto hterm = (*hdrt)[ih];
+                    cout << "   * " << setw(8) << ih << " = " << hterm.first
+                         << " [";
+                    for (auto xh : hterm.second)
+                        cout << " " << (int)xh;
+                    cout << " ]" << endl;
+                }
+            }
         }
-        if (iprint >= 2)
-            cout << "    HDRT = " << endl << hdrt->to_str() << endl;
         shared_ptr<HDRTScheme<S, FL>> hdrt_scheme =
             make_shared<HDRTScheme<S, FL>>(hdrt, schemes);
         vector<shared_ptr<vector<FL>>> ints(gfds.size());
@@ -1753,6 +1786,15 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         map<pair<OpNames, int8_t>, vector<uint16_t>> n_op_idxs, c_op_idxs;
         map<pair<OpNames, int8_t>, vector<shared_ptr<CSRSparseMatrix<S, FL>>>>
             n_op_mats, c_op_mats;
+        if (iprint >= 1) {
+            cout << endl
+                 << "DRT Big Site :: NORBS = " << n_orbs << " "
+                 << (is_right ? "Right" : "Left");
+            cout << " ORB-SYM = [ ";
+            for (auto &x : drt->orb_sym)
+                cout << (int)x << " ";
+            cout << "]" << endl;
+        }
         for (auto &p : ops) {
             OpElement<S, FL> &op =
                 *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
@@ -1760,7 +1802,14 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 make_shared<VectorAllocator<FP>>();
             shared_ptr<CSRSparseMatrix<S, FL>> mat =
                 make_shared<CSRSparseMatrix<S, FL>>();
-            mat->initialize(BigSite<S, FL>::find_site_op_info(op.q_label));
+            shared_ptr<SparseMatrixInfo<S>> info =
+                BigSite<S, FL>::find_site_op_info(op.q_label);
+            // when big site is too small (no available ipg) this may happen
+            if (info == nullptr) {
+                p.second = zero;
+                continue;
+            }
+            mat->initialize(info);
             for (int l = 0; l < mat->info->n; l++)
                 mat->csr_data[l]->alloc = d_alloc;
             p.second = mat;
@@ -1833,6 +1882,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         _t2.get_time();
         size_t size_all = 0, nnz_all = 0, size_total, nnz_total;
         for (const auto &m : n_op_qs) {
+            check_signal_()();
             if (iprint >= 1 && n_op_mats.at(m.first).size() != 0) {
                 cout << "  Build normal operator " << m.first.first;
                 if (m.first.second != -1)
@@ -1863,6 +1913,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             }
         }
         for (const auto &m : c_op_qs) {
+            check_signal_()();
             if (iprint >= 1 && c_op_mats.at(m.first).size() != 0) {
                 cout << "  Build complementary operator " << m.first.first;
                 if (m.first.second != -1)
