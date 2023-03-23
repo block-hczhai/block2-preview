@@ -270,6 +270,11 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
         .def("fill_csr_matrix_from_coo",
              &DRTBigSite<S, FL>::fill_csr_matrix_from_coo)
         .def("fill_csr_matrix", &DRTBigSite<S, FL>::fill_csr_matrix)
+        .def("build_npdm",
+             [](DRTBigSite<S, FL> *self, const string &expr,
+                py::array_t<FL> bra_ci, py::array_t<FL> ket_ci) {
+                 return self->build_npdm(expr, bra_ci.data(), ket_ci.data());
+             })
         .def_readwrite("n_total_orbs", &DRTBigSite<S, FL>::n_total_orbs)
         .def_readwrite("cutoff", &DRTBigSite<S, FL>::cutoff)
         .def_readwrite("fcidump", &DRTBigSite<S, FL>::fcidump)
