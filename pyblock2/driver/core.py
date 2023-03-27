@@ -513,6 +513,7 @@ class DMRGDriver:
         heis_twos=-1,
         heis_twosz=0,
         singlet_embedding=True,
+        pauli_mode=False,
     ):
         bw = self.bw
         import numpy as np
@@ -547,9 +548,115 @@ class DMRGDriver:
                 self.orb_sym = bw.b.VectorUInt8(list(orb_sym[0]) + list(orb_sym[1]))
             else:
                 self.orb_sym = bw.b.VectorUInt8(orb_sym)
-        self.ghamil = bw.bs.GeneralHamiltonian(
-            self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
-        )
+        if pauli_mode:
+            self.ghamil = self.get_pauli_hamiltonian()
+        else:
+            self.ghamil = bw.bs.GeneralHamiltonian(
+                self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
+            )
+
+    def get_pauli_hamiltonian(self):
+        assert SymmetryTypes.SGB in self.symm_type
+        GH = self.bw.bs.GeneralHamiltonian
+        super_self = self
+        import numpy as np
+
+        class PauliHamiltonian(GH):
+            def __init__(self, vacuum, n_sites, orb_sym):
+                GH.__init__(self)
+                self.opf = super_self.bw.bs.OperatorFunctions(super_self.bw.brs.CG())
+                self.vacuum = vacuum
+                self.n_sites = n_sites
+                self.orb_sym = orb_sym
+                self.basis = super_self.bw.brs.VectorStateInfo(
+                    [self.get_site_basis(m) for m in range(self.n_sites)]
+                )
+                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo(
+                    [super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)]
+                )
+                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat(
+                    [super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)]
+                )
+                self.init_site_ops()
+
+            def get_site_basis(self, m):
+                """Single site states."""
+                bz = super_self.bw.brs.StateInfo(super_self.bw.SX(0, 0))
+                bz.n_states[0] = 2
+                return bz
+
+            def init_site_ops(self):
+                """Initialize operator quantum numbers at each site (site_op_infos)
+                and primitive (single character) site operators (site_norm_ops)."""
+                op_defs = {
+                    "": np.array([1.0, 0.0, 0.0, 1.0]),
+                    "I": np.array([1.0, 0.0, 0.0, 1.0]),
+                    "X": np.array([0.0, 1.0, 1.0, 0.0]),
+                    "Y": np.array([0.0, -1.0, 1.0, 0.0]),
+                    "Z": np.array([1.0, 0.0, 0.0, -1.0]),
+                }
+                i_alloc = super_self.bw.b.IntVectorAllocator()
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                q = self.vacuum
+                for m in range(self.n_sites):
+                    mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                    mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
+                    self.site_op_infos[m].append((q, mat))
+                for m in range(self.n_sites):
+                    info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
+                    for op, x in op_defs.items():
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0))] = x
+                        self.site_norm_ops[m][op] = mat
+
+            def get_site_string_ops(self, m, ops):
+                """Construct longer site operators from primitive ones."""
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                for k in ops:
+                    if k in self.site_norm_ops[m]:
+                        ops[k] = self.site_norm_ops[m][k]
+                    else:
+                        xx = self.site_norm_ops[m][k[0]]
+                        for p in k[1:]:
+                            xp = self.site_norm_ops[m][p]
+                            q = xx.info.delta_quantum + xp.info.delta_quantum
+                            mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                            mat.allocate(self.find_site_op_info(m, q))
+                            self.opf.product(0, xx, xp, mat)
+                            xx = mat
+                        ops[k] = self.site_norm_ops[m][k] = xx
+                return ops
+
+            def init_string_quanta(self, exprs, term_l, left_vacuum):
+                """Quantum number for string operators (orbital independent part)."""
+                return super_self.bw.VectorVectorSX(
+                    [
+                        super_self.bw.VectorSX([self.vacuum] * (len(expr) + 1))
+                        for expr in exprs
+                    ]
+                )
+
+            def get_string_quanta(self, ref, expr, idxs, k):
+                """Quantum number for string operators (orbital dependent part)."""
+                return self.vacuum, self.vacuum
+
+            def get_string_quantum(self, expr, idxs):
+                """Total quantum number for a string operator."""
+                return self.vacuum
+
+            def deallocate(self):
+                """Release memory."""
+                for ops in self.site_norm_ops:
+                    for p in ops.values():
+                        p.deallocate()
+                for infos in self.site_op_infos:
+                    for _, p in infos:
+                        p.deallocate()
+                for bz in self.basis:
+                    bz.deallocate()
+
+        return PauliHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
         bw = self.bw
@@ -1312,6 +1419,63 @@ class DMRGDriver:
 
         bx = b.finalize()
         return self.get_mpo(bx, iprint)
+
+    def get_mpo_any_fermionic(self, op_list, ecore=None, **kwargs):
+        """
+        Args:
+            op_list : list[tuple[str, float]]
+                A list of second quantized fermionic operators and coefficients.
+                + is creation, - is destroy.
+                Example: [
+                    ('+_3 +_4 -_1 -_3', 0.0068705380508780715),
+                    ('+_3 +_4 -_4 -_3', -0.009852150878546906)
+                ]
+            ecore : core energy
+        """
+        from itertools import groupby
+
+        assert SymmetryTypes.SGF in self.symm_type
+        b = self.expr_builder()
+        kmap = {"+": "C", "-": "D"}
+        pattern = lambda x: "".join(p[0] for p in x[0].split())
+        op_dict = {
+            k: list(g) for k, g in groupby(sorted(op_list, key=pattern), key=pattern)
+        }
+        exprs = ["".join(kmap[x] for x in k) for k in op_dict.keys()]
+        indices = [
+            [int(x.split("_")[1]) for h, _ in g for x in h.split(" ")]
+            for g in op_dict.values()
+        ]
+        values = [[v for _, v in g] for g in op_dict.values()]
+        for ex, ix, vl, in zip(exprs, indices, values):
+            b.add_term(ex, ix, vl)
+        if ecore is not None:
+            b.add_const(ecore)
+        return self.get_mpo(b.finalize(), **kwargs)
+
+    def get_mpo_any_pauli(self, op_list, ecore=None, **kwargs):
+        """
+        Args:
+            op_list : list[tuple[str, float]]
+                A list of Pauli strings and coefficients.
+                Characters in the string can be IXYZ.
+                Example: [
+                    ('IIXXXIIX', 0.0559742284070319),
+                    ('IIIXIIXZ', 0.0018380565450674)
+                ]
+            ecore : core energy
+        """
+        assert SymmetryTypes.SGB in self.symm_type
+        import numpy as np
+        b = self.expr_builder()
+        idxs = np.arange(self.n_sites, dtype=int)
+        for ops, val in op_list:
+            num_y = ops.count('Y')
+            assert num_y % 2 == 0
+            b.add_term(ops, idxs, val.real * (1 - num_y % 4))
+        if ecore is not None:
+            b.add_const(ecore)
+        return self.get_mpo(b.finalize(adjust_order=False), **kwargs)
 
     def orbital_reordering(self, h1e, g2e):
         bw = self.bw
