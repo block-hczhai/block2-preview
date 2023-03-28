@@ -178,8 +178,8 @@ struct StateInfo<S,
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
                 n_states[k] =
-                    (ubond_t)min((uint32_t)n_states[k] + n_states[i],
-                                 (uint32_t)numeric_limits<ubond_t>::max());
+                    (ubond_t)min((uint64_t)n_states[k] + (uint64_t)n_states[i],
+                                 (uint64_t)numeric_limits<ubond_t>::max());
             else {
                 k++;
                 quanta[k] = quanta[i];
@@ -235,11 +235,11 @@ struct StateInfo<S,
                 for (int k = 0; k < qc.count(); k++) {
                     int ic = c.find_state(qc[k]);
                     if (ic != -1) {
-                        uint32_t nprod =
-                            (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j] +
-                            (uint32_t)c.n_states[ic];
+                        uint64_t nprod =
+                            (uint64_t)a.n_states[i] * (uint64_t)b.n_states[j] +
+                            (uint64_t)c.n_states[ic];
                         c.n_states[ic] = (ubond_t)min(
-                            nprod, (uint32_t)numeric_limits<ubond_t>::max());
+                            nprod, (uint64_t)numeric_limits<ubond_t>::max());
                     }
                 }
             }
@@ -261,10 +261,10 @@ struct StateInfo<S,
                 S qc = a.quanta[i] + b.quanta[j];
                 for (int k = 0; k < qc.count(); k++) {
                     c.quanta[ic + k] = qc[k];
-                    uint32_t nprod =
-                        (uint32_t)a.n_states[i] * (uint32_t)b.n_states[j];
+                    uint64_t nprod =
+                        (uint64_t)a.n_states[i] * (uint64_t)b.n_states[j];
                     c.n_states[ic + k] = (ubond_t)min(
-                        nprod, (uint32_t)numeric_limits<ubond_t>::max());
+                        nprod, (uint64_t)numeric_limits<ubond_t>::max());
                 }
                 ic += qc.count();
             }
@@ -304,12 +304,12 @@ struct StateInfo<S,
         a.n_states_total = 0;
         for (int i = 0; i < a.n; i++) {
             S qb = target - a.quanta[i];
-            uint32_t x = 0;
+            uint64_t x = 0;
             for (int k = 0; k < qb.count(); k++) {
                 int idx = b.find_state(qb[k]);
-                x += idx == -1 ? 0 : (uint32_t)b.n_states[idx];
+                x += idx == -1 ? 0 : (uint64_t)b.n_states[idx];
             }
-            a.n_states[i] = (ubond_t)min(x, (uint32_t)a.n_states[i]);
+            a.n_states[i] = (ubond_t)min(x, (uint64_t)a.n_states[i]);
             a.n_states_total += a.n_states[i];
         }
     }
@@ -324,16 +324,16 @@ struct StateInfo<S,
                     if ((idx = b.find_state(qb[k])) != -1)
                         idxs.insert(idx);
             }
-            uint32_t x = 0;
+            uint64_t x = 0;
             for (auto idx : idxs)
-                x += (uint32_t)b.n_states[idx];
-            a.n_states[i] = (ubond_t)min(x, (uint32_t)a.n_states[i]);
+                x += (uint64_t)b.n_states[idx];
+            a.n_states[i] = (ubond_t)min(x, (uint64_t)a.n_states[i]);
             a.n_states_total += a.n_states[i];
         }
     }
     friend ostream &operator<<(ostream &os, const StateInfo<S> &c) {
         for (int i = 0; i < c.n; i++)
-            os << c.quanta[i].to_str() << " : " << (uint32_t)c.n_states[i]
+            os << c.quanta[i].to_str() << " : " << (uint64_t)c.n_states[i]
                << endl;
         return os;
     }

@@ -585,13 +585,14 @@ template <typename S> struct MPSInfo {
             if (left_dims[i + 1]->n_states_total > m) {
                 total_bond_t new_total = 0;
                 for (int k = 0; k < left_dims[i + 1]->n; k++) {
-                    uint32_t new_n_states =
-                        (uint32_t)(ceil((double)left_dims[i + 1]->n_states[k] *
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)left_dims[i + 1]->n_states[k] *
                                         m / left_dims[i + 1]->n_states_total) +
                                    0.1);
                     assert(new_n_states != 0);
-                    left_dims[i + 1]->n_states[k] = (ubond_t)min(
-                        new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
+                    left_dims[i + 1]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
                     new_total += left_dims[i + 1]->n_states[k];
                 }
                 left_dims[i + 1]->n_states_total = new_total;
@@ -605,13 +606,14 @@ template <typename S> struct MPSInfo {
             if (right_dims[i]->n_states_total > m) {
                 total_bond_t new_total = 0;
                 for (int k = 0; k < right_dims[i]->n; k++) {
-                    uint32_t new_n_states =
-                        (uint32_t)(ceil((double)right_dims[i]->n_states[k] * m /
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)right_dims[i]->n_states[k] * m /
                                         right_dims[i]->n_states_total) +
                                    0.1);
                     assert(new_n_states != 0);
-                    right_dims[i]->n_states[k] = (ubond_t)min(
-                        new_n_states, (uint32_t)numeric_limits<ubond_t>::max());
+                    right_dims[i]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
                     new_total += right_dims[i]->n_states[k];
                 }
                 right_dims[i]->n_states_total = new_total;
@@ -638,8 +640,8 @@ template <typename S> struct MPSInfo {
             max_bdim = max(left_dims[i]->n_states_total, max_bdim);
         for (int i = n_sites; i >= 0; i--)
             max_bdim = max(right_dims[i]->n_states_total, max_bdim);
-        return (ubond_t)min(max_bdim,
-                            (total_bond_t)numeric_limits<ubond_t>::max());
+        return (ubond_t)min((uint64_t)max_bdim,
+                            (uint64_t)numeric_limits<ubond_t>::max());
     }
     // remove unavailable bond dimensions
     void check_bond_dimensions() {
@@ -1815,8 +1817,7 @@ template <typename S, typename FL> struct MPS {
             flip_fused_form(center, cg, para_rule);
     }
     void to_singlet_embedding_wfn(
-        const shared_ptr<CG<S>> &cg,
-        S left_vacuum = S(S::invalid),
+        const shared_ptr<CG<S>> &cg, S left_vacuum = S(S::invalid),
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(center == 0);
         char orig_canonical_form = canonical_form[center];
