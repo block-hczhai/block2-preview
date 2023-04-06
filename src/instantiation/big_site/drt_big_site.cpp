@@ -20,10 +20,21 @@
 
 #include "../block2_big_site.hpp"
 
+template struct block2::SZMatrix<double>;
 template struct block2::SU2Matrix<double>;
+
+template struct block2::DRT<block2::SZ, block2::ElemOpTypes::SZ>;
+template struct block2::HDRT<block2::SZ, block2::ElemOpTypes::SZ>;
+
+template struct block2::HDRTScheme<block2::SZ, double,
+                                   block2::ElemOpTypes::SZ>;
+template struct block2::DRTBigSiteBase<block2::SZ, double>;
+template struct block2::DRTBigSite<block2::SZ, double>;
 
 template struct block2::DRT<block2::SU2, block2::ElemOpTypes::SU2>;
 template struct block2::HDRT<block2::SU2, block2::ElemOpTypes::SU2>;
 
-template struct block2::HDRTScheme<block2::SU2, double>;
+template struct block2::HDRTScheme<block2::SU2, double,
+                                   block2::ElemOpTypes::SU2>;
+template struct block2::DRTBigSiteBase<block2::SU2, double>;
 template struct block2::DRTBigSite<block2::SU2, double>;

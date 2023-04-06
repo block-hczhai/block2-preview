@@ -29,6 +29,7 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -36,8 +37,18 @@ using namespace std;
 
 namespace block2 {
 
+template <typename S, typename = void> struct ElemT;
+
+template <typename S>
+struct ElemT<S, typename S::is_su2_t>
+    : integral_constant<ElemOpTypes, ElemOpTypes::SU2> {};
+
+template <typename S>
+struct ElemT<S, typename S::is_sz_t>
+    : integral_constant<ElemOpTypes, ElemOpTypes::SZ> {};
+
 // Distinct Row Table
-template <typename S, ElemOpTypes T> struct DRT {
+template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     typedef long long LL;
     vector<array<int16_t, 3>> abc;
     vector<typename S::pg_t> pgs;
@@ -49,7 +60,7 @@ template <typename S, ElemOpTypes T> struct DRT {
     DRT(int16_t a, int16_t b, int16_t c,
         typename S::pg_t ipg = (typename S::pg_t)0,
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>())
-        : DRT(a + abs(b) + c, vector<S>{S(a + a + b, b, ipg)}, orb_sym) {}
+        : DRT(a + abs(b) + c, vector<S>{S(a + a + abs(b), b, ipg)}, orb_sym) {}
     DRT(int n_sites, S q,
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>())
         : DRT(n_sites, vector<S>{q}, orb_sym) {}
@@ -59,8 +70,8 @@ template <typename S, ElemOpTypes T> struct DRT {
         if (T == ElemOpTypes::SU2 || T == ElemOpTypes::SZ) {
             for (auto &q : init_qs) {
                 abc.push_back(array<int16_t, 3>{
-                    (int16_t)((q.n() - q.twos()) >> 1), (int16_t)q.twos(),
-                    (int16_t)(n_sites - ((q.n() + q.twos()) >> 1))});
+                    (int16_t)((q.n() - abs(q.twos())) >> 1), (int16_t)q.twos(),
+                    (int16_t)(n_sites - ((q.n() + abs(q.twos())) >> 1))});
                 pgs.push_back(q.pg());
             }
         } else
@@ -224,13 +235,16 @@ template <typename S, ElemOpTypes T> struct DRT {
                     iabc = array<int16_t, 3>{iabc[0], iabc[1],
                                              (int16_t)(iabc[2] + 1)};
                 else if (x[k] == '+')
-                    iabc = array<int16_t, 3>{iabc[0], (int16_t)(iabc[1] + 1),
-                                             iabc[2]},
+                    iabc =
+                        array<int16_t, 3>{(int16_t)(iabc[0] + (iabc[1] < 0)),
+                                          (int16_t)(iabc[1] + 1),
+                                          (int16_t)(iabc[2] + (iabc[1] < 0))},
                     ipg = S::pg_mul(ipg, orb_sym[k]);
                 else if (x[k] == '-')
-                    iabc = array<int16_t, 3>{(int16_t)(iabc[0] + 1),
-                                             (int16_t)(iabc[1] - 1),
-                                             (int16_t)(iabc[2] + 1)},
+                    iabc =
+                        array<int16_t, 3>{(int16_t)(iabc[0] + (iabc[1] > 0)),
+                                          (int16_t)(iabc[1] - 1),
+                                          (int16_t)(iabc[2] + (iabc[1] > 0))},
                     ipg = S::pg_mul(ipg, orb_sym[k]);
                 else
                     iabc = array<int16_t, 3>{(int16_t)(iabc[0] + 1), iabc[1],
@@ -247,7 +261,8 @@ template <typename S, ElemOpTypes T> struct DRT {
     LL size() const { return xs[0].back(); }
     int q_index(S q) const {
         for (int j = 0; j < n_init_qs; j++)
-            if (S(abc[j][0] + abc[j][0] + abc[j][1], abc[j][1], pgs[j]) == q)
+            if (S(abc[j][0] + abc[j][0] + abs(abc[j][1]), abc[j][1], pgs[j]) ==
+                q)
                 return j;
         return -1;
     }
@@ -262,7 +277,7 @@ template <typename S, ElemOpTypes T> struct DRT {
         b->allocate(n_init_qs);
         for (int i = 0; i < n_init_qs; i++) {
             b->quanta[i] =
-                S(abc[i][0] + abc[i][0] + abc[i][1], abc[i][1], pgs[i]);
+                S(abc[i][0] + abc[i][0] + abs(abc[i][1]), abc[i][1], pgs[i]);
             b->n_states[i] = xs[i][4];
         }
         b->sort_states();
@@ -280,7 +295,7 @@ template <typename S, ElemOpTypes T> struct DRT {
         int n = n_rows();
         int pk = -1;
         for (int i = 0, k; i < n; i++, pk = k) {
-            k = abc[i][0] + abc[i][1] + abc[i][2];
+            k = abc[i][0] + abs(abc[i][1]) + abc[i][2];
             ss << setw(4) << (i + 1);
             if (k == pk)
                 ss << setw(6) << "";
@@ -303,7 +318,7 @@ template <typename S, ElemOpTypes T> struct DRT {
 };
 
 // Hamiltonian Distinct Row Table
-template <typename S, ElemOpTypes T> struct HDRT {
+template <typename S, ElemOpTypes T = ElemT<S>::value> struct HDRT {
     typedef long long LL;
     vector<array<int16_t, 5>> qs;
     vector<typename S::pg_t> pgs;
@@ -329,6 +344,22 @@ template <typename S, ElemOpTypes T> struct HDRT {
             this->orb_sym.resize(n_sites, (typename S::pg_t)0);
     }
     int n_rows() const { return (int)qs.size(); }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        if (T == ElemOpTypes::SU2)
+            return SpinPermRecoupling::get_sub_expr(expr, i, j);
+        else
+            return expr.substr(i, j - i);
+    }
+    static int get_target_twos(const string &expr) {
+        if (T == ElemOpTypes::SU2)
+            return SpinPermRecoupling::get_target_twos(expr);
+        else {
+            int dq = 0;
+            for (char x : expr)
+                dq += (x == 'c' || x == 'D') - (x == 'C' || x == 'd');
+            return dq;
+        }
+    }
     void initialize_steps(const vector<shared_ptr<SpinPermScheme>> &schemes) {
         d_map.clear(), d_step.clear();
         d_map[make_pair("", 0)] = 0;
@@ -345,17 +376,18 @@ template <typename S, ElemOpTypes T> struct HDRT {
                     for (l = k; l < n && pat[k] == pat[l];)
                         l++;
                     for (const auto &expr : exprs) {
-                        string x = SpinPermRecoupling::get_sub_expr(expr, k, l);
-                        int8_t dq =
-                            SpinPermRecoupling::get_target_twos(
-                                SpinPermRecoupling::get_sub_expr(expr, 0, l)) -
-                            SpinPermRecoupling::get_target_twos(
-                                SpinPermRecoupling::get_sub_expr(expr, 0, k));
+                        string x = get_sub_expr(expr, k, l);
+                        int8_t dq = get_target_twos(get_sub_expr(expr, 0, l)) -
+                                    get_target_twos(get_sub_expr(expr, 0, k));
                         if (!d_map.count(make_pair(x, dq))) {
                             int16_t xc =
                                 (int16_t)count(x.begin(), x.end(), 'C');
                             int16_t xd =
                                 (int16_t)count(x.begin(), x.end(), 'D');
+                            if (T != ElemOpTypes::SU2) {
+                                xc += (int16_t)count(x.begin(), x.end(), 'c');
+                                xd += (int16_t)count(x.begin(), x.end(), 'd');
+                            }
                             d_map[make_pair(x, dq)] = (int)d_step.size();
                             d_step.push_back(array<int16_t, 6>{
                                 1, (int16_t)(xc - xd), dq, 1,
@@ -514,7 +546,10 @@ template <typename S, ElemOpTypes T> struct HDRT {
                 r = cd.first;
             else {
                 stringstream ss;
-                ss << "(" << r << "+" << cd.first << ")" << cd.second;
+                if (T == ElemOpTypes::SU2)
+                    ss << "(" << r << "+" << cd.first << ")" << cd.second;
+                else
+                    ss << r << cd.first;
                 r = ss.str();
             }
         return make_pair(r, kidx);
@@ -524,11 +559,9 @@ template <typename S, ElemOpTypes T> struct HDRT {
         for (int k = 0, n = (int)idxs.size(), l; k < n; k = l) {
             for (l = k; l < n && idxs[k] == idxs[l];)
                 l++;
-            string x = SpinPermRecoupling::get_sub_expr(expr, k, l);
-            int8_t dq = SpinPermRecoupling::get_target_twos(
-                            SpinPermRecoupling::get_sub_expr(expr, 0, l)) -
-                        SpinPermRecoupling::get_target_twos(
-                            SpinPermRecoupling::get_sub_expr(expr, 0, k));
+            string x = get_sub_expr(expr, k, l);
+            int8_t dq = get_target_twos(get_sub_expr(expr, 0, l)) -
+                        get_target_twos(get_sub_expr(expr, 0, k));
             if (!d_map.count(make_pair(x, dq)))
                 throw runtime_error("expr not found : " + x + " dq = " +
                                     string(1, '0' + dq) + " expr = " + expr);
@@ -606,6 +639,69 @@ template <typename S, ElemOpTypes T> struct HDRT {
         }
         return ss.str();
     }
+};
+
+template <typename FL> struct SZMatrix {
+    vector<FL> data;
+    vector<pair<int16_t, int16_t>> indices;
+    int16_t dq;
+    SZMatrix(int16_t dq, const vector<FL> &data,
+             const vector<pair<int16_t, int16_t>> &indices)
+        : dq(dq), indices(indices), data(data) {}
+    static const vector<SZMatrix<FL>> &op_matrices() {
+        static vector<SZMatrix<FL>> _mats = vector<SZMatrix<FL>>{
+            SZMatrix<FL>(0, vector<FL>{(FL)1.0, (FL)1.0, (FL)1.0, (FL)1.0},
+                         vector<pair<int16_t, int16_t>>{
+                             make_pair(0, 0), make_pair(1, 1), make_pair(2, 2),
+                             make_pair(3, 3)}),
+            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
+                         vector<pair<int16_t, int16_t>>{make_pair(1, 0),
+                                                        make_pair(3, 2)}),
+            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
+                         vector<pair<int16_t, int16_t>>{make_pair(0, 1),
+                                                        make_pair(2, 3)}),
+            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
+                         vector<pair<int16_t, int16_t>>{make_pair(2, 0),
+                                                        make_pair(3, 1)}),
+            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
+                         vector<pair<int16_t, int16_t>>{make_pair(0, 2),
+                                                        make_pair(1, 3)})};
+        return _mats;
+    }
+    static SZMatrix<FL> multiply(const SZMatrix<FL> &a, const SZMatrix<FL> &b,
+                                 int16_t dq) {
+        map<pair<int16_t, int16_t>, FL> r;
+        for (int i = 0; i < (int)a.data.size(); i++)
+            for (int j = 0; j < (int)b.data.size(); j++)
+                if (a.indices[i].second == b.indices[j].first)
+                    r[make_pair(a.indices[i].first, b.indices[j].second)] +=
+                        a.data[i] * b.data[j];
+        vector<FL> data;
+        vector<pair<int16_t, int16_t>> indices;
+        for (auto &x : r)
+            if (x.second != (FL)0.0)
+                indices.push_back(x.first), data.push_back(x.second);
+        return SZMatrix<FL>(dq, data, indices);
+    }
+    static SZMatrix<FL> build_matrix(const string &expr) {
+        if (expr == "")
+            return op_matrices()[0];
+        else if (expr == "c")
+            return op_matrices()[1];
+        else if (expr == "d")
+            return op_matrices()[2];
+        else if (expr == "C")
+            return op_matrices()[3];
+        else if (expr == "D")
+            return op_matrices()[4];
+        SZMatrix<FL> a = build_matrix(expr.substr(0, 1));
+        SZMatrix<FL> b = build_matrix(expr.substr(1, expr.length() - 1));
+        int dq = 0;
+        for (char x : expr)
+            dq += (x == 'c' || x == 'D') - (x == 'C' || x == 'd');
+        return multiply(a, b, dq);
+    }
+    SZMatrix<FL> expand() const { return *this; }
 };
 
 template <typename FL> struct SU2Matrix {
@@ -705,16 +801,28 @@ template <typename FL> struct SU2Matrix {
     }
 };
 
-template <typename S, typename FL> struct HDRTScheme {
+template <typename S, typename FL, typename = void> struct ElemMatT;
+
+template <typename S, typename FL>
+struct ElemMatT<S, FL, typename S::is_su2_t> {
+    typedef SU2Matrix<FL> MT;
+};
+
+template <typename S, typename FL> struct ElemMatT<S, FL, typename S::is_sz_t> {
+    typedef SZMatrix<FL> MT;
+};
+
+template <typename S, typename FL, ElemOpTypes T = ElemT<S>::value>
+struct HDRTScheme {
     typedef long long LL;
-    shared_ptr<HDRT<S, ElemOpTypes::SU2>> hdrt;
+    shared_ptr<HDRT<S, T>> hdrt;
     vector<shared_ptr<SpinPermScheme>> schemes;
     map<string, map<vector<uint16_t>, int>> expr_mp;
     vector<vector<pair<int, LL>>> hjumps;
     vector<vector<int16_t>> ds;
     vector<map<typename S::pg_t, pair<int, LL>>> jis;
     int n_patterns;
-    HDRTScheme(const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt,
+    HDRTScheme(const shared_ptr<HDRT<S, T>> &hdrt,
                const vector<shared_ptr<SpinPermScheme>> &schemes)
         : hdrt(hdrt), schemes(schemes) {
         for (const auto &scheme : schemes)
@@ -737,12 +845,11 @@ template <typename S, typename FL> struct HDRTScheme {
                 for (int k = 0, n = (int)mm.first.size(), l; k < n; k = l) {
                     for (l = k; l < n && mm.first[k] == mm.first[l];)
                         l++;
-                    string x = SpinPermRecoupling::get_sub_expr(m.first, k, l);
-                    int8_t dq =
-                        SpinPermRecoupling::get_target_twos(
-                            SpinPermRecoupling::get_sub_expr(m.first, 0, l)) -
-                        SpinPermRecoupling::get_target_twos(
-                            SpinPermRecoupling::get_sub_expr(m.first, 0, k));
+                    string x = HDRT<S, T>::get_sub_expr(m.first, k, l);
+                    int8_t dq = HDRT<S, T>::get_target_twos(
+                                    HDRT<S, T>::get_sub_expr(m.first, 0, l)) -
+                                HDRT<S, T>::get_target_twos(
+                                    HDRT<S, T>::get_sub_expr(m.first, 0, k));
                     if (!hdrt->d_map.count(make_pair(x, dq)))
                         throw runtime_error("expr not found : " + x +
                                             " dq = " + string(1, '0' + dq) +
@@ -870,28 +977,25 @@ template <typename S, typename FL> struct HDRTScheme {
     }
 };
 
-template <typename, typename, typename = void> struct DRTBigSite;
-
-template <typename S, typename FL>
-struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
+template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
+    typedef integral_constant<ElemOpTypes, ElemT<S>::value> T;
     typedef typename GMatrix<FL>::FP FP;
     typedef long long LL;
     using BigSite<S, FL>::n_orbs;
     using BigSite<S, FL>::basis;
-    using BigSite<S, FL>::op_infos;
     shared_ptr<FCIDUMP<FL>> fcidump = nullptr;
-    shared_ptr<GeneralFCIDUMP<FL>> gfd = nullptr;
-    shared_ptr<DRT<S, ElemOpTypes::SU2>> drt;
+    shared_ptr<DRT<S>> drt;
     shared_ptr<vector<FL>> factors;
     array<size_t, 7> factor_strides;
     bool is_right;
     int iprint;
     int n_total_orbs;
-    const static int max_n = 10, max_s = 10;
+    const static int max_cg = 10;
     FP cutoff = 1E-14;
-    DRTBigSite(const vector<S> &qs, bool is_right, int n_orbs,
-               const vector<typename S::pg_t> &orb_sym,
-               const shared_ptr<FCIDUMP<FL>> &fcidump = nullptr, int iprint = 0)
+    DRTBigSiteBase(const vector<S> &qs, bool is_right, int n_orbs,
+                   const vector<typename S::pg_t> &orb_sym,
+                   const shared_ptr<FCIDUMP<FL>> &fcidump = nullptr,
+                   int iprint = 0)
         : BigSite<S, FL>(n_orbs), is_right(is_right), fcidump(fcidump),
           n_total_orbs(fcidump == nullptr ? 0 : fcidump->n_sites()),
           iprint(iprint) {
@@ -902,122 +1006,10 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         else
             for (int i = 0; i < n_orbs; i++)
                 big_orb_sym[i] = orb_sym[n_orbs - 1 - i];
-        drt = make_shared<DRT<S, ElemOpTypes::SU2>>(n_orbs, qs, big_orb_sym);
+        drt = make_shared<DRT<S>>(n_orbs, qs, big_orb_sym);
         basis = drt->get_basis();
-        op_infos = get_site_op_infos(orb_sym);
-        prepare_factors();
     }
-    virtual ~DRTBigSite() = default;
-    static vector<S>
-    get_target_quanta(bool is_right, int n_orbs, int n_max_elec,
-                      const vector<typename S::pg_t> &orb_sym) {
-        S vacuum, target(S::invalid);
-        vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
-        for (int m = 0; m < n_orbs; m++) {
-            shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
-            b->allocate(3);
-            b->quanta[0] = vacuum;
-            b->quanta[1] = S(1, 1, orb_sym[m]);
-            b->quanta[2] = S(2, 0, 0);
-            b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
-            b->sort_states();
-            site_basis[m] = b;
-        }
-        shared_ptr<StateInfo<S>> x = make_shared<StateInfo<S>>(vacuum);
-        if (!is_right) {
-            for (int i = 0; i < n_orbs; i++)
-                x = make_shared<StateInfo<S>>(
-                    StateInfo<S>::tensor_product(*x, *site_basis[i], target));
-            int max_n = 0;
-            for (int q = 0; q < x->n; q++)
-                if (x->quanta[q].n() > max_n)
-                    max_n = x->quanta[q].n();
-            for (int q = 0; q < x->n; q++)
-                if (x->quanta[q].n() < max_n - n_max_elec ||
-                    x->quanta[q].twos() > n_max_elec)
-                    x->n_states[q] = 0;
-        } else {
-            for (int i = n_orbs - 1; i >= 0; i--)
-                x = make_shared<StateInfo<S>>(
-                    StateInfo<S>::tensor_product(*site_basis[i], *x, target));
-            for (int q = 0; q < x->n; q++)
-                if (x->quanta[q].n() > n_max_elec)
-                    x->n_states[q] = 0;
-        }
-        x->collect();
-        return vector<S>(&x->quanta[0], &x->quanta[0] + x->n);
-    }
-    vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
-    get_site_op_infos(const vector<uint8_t> &orb_sym) {
-        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
-            make_shared<VectorAllocator<uint32_t>>();
-        map<S, shared_ptr<SparseMatrixInfo<S>>> info;
-        const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
-        const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
-        info[S(0)] = nullptr;
-        set<uint8_t> all_orb_sym(orb_sym.begin(), orb_sym.end());
-        for (int i = 0; i < max_n; i++) {
-            set<uint8_t> old_orb_sym = all_orb_sym;
-            for (auto ipg : old_orb_sym) {
-                if (i == 0)
-                    all_orb_sym.insert(S::pg_inv(ipg));
-                for (auto jpg : orb_sym) {
-                    all_orb_sym.insert(S::pg_mul(ipg, jpg));
-                    all_orb_sym.insert(S::pg_mul(ipg, S::pg_inv(jpg)));
-                }
-            }
-        }
-        for (auto ipg : all_orb_sym) {
-            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
-                for (int s = 1; s <= max_s_odd; s += 2)
-                    info[S(n, s, ipg)] = nullptr;
-            for (int n = -max_n_even; n <= max_n_even; n += 2)
-                for (int s = 0; s <= max_s_even; s += 2)
-                    info[S(n, s, ipg)] = nullptr;
-        }
-        for (auto &p : info) {
-            p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
-            p.second->initialize(*basis, *basis, p.first, p.first.is_fermion());
-        }
-        return vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
-                                                                info.end());
-    }
-    void prepare_factors() {
-        int16_t max_bb = 0, max_bk = 0, max_bh = max_s, max_dh = max_s;
-        for (auto &p : drt->abc)
-            max_bb = max(max_bb, p[1]);
-        for (auto &p : drt->abc)
-            max_bk = max(max_bk, p[1]);
-        array<int, 7> factor_shape = array<int, 7>{
-            max_bb + 1, 3, max_bk + 1, 3, max_bh + 1, max_bh + 1, max_dh + 1};
-        factor_strides[6] = 1;
-        for (int i = 6; i > 0; i--)
-            factor_strides[i - 1] = factor_strides[i] * factor_shape[i];
-        factors = make_shared<vector<FL>>(factor_strides[0] * factor_shape[0]);
-        for (int16_t bb = 0; bb <= max_bb; bb++)
-            for (int16_t db = 0; db <= 2; db++)
-                for (int16_t bk = 0; bk <= max_bk; bk++)
-                    for (int16_t dk = 0; dk <= 2; dk++)
-                        for (int16_t fq = 0; fq <= max_bh; fq++)
-                            for (int16_t iq = 0; iq <= max_bh; iq++)
-                                for (int16_t dq = 0; dq <= max_dh; dq++)
-                                    (*factors)[bb * factor_strides[0] +
-                                               db * factor_strides[1] +
-                                               bk * factor_strides[2] +
-                                               dk * factor_strides[3] +
-                                               fq * factor_strides[4] +
-                                               iq * factor_strides[5] +
-                                               dq * factor_strides[6]] =
-                                        (FL)SU2Matrix<FL>::cg().wigner_9j(
-                                            bk + dk - 1, 1 - (dk & 1), bk, iq,
-                                            dq, fq, bb + db - 1, 1 - (db & 1),
-                                            bb) *
-                                        (FL)sqrtl((bk + 1) * (fq + 1) *
-                                                  (bb + db) * (2 - (db & 1))) *
-                                        (FL)(1 -
-                                             ((((bk + dk - 1) & 1) & (dq & 1))
-                                              << 1));
-    }
+    virtual ~DRTBigSiteBase() = default;
     void
     fill_csr_matrix_from_coo(const vector<pair<MKL_INT, MKL_INT>> &coo_idxs,
                              vector<FL> &values, GCSRMatrix<FL> &mat) const {
@@ -1101,9 +1093,135 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                     mat.data[col_idxs[i][j] + i * mat.n] = values[i][j];
         }
     }
+    void print_hdrt_infos(const set<S> &iqs, const vector<string> &std_exprs,
+                          const shared_ptr<HDRT<S>> &hdrt) const {
+        if (iprint >= 1) {
+            cout << "    HDRT :: QS = [ ";
+            for (auto iq : iqs)
+                cout << iq << " ";
+            cout << "] EXPRS = [ ";
+            for (size_t ix = 0; ix < std_exprs.size(); ix++)
+                cout << std_exprs[ix]
+                     << (ix == std_exprs.size() - 1 ? " " : " + ");
+            cout << "] NTERMS = " << hdrt->size() << endl;
+            if (iprint >= 3)
+                cout << "    HDRT = " << endl << hdrt->to_str() << endl;
+            if (iprint >= 4) {
+                cout << "    HDRT STEPS = " << endl;
+                for (LL ih = 0; ih < (LL)hdrt->d_expr.size(); ih++)
+                    cout << "   * " << setw(8) << ih << " = "
+                         << hdrt->d_expr[ih].first
+                         << " :: " << (hdrt->d_expr[ih].second >= 0 ? "+" : "")
+                         << (int)hdrt->d_expr[ih].second << "" << endl;
+                cout << "    HDRT TERMS = " << endl;
+                for (LL ih = 0; ih < (LL)hdrt->size(); ih++) {
+                    auto hterm = (*hdrt)[ih];
+                    assert(hdrt->index(hterm.first, hterm.second) == ih);
+                    cout << "   * " << setw(8) << ih << " = " << hterm.first
+                         << " [";
+                    for (auto xh : hterm.second)
+                        cout << " " << (int)xh;
+                    cout << " ]" << endl;
+                }
+            }
+        }
+    }
+    vector<shared_ptr<GTensor<FL>>>
+    sort_npdm(const vector<shared_ptr<SpinPermScheme>> &schemes,
+              const shared_ptr<vector<FL>> &pr,
+              const map<string, map<vector<uint16_t>, int>> &expr_mp,
+              const vector<size_t> &psum) const {
+        vector<shared_ptr<GTensor<FL>>> r(schemes.size());
+        for (size_t it = 0; it < schemes.size(); it++) {
+            int n_op = (int)schemes[it]->index_patterns[0].size();
+            vector<MKL_INT> shape(n_op, n_orbs);
+            shared_ptr<NPDMCounter> counter =
+                make_shared<NPDMCounter>(n_op, n_orbs + 1);
+            r[it] = make_shared<GTensor<FL>>(shape);
+            for (size_t j = 0; j < schemes[it]->index_patterns.size(); j++) {
+                for (const auto &m : schemes[it]->data[j]) {
+                    const vector<uint16_t> &perm = m.first;
+                    vector<uint64_t> mx(perm.size());
+                    uint64_t mxx = 1;
+                    for (int k = (int)perm.size() - 1; k >= 0;
+                         k--, mxx *= n_orbs)
+                        mx[perm[k]] = mxx;
+                    const uint64_t lcnt = counter->count_left(
+                        schemes[it]->index_patterns[j], n_orbs - 1, false);
+                    vector<uint16_t> idx;
+                    counter->init_left(schemes[it]->index_patterns[j],
+                                       n_orbs - 1, false, idx);
+                    for (uint64_t il = 0; il < lcnt; il++) {
+                        for (auto &xr : m.second) {
+                            int im = expr_mp.at(xr.second).at(
+                                schemes[it]->index_patterns[j]);
+                            uint64_t ix = 0;
+                            for (int k = 0; k < (int)mx.size(); k++)
+                                ix += idx[k] * mx[k];
+                            (*r[it]->data)[ix] +=
+                                (FL)xr.first * (*pr)[psum[im] + il];
+                        }
+                        counter->next_left(schemes[it]->index_patterns[j],
+                                           n_orbs - 1, idx);
+                    }
+                }
+            }
+        }
+        return r;
+    }
+    vector<vector<typename ElemMatT<S, FL>::MT>>
+    get_site_matrices(const shared_ptr<HDRT<S>> &hdrt) const {
+        vector<vector<typename ElemMatT<S, FL>::MT>> site_matrices(
+            drt->n_sites);
+        for (int i = 0; i < drt->n_sites; i++) {
+            for (int d = 0; d < hdrt->nd; d++)
+                site_matrices[i].push_back(
+                    ElemMatT<S, FL>::MT::build_matrix(hdrt->d_expr[d].first)
+                        .expand());
+        }
+        return site_matrices;
+    }
+    void prepare_factors() {
+        if (T::value != ElemOpTypes::SU2)
+            return;
+        int16_t max_bb = 0, max_bk = 0, max_bh = max_cg, max_dh = max_cg;
+        for (auto &p : drt->abc)
+            max_bb = max(max_bb, p[1]);
+        for (auto &p : drt->abc)
+            max_bk = max(max_bk, p[1]);
+        array<int, 7> factor_shape = array<int, 7>{
+            max_bb + 1, 3, max_bk + 1, 3, max_bh + 1, max_bh + 1, max_dh + 1};
+        factor_strides[6] = 1;
+        for (int i = 6; i > 0; i--)
+            factor_strides[i - 1] = factor_strides[i] * factor_shape[i];
+        factors = make_shared<vector<FL>>(factor_strides[0] * factor_shape[0]);
+        for (int16_t bb = 0; bb <= max_bb; bb++)
+            for (int16_t db = 0; db <= 2; db++)
+                for (int16_t bk = 0; bk <= max_bk; bk++)
+                    for (int16_t dk = 0; dk <= 2; dk++)
+                        for (int16_t fq = 0; fq <= max_bh; fq++)
+                            for (int16_t iq = 0; iq <= max_bh; iq++)
+                                for (int16_t dq = 0; dq <= max_dh; dq++)
+                                    (*factors)[bb * factor_strides[0] +
+                                               db * factor_strides[1] +
+                                               bk * factor_strides[2] +
+                                               dk * factor_strides[3] +
+                                               fq * factor_strides[4] +
+                                               iq * factor_strides[5] +
+                                               dq * factor_strides[6]] =
+                                        (FL)SU2Matrix<FL>::cg().wigner_9j(
+                                            bk + dk - 1, 1 - (dk & 1), bk, iq,
+                                            dq, fq, bb + db - 1, 1 - (db & 1),
+                                            bb) *
+                                        (FL)sqrtl((bk + 1) * (fq + 1) *
+                                                  (bb + db) * (2 - (db & 1))) *
+                                        (FL)(1 -
+                                             ((((bk + dk - 1) & 1) & (dq & 1))
+                                              << 1));
+    }
     void build_npdm_operator_matrices(
-        const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt,
-        const vector<vector<SU2Matrix<FL>>> &site_matrices,
+        const shared_ptr<HDRT<S>> &hdrt,
+        const vector<vector<typename ElemMatT<S, FL>::MT>> &site_matrices,
         const vector<pair<LL, FL>> &mat_idxs,
         const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
         if (mats.size() == 0)
@@ -1124,11 +1242,11 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 S qket = mats[it]->info->quanta[im].get_ket();
                 // SU2 and fermion factor for exchange:
                 //   ket x op -> op x ket when is_right
-                FL xf = is_right
-                            ? (FL)(SU2Matrix<FL>::cg().phase(
-                                       opdq.twos(), qket.twos(), qbra.twos()) *
-                                   (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
-                            : (FL)1.0;
+                FL xf = (FL)1.0;
+                if (T::value == ElemOpTypes::SU2 && is_right)
+                    xf *= (FL)(1 - ((opdq.twos() & qket.twos() & 1) << 1)) *
+                          (FL)SU2Matrix<FL>::cg().phase(
+                              opdq.twos(), qket.twos(), qbra.twos());
                 int imb = drt->q_index(qbra), imk = drt->q_index(qket);
                 assert(mats[it]->info->n_states_bra[im] == drt->xs[imb].back());
                 assert(mats[it]->info->n_states_ket[im] == drt->xs[imk].back());
@@ -1154,7 +1272,8 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                               ih) -
                                   1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
                     const int jhv = hdrt->jds[jh * hdrt->nd + dh];
-                    const SU2Matrix<FL> &smat = site_matrices[k][dh];
+                    const typename ElemMatT<S, FL>::MT &smat =
+                        site_matrices[k][dh];
                     const size_t hsz = xhv[pi].size() * smat.data.size();
                     xpbk[pj].reserve(hsz), xpbk[pj].clear();
                     xjb[pj].reserve(hsz), xjb[pj].clear();
@@ -1176,13 +1295,17 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                             const int16_t mfq = hdrt->qs[jh][2];
                             const int16_t miq = hdrt->qs[jhv][2];
                             const FL f =
-                                (*factors)[bfq * factor_strides[0] +
-                                           (biq - bfq + 1) * factor_strides[1] +
-                                           kfq * factor_strides[2] +
-                                           (kiq - kfq + 1) * factor_strides[3] +
-                                           mfq * factor_strides[4] +
-                                           miq * factor_strides[5] +
-                                           mdq * factor_strides[6]];
+                                T::value == ElemOpTypes::SU2
+                                    ? (*factors)[bfq * factor_strides[0] +
+                                                 (biq - bfq + 1) *
+                                                     factor_strides[1] +
+                                                 kfq * factor_strides[2] +
+                                                 (kiq - kfq + 1) *
+                                                     factor_strides[3] +
+                                                 mfq * factor_strides[4] +
+                                                 miq * factor_strides[5] +
+                                                 mdq * factor_strides[6]]
+                                    : (FL)(1 - (((kiq & 1) & (mdq & 1)) << 1));
                             if (abs(f) < (FP)1E-14)
                                 continue;
                             xjb[pj].push_back(jbv);
@@ -1203,8 +1326,8 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         threading->activate_normal();
     }
     void build_operator_matrices(
-        const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt,
-        const vector<vector<SU2Matrix<FL>>> &site_matrices,
+        const shared_ptr<HDRT<S>> &hdrt,
+        const vector<vector<typename ElemMatT<S, FL>::MT>> &site_matrices,
         const vector<shared_ptr<vector<FL>>> &ints,
         const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
         if (mats.size() == 0)
@@ -1227,11 +1350,11 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 S qket = rep_mat->info->quanta[im].get_ket();
                 // SU2 and fermion factor for exchange:
                 //   ket x op -> op x ket when is_right
-                FL xf = is_right
-                            ? (FL)(SU2Matrix<FL>::cg().phase(
-                                       opdq.twos(), qket.twos(), qbra.twos()) *
-                                   (1 - ((opdq.twos() & qket.twos() & 1) << 1)))
-                            : (FL)1.0;
+                FL xf = (FL)1.0;
+                if (T::value == ElemOpTypes::SU2 && is_right)
+                    xf = (FL)(1 - ((opdq.twos() & qket.twos() & 1) << 1)) *
+                         (FL)SU2Matrix<FL>::cg().phase(opdq.twos(), qket.twos(),
+                                                       qbra.twos());
                 int imb = drt->q_index(qbra), imk = drt->q_index(qket);
                 assert(rep_mat->info->n_states_bra[im] == drt->xs[imb].back());
                 assert(rep_mat->info->n_states_ket[im] == drt->xs[imk].back());
@@ -1332,15 +1455,18 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                 const int16_t mfq = hdrt->qs[xjh[pi][j]][2];
                                 const int16_t miq = hdrt->qs[jhv][2];
                                 const FL f =
-                                    (*factors)[bfq * factor_strides[0] +
-                                               (biq - bfq + 1) *
-                                                   factor_strides[1] +
-                                               kfq * factor_strides[2] +
-                                               (kiq - kfq + 1) *
-                                                   factor_strides[3] +
-                                               mfq * factor_strides[4] +
-                                               miq * factor_strides[5] +
-                                               mdq * factor_strides[6]];
+                                    T::value == ElemOpTypes::SU2
+                                        ? (*factors)[bfq * factor_strides[0] +
+                                                     (biq - bfq + 1) *
+                                                         factor_strides[1] +
+                                                     kfq * factor_strides[2] +
+                                                     (kiq - kfq + 1) *
+                                                         factor_strides[3] +
+                                                     mfq * factor_strides[4] +
+                                                     miq * factor_strides[5] +
+                                                     mdq * factor_strides[6]]
+                                        : (FL)(1 -
+                                               (((kiq & 1) & (mdq & 1)) << 1));
                                 if (abs(f) < (FP)1E-14)
                                     continue;
                                 xjk[pj].push_back(jkv);
@@ -1398,54 +1524,437 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         }
         threading->activate_normal();
     }
-    vector<vector<SU2Matrix<FL>>>
-    get_site_matrices(const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt) const {
-        vector<vector<SU2Matrix<FL>>> site_matrices(drt->n_sites);
-        for (int i = 0; i < drt->n_sites; i++) {
-            for (int d = 0; d < hdrt->nd; d++)
-                site_matrices[i].push_back(
-                    SU2Matrix<FL>::build_matrix(hdrt->d_expr[d].first)
-                        .expand());
+    vector<shared_ptr<GTensor<FL>>>
+    build_npdm(const string &expr, const FL *bra_ci, const FL *ket_ci) const {
+        int16_t op_twos = HDRT<S, T::value>::get_target_twos(expr);
+        int16_t xc = (int16_t)(count(expr.begin(), expr.end(), 'c') +
+                               count(expr.begin(), expr.end(), 'C'));
+        int16_t xd = (int16_t)(count(expr.begin(), expr.end(), 'd') +
+                               count(expr.begin(), expr.end(), 'D'));
+        S iq(xc - xd, op_twos, 0); // assume ipg is the same
+        vector<pair<S, pair<int16_t, int16_t>>> iop_qs;
+        for (int16_t i = (int16_t)(xc + xd), j = min(i, (int16_t)1); j <= i;
+             j++)
+            iop_qs.push_back(make_pair(iq, make_pair(j, i)));
+        shared_ptr<HDRT<S>> hdrt =
+            make_shared<HDRT<S>>(n_orbs, iop_qs, drt->orb_sym);
+        vector<shared_ptr<SpinPermScheme>> schemes =
+            vector<shared_ptr<SpinPermScheme>>{make_shared<SpinPermScheme>(
+                T::value == ElemOpTypes::SU2
+                    ? SpinPermScheme::initialize_su2(xc + xd, expr, false, true)
+                    : SpinPermScheme::initialize_sz(xc + xd, expr, true))};
+        hdrt->initialize_steps(schemes);
+        hdrt->initialize();
+        print_hdrt_infos(set<S>{iq}, vector<string>{expr}, hdrt);
+        shared_ptr<HDRTScheme<S, FL>> hdrt_scheme =
+            make_shared<HDRTScheme<S, FL>>(hdrt, schemes);
+        shared_ptr<vector<vector<LL>>> npdm_ord = hdrt_scheme->sort_npdm();
+        vector<size_t> psum(npdm_ord->size() + 1, 0);
+        for (size_t i = 0; i < npdm_ord->size(); i++)
+            psum[i + 1] = psum[i] + (*npdm_ord)[i].size();
+        shared_ptr<vector<FL>> r =
+            make_shared<vector<FL>>(psum.back(), (FL)0.0);
+        int ntg = threading->activate_global();
+        vector<vector<vector<int>>> jbra(ntg, vector<vector<int>>(2));
+        vector<vector<vector<int>>> jket(ntg, vector<vector<int>>(2));
+        vector<vector<vector<pair<MKL_INT, MKL_INT>>>> pbk(
+            ntg, vector<vector<pair<MKL_INT, MKL_INT>>>(2));
+        vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
+        vector<vector<typename ElemMatT<S, FL>::MT>> site_matrices =
+            get_site_matrices(hdrt);
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (size_t i = 0; i < r->size(); i++) {
+            const size_t jx =
+                upper_bound(psum.begin(), psum.end(), i) - psum.begin() - 1;
+            const int tid = threading->get_thread_id();
+            int pi = 0, pj = pi ^ 1;
+            vector<vector<pair<MKL_INT, MKL_INT>>> &xpbk = pbk[tid];
+            vector<vector<int>> &xjb = jbra[tid], &xjk = jket[tid];
+            vector<vector<FL>> &xhv = hv[tid];
+            xpbk[pi].clear(), xjb[pi].clear();
+            xjk[pi].clear(), xhv[pi].clear();
+            int jh = 0;
+            LL ih = (*npdm_ord)[jx][i - psum[jx]];
+            if (ih == -1)
+                continue;
+            for (; ih >= hdrt->xs[jh * (hdrt->nd + 1) + hdrt->nd]; jh++)
+                ih -= hdrt->xs[jh * (hdrt->nd + 1) + hdrt->nd];
+            for (int imb = 0; imb < drt->n_init_qs; imb++)
+                for (int imk = 0; imk < drt->n_init_qs; imk++) {
+                    xpbk[pi].push_back(make_pair(0, 0));
+                    xjb[pi].push_back(imb), xjk[pi].push_back(imk);
+                    xhv[pi].push_back((FL)1.0);
+                }
+            for (int k = drt->n_sites - 1; k >= 0; k--, pi ^= 1, pj ^= 1) {
+                int16_t dh =
+                    (int16_t)(upper_bound(
+                                  hdrt->xs.begin() + jh * (hdrt->nd + 1),
+                                  hdrt->xs.begin() + (jh + 1) * (hdrt->nd + 1),
+                                  ih) -
+                              1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
+                const int jhv = hdrt->jds[jh * hdrt->nd + dh];
+                const typename ElemMatT<S, FL>::MT &smat = site_matrices[k][dh];
+                const size_t hsz = xhv[pi].size() * smat.data.size();
+                xpbk[pj].reserve(hsz), xpbk[pj].clear();
+                xjb[pj].reserve(hsz), xjb[pj].clear();
+                xjk[pj].reserve(hsz), xjk[pj].clear();
+                xhv[pj].reserve(hsz), xhv[pj].clear();
+                for (size_t j = 0; j < xjk[pi].size(); j++)
+                    for (size_t md = 0; md < smat.data.size(); md++) {
+                        const int16_t dbra = smat.indices[md].first;
+                        const int16_t dket = smat.indices[md].second;
+                        const int jbv = drt->jds[xjb[pi][j]][dbra];
+                        const int jkv = drt->jds[xjk[pi][j]][dket];
+                        if (jbv == 0 || jkv == 0)
+                            continue;
+                        const int16_t bfq = drt->abc[xjb[pi][j]][1];
+                        const int16_t kfq = drt->abc[xjk[pi][j]][1];
+                        const int16_t biq = drt->abc[jbv][1];
+                        const int16_t kiq = drt->abc[jkv][1];
+                        const int16_t mdq = smat.dq;
+                        const int16_t mfq = hdrt->qs[jh][2];
+                        const int16_t miq = hdrt->qs[jhv][2];
+                        const FL f =
+                            T::value == ElemOpTypes::SU2
+                                ? (*factors)[bfq * factor_strides[0] +
+                                             (biq - bfq + 1) *
+                                                 factor_strides[1] +
+                                             kfq * factor_strides[2] +
+                                             (kiq - kfq + 1) *
+                                                 factor_strides[3] +
+                                             mfq * factor_strides[4] +
+                                             miq * factor_strides[5] +
+                                             mdq * factor_strides[6]]
+                                : (FL)(1 - (((kiq & 1) & (mdq & 1)) << 1));
+                        if (abs(f) < (FP)1E-14)
+                            continue;
+                        xjb[pj].push_back(jbv);
+                        xjk[pj].push_back(jkv);
+                        xpbk[pj].push_back(make_pair(
+                            drt->xs[xjb[pi][j]][dbra] + xpbk[pi][j].first,
+                            drt->xs[xjk[pi][j]][dket] + xpbk[pi][j].second));
+                        xhv[pj].push_back(f * xhv[pi][j] * smat.data[md]);
+                    }
+                ih -= hdrt->xs[jh * (hdrt->nd + 1) + dh];
+                jh = jhv;
+            }
+            FL rv = (FL)0.0;
+            for (size_t j = 0; j < xpbk[pi].size(); j++)
+                rv += bra_ci[xpbk[pi][j].first] * ket_ci[xpbk[pi][j].second] *
+                      xhv[pi][j];
+            (*r)[i] = rv;
         }
-        return site_matrices;
+        threading->activate_normal();
+        vector<shared_ptr<GTensor<FL>>> rr =
+            sort_npdm(schemes, r, hdrt_scheme->expr_mp, psum);
+        return rr;
     }
-    void
-    print_hdrt_infos(const set<S> &iqs, const vector<string> &std_exprs,
-                     const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &hdrt) const {
+    virtual void build_normal_site_ops(
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {}
+    virtual void build_complementary_site_ops(
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {}
+    void get_site_ops(
+        uint16_t m,
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override {
+        shared_ptr<SparseMatrix<S, FL>> zero =
+            make_shared<SparseMatrix<S, FL>>(nullptr);
+        zero->factor = 0.0;
+        map<pair<OpNames, int8_t>, set<S>> n_op_qs, c_op_qs;
+        map<pair<OpNames, int8_t>, vector<uint16_t>> n_op_idxs, c_op_idxs;
+        map<pair<OpNames, int8_t>, vector<shared_ptr<CSRSparseMatrix<S, FL>>>>
+            n_op_mats, c_op_mats;
         if (iprint >= 1) {
-            cout << "    HDRT :: QS = [ ";
-            for (auto iq : iqs)
-                cout << iq << " ";
-            cout << "] EXPRS = [ ";
-            for (size_t ix = 0; ix < std_exprs.size(); ix++)
-                cout << std_exprs[ix]
-                     << (ix == std_exprs.size() - 1 ? " " : " + ");
-            cout << "] NTERMS = " << hdrt->size() << endl;
-            if (iprint >= 3)
-                cout << "    HDRT = " << endl << hdrt->to_str() << endl;
-            if (iprint >= 4) {
-                cout << "    HDRT STEPS = " << endl;
-                for (LL ih = 0; ih < (LL)hdrt->d_expr.size(); ih++)
-                    cout << "   * " << setw(8) << ih << " = "
-                         << hdrt->d_expr[ih].first
-                         << " :: " << (hdrt->d_expr[ih].second >= 0 ? "+" : "")
-                         << (int)hdrt->d_expr[ih].second << "" << endl;
-                cout << "    HDRT TERMS = " << endl;
-                for (LL ih = 0; ih < (LL)hdrt->size(); ih++) {
-                    auto hterm = (*hdrt)[ih];
-                    assert(hdrt->index(hterm.first, hterm.second) == ih);
-                    cout << "   * " << setw(8) << ih << " = " << hterm.first
-                         << " [";
-                    for (auto xh : hterm.second)
-                        cout << " " << (int)xh;
-                    cout << " ]" << endl;
+            cout << endl
+                 << "DRT Big Site :: NORBS = " << n_orbs << " "
+                 << (is_right ? "Right" : "Left");
+            cout << " ORB-SYM = [ ";
+            for (auto &x : drt->orb_sym)
+                cout << (int)x << " ";
+            cout << "]" << endl;
+        }
+        for (auto &p : ops) {
+            OpElement<S, FL> &op =
+                *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<CSRSparseMatrix<S, FL>> mat =
+                make_shared<CSRSparseMatrix<S, FL>>();
+            shared_ptr<SparseMatrixInfo<S>> info =
+                BigSite<S, FL>::find_site_op_info(op.q_label);
+            // when big site is too small (no available ipg) this may happen
+            if (info == nullptr) {
+                p.second = zero;
+                continue;
+            }
+            mat->initialize(info);
+            for (int l = 0; l < mat->info->n; l++)
+                mat->csr_data[l]->alloc = d_alloc;
+            p.second = mat;
+            int8_t s;
+            switch (op.name) {
+            case OpNames::I:
+                n_op_qs[make_pair(op.name, -1)].insert(op.q_label);
+                n_op_idxs[make_pair(op.name, -1)].push_back(0);
+                n_op_mats[make_pair(op.name, -1)].push_back(mat);
+                break;
+            case OpNames::C:
+            case OpNames::D:
+                s = (int8_t)op.site_index.ss();
+                n_op_qs[make_pair(op.name, s)].insert(op.q_label);
+                n_op_idxs[make_pair(op.name, s)].push_back(
+                    is_right ? n_total_orbs - 1 - op.site_index[0]
+                             : op.site_index[0]);
+                n_op_mats[make_pair(op.name, s)].push_back(mat);
+                break;
+            case OpNames::A:
+            case OpNames::B:
+            case OpNames::BD:
+                s = (int8_t)op.site_index.ss();
+                n_op_qs[make_pair(op.name, s)].insert(op.q_label);
+                n_op_idxs[make_pair(op.name, s)].push_back(
+                    is_right ? n_total_orbs - 1 - op.site_index[0]
+                             : op.site_index[0]);
+                n_op_idxs[make_pair(op.name, s)].push_back(
+                    is_right ? n_total_orbs - 1 - op.site_index[1]
+                             : op.site_index[1]);
+                n_op_mats[make_pair(op.name, s)].push_back(mat);
+                break;
+            case OpNames::AD:
+                // note that ad is defined as ad[i, j] = C[j] * C[i]
+                s = (int8_t)op.site_index.ss();
+                n_op_qs[make_pair(op.name, s)].insert(op.q_label);
+                n_op_idxs[make_pair(op.name, s)].push_back(
+                    is_right ? n_total_orbs - 1 - op.site_index[1]
+                             : op.site_index[1]);
+                n_op_idxs[make_pair(op.name, s)].push_back(
+                    is_right ? n_total_orbs - 1 - op.site_index[0]
+                             : op.site_index[0]);
+                n_op_mats[make_pair(op.name, s)].push_back(mat);
+                break;
+            case OpNames::P:
+            case OpNames::PD:
+            case OpNames::Q:
+                s = (int8_t)op.site_index.ss();
+                c_op_qs[make_pair(op.name, s)].insert(op.q_label);
+                c_op_idxs[make_pair(op.name, s)].push_back(op.site_index[0]);
+                c_op_idxs[make_pair(op.name, s)].push_back(op.site_index[1]);
+                c_op_mats[make_pair(op.name, s)].push_back(mat);
+                break;
+            case OpNames::R:
+            case OpNames::RD:
+                s = (int8_t)op.site_index.ss();
+                c_op_qs[make_pair(op.name, s)].insert(op.q_label);
+                c_op_idxs[make_pair(op.name, s)].push_back(op.site_index[0]);
+                c_op_mats[make_pair(op.name, s)].push_back(mat);
+                break;
+            case OpNames::H:
+                c_op_qs[make_pair(op.name, -1)].insert(op.q_label);
+                c_op_idxs[make_pair(op.name, -1)].push_back(0);
+                c_op_mats[make_pair(op.name, -1)].push_back(mat);
+                break;
+            default:
+                assert(false);
+                break;
+            }
+        }
+        Timer _t, _t2;
+        _t2.get_time();
+        size_t size_all = 0, nnz_all = 0, size_total, nnz_total;
+        for (const auto &m : n_op_qs) {
+            check_signal_()();
+            if (iprint >= 1 && n_op_mats.at(m.first).size() != 0) {
+                cout << "  Build normal operator " << m.first.first;
+                if (m.first.second != -1)
+                    cout << (int)m.first.second;
+                cout << ".. NOPS = " << n_op_mats.at(m.first).size() << " .."
+                     << endl;
+            }
+            _t.get_time();
+            build_normal_site_ops(m.first.first, m.first.second, m.second,
+                                  n_op_idxs.at(m.first), n_op_mats.at(m.first));
+            double top = _t.get_time();
+            size_total = 0, nnz_total = 0;
+            for (const auto &mat : n_op_mats.at(m.first))
+                for (int i = 0; i < mat->info->n; i++) {
+                    nnz_total += mat->csr_data[i]->nnz;
+                    size_total += mat->csr_data[i]->size();
+                }
+            size_all += size_total, nnz_all += nnz_total;
+            if (iprint >= 1 && n_op_mats.at(m.first).size() != 0) {
+                cout << "    SIZE = " << setw(8)
+                     << Parsing::to_size_string(size_total * sizeof(FL))
+                     << " NNZ = " << setw(8)
+                     << Parsing::to_size_string(nnz_total * sizeof(FL));
+                cout << " SPT = " << fixed << setprecision(4) << setw(6)
+                     << (double)(size_total - nnz_total) / size_total;
+                cout << " T = " << fixed << setprecision(3) << setw(10) << top
+                     << endl;
+            }
+        }
+        for (const auto &m : c_op_qs) {
+            check_signal_()();
+            if (iprint >= 1 && c_op_mats.at(m.first).size() != 0) {
+                cout << "  Build complementary operator " << m.first.first;
+                if (m.first.second != -1)
+                    cout << (int)m.first.second;
+                cout << " .. NOPS = " << c_op_mats.at(m.first).size() << " .."
+                     << endl;
+            }
+            _t.get_time();
+            build_complementary_site_ops(m.first.first, m.first.second,
+                                         m.second, c_op_idxs.at(m.first),
+                                         c_op_mats.at(m.first));
+            double top = _t.get_time();
+            size_total = 0, nnz_total = 0;
+            for (const auto &mat : c_op_mats.at(m.first))
+                for (int i = 0; i < mat->info->n; i++) {
+                    nnz_total += mat->csr_data[i]->nnz;
+                    size_total += mat->csr_data[i]->size();
+                }
+            size_all += size_total, nnz_all += nnz_total;
+            if (iprint >= 1 && c_op_mats.at(m.first).size() != 0) {
+                cout << "    SIZE = " << setw(8)
+                     << Parsing::to_size_string(size_total * sizeof(FL))
+                     << " NNZ = " << setw(8)
+                     << Parsing::to_size_string(nnz_total * sizeof(FL));
+                cout << " SPT = " << fixed << setprecision(4) << setw(6)
+                     << (double)(size_total - nnz_total) / size_total;
+                cout << " T = " << fixed << setprecision(3) << setw(10) << top
+                     << endl;
+            }
+        }
+        double tall = _t2.get_time();
+        if (iprint >= 1) {
+            cout << "ALL SIZE = " << setw(8)
+                 << Parsing::to_size_string(size_all * sizeof(FL))
+                 << " NNZ = " << setw(8)
+                 << Parsing::to_size_string(nnz_all * sizeof(FL));
+            cout << " SPT = " << fixed << setprecision(4) << setw(6)
+                 << (double)(size_all - nnz_all) / size_all;
+            cout << " T = " << fixed << setprecision(3) << setw(10) << tall
+                 << endl;
+        }
+    }
+};
+
+template <typename, typename, typename = void> struct DRTBigSite;
+
+template <typename S, typename FL>
+struct DRTBigSite<S, FL, typename S::is_su2_t> : DRTBigSiteBase<S, FL> {
+    typedef integral_constant<ElemOpTypes, ElemT<S>::value> T;
+    typedef typename GMatrix<FL>::FP FP;
+    typedef long long LL;
+    using DRTBigSiteBase<S, FL>::n_orbs;
+    using DRTBigSiteBase<S, FL>::basis;
+    using DRTBigSiteBase<S, FL>::op_infos;
+    using DRTBigSiteBase<S, FL>::fcidump;
+    using DRTBigSiteBase<S, FL>::drt;
+    using DRTBigSiteBase<S, FL>::is_right;
+    using DRTBigSiteBase<S, FL>::iprint;
+    using DRTBigSiteBase<S, FL>::n_total_orbs;
+    using DRTBigSiteBase<S, FL>::factors;
+    using DRTBigSiteBase<S, FL>::factor_strides;
+    using DRTBigSiteBase<S, FL>::print_hdrt_infos;
+    using DRTBigSiteBase<S, FL>::sort_npdm;
+    using DRTBigSiteBase<S, FL>::get_site_matrices;
+    using DRTBigSiteBase<S, FL>::prepare_factors;
+    using DRTBigSiteBase<S, FL>::build_operator_matrices;
+    using DRTBigSiteBase<S, FL>::build_npdm_operator_matrices;
+    using DRTBigSiteBase<S, FL>::cutoff;
+    shared_ptr<GeneralFCIDUMP<FL>> gfd = nullptr;
+    const static int max_n = 10, max_s = 10;
+    DRTBigSite(const vector<S> &qs, bool is_right, int n_orbs,
+               const vector<typename S::pg_t> &orb_sym,
+               const shared_ptr<FCIDUMP<FL>> &fcidump = nullptr, int iprint = 0)
+        : DRTBigSiteBase<S, FL>(qs, is_right, n_orbs, orb_sym, fcidump,
+                                iprint) {
+        op_infos = get_site_op_infos(orb_sym);
+        prepare_factors();
+    }
+    virtual ~DRTBigSite() = default;
+    static vector<S>
+    get_target_quanta(bool is_right, int n_orbs, int n_max_elec,
+                      const vector<typename S::pg_t> &orb_sym) {
+        S vacuum, target(S::invalid);
+        vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
+        for (int m = 0; m < n_orbs; m++) {
+            shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+            b->allocate(3);
+            b->quanta[0] = vacuum;
+            b->quanta[1] = S(1, 1, orb_sym[m]);
+            b->quanta[2] = S(2, 0, 0);
+            b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
+            b->sort_states();
+            site_basis[m] = b;
+        }
+        shared_ptr<StateInfo<S>> x = make_shared<StateInfo<S>>(vacuum);
+        if (!is_right) {
+            for (int i = 0; i < n_orbs; i++)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*x, *site_basis[i], target));
+            int max_n = 0;
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > max_n)
+                    max_n = x->quanta[q].n();
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() < max_n - n_max_elec ||
+                    x->quanta[q].twos() > n_max_elec)
+                    x->n_states[q] = 0;
+        } else {
+            for (int i = n_orbs - 1; i >= 0; i--)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*site_basis[i], *x, target));
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > n_max_elec)
+                    x->n_states[q] = 0;
+        }
+        x->collect();
+        return vector<S>(&x->quanta[0], &x->quanta[0] + x->n);
+    }
+    vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
+    get_site_op_infos(const vector<uint8_t> &orb_sym) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+        const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
+        const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
+        info[S(0)] = nullptr;
+        set<uint8_t> all_orb_sym(orb_sym.begin(), orb_sym.end());
+        for (int i = 0; i < max_n; i++) {
+            set<uint8_t> old_orb_sym = all_orb_sym;
+            for (auto ipg : old_orb_sym) {
+                if (i == 0)
+                    all_orb_sym.insert(S::pg_inv(ipg));
+                for (auto jpg : orb_sym) {
+                    all_orb_sym.insert(S::pg_mul(ipg, jpg));
+                    all_orb_sym.insert(S::pg_mul(ipg, S::pg_inv(jpg)));
                 }
             }
         }
+        for (auto ipg : all_orb_sym) {
+            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                for (int s = 1; s <= max_s_odd; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
+            for (int n = -max_n_even; n <= max_n_even; n += 2)
+                for (int s = 0; s <= max_s_even; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
+        }
+        for (auto &p : info) {
+            p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            p.second->initialize(*basis, *basis, p.first, p.first.is_fermion());
+        }
+        return vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
+                                                                info.end());
     }
     void build_normal_site_ops(
-        OpNames op_name, const set<S> &iqs, const vector<uint16_t> &idxs,
-        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const override {
         if (mats.size() == 0)
             return;
         const map<OpNames, vector<int16_t>> op_map =
@@ -1457,16 +1966,14 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                           {OpNames::B, vector<int16_t>{2}},
                                           {OpNames::BD, vector<int16_t>{2}}};
         vector<pair<S, pair<int16_t, int16_t>>> iop_qs;
-        for (auto &iq : iqs)
+        for (auto &iqx : iqs)
             for (int16_t i : op_map.at(op_name))
                 for (int16_t j = min(i, (int16_t)1); j <= i; j++)
-                    iop_qs.push_back(make_pair(iq, make_pair(j, i)));
-        shared_ptr<HDRT<S, ElemOpTypes::SU2>> hdrt =
-            make_shared<HDRT<S, ElemOpTypes::SU2>>(n_orbs, iop_qs,
-                                                   drt->orb_sym);
+                    iop_qs.push_back(make_pair(iqx, make_pair(j, i)));
+        shared_ptr<HDRT<S>> hdrt =
+            make_shared<HDRT<S>>(n_orbs, iop_qs, drt->orb_sym);
         vector<shared_ptr<SpinPermScheme>> schemes;
         vector<string> std_exprs;
-        const int16_t iq = (*iqs.begin()).twos();
         if (op_name == OpNames::I)
             std_exprs.push_back("");
         else if (op_name == OpNames::C)
@@ -1512,7 +2019,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             idx_pattern_mp[schemes[0]->index_patterns[i]] = i;
             counters[i] = make_shared<NPDMCounter>(nn, hdrt->n_sites + 1);
         }
-        const FL xf = (FL)(iq != 2 || !is_right ? 1.0 : -1.0);
+        const FL xf = (FL)(iq == -1 || iq == 0 || !is_right ? 1.0 : -1.0);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (size_t i = 0; i < mats.size(); i++) {
@@ -1546,8 +2053,9 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                      mats);
     }
     void build_complementary_site_ops(
-        OpNames op_name, const set<S> &iqs, const vector<uint16_t> &idxs,
-        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const override {
         if (mats.size() == 0)
             return;
         const map<OpNames, vector<int16_t>> op_map =
@@ -1558,13 +2066,12 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                           {OpNames::PD, vector<int16_t>{2}},
                                           {OpNames::Q, vector<int16_t>{2}}};
         vector<pair<S, pair<int16_t, int16_t>>> iop_qs;
-        for (auto &iq : iqs)
+        for (auto &iqx : iqs)
             for (int16_t i : op_map.at(op_name))
                 for (int16_t j = 1; j <= i; j++)
-                    iop_qs.push_back(make_pair(iq, make_pair(j, i)));
-        shared_ptr<HDRT<S, ElemOpTypes::SU2>> hdrt =
-            make_shared<HDRT<S, ElemOpTypes::SU2>>(n_orbs, iop_qs,
-                                                   drt->orb_sym);
+                    iop_qs.push_back(make_pair(iqx, make_pair(j, i)));
+        shared_ptr<HDRT<S>> hdrt =
+            make_shared<HDRT<S>>(n_orbs, iop_qs, drt->orb_sym);
         vector<shared_ptr<SpinPermScheme>> schemes;
         vector<shared_ptr<GeneralFCIDUMP<FL>>> gfds;
         vector<string> std_exprs;
@@ -1572,7 +2079,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             gfds.push_back(this->gfd), std_exprs = this->gfd->exprs;
         else if (op_name == OpNames::H) {
             shared_ptr<GeneralFCIDUMP<FL>> gfd =
-                make_shared<GeneralFCIDUMP<FL>>(ElemOpTypes::SU2);
+                make_shared<GeneralFCIDUMP<FL>>(T::value);
             gfd->exprs.push_back("((C+(C+D)0)1+D)0");
             gfd->indices.push_back(vector<uint16_t>());
             gfd->data.push_back(vector<FL>());
@@ -1615,7 +2122,7 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         } else if (op_name == OpNames::R || op_name == OpNames::RD) {
             for (uint16_t ix : idxs) {
                 shared_ptr<GeneralFCIDUMP<FL>> gfd =
-                    make_shared<GeneralFCIDUMP<FL>>(ElemOpTypes::SU2);
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
                 gfd->exprs.push_back(op_name == OpNames::R ? "((C+D)0+D)1"
                                                            : "(C+(C+D)0)1");
                 gfd->indices.push_back(vector<uint16_t>());
@@ -1623,6 +2130,8 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 auto *idx = &gfd->indices.back();
                 auto *dt = &gfd->data.back();
                 array<uint16_t, 3> arr;
+                //  R: arr = k l j : v(i, j, k, l) * ((Ck+Dl)0+Dj)1
+                // RD: arr = i k l : v(i, j, k, l) * (Ci+(Ck+Dl)0)1
                 for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
                     for (arr[1] = 0; arr[1] < n_orbs; arr[1]++)
                         for (arr[2] = 0; arr[2] < n_orbs; arr[2]++) {
@@ -1637,11 +2146,11 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                                         arr[1]))
                                     : (is_right
                                            ? fcidump->v(
-                                                 ix, n_total_orbs - 1 - arr[0],
-                                                 n_total_orbs - 1 - arr[2],
-                                                 n_total_orbs - 1 - arr[1])
-                                           : fcidump->v(ix, arr[0], arr[2],
-                                                        arr[1]));
+                                                 n_total_orbs - 1 - arr[0], ix,
+                                                 n_total_orbs - 1 - arr[1],
+                                                 n_total_orbs - 1 - arr[2])
+                                           : fcidump->v(arr[0], ix, arr[1],
+                                                        arr[2]));
                             if (abs(v) > cutoff) {
                                 idx->insert(idx->end(), arr.begin(), arr.end());
                                 dt->push_back(v);
@@ -1664,11 +2173,10 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 gfds.push_back(gfd->adjust_order(schemes, true, true));
             }
         } else if (op_name == OpNames::P || op_name == OpNames::PD) {
-            const int16_t iq = (*iqs.begin()).twos();
             for (int ixx = 0; ixx < (int)idxs.size(); ixx += 2) {
                 const uint16_t ix0 = idxs[ixx], ix1 = idxs[ixx + 1];
                 shared_ptr<GeneralFCIDUMP<FL>> gfd =
-                    make_shared<GeneralFCIDUMP<FL>>(ElemOpTypes::SU2);
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
                 gfd->exprs.push_back(op_name == OpNames::P
                                          ? (iq == 0 ? "(D+D)0" : "(D+D)2")
                                          : (iq == 0 ? "(C+C)0" : "(C+C)2"));
@@ -1677,6 +2185,8 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 auto *idx = &gfd->indices.back();
                 auto *dt = &gfd->data.back();
                 array<uint16_t, 2> arr;
+                //  P: arr = j l : v(i, j, k, l) * (Dj+Dl)0
+                // PD: arr = l j : v(j, i, l, k) * (Cl+Cj)0
                 for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
                     for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
                         const FL v =
@@ -1690,9 +2200,9 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                                 : (is_right
                                        ? (FL)(iq == 0 ? 1.0 : -1.0) *
                                              fcidump->v(
-                                                 ix0, n_total_orbs - 1 - arr[1],
-                                                 ix1, n_total_orbs - 1 - arr[0])
-                                       : fcidump->v(ix0, arr[1], ix1, arr[0]));
+                                                 n_total_orbs - 1 - arr[1], ix0,
+                                                 n_total_orbs - 1 - arr[0], ix1)
+                                       : fcidump->v(arr[1], ix0, arr[0], ix1));
                         if (abs(v) > cutoff) {
                             idx->insert(idx->end(), arr.begin(), arr.end());
                             dt->push_back(v);
@@ -1702,17 +2212,18 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
                 gfds.push_back(gfd->adjust_order(schemes, true, true));
             }
         } else if (op_name == OpNames::Q) {
-            const int16_t iq = (*iqs.begin()).twos();
             for (int ixx = 0; ixx < (int)idxs.size(); ixx += 2) {
                 const uint16_t ix0 = idxs[ixx], ix1 = idxs[ixx + 1];
                 shared_ptr<GeneralFCIDUMP<FL>> gfd =
-                    make_shared<GeneralFCIDUMP<FL>>(ElemOpTypes::SU2);
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
                 gfd->exprs.push_back(iq == 0 ? "(C+D)0" : "(C+D)2");
                 gfd->indices.push_back(vector<uint16_t>());
                 gfd->data.push_back(vector<FL>());
                 auto *idx = &gfd->indices.back();
                 auto *dt = &gfd->data.back();
                 array<uint16_t, 2> arr;
+                // Q0: arr = k l : [ 2 v(i,j,k,l) - v(i,l,k,j) ] * (Ck+Dl)0
+                // Q2: arr = k l : v(i,l,k,j) * (Ck+Dl)2
                 for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
                     for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
                         const FL v =
@@ -1762,346 +2273,474 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             ints[i] = hdrt_scheme->sort_integral(gfds[i]);
         build_operator_matrices(hdrt, get_site_matrices(hdrt), ints, mats);
     }
-    void get_site_ops(
-        uint16_t m,
-        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
-            &ops) const override {
-        shared_ptr<SparseMatrix<S, FL>> zero =
-            make_shared<SparseMatrix<S, FL>>(nullptr);
-        zero->factor = 0.0;
-        map<pair<OpNames, int8_t>, set<S>> n_op_qs, c_op_qs;
-        map<pair<OpNames, int8_t>, vector<uint16_t>> n_op_idxs, c_op_idxs;
-        map<pair<OpNames, int8_t>, vector<shared_ptr<CSRSparseMatrix<S, FL>>>>
-            n_op_mats, c_op_mats;
-        if (iprint >= 1) {
-            cout << endl
-                 << "DRT Big Site :: NORBS = " << n_orbs << " "
-                 << (is_right ? "Right" : "Left");
-            cout << " ORB-SYM = [ ";
-            for (auto &x : drt->orb_sym)
-                cout << (int)x << " ";
-            cout << "]" << endl;
-        }
-        for (auto &p : ops) {
-            OpElement<S, FL> &op =
-                *dynamic_pointer_cast<OpElement<S, FL>>(p.first);
-            shared_ptr<VectorAllocator<FP>> d_alloc =
-                make_shared<VectorAllocator<FP>>();
-            shared_ptr<CSRSparseMatrix<S, FL>> mat =
-                make_shared<CSRSparseMatrix<S, FL>>();
-            shared_ptr<SparseMatrixInfo<S>> info =
-                BigSite<S, FL>::find_site_op_info(op.q_label);
-            // when big site is too small (no available ipg) this may happen
-            if (info == nullptr) {
-                p.second = zero;
-                continue;
-            }
-            mat->initialize(info);
-            for (int l = 0; l < mat->info->n; l++)
-                mat->csr_data[l]->alloc = d_alloc;
-            p.second = mat;
-            int8_t s;
-            switch (op.name) {
-            case OpNames::I:
-                n_op_qs[make_pair(op.name, -1)].insert(op.q_label);
-                n_op_idxs[make_pair(op.name, -1)].push_back(0);
-                n_op_mats[make_pair(op.name, -1)].push_back(mat);
-                break;
-            case OpNames::C:
-            case OpNames::D:
-                n_op_qs[make_pair(op.name, -1)].insert(op.q_label);
-                n_op_idxs[make_pair(op.name, -1)].push_back(
-                    is_right ? n_total_orbs - 1 - op.site_index[0]
-                             : op.site_index[0]);
-                n_op_mats[make_pair(op.name, -1)].push_back(mat);
-                break;
-            case OpNames::A:
-            case OpNames::B:
-            case OpNames::BD:
-                s = (int8_t)op.site_index.ss();
-                n_op_qs[make_pair(op.name, s)].insert(op.q_label);
-                n_op_idxs[make_pair(op.name, s)].push_back(
-                    is_right ? n_total_orbs - 1 - op.site_index[0]
-                             : op.site_index[0]);
-                n_op_idxs[make_pair(op.name, s)].push_back(
-                    is_right ? n_total_orbs - 1 - op.site_index[1]
-                             : op.site_index[1]);
-                n_op_mats[make_pair(op.name, s)].push_back(mat);
-                break;
-            case OpNames::AD:
-                // note that ad is defined as ad[i, j] = C[j] * C[i]
-                s = (int8_t)op.site_index.ss();
-                n_op_qs[make_pair(op.name, s)].insert(op.q_label);
-                n_op_idxs[make_pair(op.name, s)].push_back(
-                    is_right ? n_total_orbs - 1 - op.site_index[1]
-                             : op.site_index[1]);
-                n_op_idxs[make_pair(op.name, s)].push_back(
-                    is_right ? n_total_orbs - 1 - op.site_index[0]
-                             : op.site_index[0]);
-                n_op_mats[make_pair(op.name, s)].push_back(mat);
-                break;
-            case OpNames::P:
-            case OpNames::PD:
-            case OpNames::Q:
-                s = (int8_t)op.site_index.ss();
-                c_op_qs[make_pair(op.name, s)].insert(op.q_label);
-                c_op_idxs[make_pair(op.name, s)].push_back(op.site_index[0]);
-                c_op_idxs[make_pair(op.name, s)].push_back(op.site_index[1]);
-                c_op_mats[make_pair(op.name, s)].push_back(mat);
-                break;
-            case OpNames::R:
-            case OpNames::RD:
-                c_op_qs[make_pair(op.name, -1)].insert(op.q_label);
-                c_op_idxs[make_pair(op.name, -1)].push_back(op.site_index[0]);
-                c_op_mats[make_pair(op.name, -1)].push_back(mat);
-                break;
-            case OpNames::H:
-                c_op_qs[make_pair(op.name, -1)].insert(op.q_label);
-                c_op_idxs[make_pair(op.name, -1)].push_back(0);
-                c_op_mats[make_pair(op.name, -1)].push_back(mat);
-                break;
-            default:
-                assert(false);
-                break;
-            }
-        }
-        Timer _t, _t2;
-        _t2.get_time();
-        size_t size_all = 0, nnz_all = 0, size_total, nnz_total;
-        for (const auto &m : n_op_qs) {
-            check_signal_()();
-            if (iprint >= 1 && n_op_mats.at(m.first).size() != 0) {
-                cout << "  Build normal operator " << m.first.first;
-                if (m.first.second != -1)
-                    cout << (int)m.first.second;
-                cout << ".. NOPS = " << n_op_mats.at(m.first).size() << " .."
-                     << endl;
-            }
-            _t.get_time();
-            build_normal_site_ops(m.first.first, m.second,
-                                  n_op_idxs.at(m.first), n_op_mats.at(m.first));
-            double top = _t.get_time();
-            size_total = 0, nnz_total = 0;
-            for (const auto &mat : n_op_mats.at(m.first))
-                for (int i = 0; i < mat->info->n; i++) {
-                    nnz_total += mat->csr_data[i]->nnz;
-                    size_total += mat->csr_data[i]->size();
-                }
-            size_all += size_total, nnz_all += nnz_total;
-            if (iprint >= 1 && n_op_mats.at(m.first).size() != 0) {
-                cout << "    SIZE = " << setw(8)
-                     << Parsing::to_size_string(size_total * sizeof(FL))
-                     << " NNZ = " << setw(8)
-                     << Parsing::to_size_string(nnz_total * sizeof(FL));
-                cout << " SPT = " << fixed << setprecision(4) << setw(6)
-                     << (double)(size_total - nnz_total) / size_total;
-                cout << " T = " << fixed << setprecision(3) << setw(10) << top
-                     << endl;
-            }
-        }
-        for (const auto &m : c_op_qs) {
-            check_signal_()();
-            if (iprint >= 1 && c_op_mats.at(m.first).size() != 0) {
-                cout << "  Build complementary operator " << m.first.first;
-                if (m.first.second != -1)
-                    cout << (int)m.first.second;
-                cout << " .. NOPS = " << c_op_mats.at(m.first).size() << " .."
-                     << endl;
-            }
-            _t.get_time();
-            build_complementary_site_ops(m.first.first, m.second,
-                                         c_op_idxs.at(m.first),
-                                         c_op_mats.at(m.first));
-            double top = _t.get_time();
-            size_total = 0, nnz_total = 0;
-            for (const auto &mat : c_op_mats.at(m.first))
-                for (int i = 0; i < mat->info->n; i++) {
-                    nnz_total += mat->csr_data[i]->nnz;
-                    size_total += mat->csr_data[i]->size();
-                }
-            size_all += size_total, nnz_all += nnz_total;
-            if (iprint >= 1 && c_op_mats.at(m.first).size() != 0) {
-                cout << "    SIZE = " << setw(8)
-                     << Parsing::to_size_string(size_total * sizeof(FL))
-                     << " NNZ = " << setw(8)
-                     << Parsing::to_size_string(nnz_total * sizeof(FL));
-                cout << " SPT = " << fixed << setprecision(4) << setw(6)
-                     << (double)(size_total - nnz_total) / size_total;
-                cout << " T = " << fixed << setprecision(3) << setw(10) << top
-                     << endl;
-            }
-        }
-        double tall = _t2.get_time();
-        if (iprint >= 1) {
-            cout << "ALL SIZE = " << setw(8)
-                 << Parsing::to_size_string(size_all * sizeof(FL))
-                 << " NNZ = " << setw(8)
-                 << Parsing::to_size_string(nnz_all * sizeof(FL));
-            cout << " SPT = " << fixed << setprecision(4) << setw(6)
-                 << (double)(size_all - nnz_all) / size_all;
-            cout << " T = " << fixed << setprecision(3) << setw(10) << tall
-                 << endl;
-        }
+};
+
+template <typename S, typename FL>
+struct DRTBigSite<S, FL, typename S::is_sz_t> : DRTBigSiteBase<S, FL> {
+    typedef integral_constant<ElemOpTypes, ElemT<S>::value> T;
+    typedef typename GMatrix<FL>::FP FP;
+    typedef long long LL;
+    using DRTBigSiteBase<S, FL>::n_orbs;
+    using DRTBigSiteBase<S, FL>::basis;
+    using DRTBigSiteBase<S, FL>::op_infos;
+    using DRTBigSiteBase<S, FL>::fcidump;
+    using DRTBigSiteBase<S, FL>::drt;
+    using DRTBigSiteBase<S, FL>::is_right;
+    using DRTBigSiteBase<S, FL>::iprint;
+    using DRTBigSiteBase<S, FL>::n_total_orbs;
+    using DRTBigSiteBase<S, FL>::print_hdrt_infos;
+    using DRTBigSiteBase<S, FL>::sort_npdm;
+    using DRTBigSiteBase<S, FL>::get_site_matrices;
+    using DRTBigSiteBase<S, FL>::build_operator_matrices;
+    using DRTBigSiteBase<S, FL>::build_npdm_operator_matrices;
+    using DRTBigSiteBase<S, FL>::cutoff;
+    shared_ptr<GeneralFCIDUMP<FL>> gfd = nullptr;
+    const static int max_n = 10, max_s = 10;
+    DRTBigSite(const vector<S> &qs, bool is_right, int n_orbs,
+               const vector<typename S::pg_t> &orb_sym,
+               const shared_ptr<FCIDUMP<FL>> &fcidump = nullptr, int iprint = 0)
+        : DRTBigSiteBase<S, FL>(qs, is_right, n_orbs, orb_sym, fcidump,
+                                iprint) {
+        op_infos = get_site_op_infos(orb_sym);
     }
-    vector<shared_ptr<GTensor<FL>>>
-    sort_npdm(const vector<shared_ptr<SpinPermScheme>> &schemes,
-              const shared_ptr<vector<FL>> &pr,
-              const map<string, map<vector<uint16_t>, int>> &expr_mp,
-              const vector<size_t> &psum) const {
-        vector<shared_ptr<GTensor<FL>>> r(schemes.size());
-        for (size_t it = 0; it < schemes.size(); it++) {
-            int n_op = (int)schemes[it]->index_patterns[0].size();
-            vector<MKL_INT> shape(n_op, n_orbs);
-            shared_ptr<NPDMCounter> counter =
-                make_shared<NPDMCounter>(n_op, n_orbs + 1);
-            r[it] = make_shared<GTensor<FL>>(shape);
-            for (size_t j = 0; j < schemes[it]->index_patterns.size(); j++) {
-                for (const auto &m : schemes[it]->data[j]) {
-                    const vector<uint16_t> &perm = m.first;
-                    vector<uint64_t> mx(perm.size());
-                    uint64_t mxx = 1;
-                    for (int k = (int)perm.size() - 1; k >= 0;
-                         k--, mxx *= n_orbs)
-                        mx[perm[k]] = mxx;
-                    const uint64_t lcnt = counter->count_left(
-                        schemes[it]->index_patterns[j], n_orbs - 1, false);
-                    vector<uint16_t> idx;
-                    counter->init_left(schemes[it]->index_patterns[j],
-                                       n_orbs - 1, false, idx);
-                    for (uint64_t il = 0; il < lcnt; il++) {
-                        for (auto &xr : m.second) {
-                            int im = expr_mp.at(xr.second).at(
-                                schemes[it]->index_patterns[j]);
-                            uint64_t ix = 0;
-                            for (int k = 0; k < (int)mx.size(); k++)
-                                ix += idx[k] * mx[k];
-                            (*r[it]->data)[ix] +=
-                                (FL)xr.first * (*pr)[psum[im] + il];
-                        }
-                        counter->next_left(schemes[it]->index_patterns[j],
-                                           n_orbs - 1, idx);
-                    }
+    virtual ~DRTBigSite() = default;
+    static vector<S>
+    get_target_quanta(bool is_right, int n_orbs, int n_max_elec,
+                      const vector<typename S::pg_t> &orb_sym) {
+        S vacuum, target(S::invalid);
+        vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
+        for (int m = 0; m < n_orbs; m++) {
+            shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+            b->allocate(4);
+            b->quanta[0] = vacuum;
+            b->quanta[1] = S(1, 1, orb_sym[m]);
+            b->quanta[2] = S(1, -1, orb_sym[m]);
+            b->quanta[3] = S(2, 0, 0);
+            b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] =
+                1;
+            b->sort_states();
+            site_basis[m] = b;
+        }
+        shared_ptr<StateInfo<S>> x = make_shared<StateInfo<S>>(vacuum);
+        if (!is_right) {
+            for (int i = 0; i < n_orbs; i++)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*x, *site_basis[i], target));
+            int max_n = 0;
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > max_n)
+                    max_n = x->quanta[q].n();
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() < max_n - n_max_elec ||
+                    abs(x->quanta[q].twos()) > n_max_elec)
+                    x->n_states[q] = 0;
+        } else {
+            for (int i = n_orbs - 1; i >= 0; i--)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*site_basis[i], *x, target));
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > n_max_elec)
+                    x->n_states[q] = 0;
+        }
+        x->collect();
+        return vector<S>(&x->quanta[0], &x->quanta[0] + x->n);
+    }
+    vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
+    get_site_op_infos(const vector<uint8_t> &orb_sym) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+        const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
+        const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
+        info[S(0)] = nullptr;
+        set<uint8_t> all_orb_sym(orb_sym.begin(), orb_sym.end());
+        for (int i = 0; i < max_n; i++) {
+            set<uint8_t> old_orb_sym = all_orb_sym;
+            for (auto ipg : old_orb_sym) {
+                if (i == 0)
+                    all_orb_sym.insert(S::pg_inv(ipg));
+                for (auto jpg : orb_sym) {
+                    all_orb_sym.insert(S::pg_mul(ipg, jpg));
+                    all_orb_sym.insert(S::pg_mul(ipg, S::pg_inv(jpg)));
                 }
             }
         }
-        return r;
+        for (auto ipg : all_orb_sym) {
+            for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                for (int s = -max_s_odd; s <= max_s_odd; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
+            for (int n = -max_n_even; n <= max_n_even; n += 2)
+                for (int s = -max_s_even; s <= max_s_even; s += 2)
+                    info[S(n, s, ipg)] = nullptr;
+        }
+        for (auto &p : info) {
+            p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            p.second->initialize(*basis, *basis, p.first, p.first.is_fermion());
+        }
+        return vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(info.begin(),
+                                                                info.end());
     }
-    vector<shared_ptr<GTensor<FL>>>
-    build_npdm(const string &expr, const FL *bra_ci, const FL *ket_ci) const {
-        int16_t op_twos = SpinPermRecoupling::get_target_twos(expr);
-        int16_t xc = (int16_t)count(expr.begin(), expr.end(), 'C');
-        int16_t xd = (int16_t)count(expr.begin(), expr.end(), 'D');
-        S iq(xc - xd, op_twos, 0); // assume ipg is the same
+    void build_normal_site_ops(
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const override {
+        if (mats.size() == 0)
+            return;
+        const map<OpNames, vector<int16_t>> op_map =
+            map<OpNames, vector<int16_t>>{{OpNames::I, vector<int16_t>{0}},
+                                          {OpNames::C, vector<int16_t>{1}},
+                                          {OpNames::D, vector<int16_t>{1}},
+                                          {OpNames::A, vector<int16_t>{2}},
+                                          {OpNames::AD, vector<int16_t>{2}},
+                                          {OpNames::B, vector<int16_t>{2}},
+                                          {OpNames::BD, vector<int16_t>{2}}};
         vector<pair<S, pair<int16_t, int16_t>>> iop_qs;
-        for (int16_t i = (int16_t)(xc + xd), j = min(i, (int16_t)1); j <= i;
-             j++)
-            iop_qs.push_back(make_pair(iq, make_pair(j, i)));
-        shared_ptr<HDRT<S, ElemOpTypes::SU2>> hdrt =
-            make_shared<HDRT<S, ElemOpTypes::SU2>>(n_orbs, iop_qs,
-                                                   drt->orb_sym);
-        vector<shared_ptr<SpinPermScheme>> schemes =
-            vector<shared_ptr<SpinPermScheme>>{make_shared<SpinPermScheme>(
-                SpinPermScheme::initialize_su2(xc + xd, expr, false, true))};
+        for (auto &iqx : iqs)
+            for (int16_t i : op_map.at(op_name))
+                for (int16_t j = min(i, (int16_t)1); j <= i; j++)
+                    iop_qs.push_back(make_pair(iqx, make_pair(j, i)));
+        shared_ptr<HDRT<S>> hdrt =
+            make_shared<HDRT<S>>(n_orbs, iop_qs, drt->orb_sym);
+        vector<shared_ptr<SpinPermScheme>> schemes;
+        vector<string> std_exprs;
+        if (op_name == OpNames::I)
+            std_exprs.push_back("");
+        else if (op_name == OpNames::C)
+            std_exprs.push_back(iq ? "C" : "c");
+        else if (op_name == OpNames::D)
+            std_exprs.push_back(iq ? "D" : "d");
+        else if (op_name == OpNames::A)
+            std_exprs.push_back(string((iq & 1) ? "C" : "c") +
+                                string((iq >> 1) ? "C" : "c"));
+        else if (op_name == OpNames::AD)
+            std_exprs.push_back(string((iq >> 1) ? "D" : "d") +
+                                string((iq & 1) ? "D" : "d"));
+        else if (op_name == OpNames::B)
+            std_exprs.push_back(string((iq & 1) ? "C" : "c") +
+                                string((iq >> 1) ? "D" : "d"));
+        else if (op_name == OpNames::BD)
+            std_exprs.push_back(string((iq & 1) ? "D" : "d") +
+                                string((iq >> 1) ? "C" : "c"));
+        else
+            throw runtime_error("Unsupported operator name!");
+        schemes.reserve(std_exprs.size());
+        for (size_t ix = 0; ix < std_exprs.size(); ix++)
+            schemes.push_back(
+                make_shared<SpinPermScheme>(SpinPermScheme::initialize_sz(
+                    SpinPermRecoupling::count_cds(std_exprs[ix]), std_exprs[ix],
+                    true)));
         hdrt->initialize_steps(schemes);
         hdrt->initialize();
-        print_hdrt_infos(set<S>{iq}, vector<string>{expr}, hdrt);
+        print_hdrt_infos(iqs, std_exprs, hdrt);
         shared_ptr<HDRTScheme<S, FL>> hdrt_scheme =
             make_shared<HDRTScheme<S, FL>>(hdrt, schemes);
+        vector<pair<LL, FL>> mat_idxs(mats.size());
         shared_ptr<vector<vector<LL>>> npdm_ord = hdrt_scheme->sort_npdm();
-        vector<size_t> psum(npdm_ord->size() + 1, 0);
-        for (size_t i = 0; i < npdm_ord->size(); i++)
-            psum[i + 1] = psum[i] + (*npdm_ord)[i].size();
-        shared_ptr<vector<FL>> r =
-            make_shared<vector<FL>>(psum.back(), (FL)0.0);
+        int nn = SpinPermRecoupling::count_cds(std_exprs[0]);
+        map<vector<uint16_t>, int> idx_pattern_mp;
+        vector<shared_ptr<NPDMCounter>> counters(
+            schemes[0]->index_patterns.size());
+        for (int i = 0; i < (int)schemes[0]->index_patterns.size(); i++) {
+            idx_pattern_mp[schemes[0]->index_patterns[i]] = i;
+            counters[i] = make_shared<NPDMCounter>(nn, hdrt->n_sites + 1);
+        }
+        const FL xf = (FL)1.0;
+        // const FL xf = (FL)(iq != 2 || !is_right ? 1.0 : -1.0);
         int ntg = threading->activate_global();
-        vector<vector<vector<int>>> jbra(ntg, vector<vector<int>>(2));
-        vector<vector<vector<int>>> jket(ntg, vector<vector<int>>(2));
-        vector<vector<vector<pair<MKL_INT, MKL_INT>>>> pbk(
-            ntg, vector<vector<pair<MKL_INT, MKL_INT>>>(2));
-        vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
-        vector<vector<SU2Matrix<FL>>> site_matrices = get_site_matrices(hdrt);
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < r->size(); i++) {
-            const size_t jx =
-                upper_bound(psum.begin(), psum.end(), i) - psum.begin() - 1;
-            const int tid = threading->get_thread_id();
-            int pi = 0, pj = pi ^ 1;
-            vector<vector<pair<MKL_INT, MKL_INT>>> &xpbk = pbk[tid];
-            vector<vector<int>> &xjb = jbra[tid], &xjk = jket[tid];
-            vector<vector<FL>> &xhv = hv[tid];
-            xpbk[pi].clear(), xjb[pi].clear();
-            xjk[pi].clear(), xhv[pi].clear();
-            int jh = 0;
-            LL ih = (*npdm_ord)[jx][i - psum[jx]];
-            if (ih == -1)
-                continue;
-            for (; ih >= hdrt->xs[jh * (hdrt->nd + 1) + hdrt->nd]; jh++)
-                ih -= hdrt->xs[jh * (hdrt->nd + 1) + hdrt->nd];
-            for (int imb = 0; imb < drt->n_init_qs; imb++)
-                for (int imk = 0; imk < drt->n_init_qs; imk++) {
-                    xpbk[pi].push_back(make_pair(0, 0));
-                    xjb[pi].push_back(imb), xjk[pi].push_back(imk);
-                    xhv[pi].push_back((FL)1.0);
-                }
-            for (int k = drt->n_sites - 1; k >= 0; k--, pi ^= 1, pj ^= 1) {
-                int16_t dh =
-                    (int16_t)(upper_bound(
-                                  hdrt->xs.begin() + jh * (hdrt->nd + 1),
-                                  hdrt->xs.begin() + (jh + 1) * (hdrt->nd + 1),
-                                  ih) -
-                              1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
-                const int jhv = hdrt->jds[jh * hdrt->nd + dh];
-                const SU2Matrix<FL> &smat = site_matrices[k][dh];
-                const size_t hsz = xhv[pi].size() * smat.data.size();
-                xpbk[pj].reserve(hsz), xpbk[pj].clear();
-                xjb[pj].reserve(hsz), xjb[pj].clear();
-                xjk[pj].reserve(hsz), xjk[pj].clear();
-                xhv[pj].reserve(hsz), xhv[pj].clear();
-                for (size_t j = 0; j < xjk[pi].size(); j++)
-                    for (size_t md = 0; md < smat.data.size(); md++) {
-                        const int16_t dbra = smat.indices[md].first;
-                        const int16_t dket = smat.indices[md].second;
-                        const int jbv = drt->jds[xjb[pi][j]][dbra];
-                        const int jkv = drt->jds[xjk[pi][j]][dket];
-                        if (jbv == 0 || jkv == 0)
-                            continue;
-                        const int16_t bfq = drt->abc[xjb[pi][j]][1];
-                        const int16_t kfq = drt->abc[xjk[pi][j]][1];
-                        const int16_t biq = drt->abc[jbv][1];
-                        const int16_t kiq = drt->abc[jkv][1];
-                        const int16_t mdq = smat.dq;
-                        const int16_t mfq = hdrt->qs[jh][2];
-                        const int16_t miq = hdrt->qs[jhv][2];
-                        const FL f =
-                            (*factors)[bfq * factor_strides[0] +
-                                       (biq - bfq + 1) * factor_strides[1] +
-                                       kfq * factor_strides[2] +
-                                       (kiq - kfq + 1) * factor_strides[3] +
-                                       mfq * factor_strides[4] +
-                                       miq * factor_strides[5] +
-                                       mdq * factor_strides[6]];
-                        if (abs(f) < (FP)1E-14)
-                            continue;
-                        xjb[pj].push_back(jbv);
-                        xjk[pj].push_back(jkv);
-                        xpbk[pj].push_back(make_pair(
-                            drt->xs[xjb[pi][j]][dbra] + xpbk[pi][j].first,
-                            drt->xs[xjk[pi][j]][dket] + xpbk[pi][j].second));
-                        xhv[pj].push_back(f * xhv[pi][j] * smat.data[md]);
-                    }
-                ih -= hdrt->xs[jh * (hdrt->nd + 1) + dh];
-                jh = jhv;
-            }
-            FL rv = (FL)0.0;
-            for (size_t j = 0; j < xpbk[pi].size(); j++)
-                rv += bra_ci[xpbk[pi][j].first] * ket_ci[xpbk[pi][j].second] *
-                      xhv[pi][j];
-            (*r)[i] = rv;
+        for (size_t i = 0; i < mats.size(); i++) {
+            vector<uint16_t> idx(idxs.begin() + i * nn,
+                                 idxs.begin() + (i + 1) * nn);
+            vector<uint16_t> idx_mat(nn), idx_idx(nn);
+            for (int j = 0; j < nn; j++)
+                idx_idx[j] = j;
+            sort(idx_idx.begin(), idx_idx.begin() + nn,
+                 [&idx](uint16_t a, uint16_t b) { return idx[a] < idx[b]; });
+            if (nn >= 1)
+                idx_mat[0] = 0;
+            for (int j = 1; j < nn; j++)
+                idx_mat[j] =
+                    idx_mat[j - 1] + (idx[idx_idx[j]] != idx[idx_idx[j - 1]]);
+            const int ii = idx_pattern_mp.at(idx_mat);
+            const auto &xschs = schemes[0]->data[ii].at(idx_idx);
+            const auto &counter = counters[ii];
+            assert(xschs.size() == 1);
+            const pair<double, string> &pds = xschs[0];
+            const vector<LL> &xord =
+                (*npdm_ord)[hdrt_scheme->expr_mp.at(pds.second).at(idx_mat)];
+            for (int j = 0; j < nn; j++)
+                idx_mat[j] = idx[idx_idx[j]];
+            mat_idxs[i] =
+                make_pair(xord[counter->find_left(hdrt->n_sites - 1, idx_mat)],
+                          (FL)pds.first * xf);
         }
         threading->activate_normal();
-        vector<shared_ptr<GTensor<FL>>> rr =
-            sort_npdm(schemes, r, hdrt_scheme->expr_mp, psum);
-        return rr;
+        build_npdm_operator_matrices(hdrt, get_site_matrices(hdrt), mat_idxs,
+                                     mats);
+    }
+    void build_complementary_site_ops(
+        OpNames op_name, int8_t iq, const set<S> &iqs,
+        const vector<uint16_t> &idxs,
+        const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const override {
+        if (mats.size() == 0)
+            return;
+        const map<OpNames, vector<int16_t>> op_map =
+            map<OpNames, vector<int16_t>>{{OpNames::H, vector<int16_t>{2, 4}},
+                                          {OpNames::R, vector<int16_t>{1, 3}},
+                                          {OpNames::RD, vector<int16_t>{1, 3}},
+                                          {OpNames::P, vector<int16_t>{2}},
+                                          {OpNames::PD, vector<int16_t>{2}},
+                                          {OpNames::Q, vector<int16_t>{2}}};
+        vector<pair<S, pair<int16_t, int16_t>>> iop_qs;
+        for (auto &iqx : iqs)
+            for (int16_t i : op_map.at(op_name))
+                for (int16_t j = 1; j <= i; j++)
+                    iop_qs.push_back(make_pair(iqx, make_pair(j, i)));
+        shared_ptr<HDRT<S>> hdrt =
+            make_shared<HDRT<S>>(n_orbs, iop_qs, drt->orb_sym);
+        vector<shared_ptr<SpinPermScheme>> schemes;
+        vector<shared_ptr<GeneralFCIDUMP<FL>>> gfds;
+        vector<string> std_exprs;
+        if (this->gfd != nullptr)
+            gfds.push_back(this->gfd), std_exprs = this->gfd->exprs;
+        else if (op_name == OpNames::H) {
+            shared_ptr<GeneralFCIDUMP<FL>> gfd =
+                make_shared<GeneralFCIDUMP<FL>>(T::value);
+            gfd->exprs.push_back("ccdd");
+            gfd->exprs.push_back("cCDd");
+            gfd->exprs.push_back("CcdD");
+            gfd->exprs.push_back("CCDD");
+            for (uint8_t si = 0; si < 2; si++)
+                for (uint8_t sj = 0; sj < 2; sj++) {
+                    gfd->indices.push_back(vector<uint16_t>());
+                    gfd->data.push_back(vector<FL>());
+                    auto *idx = &gfd->indices.back();
+                    auto *dt = &gfd->data.back();
+                    array<uint16_t, 4> arr;
+                    for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                        for (arr[1] = 0; arr[1] < n_orbs; arr[1]++)
+                            for (arr[2] = 0; arr[2] < n_orbs; arr[2]++)
+                                for (arr[3] = 0; arr[3] < n_orbs; arr[3]++) {
+                                    const FL v =
+                                        is_right
+                                            ? fcidump->v(
+                                                  si, sj,
+                                                  n_total_orbs - 1 - arr[0],
+                                                  n_total_orbs - 1 - arr[3],
+                                                  n_total_orbs - 1 - arr[1],
+                                                  n_total_orbs - 1 - arr[2])
+                                            : fcidump->v(si, sj, arr[0], arr[3],
+                                                         arr[1], arr[2]);
+                                    if (abs(v) > cutoff) {
+                                        idx->insert(idx->end(), arr.begin(),
+                                                    arr.end());
+                                        dt->push_back((FL)0.5 * v);
+                                    }
+                                }
+                }
+            gfd->exprs.push_back("cd");
+            gfd->exprs.push_back("CD");
+            for (uint8_t si = 0; si < 2; si++) {
+                gfd->indices.push_back(vector<uint16_t>());
+                gfd->data.push_back(vector<FL>());
+                auto *idx = &gfd->indices.back();
+                auto *dt = &gfd->data.back();
+                array<uint16_t, 2> arr;
+                for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                    for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
+                        const FL v =
+                            is_right ? fcidump->t(si, n_total_orbs - 1 - arr[0],
+                                                  n_total_orbs - 1 - arr[1])
+                                     : fcidump->t(si, arr[0], arr[1]);
+                        if (abs(v) > cutoff) {
+                            idx->insert(idx->end(), arr.begin(),
+                                        arr.begin() + 2);
+                            dt->push_back(v);
+                        }
+                    }
+            }
+            std_exprs = gfd->exprs;
+            gfds.push_back(gfd->adjust_order(schemes, true, true));
+        } else if (op_name == OpNames::R || op_name == OpNames::RD) {
+            for (uint16_t ix : idxs) {
+                shared_ptr<GeneralFCIDUMP<FL>> gfd =
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
+                if (iq == 0) {
+                    gfd->exprs.push_back(op_name == OpNames::R ? "cdd" : "ccd");
+                    gfd->exprs.push_back(op_name == OpNames::R ? "CDd" : "cCD");
+                } else {
+                    gfd->exprs.push_back(op_name == OpNames::R ? "cdD" : "Ccd");
+                    gfd->exprs.push_back(op_name == OpNames::R ? "CDD" : "CCD");
+                }
+                //  R: arr = k l j : v(i, j, k, l) * Ck Dl Dj
+                // RD: arr = i k l : v(i, j, k, l) * Ci Ck Dl
+                for (uint8_t si = 0; si < 2; si++) {
+                    gfd->indices.push_back(vector<uint16_t>());
+                    gfd->data.push_back(vector<FL>());
+                    auto *idx = &gfd->indices.back();
+                    auto *dt = &gfd->data.back();
+                    array<uint16_t, 3> arr;
+                    for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                        for (arr[1] = 0; arr[1] < n_orbs; arr[1]++)
+                            for (arr[2] = 0; arr[2] < n_orbs; arr[2]++) {
+                                const FL v =
+                                    op_name == OpNames::R
+                                        ? (is_right
+                                               ? fcidump->v(
+                                                     iq, si, ix,
+                                                     n_total_orbs - 1 - arr[2],
+                                                     n_total_orbs - 1 - arr[0],
+                                                     n_total_orbs - 1 - arr[1])
+                                               : fcidump->v(iq, si, ix, arr[2],
+                                                            arr[0], arr[1]))
+                                        : (is_right
+                                               ? fcidump->v(
+                                                     iq, si,
+                                                     n_total_orbs - 1 - arr[0],
+                                                     ix,
+                                                     n_total_orbs - 1 - arr[1],
+                                                     n_total_orbs - 1 - arr[2])
+                                               : fcidump->v(iq, si, arr[0], ix,
+                                                            arr[1], arr[2]));
+                                if (abs(v) > cutoff) {
+                                    idx->insert(idx->end(), arr.begin(),
+                                                arr.end());
+                                    dt->push_back(v);
+                                }
+                            }
+                }
+                gfd->exprs.push_back(iq ? (op_name == OpNames::R ? "D" : "C")
+                                        : (op_name == OpNames::R ? "d" : "c"));
+                gfd->indices.push_back(vector<uint16_t>());
+                gfd->data.push_back(vector<FL>());
+                auto *idx = &gfd->indices.back();
+                auto *dt = &gfd->data.back();
+                array<uint16_t, 1> arr;
+                for (arr[0] = 0; arr[0] < n_orbs; arr[0]++) {
+                    const FL v =
+                        is_right ? fcidump->t(iq, ix, n_total_orbs - 1 - arr[0])
+                                 : fcidump->t(iq, ix, arr[0]);
+                    if (abs(v) > cutoff) {
+                        idx->push_back(arr[0]);
+                        dt->push_back((FL)0.5 * v);
+                    }
+                }
+                std_exprs = gfd->exprs;
+                gfds.push_back(gfd->adjust_order(schemes, true, true));
+            }
+        } else if (op_name == OpNames::P || op_name == OpNames::PD) {
+            for (int ixx = 0; ixx < (int)idxs.size(); ixx += 2) {
+                const uint16_t ix0 = idxs[ixx], ix1 = idxs[ixx + 1];
+                shared_ptr<GeneralFCIDUMP<FL>> gfd =
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
+                gfd->exprs.push_back(op_name == OpNames::P
+                                         ? string((iq & 1) ? "D" : "d") +
+                                               string((iq >> 1) ? "D" : "d")
+                                         : string((iq >> 1) ? "C" : "c") +
+                                               string((iq & 1) ? "C" : "c"));
+                gfd->indices.push_back(vector<uint16_t>());
+                gfd->data.push_back(vector<FL>());
+                auto *idx = &gfd->indices.back();
+                auto *dt = &gfd->data.back();
+                array<uint16_t, 2> arr;
+                //  P: arr = l j : v(i, j, k, l) * Dl Dj
+                // PD: arr = j l : v(j, i, l, k) * Cj Cl
+                for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                    for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
+                        const FL v =
+                            op_name == OpNames::P
+                                ? (is_right
+                                       ? -fcidump->v(iq & 1, iq >> 1, ix0,
+                                                    n_total_orbs - 1 - arr[0],
+                                                    ix1,
+                                                    n_total_orbs - 1 - arr[1])
+                                       : -fcidump->v(iq & 1, iq >> 1, ix0,
+                                                    arr[0], ix1, arr[1]))
+                                : (is_right
+                                       ? -fcidump->v(
+                                             iq & 1, iq >> 1,
+                                             n_total_orbs - 1 - arr[1], ix0,
+                                             n_total_orbs - 1 - arr[0], ix1)
+                                       : -fcidump->v(iq & 1, iq >> 1, arr[1],
+                                                    ix0, arr[0], ix1));
+                        if (abs(v) > cutoff) {
+                            idx->insert(idx->end(), arr.begin(), arr.end());
+                            dt->push_back(v);
+                        }
+                    }
+                std_exprs = gfd->exprs;
+                gfds.push_back(gfd->adjust_order(schemes, true, true));
+            }
+        } else if (op_name == OpNames::Q) {
+            for (int ixx = 0; ixx < (int)idxs.size(); ixx += 2) {
+                const uint16_t ix0 = idxs[ixx], ix1 = idxs[ixx + 1];
+                shared_ptr<GeneralFCIDUMP<FL>> gfd =
+                    make_shared<GeneralFCIDUMP<FL>>(T::value);
+                gfd->exprs.push_back(string((iq >> 1) ? "C" : "c") +
+                                     string((iq & 1) ? "D" : "d"));
+                gfd->indices.push_back(vector<uint16_t>());
+                gfd->data.push_back(vector<FL>());
+                auto *idx = &gfd->indices.back();
+                auto *dt = &gfd->data.back();
+                array<uint16_t, 2> arr;
+                // Q12: arr  = k l : -v(i,l,k,j) * Ck Dl
+                // Q03: arr += k l : +v(i,j,k,l) * Ck Dl
+                for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                    for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
+                        const FL v =
+                            is_right
+                                ? -fcidump->v(iq & 1, iq >> 1, ix0,
+                                              n_total_orbs - 1 - arr[1],
+                                              n_total_orbs - 1 - arr[0], ix1)
+                                : -fcidump->v(iq & 1, iq >> 1, ix0, arr[1],
+                                              arr[0], ix1);
+                        if (abs(v) > cutoff) {
+                            idx->insert(idx->end(), arr.begin(), arr.end());
+                            dt->push_back(v);
+                        }
+                    }
+                if (iq == 0 || iq == 3)
+                    for (uint8_t si = 0; si < 2; si++) {
+                        gfd->exprs.push_back(si == 0 ? "cd" : "CD");
+                        gfd->indices.push_back(vector<uint16_t>());
+                        gfd->data.push_back(vector<FL>());
+                        idx = &gfd->indices.back(), dt = &gfd->data.back();
+                        for (arr[0] = 0; arr[0] < n_orbs; arr[0]++)
+                            for (arr[1] = 0; arr[1] < n_orbs; arr[1]++) {
+                                const FL v =
+                                    is_right
+                                        ? fcidump->v(iq & 1, si, ix0, ix1,
+                                                     n_total_orbs - 1 - arr[0],
+                                                     n_total_orbs - 1 - arr[1])
+                                        : fcidump->v(iq & 1, si, ix0, ix1,
+                                                     arr[0], arr[1]);
+                                if (abs(v) > cutoff) {
+                                    idx->insert(idx->end(), arr.begin(),
+                                                arr.end());
+                                    dt->push_back(v);
+                                }
+                            }
+                    }
+                std_exprs = gfd->exprs;
+                gfds.push_back(gfd->adjust_order(schemes, true, true));
+            }
+        } else
+            throw runtime_error("Unsupported operator name!");
+        schemes.reserve(std_exprs.size());
+        for (size_t ix = 0; ix < std_exprs.size(); ix++)
+            schemes.push_back(
+                make_shared<SpinPermScheme>(SpinPermScheme::initialize_sz(
+                    SpinPermRecoupling::count_cds(std_exprs[ix]), std_exprs[ix],
+                    true)));
+        hdrt->initialize_steps(schemes);
+        hdrt->initialize();
+        print_hdrt_infos(iqs, std_exprs, hdrt);
+        shared_ptr<HDRTScheme<S, FL>> hdrt_scheme =
+            make_shared<HDRTScheme<S, FL>>(hdrt, schemes);
+        vector<shared_ptr<vector<FL>>> ints(gfds.size());
+        for (size_t i = 0; i < gfds.size(); i++)
+            ints[i] = hdrt_scheme->sort_integral(gfds[i]);
+        build_operator_matrices(hdrt, get_site_matrices(hdrt), ints, mats);
     }
 };
 

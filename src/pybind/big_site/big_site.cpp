@@ -32,5 +32,8 @@ template void bind_fl_sci_big_site_fock<SZ, double>(py::module &m);
 
 template void bind_fl_csf_big_site<SU2, double>(py::module &m);
 
+template void bind_drt_big_site<SZ>(py::module &m);
 template void bind_drt_big_site<SU2>(py::module &m);
+
+template void bind_fl_drt_big_site<SZ, double>(py::module &m);
 template void bind_fl_drt_big_site<SU2, double>(py::module &m);

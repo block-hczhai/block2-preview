@@ -133,7 +133,7 @@ if "single_prec" in dic and "use_complex" not in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
@@ -195,7 +195,7 @@ elif "single_prec" in dic and "use_complex" in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
@@ -281,7 +281,7 @@ elif "use_complex" not in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
@@ -368,7 +368,7 @@ else:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
@@ -1190,7 +1190,6 @@ if pre_run or not no_pre_run:
             big_left_orig = CSFBigSite(n_inactive, abs(xl[-1]), False, fcidump, orb_sym[:n_inactive])
             big_right_orig = CSFBigSite(n_external, abs(xr[-1]), True, fcidump, orb_sym[-n_external:])
         elif big_site_method == "drt":
-            assert "nonspinadapted" not in dic
             left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, abs(xl[-1]), orb_sym[:n_inactive])
             right_iqs = DRTBigSite.get_target_quanta(True, n_external, abs(xr[-1]), orb_sym[-n_external:])
             big_left_orig = DRTBigSite(left_iqs, False, n_inactive,
@@ -3928,7 +3927,6 @@ if not pre_run:
                 big_right_orig = CSFBigSite(n_external, abs(
                     xr[-1]), True, fd_zero, orb_sym[-n_external:])
             elif big_site_method == "drt":
-                assert "nonspinadapted" not in dic
                 left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, abs(xl[-1]), orb_sym[:n_inactive])
                 right_iqs = DRTBigSite.get_target_quanta(True, n_external, abs(xr[-1]), orb_sym[-n_external:])
                 big_left_orig = DRTBigSite(left_iqs, False, n_inactive,

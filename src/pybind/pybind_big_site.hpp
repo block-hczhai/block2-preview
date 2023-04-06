@@ -59,6 +59,17 @@ template <typename S, typename FL> void bind_fl_big_site(py::module &m) {
 template <typename S, typename FL>
 void bind_fl_sci_big_site_fock(py::module &m) {
 
+    py::class_<SCIFockDeterminant, shared_ptr<SCIFockDeterminant>>(
+        m, "SCIFockDeterminant")
+        .def(py::init<>())
+        .def_readwrite("norbs", &SCIFockDeterminant::norbs)
+        .def_readwrite("nAlphaEl", &SCIFockDeterminant::nAlphaEl)
+        .def_readwrite("nBetaEl", &SCIFockDeterminant::nBetaEl)
+        .def_readwrite("EffDetLen", &SCIFockDeterminant::EffDetLen)
+        .def("getocc", &SCIFockDeterminant::getocc);
+
+    py::bind_vector<vector<SCIFockDeterminant>>(m, "VectorSCIFockDeterminant");
+
     py::class_<SCIFockBigSite<S, FL>, shared_ptr<SCIFockBigSite<S, FL>>,
                BigSite<S, FL>>(m, "SCIFockBigSite")
         .def(py::init<int, int, bool, const shared_ptr<FCIDUMP<FL>> &,
@@ -97,6 +108,9 @@ void bind_fl_sci_big_site_fock(py::module &m) {
         .def_readwrite("eps", &SCIFockBigSite<S, FL>::eps,
                        "Sparsity value threshold. Everything below eps will be "
                        "set to 0.0")
+        .def_readwrite("fragSpace", &SCIFockBigSite<S, FL>::fragSpace)
+        .def_readwrite("offsets", &SCIFockBigSite<S, FL>::offsets)
+        .def_readwrite("nDet", &SCIFockBigSite<S, FL>::nDet)
         .def("setOmpThreads", &SCIFockBigSite<S, FL>::setOmpThreads)
         // vv setter
         .def_property(
@@ -180,15 +194,14 @@ template <typename S, typename FL> void bind_fl_csf_big_site(py::module &m) {
 
 template <typename S> void bind_drt_big_site(py::module &m) {
 
-    py::class_<DRT<S, ElemOpTypes::SU2>, shared_ptr<DRT<S, ElemOpTypes::SU2>>>(
-        m, "DRT")
-        .def_readwrite("abc", &DRT<S, ElemOpTypes::SU2>::abc)
-        .def_readwrite("pgs", &DRT<S, ElemOpTypes::SU2>::pgs)
-        .def_readwrite("orb_sym", &DRT<S, ElemOpTypes::SU2>::orb_sym)
-        .def_readwrite("jds", &DRT<S, ElemOpTypes::SU2>::jds)
-        .def_readwrite("xs", &DRT<S, ElemOpTypes::SU2>::xs)
-        .def_readwrite("n_sites", &DRT<S, ElemOpTypes::SU2>::n_sites)
-        .def_readwrite("n_init_qs", &DRT<S, ElemOpTypes::SU2>::n_init_qs)
+    py::class_<DRT<S>, shared_ptr<DRT<S>>>(m, "DRT")
+        .def_readwrite("abc", &DRT<S>::abc)
+        .def_readwrite("pgs", &DRT<S>::pgs)
+        .def_readwrite("orb_sym", &DRT<S>::orb_sym)
+        .def_readwrite("jds", &DRT<S>::jds)
+        .def_readwrite("xs", &DRT<S>::xs)
+        .def_readwrite("n_sites", &DRT<S>::n_sites)
+        .def_readwrite("n_init_qs", &DRT<S>::n_init_qs)
         .def(py::init<>())
         .def(py::init<int16_t, int16_t, int16_t>())
         .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t>())
@@ -199,50 +212,47 @@ template <typename S> void bind_drt_big_site(py::module &m) {
         .def(py::init<int, const vector<S> &>())
         .def(py::init<int, const vector<S> &,
                       const vector<typename S::pg_t> &>())
-        .def_property_readonly("n_rows", &DRT<S, ElemOpTypes::SU2>::n_rows)
-        .def("initialize", &DRT<S, ElemOpTypes::SU2>::initialize)
-        .def("__getitem__", &DRT<S, ElemOpTypes::SU2>::operator[], py::arg("i"))
-        .def("index", &DRT<S, ElemOpTypes::SU2>::index)
-        .def("__len__", &DRT<S, ElemOpTypes::SU2>::size)
-        .def("q_index", &DRT<S, ElemOpTypes::SU2>::q_index)
-        .def("q_range", &DRT<S, ElemOpTypes::SU2>::q_range)
-        .def("get_basis", &DRT<S, ElemOpTypes::SU2>::get_basis)
-        .def("__repr__", &DRT<S, ElemOpTypes::SU2>::to_str);
+        .def_property_readonly("n_rows", &DRT<S>::n_rows)
+        .def("initialize", &DRT<S>::initialize)
+        .def("__getitem__", &DRT<S>::operator[], py::arg("i"))
+        .def("index", &DRT<S>::index)
+        .def("__len__", &DRT<S>::size)
+        .def("q_index", &DRT<S>::q_index)
+        .def("q_range", &DRT<S>::q_range)
+        .def("get_basis", &DRT<S>::get_basis)
+        .def("__repr__", &DRT<S>::to_str);
 
-    py::class_<HDRT<S, ElemOpTypes::SU2>,
-               shared_ptr<HDRT<S, ElemOpTypes::SU2>>>(m, "HDRT")
-        .def_readwrite("qs", &HDRT<S, ElemOpTypes::SU2>::qs)
-        .def_readwrite("pgs", &HDRT<S, ElemOpTypes::SU2>::pgs)
-        .def_readwrite("orb_sym", &HDRT<S, ElemOpTypes::SU2>::orb_sym)
-        .def_readwrite("jds", &HDRT<S, ElemOpTypes::SU2>::jds)
-        .def_readwrite("xs", &HDRT<S, ElemOpTypes::SU2>::xs)
-        .def_readwrite("n_sites", &HDRT<S, ElemOpTypes::SU2>::n_sites)
-        .def_readwrite("n_init_qs", &HDRT<S, ElemOpTypes::SU2>::n_init_qs)
-        .def_readwrite("nd", &HDRT<S, ElemOpTypes::SU2>::nd)
-        .def_readwrite("d_map", &HDRT<S, ElemOpTypes::SU2>::d_map)
-        .def_readwrite("d_step", &HDRT<S, ElemOpTypes::SU2>::d_step)
-        .def_readwrite("d_expr", &HDRT<S, ElemOpTypes::SU2>::d_expr)
+    py::class_<HDRT<S>, shared_ptr<HDRT<S>>>(m, "HDRT")
+        .def_readwrite("qs", &HDRT<S>::qs)
+        .def_readwrite("pgs", &HDRT<S>::pgs)
+        .def_readwrite("orb_sym", &HDRT<S>::orb_sym)
+        .def_readwrite("jds", &HDRT<S>::jds)
+        .def_readwrite("xs", &HDRT<S>::xs)
+        .def_readwrite("n_sites", &HDRT<S>::n_sites)
+        .def_readwrite("n_init_qs", &HDRT<S>::n_init_qs)
+        .def_readwrite("nd", &HDRT<S>::nd)
+        .def_readwrite("d_map", &HDRT<S>::d_map)
+        .def_readwrite("d_step", &HDRT<S>::d_step)
+        .def_readwrite("d_expr", &HDRT<S>::d_expr)
         .def(py::init<>())
         .def(py::init<int, const vector<pair<S, pair<int16_t, int16_t>>> &>())
         .def(py::init<int, const vector<pair<S, pair<int16_t, int16_t>>> &,
                       const vector<typename S::pg_t> &>())
-        .def_property_readonly("n_rows", &HDRT<S, ElemOpTypes::SU2>::n_rows)
-        .def("initialize_steps", &HDRT<S, ElemOpTypes::SU2>::initialize_steps)
-        .def("initialize", &HDRT<S, ElemOpTypes::SU2>::initialize)
-        .def("__getitem__", &HDRT<S, ElemOpTypes::SU2>::operator[],
-             py::arg("i"))
-        .def("index", &HDRT<S, ElemOpTypes::SU2>::index)
-        .def("__len__", &HDRT<S, ElemOpTypes::SU2>::size)
-        .def("fill_data",
-             &HDRT<S, ElemOpTypes::SU2>::template fill_data<double>)
-        .def("__repr__", &HDRT<S, ElemOpTypes::SU2>::to_str);
+        .def_property_readonly("n_rows", &HDRT<S>::n_rows)
+        .def("initialize_steps", &HDRT<S>::initialize_steps)
+        .def("initialize", &HDRT<S>::initialize)
+        .def("__getitem__", &HDRT<S>::operator[], py::arg("i"))
+        .def("index", &HDRT<S>::index)
+        .def("__len__", &HDRT<S>::size)
+        .def("fill_data", &HDRT<S>::template fill_data<double>)
+        .def("__repr__", &HDRT<S>::to_str);
 }
 
 template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
 
     py::class_<HDRTScheme<S, FL>, shared_ptr<HDRTScheme<S, FL>>>(m,
                                                                  "HDRTScheme")
-        .def(py::init<const shared_ptr<HDRT<S, ElemOpTypes::SU2>> &,
+        .def(py::init<const shared_ptr<HDRT<S>> &,
                       const vector<shared_ptr<SpinPermScheme>> &>())
         .def("sort_integral", &HDRTScheme<S, FL>::sort_integral)
         .def("sort_npdm", &HDRTScheme<S, FL>::sort_npdm)
@@ -423,7 +433,10 @@ extern template void bind_fl_sci_big_site_fock<SZ, double>(py::module &m);
 
 extern template void bind_fl_csf_big_site<SU2, double>(py::module &m);
 
+extern template void bind_drt_big_site<SZ>(py::module &m);
 extern template void bind_drt_big_site<SU2>(py::module &m);
+
+extern template void bind_fl_drt_big_site<SZ, double>(py::module &m);
 extern template void bind_fl_drt_big_site<SU2, double>(py::module &m);
 
 #endif

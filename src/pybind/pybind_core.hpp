@@ -1377,6 +1377,8 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<pair<long long int, int>>>(m, "VectorPLLIntInt");
     py::bind_vector<vector<pair<long long int, long long int>>>(
         m, "VectorPLLIntLLInt");
+    py::bind_vector<vector<pair<unsigned long, unsigned long>>>(
+        m, "VectorPULIntULInt");
     py::bind_vector<vector<int16_t>>(m, "VectorInt16");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");

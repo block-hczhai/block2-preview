@@ -20,12 +20,12 @@
 
 #pragma once
 
-#include "../core/symmetry.hpp"
 #include "../big_site/big_site.hpp"
 #include "../big_site/csf_big_site.hpp"
 #include "../big_site/drt_big_site.hpp"
 #include "../big_site/qc_hamiltonian_big_site.hpp"
 #include "../big_site/sweep_algorithm_big_site.hpp"
+#include "../core/symmetry.hpp"
 #include "block2_core.hpp"
 #include "block2_dmrg.hpp"
 
@@ -43,12 +43,23 @@ extern template struct block2::CSFSpace<block2::SU2, double>;
 extern template struct block2::CSFBigSite<block2::SU2, double>;
 
 // drt_big_site.hpp
+extern template struct block2::SZMatrix<double>;
 extern template struct block2::SU2Matrix<double>;
+
+extern template struct block2::DRT<block2::SZ, block2::ElemOpTypes::SZ>;
+extern template struct block2::HDRT<block2::SZ, block2::ElemOpTypes::SZ>;
+
+extern template struct block2::HDRTScheme<block2::SZ, double,
+                                          block2::ElemOpTypes::SZ>;
+extern template struct block2::DRTBigSiteBase<block2::SZ, double>;
+extern template struct block2::DRTBigSite<block2::SZ, double>;
 
 extern template struct block2::DRT<block2::SU2, block2::ElemOpTypes::SU2>;
 extern template struct block2::HDRT<block2::SU2, block2::ElemOpTypes::SU2>;
 
-extern template struct block2::HDRTScheme<block2::SU2, double>;
+extern template struct block2::HDRTScheme<block2::SU2, double,
+                                          block2::ElemOpTypes::SU2>;
+extern template struct block2::DRTBigSiteBase<block2::SU2, double>;
 extern template struct block2::DRTBigSite<block2::SU2, double>;
 
 // qc_hamiltonian_big_site.hpp
