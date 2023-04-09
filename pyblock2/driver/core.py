@@ -1467,10 +1467,11 @@ class DMRGDriver:
         """
         assert SymmetryTypes.SGB in self.symm_type
         import numpy as np
+
         b = self.expr_builder()
         idxs = np.arange(self.n_sites, dtype=int)
         for ops, val in op_list:
-            num_y = ops.count('Y')
+            num_y = ops.count("Y")
             assert num_y % 2 == 0
             b.add_term(ops, idxs, val.real * (1 - num_y % 4))
         if ecore is not None:
@@ -1722,9 +1723,14 @@ class DMRGDriver:
 
         return mpos
 
-    def get_orbital_entropies(self, ket, orb_type=1, ij_symm=True, iprint=0):
+    def get_orbital_entropies(
+        self, ket, orb_type=1, ij_symm=True, use_npdm=True, iprint=0
+    ):
         bw = self.bw
         import numpy as np
+
+        if use_npdm:
+            return self.get_orbital_entropies_use_npdm(ket, orb_type, iprint=iprint)
 
         mpos = self.get_n_orb_rdm_mpos(
             orb_type=orb_type, ij_symm=ij_symm, iprint=iprint
@@ -1755,11 +1761,61 @@ class DMRGDriver:
                 ents[ih[::-1]] = ents[ih]
         return ents
 
-    def get_orbital_interaction_matrix(self, ket, iprint=0):
+    def get_orbital_entropies_use_npdm(self, ket, orb_type=1, iprint=0):
         import numpy as np
 
-        s1 = self.get_orbital_entropies(ket, orb_type=1, iprint=iprint)
-        s2 = self.get_orbital_entropies(ket, orb_type=2, iprint=iprint)
+        ents = np.zeros((self.n_sites,) * orb_type)
+        mket = ket.deep_copy(ket.info.tag + "@ORB-ENT-TMP")
+        if orb_type == 1:
+            exprs, nx = OrbitalEntropy.get_one_orb_rdm_exprs()
+        else:
+            exprs, nx = OrbitalEntropy.get_two_orb_rdm_exprs()
+
+        rrdms = np.zeros(ents.shape + (nx,))
+        for (k, m), v in exprs.items():
+            pdm = self.get_npdm(
+                mket, pdm_type=len(k) // 2, npdm_expr=k, mask=list(m), iprint=iprint
+            )[0]
+            for ix, f in v:
+                if orb_type == 1:
+                    rrdms[..., ix] += pdm * f
+                elif orb_type == 2:
+                    if len(set(m)) == 0:
+                        rrdms[..., ix] += pdm[None, None] * f
+                    elif len(set(m)) == 1 and m[0] == 0:
+                        rrdms[..., ix] += pdm[:, None] * f
+                    elif len(set(m)) == 1 and m[0] == 1:
+                        rrdms[..., ix] += pdm[None, :] * f
+                    else:
+                        rrdms[..., ix] += pdm * f
+
+        if orb_type == 1:
+            for i in range(self.n_sites):
+                ld = np.array(rrdms[i])
+                ld[np.abs(ld) < 1e-14] = 0
+                ld = ld[ld != 0]
+                ent = float(np.sum(-ld * np.log(ld)))
+                ents[i] = ent
+        elif orb_type == 2:
+            for i in range(self.n_sites):
+                for j in range(self.n_sites):
+                    ld = np.array(rrdms[i, j])
+                    ld = OrbitalEntropy.get_two_orb_rdm_eigvals(ld, diag_only=i == j)
+                    ld[np.abs(ld) < 1e-14] = 0
+                    ld = ld[ld != 0]
+                    ent = float(np.sum(-ld * np.log(ld)))
+                    ents[i, j] = ent
+        return ents
+
+    def get_orbital_interaction_matrix(self, ket, use_npdm=True, iprint=0):
+        import numpy as np
+
+        s1 = self.get_orbital_entropies(
+            ket, orb_type=1, use_npdm=use_npdm, iprint=iprint
+        )
+        s2 = self.get_orbital_entropies(
+            ket, orb_type=2, use_npdm=use_npdm, iprint=iprint
+        )
         return 0.5 * (s1[:, None] + s1[None, :] - s2) * (1 - np.identity(len(s1)))
 
     def get_conventional_npdm(
@@ -1917,7 +1973,8 @@ class DMRGDriver:
         soc=False,
         site_type=0,
         algo_type=None,
-        su2_coupling=None,
+        npdm_expr=None,
+        mask=None,
         simulated_parallel=0,
         fused_contraction_rotation=True,
         cutoff=1e-24,
@@ -1938,26 +1995,58 @@ class DMRGDriver:
             self.mpi.barrier()
 
         if SymmetryTypes.SU2 in bw.symm_type:
-            if su2_coupling is None:
-                su2_coupling = "((C+%s)1+D)0"
-            op_str = "(C+D)0"
-            for _ in range(pdm_type - 1):
-                op_str = su2_coupling % op_str
-            perm = bw.b.SpinPermScheme.initialize_su2(pdm_type * 2, op_str, True)
+            if npdm_expr is not None and "%s" not in npdm_expr:
+                op_str = npdm_expr
+            else:
+                su2_coupling = "((C+%s)1+D)0" if npdm_expr is None else npdm_expr
+                op_str = "(C+D)0"
+                for _ in range(pdm_type - 1):
+                    op_str = su2_coupling % op_str
+            if mask is None:
+                perm = bw.b.SpinPermScheme.initialize_su2(pdm_type * 2, op_str, True)
+            else:
+                perm = bw.b.SpinPermScheme.initialize_su2(
+                    pdm_type * 2, op_str, True, mask=bw.b.VectorUInt16(mask)
+                )
             perms = bw.b.VectorSpinPermScheme([perm])
         elif SymmetryTypes.SZ in bw.symm_type:
-            op_str = ["cd", "CD"]
-            for _ in range(pdm_type - 1):
-                op_str = ["c%sd" % x for x in op_str] + ["C%sD" % op_str[-1]]
-            perms = bw.b.VectorSpinPermScheme(
-                [
-                    bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
-                    for cd in op_str
-                ]
-            )
+            if npdm_expr is not None and isinstance(npdm_expr, str):
+                op_str = [npdm_expr]
+            elif npdm_expr is not None:
+                op_str = npdm_expr
+            else:
+                op_str = ["cd", "CD"]
+                for _ in range(pdm_type - 1):
+                    op_str = ["c%sd" % x for x in op_str] + ["C%sD" % op_str[-1]]
+            if mask is None:
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                        for cd in op_str
+                    ]
+                )
+            else:
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(
+                            pdm_type * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                        )
+                        for cd in op_str
+                    ]
+                )
         elif SymmetryTypes.SGF in bw.symm_type:
-            op_str = "C" * pdm_type + "D" * pdm_type
-            perm = bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, op_str, True)
+            if npdm_expr is not None and isinstance(npdm_expr, str):
+                op_str = [npdm_expr]
+            elif npdm_expr is not None:
+                op_str = npdm_expr
+            else:
+                op_str = "C" * pdm_type + "D" * pdm_type
+            if mask is None:
+                perm = bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, op_str, True)
+            else:
+                perm = bw.b.SpinPermScheme.initialize_sz(
+                    pdm_type * 2, op_str, True, mask=bw.b.VectorUInt16(mask)
+                )
             perms = bw.b.VectorSpinPermScheme([perm])
 
         if iprint >= 1:
@@ -1965,7 +2054,7 @@ class DMRGDriver:
 
         if iprint >= 3:
             for perm in perms:
-                print(perm)
+                print(perm.to_str())
 
         if simulated_parallel != 0 and self.mpi is not None:
             raise RuntimeError("Cannot simulate parallel in parallel mode!")
@@ -2009,6 +2098,8 @@ class DMRGDriver:
             self.align_mps_center(mbra, mket)
 
             scheme = bw.b.NPDMScheme(perms)
+            if iprint >= 4:
+                print(scheme.to_str())
             pmpo = bw.bs.GeneralNPDMMPO(
                 self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
             )
@@ -3551,9 +3642,47 @@ class OrbitalEntropy:
         return h_terms
 
     @staticmethod
-    def get_two_orb_rdm_eigvals(ld):
+    def get_one_orb_rdm_exprs():
+        exprs = {}
+        for iix, ix in enumerate([0, 5, 10, 15]):
+            for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix]):
+                kk = (x[1:], (0,) * len(x[1:]))
+                if kk not in exprs:
+                    exprs[kk] = []
+                exprs[kk].append((iix, 1.0 if x[0] == "+" else -1.0))
+        return exprs, 4
+
+    @staticmethod
+    def get_two_orb_rdm_exprs():
+        exprs = {}
+        # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
+        ts = (
+            "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
+            + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+            + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
+        )
+        ts = [[int(v) for v in u.split("/")] for u in ts.split()]
+        for ii, (ix, iy) in enumerate(ts):
+            ff = -1 if ix < 0 else 1
+            for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[abs(ix) - 1]):
+                for y in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[iy - 1]):
+                    kk = (x[1:] + y[1:], (0,) * len(x[1:]) + (1,) * len(y[1:]))
+                    if kk not in exprs:
+                        exprs[kk] = []
+                    exprs[kk].append((ii, ff if x[0] == y[0] else -ff))
+        return exprs, len(ts)
+
+    @staticmethod
+    def get_two_orb_rdm_eigvals(ld, diag_only=False):
         import numpy as np
 
+        if diag_only and len(ld) == 36:
+            return ld[
+                np.array(
+                    [0, 1, 4, 5, 8, 9, 10, 15, 20, 25, 26, 27, 30, 31, 34, 35],
+                    dtype=int,
+                )
+            ]
         if len(ld) == 16:
             return ld
         elif len(ld) == 26:
@@ -3582,6 +3711,8 @@ class OrbitalEntropy:
                 ix += d
                 ip += d * d
             assert ix == len(lx) and ip == len(ld)
+        else:
+            lx = 0
         return lx
 
 

@@ -5612,6 +5612,12 @@ struct Expect {
         size_t total_mem = 0;
         for (int i = 0; i < (int)scheme->perms.size(); i++) {
             int n_op = (int)scheme->perms[i]->index_patterns[0].size();
+            if (scheme->perms[i]->mask.size() != 0) {
+                n_op = 1;
+                for (int k = 1; k < scheme->perms[i]->mask.size(); k++)
+                    n_op += scheme->perms[i]->mask[k] !=
+                            scheme->perms[i]->mask[k - 1];
+            }
             vector<MKL_INT> shape(n_op, n_physical_sites);
             r[i] = make_shared<GTensor<FLX>>(shape);
             r[i]->clear();

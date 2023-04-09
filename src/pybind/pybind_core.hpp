@@ -2100,10 +2100,14 @@ template <typename S = void> void bind_io(py::module &m) {
     py::class_<SpinPermPattern, shared_ptr<SpinPermPattern>>(m,
                                                              "SpinPermPattern")
         .def_readwrite("n", &SpinPermPattern::n)
+        .def_readwrite("mask", &SpinPermPattern::mask)
         .def_readwrite("data", &SpinPermPattern::data)
         .def(py::init<uint16_t>())
-        .def_static("all_reordering", &SpinPermPattern::all_reordering)
-        .def_static("initialize", &SpinPermPattern::initialize)
+        .def(py::init<uint16_t, const vector<uint16_t> &>())
+        .def_static("all_reordering", &SpinPermPattern::all_reordering,
+                    py::arg("x"), py::arg("mask") = vector<uint16_t>())
+        .def_static("initialize", &SpinPermPattern::initialize, py::arg("n"),
+                    py::arg("mask") = vector<uint16_t>())
         .def_static("get_unique", &SpinPermPattern::get_unique)
         .def_static("make_matrix", &SpinPermPattern::make_matrix)
         .def("count", &SpinPermPattern::count)
@@ -2122,15 +2126,18 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("data", &SpinPermScheme::data)
         .def_readwrite("is_su2", &SpinPermScheme::is_su2)
         .def_readwrite("left_vacuum", &SpinPermScheme::left_vacuum)
+        .def_readwrite("mask", &SpinPermScheme::mask)
         .def_static("initialize_sz", &SpinPermScheme::initialize_sz,
                     py::arg("nn"), py::arg("spin_str"),
-                    py::arg("is_fermion") = true)
+                    py::arg("is_fermion") = true,
+                    py::arg("mask") = vector<uint16_t>())
         .def_static("initialize_su2_old", &SpinPermScheme::initialize_su2_old,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false)
         .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
                     py::arg("nn"), py::arg("spin_str"),
-                    py::arg("is_npdm") = false, py::arg("is_drt") = false)
+                    py::arg("is_npdm") = false, py::arg("is_drt") = false,
+                    py::arg("mask") = vector<uint16_t>())
         .def("to_str", &SpinPermScheme::to_str);
 
     py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,
@@ -2664,10 +2671,12 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
             vector<ssize_t> shape, strides;
             for (auto x : self->shape)
                 shape.push_back(x);
-            strides.push_back(sizeof(FL));
-            for (int i = (int)shape.size() - 1; i > 0; i--)
-                strides.push_back(strides.back() * shape[i]);
-            reverse(strides.begin(), strides.end());
+            if (shape.size() != 0) {
+                strides.push_back(sizeof(FL));
+                for (int i = (int)shape.size() - 1; i > 0; i--)
+                    strides.push_back(strides.back() * shape[i]);
+                reverse(strides.begin(), strides.end());
+            }
             return py::buffer_info(&(*self->data)[0], sizeof(FL),
                                    py::format_descriptor<FL>::format(),
                                    shape.size(), shape, strides);

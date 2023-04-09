@@ -18,7 +18,7 @@
  *
  */
 
-/** Fast Fourier Transform (FFT) and number theory algorithms. */
+/** Matching algorithms. */
 
 #pragma once
 

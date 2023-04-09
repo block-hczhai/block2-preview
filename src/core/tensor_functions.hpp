@@ -630,7 +630,8 @@ template <typename S, typename FL> struct TensorFunctions {
                     }
             }
         }
-        assert(mshape_presum.back().back().back() == mshape);
+        assert(mshape == 0 ? mshape_presum.back().size() == 0
+                           : mshape_presum.back().back().back() == mshape);
     }
     virtual shared_ptr<GTensor<FL, uint64_t>>
     npdm_sort_load_file(const string &filename, bool compressed) const {
@@ -688,6 +689,8 @@ template <typename S, typename FL> struct TensorFunctions {
         for (int ii = 0; ii < middle_count; ii++) {
             bool is_last = ii >= middle_base_count;
             int i = is_last ? ii - middle_base_count : ii;
+            if (scheme->n_max_ops == 0 && center != 0)
+                continue;
             if (is_last && scheme->last_middle_blocking[i].size() == 0)
                 continue;
             map<string, int> middle_cd_map;
@@ -695,6 +698,7 @@ template <typename S, typename FL> struct TensorFunctions {
                 middle_cd_map[scheme->middle_terms[i][j]] = j;
             for (auto &r : middle_patterns.at(scheme->middle_perm_patterns[i]))
                 for (auto &pr : scheme->perms[r.first]->data[r.second]) {
+                    const vector<uint16_t> &mask = scheme->perms[r.first]->mask;
                     const vector<uint16_t> &perm = pr.first;
                     for (auto &prr : pr.second) {
                         int jj = middle_cd_map[prr.second];
@@ -720,10 +724,13 @@ template <typename S, typename FL> struct TensorFunctions {
                             continue;
                         // left / right index linearlization multiplier
                         vector<uint64_t> lmx(
-                            scheme->left_terms[lx].first.first.size());
-                        vector<uint64_t> rmx(rpat.size());
+                            scheme->left_terms[lx].first.first.size(), 0);
+                        vector<uint64_t> rmx(rpat.size(), 0);
                         uint64_t mxx = 1;
                         for (int k = (int)perm.size() - 1; k >= 0; k--) {
+                            if (mask.size() != 0 && k != 0 &&
+                                mask[k] == mask[k - 1])
+                                continue;
                             if (perm[k] < lmx.size())
                                 lmx[perm[k]] = mxx;
                             else
