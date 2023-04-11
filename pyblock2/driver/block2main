@@ -2704,10 +2704,12 @@ if not pre_run:
         if MPI is not None:
             MPI.barrier()
 
-        bmps.load_mutable()
+        bmps.info.load_mutable()
         bmps.info.bond_dim = max(bmps.info.bond_dim, bmps.info.get_max_bond_dimension())
-        kmps.load_mutable()
+        bmps.info.deallocate_mutable()
+        kmps.info.load_mutable()
         kmps.info.bond_dim = max(kmps.info.bond_dim, kmps.info.get_max_bond_dimension())
+        kmps.info.deallocate_mutable()
 
         if MPI is not None:
             MPI.barrier()
@@ -2762,7 +2764,7 @@ if not pre_run:
         pmpo = SimplifiedMPO(pmpo, Rule(), False, False)
         if MPI is not None:
             pmpo = ParallelMPO(pmpo, npdm_prule)
-        
+
         pme = MovingEnvironment(pmpo, bmps, kmps, "NPDM")
         pme.cached_contraction = False
         pme.fused_contraction_rotation = True

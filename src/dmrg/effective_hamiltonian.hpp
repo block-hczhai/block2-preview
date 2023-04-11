@@ -648,7 +648,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                         !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
                              ->number(op->dops[i])) {
                         btmp.clear();
-                        (*this)(ktmp, btmp, (int)i, 1.0, npdm_scheme == nullptr);
+                        (*this)(ktmp, btmp, (int)i, 1.0,
+                                npdm_scheme == nullptr);
                         r = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                     } else {
                         if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
@@ -684,7 +685,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 fuse_left == -1 ? op->lopt->ops.size() < op->ropt->ops.size()
                                 : fuse_left,
                 algo_type & ExpectationAlgorithmTypes::Compressed,
-                algo_type & ExpectationAlgorithmTypes::LowMem);
+                algo_type & ExpectationAlgorithmTypes::LowMem, (FL)0.0);
         }
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
@@ -1537,100 +1538,179 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         shared_ptr<OpExpr<S>> expr = nullptr;
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             expr = add_const_term(const_e, para_rule);
-        Timer t;
-        t.get_time();
-        GMatrix<FL> ktmp(nullptr, (MKL_INT)ket[0]->total_memory, 1);
-        GMatrix<FL> rtmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
-        GMatrix<FL> btmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
-        btmp.allocate();
+        if (algo_type == ExpectationAlgorithmTypes::Automatic) {
+            algo_type = ExpectationAlgorithmTypes::Normal;
+            if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
+                    OpNames::XPDM &&
+                dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])
+                        ->site_index == SiteIndex())
+                algo_type = ExpectationAlgorithmTypes::SymbolFree |
+                            ExpectationAlgorithmTypes::Compressed;
+        }
         SeqTypes mode = tf->opf->seq->mode;
         tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
+        Timer t;
+        t.get_time();
         vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>> expectations;
-        expectations.reserve(op->mat->data.size());
-        vector<FL> results;
-        vector<size_t> results_idx;
-        results.reserve(op->mat->data.size() * ket.size());
-        results_idx.reserve(op->mat->data.size());
-        if (para_rule != nullptr)
-            para_rule->set_partition(ParallelRulePartitionTypes::Middle);
-        for (size_t i = 0; i < op->mat->data.size(); i++) {
-            vector<FL> rr(ket.size(), 0);
-            if (dynamic_pointer_cast<OpElement<S, FL>>(op->dops[i])->name ==
+        // may happen for NPDM with ancilla
+        if (op->mat->data.size() == 1 &&
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
                 OpNames::Zero)
-                continue;
-            else if (ex_type == ExpectationTypes::Real) {
-                if (para_rule == nullptr ||
-                    !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
-                         ->number(op->dops[i])) {
-                    for (int j = 0; j < (int)ket.size(); j++) {
-                        ktmp.data = ket[j]->data;
-                        rtmp.data = bra[j]->data;
-                        btmp.clear();
-                        (*this)(ktmp, btmp, (int)i, 1.0, true);
-                        rr[j] = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
-                    }
-                } else {
-                    if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
-                            ->own(op->dops[i])) {
+            ;
+        else if (algo_type == ExpectationAlgorithmTypes::Normal) {
+            GMatrix<FL> ktmp(nullptr, (MKL_INT)ket[0]->total_memory, 1);
+            GMatrix<FL> rtmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
+            GMatrix<FL> btmp(nullptr, (MKL_INT)bra[0]->total_memory, 1);
+            btmp.allocate();
+            expectations.reserve(op->mat->data.size());
+            vector<FL> results;
+            vector<size_t> results_idx;
+            results.reserve(op->mat->data.size() * ket.size());
+            results_idx.reserve(op->mat->data.size());
+            if (para_rule != nullptr)
+                para_rule->set_partition(ParallelRulePartitionTypes::Middle);
+            for (size_t i = 0; i < op->mat->data.size(); i++) {
+                vector<FL> rr(ket.size(), 0);
+                if (dynamic_pointer_cast<OpElement<S, FL>>(op->dops[i])->name ==
+                    OpNames::Zero)
+                    continue;
+                else if (ex_type == ExpectationTypes::Real) {
+                    if (para_rule == nullptr ||
+                        !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                             ->number(op->dops[i])) {
                         for (int j = 0; j < (int)ket.size(); j++) {
                             ktmp.data = ket[j]->data;
                             rtmp.data = bra[j]->data;
                             btmp.clear();
-                            (*this)(ktmp, btmp, (int)i, 1.0, false);
+                            (*this)(ktmp, btmp, (int)i, 1.0, true);
                             rr[j] =
                                 GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
                         }
+                    } else {
+                        if (dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                                ->own(op->dops[i])) {
+                            for (int j = 0; j < (int)ket.size(); j++) {
+                                ktmp.data = ket[j]->data;
+                                rtmp.data = bra[j]->data;
+                                btmp.clear();
+                                (*this)(ktmp, btmp, (int)i, 1.0, false);
+                                rr[j] = GMatrixFunctions<FL>::complex_dot(rtmp,
+                                                                          btmp);
+                            }
+                        }
+                        results.insert(results.end(), rr.begin(), rr.end());
+                        results_idx.push_back(expectations.size());
                     }
-                    results.insert(results.end(), rr.begin(), rr.end());
-                    results_idx.push_back(expectations.size());
-                }
-                expectations.push_back(make_pair(op->dops[i], rr));
+                    expectations.push_back(make_pair(op->dops[i], rr));
+                } else if (ex_type == ExpectationTypes::Complex) {
+                    assert(ket.size() == 2 && bra.size() == 2);
+                    assert(ket[0]->total_memory == ket[1]->total_memory);
+                    assert(bra[0]->total_memory == bra[1]->total_memory);
+                    GMatrix<FL> itmp(nullptr, (MKL_INT)bra[1]->total_memory, 1);
+                    if (para_rule == nullptr ||
+                        !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                             ->number(op->dops[i]) ||
+                        dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                            ->own(op->dops[i])) {
+                        rtmp.data = bra[0]->data;
+                        itmp.data = bra[1]->data;
+                        ktmp.data = ket[0]->data;
+                        btmp.clear();
+                        (*this)(ktmp, btmp, (int)i, 1.0, true);
+                        rr[0] = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
+                        rr[1] = -GMatrixFunctions<FL>::complex_dot(itmp, btmp);
+                        ktmp.data = ket[1]->data;
+                        btmp.clear();
+                        (*this)(ktmp, btmp, (int)i, 1.0, true);
+                        rr[1] += GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
+                        rr[0] += GMatrixFunctions<FL>::complex_dot(itmp, btmp);
+                    }
+                    if (para_rule != nullptr &&
+                        dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
+                            ->number(op->dops[i])) {
+                        results.insert(results.end(), rr.begin(), rr.end());
+                        results_idx.push_back(expectations.size());
+                    }
+                    expectations.push_back(make_pair(op->dops[i], rr));
+                } else
+                    assert(false);
+            }
+            btmp.deallocate();
+            if (results.size() != 0) {
+                assert(para_rule != nullptr);
+                para_rule->comm->allreduce_sum(results.data(), results.size());
+                for (size_t i = 0; i < results.size(); i += ket.size())
+                    memcpy(
+                        expectations[results_idx[i / ket.size()]].second.data(),
+                        results.data() + i, sizeof(FL) * ket.size());
+            }
+        } else if (algo_type & ExpectationAlgorithmTypes::SymbolFree) {
+            if (npdm_scheme == nullptr)
+                throw runtime_error("ExpectationAlgorithmTypes::SymbolFree "
+                                    "only works with general NPDM MPO.");
+            vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>> expectations(1);
+            uint64_t mshape = 0;
+            if (ex_type == ExpectationTypes::Real) {
+                assert(ket.size() == bra.size());
+                for (size_t k = 0; k < ket.size(); k++)
+                    for (size_t j = 0; j < ket[k]->infos.size(); j++) {
+                        auto ex = tf->tensor_product_npdm_fragment(
+                            npdm_scheme, opdq, npdm_fragment_filename,
+                            npdm_n_sites, npdm_center, npdm_parallel_center,
+                            op->lopt, op->ropt, (*ket[k])[j], (*bra[k])[j],
+                            fuse_left == -1
+                                ? op->lopt->ops.size() < op->ropt->ops.size()
+                                : fuse_left,
+                            algo_type & ExpectationAlgorithmTypes::Compressed,
+                            algo_type & ExpectationAlgorithmTypes::LowMem,
+                            k == 0 && j == 0 ? (FL)0.0 : (FL)1.0);
+                        mshape +=
+                            dynamic_pointer_cast<OpCounter<S>>(ex[0].first)
+                                ->data;
+                    }
             } else if (ex_type == ExpectationTypes::Complex) {
                 assert(ket.size() == 2 && bra.size() == 2);
-                assert(ket[0]->total_memory == ket[1]->total_memory);
-                assert(bra[0]->total_memory == bra[1]->total_memory);
-                GMatrix<FL> itmp(nullptr, (MKL_INT)bra[1]->total_memory, 1);
-                if (para_rule == nullptr ||
-                    !dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
-                         ->number(op->dops[i]) ||
-                    dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)->own(
-                        op->dops[i])) {
-                    rtmp.data = bra[0]->data;
-                    itmp.data = bra[1]->data;
-                    ktmp.data = ket[0]->data;
-                    btmp.clear();
-                    (*this)(ktmp, btmp, (int)i, 1.0, true);
-                    rr[0] = GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
-                    rr[1] = -GMatrixFunctions<FL>::complex_dot(itmp, btmp);
-                    ktmp.data = ket[1]->data;
-                    btmp.clear();
-                    (*this)(ktmp, btmp, (int)i, 1.0, true);
-                    rr[1] += GMatrixFunctions<FL>::complex_dot(rtmp, btmp);
-                    rr[0] += GMatrixFunctions<FL>::complex_dot(itmp, btmp);
-                }
-                if (para_rule != nullptr &&
-                    dynamic_pointer_cast<ParallelRule<S, FL>>(para_rule)
-                        ->number(op->dops[i])) {
-                    results.insert(results.end(), rr.begin(), rr.end());
-                    results_idx.push_back(expectations.size());
-                }
-                expectations.push_back(make_pair(op->dops[i], rr));
+                assert(ket[0]->infos.size() == bra[0]->infos.size());
+                assert(ket[1]->infos.size() == bra[1]->infos.size());
+                assert(ket[0]->infos.size() == bra[1]->infos.size());
+                assert(ket[1]->infos.size() == bra[0]->infos.size());
+                bool accumulate = false;
+                for (int p = 0; p < 2; p++)
+                    for (int k = 0; k < 2; k++)
+                        for (size_t j = 0; j < ket[k]->infos.size(); j++) {
+                            auto ex = tf->tensor_product_npdm_fragment(
+                                npdm_scheme, opdq,
+                                npdm_fragment_filename +
+                                    (p == 0 ? "-RE" : "-IM"),
+                                npdm_n_sites, npdm_center, npdm_parallel_center,
+                                op->lopt, op->ropt, (*ket[k])[j],
+                                (*bra[p == 0 ? k : 1 - k])[j],
+                                fuse_left == -1 ? op->lopt->ops.size() <
+                                                      op->ropt->ops.size()
+                                                : fuse_left,
+                                algo_type &
+                                    ExpectationAlgorithmTypes::Compressed,
+                                algo_type & ExpectationAlgorithmTypes::LowMem,
+                                k == 0 && j == 0 && p == 0
+                                    ? (FL)0.0
+                                    : ((p == 0 ? k : 1 - k) == 0 ? (FL)1.0
+                                                                 : (FL)-1.0));
+                            mshape +=
+                                dynamic_pointer_cast<OpCounter<S>>(ex[0].first)
+                                    ->data;
+                        }
             } else
                 assert(false);
-        }
-        btmp.deallocate();
+            expectations[0] = make_pair(make_shared<OpCounter<S>>(mshape),
+                                        vector<FL>{(FL)0.0});
+        } else
+            assert(false);
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)
             op->mat->data[0] = expr;
-        if (results.size() != 0) {
-            assert(para_rule != nullptr);
-            para_rule->comm->allreduce_sum(results.data(), results.size());
-            for (size_t i = 0; i < results.size(); i += ket.size())
-                memcpy(expectations[results_idx[i]].second.data(),
-                       results.data() + i, sizeof(FL) * ket.size());
-        }
         tf->opf->seq->mode = mode;
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)

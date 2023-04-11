@@ -221,7 +221,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         const shared_ptr<OperatorTensor<S, FL>> &ropt,
         const shared_ptr<SparseMatrix<S, FL>> &cmat,
         const shared_ptr<SparseMatrix<S, FL>> &vmat, bool cache_left,
-        bool compressed, bool low_mem) const override {
+        bool compressed, bool low_mem, FL accu_factor) const override {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(1);
         if (center == n_sites - 1) {
             expectations[0] = make_pair(make_shared<OpCounter<S>>(0), (FL)0.0);
@@ -707,6 +707,17 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 }
             }
         };
+        if (accu_factor != (FL)0.0) {
+            shared_ptr<GTensor<FL, uint64_t>> prev =
+                TensorFunctions<S, FL>::npdm_sort_load_file(filename,
+                                                            compressed);
+            int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static, 1048576) num_threads(ntg)
+            for (size_t ix = 0; ix < prev->size(); ix++)
+                (*result->data)[ix] =
+                    (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            threading->activate_normal();
+        }
         string fn = filename + (compressed ? ".fpc" : ".npy");
         ofstream ofs(fn.c_str(), ios::binary);
         if (!ofs.good())

@@ -663,7 +663,7 @@ template <typename S, typename FL> struct TensorFunctions {
     void npdm_sort(const shared_ptr<NPDMScheme> &scheme,
                    const vector<shared_ptr<GTensor<FLX>>> &npdm,
                    const string &filename, int n_sites, int center,
-                   bool compressed) const {
+                   bool compressed, int r_step, int r_init) const {
         shared_ptr<NPDMCounter> counter =
             make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
         shared_ptr<GTensor<FL, uint64_t>> p =
@@ -726,7 +726,7 @@ template <typename S, typename FL> struct TensorFunctions {
                         vector<uint64_t> lmx(
                             scheme->left_terms[lx].first.first.size(), 0);
                         vector<uint64_t> rmx(rpat.size(), 0);
-                        uint64_t mxx = 1;
+                        uint64_t mxx = r_step;
                         for (int k = (int)perm.size() - 1; k >= 0; k--) {
                             if (mask.size() != 0 && k != 0 &&
                                 mask[k] == mask[k - 1])
@@ -740,7 +740,7 @@ template <typename S, typename FL> struct TensorFunctions {
                         // left / right indices
                         vector<uint16_t> lxx, rxx;
                         // left / right linearlized indices
-                        vector<uint64_t> lixx(lcnt), rixx(rcnt);
+                        vector<uint64_t> lixx(lcnt), rixx(rcnt, r_init);
                         counter->init_left(scheme->left_terms[lx].first.first,
                                            center, !is_last, lxx);
                         for (uint64_t il = 0; il < lcnt; il++) {
@@ -860,8 +860,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &cmat,
                                  const shared_ptr<SparseMatrix<S, FL>> &vmat,
-                                 bool cache_left, bool compressed,
-                                 bool low_mem) const {
+                                 bool cache_left, bool compressed, bool low_mem,
+                                 FL accu_factor) const {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(1);
         if (center == n_sites - 1) {
             expectations[0] = make_pair(make_shared<OpCounter<S>>(0), (FL)0.0);
@@ -1288,6 +1288,16 @@ template <typename S, typename FL> struct TensorFunctions {
                 }
             }
         };
+        if (accu_factor != (FL)0.0) {
+            shared_ptr<GTensor<FL, uint64_t>> prev =
+                npdm_sort_load_file(filename, compressed);
+            int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static, 1048576) num_threads(ntg)
+            for (size_t ix = 0; ix < prev->size(); ix++)
+                (*result->data)[ix] =
+                    (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            threading->activate_normal();
+        }
         string fn = filename + (compressed ? ".fpc" : ".npy");
         ofstream ofs(fn.c_str(), ios::binary);
         if (!ofs.good())

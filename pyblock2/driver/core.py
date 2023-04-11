@@ -1262,6 +1262,7 @@ class DMRGDriver:
         if algo_type is None:
             algo_type = MPOAlgorithmTypes.FastBipartite
         algo_type = getattr(bw.b.MPOAlgorithmTypes, algo_type.name)
+        assert self.ghamil is not None
         mpo = bw.bs.GeneralMPO(self.ghamil, expr, algo_type, cutoff, -1, iprint)
         mpo.left_vacuum = left_vacuum
         mpo.sum_mpo_mod = sum_mpo_mod
@@ -2090,10 +2091,11 @@ class DMRGDriver:
                 if self.mpi is not None:
                     self.mpi.barrier()
 
-                mps.load_mutable()
+                mps.info.load_mutable()
                 mps.info.bond_dim = max(
                     mps.info.bond_dim, mps.info.get_max_bond_dimension()
                 )
+                mps.info.deallocate_mutable()
 
             self.align_mps_center(mbra, mket)
 

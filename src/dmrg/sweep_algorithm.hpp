@@ -5223,7 +5223,17 @@ struct Expect {
             typename PartitionWeights<FLX>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
+            if (is_same<FLX, FLS>::value)
+                expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
+            else {
+                shared_ptr<OpElement<S, FLS>> op =
+                    dynamic_pointer_cast<OpElement<S, FLS>>(
+                        get<0>(pdi)[k].first);
+                expectations[k] = make_pair(
+                    make_shared<OpElement<S, FLX>>(
+                        op->name, op->site_index, op->q_label, (FLX)op->factor),
+                    (FLX)x);
+            }
         }
         return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
@@ -5361,7 +5371,17 @@ struct Expect {
             typename PartitionWeights<FLX>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
+            if (is_same<FLX, FLS>::value)
+                expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
+            else {
+                shared_ptr<OpElement<S, FLS>> op =
+                    dynamic_pointer_cast<OpElement<S, FLS>>(
+                        get<0>(pdi)[k].first);
+                expectations[k] = make_pair(
+                    make_shared<OpElement<S, FLX>>(
+                        op->name, op->site_index, op->q_label, (FLX)op->factor),
+                    (FLX)x);
+            }
         }
         return Iteration(expectations, bra_error, ket_error, get<1>(pdi),
                          get<2>(pdi));
@@ -5669,13 +5689,39 @@ struct Expect {
                 cout << " Site = " << setw(5) << ix << " .. ";
                 cout.flush();
             }
-            if (symbol_free)
-                me->mpo->tf->template npdm_sort<FLX>(
-                    scheme, r, me->get_npdm_fragment_filename(ix), me->n_sites,
-                    ix,
-                    (algo_type & ExpectationAlgorithmTypes::Compressed) ||
-                        (algo_type & ExpectationAlgorithmTypes::Automatic));
-            else
+            if (symbol_free) {
+                if (symbol_free && ex_type == ExpectationTypes::Complex &&
+                    !is_same<FLS, FLX>::value) {
+                    vector<shared_ptr<GTensor<FLS>>> rx(r.size());
+                    for (int i = 0; i < (int)r.size(); i++) {
+                        vector<MKL_INT> shape = r[i]->shape;
+                        shape.push_back(2);
+                        rx[i] = make_shared<GTensor<FLS>>(shape);
+                        rx[i]->clear();
+                    }
+                    me->mpo->tf->template npdm_sort<FLS>(
+                        scheme, rx, me->get_npdm_fragment_filename(ix) + "-RE",
+                        me->n_sites, ix,
+                        (algo_type & ExpectationAlgorithmTypes::Compressed) ||
+                            (algo_type & ExpectationAlgorithmTypes::Automatic),
+                        2, 0);
+                    me->mpo->tf->template npdm_sort<FLS>(
+                        scheme, rx, me->get_npdm_fragment_filename(ix) + "-IM",
+                        me->n_sites, ix,
+                        (algo_type & ExpectationAlgorithmTypes::Compressed) ||
+                            (algo_type & ExpectationAlgorithmTypes::Automatic),
+                        2, 1);
+                    for (int i = 0; i < (int)r.size(); i++)
+                        memcpy(r[i]->data->data(), rx[i]->data->data(),
+                               r[i]->data->size() * sizeof(FLX));
+                } else
+                    me->mpo->tf->template npdm_sort<FLX>(
+                        scheme, r, me->get_npdm_fragment_filename(ix),
+                        me->n_sites, ix,
+                        (algo_type & ExpectationAlgorithmTypes::Compressed) ||
+                            (algo_type & ExpectationAlgorithmTypes::Automatic),
+                        1, 0);
+            } else
                 for (size_t i = 0; i < (size_t)v.size(); i++) {
                     shared_ptr<OpElement<S, FL>> op =
                         dynamic_pointer_cast<OpElement<S, FL>>(v[i].first);
