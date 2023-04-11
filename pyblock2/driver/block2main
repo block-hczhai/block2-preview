@@ -2881,7 +2881,7 @@ if not pre_run:
             if MPI is None or MPI.rank == 0:
                 dmocc = np.diag(np.sum(dm, axis=0))
                 if dmocc.dtype == np.complex128:
-                    _print("DMRG OCC = ", "".join(["(%6.3f,%6.3f)" % (np.real(x), np.imag(x)) for x in dmocc]))
+                    _print("DMRG OCC = ", "".join([" (%6.3f,%6.3f)" % (np.real(x), np.imag(x)) for x in dmocc]))
                 else:
                     _print("DMRG OCC = ", "".join(["%6.3f" % x for x in dmocc]))
                 if big_site_method != "folding":
@@ -3176,9 +3176,14 @@ if not pre_run:
         n_orbs, n_ops = len(dm), dm.ndim
         with open(scratch + "/" + fn, "w") as f:
             f.write("%s\n" % n_orbs)
-            f.writelines(("%d " * n_ops + "%20.14f\n") % (tuple(ix) + (f, ))
-                for ix, f in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
-                    dm.flatten()))
+            if dm.dtype == np.complex128:
+                f.writelines(("%2d " * n_ops + "%20.14f %20.14f\n") % (tuple(ix) + (x.real, x.imag))
+                    for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
+                        dm.flatten()))
+            else:
+                f.writelines(("%d " * n_ops + "%20.14f\n") % (tuple(ix) + (x, ))
+                    for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
+                        dm.flatten()))
 
     # TWOPDM
     if "restart_twopdm" in dic or "twopdm" in dic:

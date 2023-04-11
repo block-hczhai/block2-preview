@@ -659,9 +659,8 @@ template <typename S, typename FL> struct TensorFunctions {
         ifs.close();
         return p;
     }
-    template <typename FLX>
-    void npdm_sort(const shared_ptr<NPDMScheme> &scheme,
-                   const vector<shared_ptr<GTensor<FLX>>> &npdm,
+    template <typename FLX, typename GT>
+    void npdm_sort(const shared_ptr<NPDMScheme> &scheme, const vector<GT> &npdm,
                    const string &filename, int n_sites, int center,
                    bool compressed, int r_step, int r_init) const {
         shared_ptr<NPDMCounter> counter =

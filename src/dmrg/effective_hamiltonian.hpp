@@ -1154,6 +1154,26 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         vector<vector<pair<uint8_t, S>>> msubsl =
             Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
                                                   hop_left_vacuum);
+        // symbol-free npdm case
+        if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
+                OpNames::XPDM &&
+            dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->site_index ==
+                SiteIndex()) {
+            for (int i = 0; i < (int)msl.size(); i++) {
+                set<S> set_subsl;
+                for (auto &pl : left_op_infos)
+                    for (auto &pr : right_op_infos) {
+                        S p = msl[i].combine(pl.first, -pr.first);
+                        if (p != S(S::invalid))
+                            msubsl[i].push_back(make_pair(0, p));
+                    }
+                sort(msubsl[i].begin(), msubsl[i].end());
+                msubsl[i].resize(
+                    distance(msubsl[i].begin(),
+                             unique(msubsl[i].begin(), msubsl[i].end())));
+            }
+        }
         // tensor product diagonal
         if (compute_diag) {
             for (int i = 0; i < diag->n; i++) {
@@ -1652,7 +1672,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             if (npdm_scheme == nullptr)
                 throw runtime_error("ExpectationAlgorithmTypes::SymbolFree "
                                     "only works with general NPDM MPO.");
-            vector<pair<shared_ptr<OpExpr<S>>, vector<FL>>> expectations(1);
+            expectations.resize(1);
             uint64_t mshape = 0;
             if (ex_type == ExpectationTypes::Real) {
                 assert(ket.size() == bra.size());
@@ -1672,6 +1692,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                             dynamic_pointer_cast<OpCounter<S>>(ex[0].first)
                                 ->data;
                     }
+                expectations[0] = make_pair(make_shared<OpCounter<S>>(mshape),
+                                            vector<FL>{(FL)0.0});
             } else if (ex_type == ExpectationTypes::Complex) {
                 assert(ket.size() == 2 && bra.size() == 2);
                 assert(ket[0]->infos.size() == bra[0]->infos.size());
@@ -1679,6 +1701,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 assert(ket[0]->infos.size() == bra[1]->infos.size());
                 assert(ket[1]->infos.size() == bra[0]->infos.size());
                 bool accumulate = false;
+                // p = 0 (RE) K=0 B=0 F=1; K=1 B=1 F= 1
+                // p = 1 (IM) K=1 B=0 F=1; K=0 B=1 F=-1
                 for (int p = 0; p < 2; p++)
                     for (int k = 0; k < 2; k++)
                         for (size_t j = 0; j < ket[k]->infos.size(); j++) {
@@ -1687,26 +1711,25 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                 npdm_fragment_filename +
                                     (p == 0 ? "-RE" : "-IM"),
                                 npdm_n_sites, npdm_center, npdm_parallel_center,
-                                op->lopt, op->ropt, (*ket[k])[j],
-                                (*bra[p == 0 ? k : 1 - k])[j],
+                                op->lopt, op->ropt,
+                                (*ket[p == 0 ? k : 1 - k])[j], (*bra[k])[j],
                                 fuse_left == -1 ? op->lopt->ops.size() <
                                                       op->ropt->ops.size()
                                                 : fuse_left,
                                 algo_type &
                                     ExpectationAlgorithmTypes::Compressed,
                                 algo_type & ExpectationAlgorithmTypes::LowMem,
-                                k == 0 && j == 0 && p == 0
+                                k == 0 && j == 0
                                     ? (FL)0.0
-                                    : ((p == 0 ? k : 1 - k) == 0 ? (FL)1.0
-                                                                 : (FL)-1.0));
+                                    : (p == 1 && k == 1 ? (FL)-1.0 : (FL)1.0));
                             mshape +=
                                 dynamic_pointer_cast<OpCounter<S>>(ex[0].first)
                                     ->data;
                         }
+                expectations[0] = make_pair(make_shared<OpCounter<S>>(mshape),
+                                            vector<FL>{(FL)0.0, (FL)0.0});
             } else
                 assert(false);
-            expectations[0] = make_pair(make_shared<OpCounter<S>>(mshape),
-                                        vector<FL>{(FL)0.0});
         } else
             assert(false);
         if ((FL)const_e != (FL)0.0 && op->mat->data.size() > 0)

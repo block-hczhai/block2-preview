@@ -416,7 +416,8 @@ template <typename FL, typename IX = MKL_INT> struct GTensor {
         ss << ", 'fortran_order': False, 'shape': (";
         size_t arr_len = 1;
         for (int i = 0; i < (int)shape.size(); i++) {
-            ss << shape[i] << (i == (int)shape.size() - 1 ? ")" : ", ");
+            ss << shape[i]
+               << (i == (int)shape.size() - 1 ? (i == 0 ? ",)" : ")") : ", ");
             arr_len *= shape[i];
         }
         ss << ", }\n";

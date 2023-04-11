@@ -5223,7 +5223,8 @@ struct Expect {
             typename PartitionWeights<FLX>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            if (is_same<FLX, FLS>::value)
+            if (is_same<FLX, FLS>::value ||
+                get<0>(pdi)[k].first->get_type() == OpTypes::Counter)
                 expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
             else {
                 shared_ptr<OpElement<S, FLS>> op =
@@ -5371,7 +5372,8 @@ struct Expect {
             typename PartitionWeights<FLX>::type::value_type x = 0.0;
             for (size_t l = 0; l < partition_weights.size(); l++)
                 x += partition_weights[l] * get<0>(pdi)[k].second[l];
-            if (is_same<FLX, FLS>::value)
+            if (is_same<FLX, FLS>::value ||
+                get<0>(pdi)[k].first->get_type() == OpTypes::Counter)
                 expectations[k] = make_pair(get<0>(pdi)[k].first, (FLX)x);
             else {
                 shared_ptr<OpElement<S, FLS>> op =
@@ -5621,6 +5623,10 @@ struct Expect {
             n_physical_sites = me->n_sites;
         return NPC1MPOQC<S, FLX>::get_matrix(s, expectations, n_physical_sites);
     }
+    struct GTensorPtr {
+        shared_ptr<FLS *> data;
+        GTensorPtr(FLS *data) : data(make_shared<FLS *>(data)) {}
+    };
     vector<shared_ptr<GTensor<FLX>>> get_npdm(uint16_t n_physical_sites = 0U) {
         if (me->mpo->npdm_scheme == nullptr)
             throw runtime_error(
@@ -5692,30 +5698,27 @@ struct Expect {
             if (symbol_free) {
                 if (symbol_free && ex_type == ExpectationTypes::Complex &&
                     !is_same<FLS, FLX>::value) {
-                    vector<shared_ptr<GTensor<FLS>>> rx(r.size());
-                    for (int i = 0; i < (int)r.size(); i++) {
-                        vector<MKL_INT> shape = r[i]->shape;
-                        shape.push_back(2);
-                        rx[i] = make_shared<GTensor<FLS>>(shape);
-                        rx[i]->clear();
-                    }
-                    me->mpo->tf->template npdm_sort<FLS>(
+                    vector<shared_ptr<GTensorPtr>> rx(r.size());
+                    for (int i = 0; i < (int)r.size(); i++)
+                        rx[i] =
+                            make_shared<GTensorPtr>((FLS *)r[i]->data->data());
+                    me->mpo->tf->template npdm_sort<FLS,
+                                                    shared_ptr<GTensorPtr>>(
                         scheme, rx, me->get_npdm_fragment_filename(ix) + "-RE",
                         me->n_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
                             (algo_type & ExpectationAlgorithmTypes::Automatic),
                         2, 0);
-                    me->mpo->tf->template npdm_sort<FLS>(
+                    me->mpo->tf->template npdm_sort<FLS,
+                                                    shared_ptr<GTensorPtr>>(
                         scheme, rx, me->get_npdm_fragment_filename(ix) + "-IM",
                         me->n_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
                             (algo_type & ExpectationAlgorithmTypes::Automatic),
                         2, 1);
-                    for (int i = 0; i < (int)r.size(); i++)
-                        memcpy(r[i]->data->data(), rx[i]->data->data(),
-                               r[i]->data->size() * sizeof(FLX));
                 } else
-                    me->mpo->tf->template npdm_sort<FLX>(
+                    me->mpo->tf->template npdm_sort<FLX,
+                                                    shared_ptr<GTensor<FLX>>>(
                         scheme, r, me->get_npdm_fragment_filename(ix),
                         me->n_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
