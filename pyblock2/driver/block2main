@@ -3181,7 +3181,7 @@ if not pre_run:
                     for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
                         dm.flatten()))
             else:
-                f.writelines(("%d " * n_ops + "%20.14f\n") % (tuple(ix) + (x, ))
+                f.writelines(("%2d " * n_ops + "%20.14f\n") % (tuple(ix) + (x, ))
                     for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
                         dm.flatten()))
 
