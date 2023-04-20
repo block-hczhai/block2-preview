@@ -217,8 +217,12 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
                                                (*cmp)[ket], 1.0, 1.0);
             }
             ptrs = cmp;
-            if (i_site == n_sites - 1)
-                return cmp->norm();
+            if (i_site == n_sites - 1) {
+                FP ov = 0.0;
+                for (size_t itmp = 0; itmp < cmp->total_memory; itmp++)
+                    ov += cmp->data[itmp];
+                return ov;
+            }
         }
         return 0;
     }

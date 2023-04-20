@@ -48,7 +48,7 @@ class SPDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, su2, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20):
+    def __init__(self, su2, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20, ratio=0.5):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -118,7 +118,7 @@ class SPDMRG:
             one_pdm = np.load(scratch + "/1pdm.npy")
 
             E_0 = self.SPDMRG.energy_zeroth(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
-            self.fcidump.const_e = - 0.5 * ( E_cas + E_0 ) 
+            self.fcidump.const_e = -ratio * E_cas - (1 - ratio) * E_0
 
     def change_mps_center(self, ket, center):
         if self.su2:
