@@ -971,7 +971,7 @@ class DMRGDriver:
         self,
         h1e,
         g2e,
-        ecore=0,
+        ecore=0.0,
         para_type=None,
         reorder=None,
         cutoff=1e-20,
@@ -992,6 +992,7 @@ class DMRGDriver:
         disjoint_multiplier=1.0,
         block_max_length=False,
         add_ident=True,
+        esptein_nesbet_partition=False,
         iprint=1,
     ):
         import numpy as np
@@ -1028,7 +1029,11 @@ class DMRGDriver:
                 g2e = gg2e
 
         if symmetrize and self.orb_sym is not None:
-            self.integral_symmetrize(self.orb_sym, h1e=h1e, g2e=g2e, iprint=iprint)
+            x_orb_sym = self.orb_sym
+            if self.reorder_idx is not None:
+                rev_idx = np.argsort(self.reorder_idx)
+                x_orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[rev_idx])
+            self.integral_symmetrize(x_orb_sym, h1e=h1e, g2e=g2e, iprint=iprint)
 
         if integral_cutoff != 0:
             error = 0
@@ -1056,10 +1061,16 @@ class DMRGDriver:
                 print("integral cutoff error = ", error)
 
         if reorder is not None:
+            prev_reord = self.reorder_idx is not None
             if isinstance(reorder, np.ndarray):
                 idx = reorder
             elif reorder == "irrep":
                 assert self.orb_sym is not None
+                if self.reorder_idx is not None:
+                    rev_idx = np.argsort(self.reorder_idx)
+                    x_orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[rev_idx])
+                else:
+                    x_orb_sym = self.orb_sym
                 if self.pg == "d2h":
                     # D2H
                     # 0   1   2   3   4   5   6   7   (XOR)
@@ -1076,7 +1087,7 @@ class DMRGDriver:
                     optimal_reorder = [0, 3, 1, 2, 4]
                 else:
                     optimal_reorder = [0, 6, 3, 5, 7, 1, 4, 2, 8]
-                orb_opt = [optimal_reorder[x] for x in np.array(self.orb_sym)]
+                orb_opt = [optimal_reorder[x] for x in np.array(x_orb_sym)]
                 idx = np.argsort(orb_opt)
             elif reorder == "fiedler" or reorder == True:
                 idx = self.orbital_reordering(h1e, g2e)
@@ -1086,14 +1097,18 @@ class DMRGDriver:
                 print("reordering = ", idx)
             self.reorder_idx = idx
             if SymmetryTypes.SZ in bw.symm_type:
-                for i in enumerate(len(h1e)):
-                    h1e[i] = h1e[i][idx][:, idx]
-                for i in enumerate(len(g2e)):
-                    g2e[i] = g2e[i][idx][:, idx][:, :, idx][:, :, :, idx]
+                if h1e is not None:
+                    for i in enumerate(len(h1e)):
+                        h1e[i] = h1e[i][idx][:, idx]
+                if g2e is not None:
+                    for i in enumerate(len(g2e)):
+                        g2e[i] = g2e[i][idx][:, idx][:, :, idx][:, :, :, idx]
             else:
-                h1e = h1e[idx][:, idx]
-                g2e = g2e[idx][:, idx][:, :, idx][:, :, :, idx]
-            if self.orb_sym is not None:
+                if h1e is not None:
+                    h1e = h1e[idx][:, idx]
+                if g2e is not None:
+                    g2e = g2e[idx][:, idx][:, :, idx][:, :, :, idx]
+            if self.orb_sym is not None and not prev_reord:
                 self.orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[idx])
                 if self.ghamil is not None:
                     self.ghamil = bw.bs.GeneralHamiltonian(
@@ -1128,6 +1143,19 @@ class DMRGDriver:
 
         # build Hamiltonian expression
         b = self.expr_builder()
+
+        if esptein_nesbet_partition:
+            assert SymmetryTypes.SU2 in bw.symm_type
+            xp = np.mgrid[: self.n_sites]
+            xi, xj = xp[:, None], xp[None, :]
+            if h1e is not None:
+                h1e = h1e.copy()
+                h1e[xi != xj] = 0
+            xi, xj = xi[:, :, None, None], xj[:, :, None, None]
+            xk, xl = xp[None, None, :, None], xp[None, None, None, :]
+            if g2e is not None:
+                g2e = g2e.copy()
+                g2e[(~((xi == xj) & (xk == xl))) & (~((xj == xk) & (xi == xl)))] = 0
 
         if normal_order_ref is None:
             if SymmetryTypes.SU2 in bw.symm_type:
@@ -1501,6 +1529,7 @@ class DMRGDriver:
         iprint=0,
         dav_type=None,
         cutoff=1e-20,
+        twosite_to_onesite=None,
         dav_max_iter=4000,
         proj_mpss=None,
         proj_weights=None,
@@ -1559,7 +1588,20 @@ class DMRGDriver:
         if n_sweeps == -1:
             return None
         me.init_environments(iprint >= 2)
-        ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
+        if twosite_to_onesite is None:
+            ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
+        else:
+            ener = dmrg.solve(twosite_to_onesite, ket.center == 0, 0)
+            dmrg.me.dot = 1
+            for ext_me in dmrg.ext_mes:
+                ext_me.dot = 1
+            ener = dmrg.solve(n_sweeps, ket.center == 0, tol, twosite_to_onesite)
+            ket.dot = 1
+            if self.mpi is not None:
+                self.mpi.barrier()
+            ket.save_data()
+            if self.mpi is not None:
+                self.mpi.barrier()
 
         if self.clean_scratch:
             dmrg.me.remove_partition_files()
@@ -1946,6 +1988,7 @@ class DMRGDriver:
                 axis=0,
             )
             if self.reorder_idx is not None:
+                rev_idx = np.argsort(self.reorder_idx)
                 dm[:, :, :, :, :] = dm[:, rev_idx, :, :, :][:, :, rev_idx, :, :][
                     :, :, :, rev_idx, :
                 ][:, :, :, :, rev_idx]
@@ -2386,7 +2429,10 @@ class DMRGDriver:
         bra_bond_dims=None,
         noises=None,
         noise_mpo=None,
+        thrds=None,
+        left_mpo=None,
         cutoff=1e-24,
+        linear_max_iter=4000,
         iprint=0,
     ):
         bw = self.bw
@@ -2397,8 +2443,16 @@ class DMRGDriver:
         if bra_bond_dims is None:
             bra_bond_dims = [bra.info.bond_dim]
         self.align_mps_center(bra, ket)
-        if noises is not None and noises[0] != 0:
+        if thrds is None:
+            if SymmetryTypes.SP not in bw.symm_type:
+                thrds = [1e-6] * 4 + [1e-7] * 1
+            else:
+                thrds = [1e-5] * 4 + [5e-6] * 1
+        if noises is not None and noises[0] != 0 and noise_mpo is not None:
             pme = bw.bs.MovingEnvironment(noise_mpo, bra, bra, "PERT-CPS")
+            pme.init_environments(iprint >= 2)
+        elif left_mpo is not None:
+            pme = bw.bs.MovingEnvironment(left_mpo, bra, bra, "L-MULT")
             pme.init_environments(iprint >= 2)
         else:
             pme = None
@@ -2418,15 +2472,22 @@ class DMRGDriver:
                 bw.b.VectorUBond(bond_dims),
                 bw.VectorFP(noises),
             )
-        if pme is not None:
+        if noises is not None and noises[0] != 0:
             cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+            cps.decomp_type = bw.b.DecompositionTypes.SVD
+        if noises is not None and noises[0] != 0 and left_mpo is None:
             cps.eq_type = bw.b.EquationTypes.PerturbativeCompression
         cps.iprint = iprint
         cps.cutoff = cutoff
+        cps.linear_conv_thrds = bw.VectorFP(thrds)
+        cps.linear_max_iter = linear_max_iter + 100
+        cps.linear_soft_max_iter = linear_max_iter
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
 
         if self.clean_scratch:
             me.remove_partition_files()
+            if pme is not None:
+                pme.remove_partition_files()
 
         if self.mpi is not None:
             self.mpi.barrier()
@@ -2645,23 +2706,8 @@ class DMRGDriver:
 
 
 class SOCDMRGDriver(DMRGDriver):
-    def __init__(
-        self,
-        stack_mem=1 << 30,
-        scratch="./nodex",
-        restart_dir=None,
-        n_threads=None,
-        symm_type=SymmetryTypes.SU2,
-        mpi=None,
-    ):
-        super().__init__(
-            stack_mem=stack_mem,
-            scratch=scratch,
-            restart_dir=restart_dir,
-            n_threads=n_threads,
-            symm_type=symm_type,
-            mpi=mpi,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def hybrid_mpo_dmrg(
         self, mpo, mpo_cpx, ket, n_sweeps=10, iprint=0, tol=1e-8, **kwargs

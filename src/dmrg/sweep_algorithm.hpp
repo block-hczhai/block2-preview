@@ -2237,7 +2237,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         return make_tuple(sweep_energies[idx], max_dw, sweep_quanta[idx]);
     }
     // energy optimization using multiple DMRG sweeps
-    FPLS solve(int n_sweeps, bool forward = true, FPS tol = 1E-6) {
+    FPLS solve(int n_sweeps, bool forward = true, FPS tol = 1E-6,
+               int sweep_start = 0) {
         if (bond_dims.size() < n_sweeps)
             bond_dims.resize(n_sweeps, bond_dims.back());
         if (noises.size() < n_sweeps)
@@ -2271,14 +2272,14 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         Timer start, current;
         start.get_time();
         current.get_time();
-        energies.clear();
-        discarded_weights.clear();
-        mps_quanta.clear();
+        energies.resize(sweep_start);
+        discarded_weights.resize(sweep_start);
+        mps_quanta.resize(sweep_start);
         bool converged;
         FPS energy_difference;
         if (iprint >= 1)
             cout << endl;
-        for (int iw = 0; iw < n_sweeps; iw++) {
+        for (int iw = sweep_start; iw < n_sweeps; iw++) {
             isweep = iw;
             if (iprint >= 1)
                 cout << "Sweep = " << setw(4) << iw

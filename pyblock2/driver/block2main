@@ -4316,8 +4316,8 @@ if not pre_run:
             from stopt import SPDMRG
 
         nsample = int(dic.get("stopt_sampling", 10000))
-        sp_dmrg = SPDMRG(su2="nonspinadapted" not in dic,
-                         scratch=scratch, fcidump=fcidump, mps_tags=mps_tags, verbose=outputlevel)
+        sp_dmrg = SPDMRG(su2="nonspinadapted" not in dic, scratch=scratch, fcidump=fcidump,
+                         orb_idx=orb_idx, mps_tags=mps_tags, verbose=outputlevel)
         e_corr, std_corr = sp_dmrg.kernel(nsample)
 
         if MPI is None or MPI.rank == 0:

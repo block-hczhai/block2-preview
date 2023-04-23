@@ -1189,6 +1189,7 @@ void bind_fl_dmrg(py::module &m) {
         .def("sweep", &DMRG<S, FL, FLS>::sweep)
         .def("solve", &DMRG<S, FL, FLS>::solve, py::arg("n_sweeps"),
              py::arg("forward") = true, py::arg("tol") = 1E-6,
+             py::arg("sweep_start") = 0,
              py::call_guard<checked_ostream_redirect,
                             checked_estream_redirect>());
 }

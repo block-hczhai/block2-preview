@@ -48,7 +48,8 @@ class SPDMRG:
     stochastic perturbative DMRG for molecules.
     """
 
-    def __init__(self, su2, scratch='./nodex', fcidump=None, mps_tags=[], verbose=0, use_threading=True, n_steps=20, ratio=0.5):
+    def __init__(self, su2, scratch='./nodex', fcidump=None, orb_idx=None,
+                 mps_tags=[], verbose=0, use_threading=True, n_steps=20, ratio=0.5):
         """
         Memory is in bytes.
         verbose = 0 (quiet), 2 (per sweep), 3 (per iteration)
@@ -62,6 +63,7 @@ class SPDMRG:
         self.n_steps = n_steps
         self.bdims = [0, 0]
         self.su2 = su2
+        self.orb_idx = orb_idx
 
         if self.su2:
             from block2.su2 import MPSInfo, MPS, UnfusedMPS, StochasticPDMRG
@@ -116,8 +118,15 @@ class SPDMRG:
             dm_e_pqqp = np.load(scratch + '/e_pqqp.npy')
             dm_e_pqpq = np.load(scratch + '/e_pqpq.npy')
             one_pdm = np.load(scratch + "/1pdm.npy")
+            one_pdm = one_pdm[0] + one_pdm[1]
+            if self.orb_idx is not None:
+                one_pdm[:, :] = one_pdm[self.orb_idx, :][:, self.orb_idx]
+                dm_e_pqqp[:, :] = dm_e_pqqp[self.orb_idx, :][:, self.orb_idx]
+                dm_e_pqpq[:, :] = dm_e_pqpq[self.orb_idx, :][:, self.orb_idx]
 
-            E_0 = self.SPDMRG.energy_zeroth(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm[0]+one_pdm[1])
+            E_0 = self.SPDMRG.energy_zeroth(fcidump, dm_e_pqqp, dm_e_pqpq, one_pdm)
+            if self.verbose >= 2:
+                _print('Ecas = ', E_cas, 'Een = ', E_0)
             self.fcidump.const_e = -ratio * E_cas - (1 - ratio) * E_0
 
     def change_mps_center(self, ket, center):
@@ -181,7 +190,6 @@ class SPDMRG:
             _print("1-1] C term")
             _print("     sampling D_p with P_p = |<Phi_0|D_p>|^2")
             _print("     & computing <1/(E_d-E_0)>")
-        Cterm = []
         H00   = 0.0
         H00_2 = 0.0
         H11   = 0.0
@@ -220,8 +228,6 @@ class SPDMRG:
             _print("     sampling D_p with P_p = |<Psi_0| VQ |D_p>|^2")
             _print("     & computing <1/(E_d-E_0)> and <<D_p|Psi_0> / {(E_d-E_0) <D_p|QV|Psi_0>}>")
 
-        Aterm = []
-        Bterm = []
         if self.use_threading:
             _print("Sampling | BRA bond dimension = %d | KET bond dimension = %d | Nsample = %d"
                 % (self.bdims[1], self.bdims[0], max_samp), flush=True)

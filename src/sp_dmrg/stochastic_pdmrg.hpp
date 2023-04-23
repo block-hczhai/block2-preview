@@ -126,7 +126,7 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
     }
     // ityp == 0: sampling a determinant for C term
     // ityp == 1: sampling a determinant for A,B term
-    FP sampling(int ityp, vector<uint8_t> &det_string) const {
+    FL sampling(int ityp, vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 0 ? pinfos_psi0 : pinfos_qvpsi0;
         const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
@@ -149,7 +149,6 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
         Random::fill<FP>((FP *)rand.data(), n_sites);
         vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
         vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
-        FP rnorm = 0;
         for (int i_site = 0; i_site < n_sites; i_site++) {
             for (uint8_t d = 0; d < phys_dim; d++) {
                 shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
@@ -174,18 +173,17 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
                 accp[d + 1] /= accp[phys_dim];
                 if (rand[i_site] < accp[d + 1]) {
                     ptrs = ptrs_save[d];
-                    rnorm = cp[d];
                     det_string[2 * i_site] = d & 1;
                     det_string[2 * i_site + 1] = (d & 2) >> 1;
                     break;
                 }
             }
         }
-        return sqrt(rnorm);
+        return ptrs->data[0];
     }
     // ityp == 0: <Psi^(0)|VQ|D>
     // ityp == 1: <Psi^(0)|D>
-    FP overlap(int ityp, const vector<uint8_t> &det_string) const {
+    FL overlap(int ityp, const vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 1 ? pinfos_psi0 : pinfos_qvpsi0;
         const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
@@ -217,14 +215,8 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
                                                (*cmp)[ket], 1.0, 1.0);
             }
             ptrs = cmp;
-            if (i_site == n_sites - 1) {
-                FP ov = 0.0;
-                for (size_t itmp = 0; itmp < cmp->total_memory; itmp++)
-                    ov += cmp->data[itmp];
-                return ov;
-            }
         }
-        return 0;
+        return ptrs->data[0];
     }
     void
     gen_tmp_mats(const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
@@ -283,7 +275,8 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
 #pragma omp for schedule(static)
             for (int i_sample = 0; i_sample < n_sample; i_sample++) {
                 rand_mt.fill<FP>((FP *)rand.data(), n_sites);
-                FP det_ener = 0, rnormsq = 0, snorm = 0;
+                FP det_ener = 0;
+                FL rnorm = (FL)0.0, snorm = (FL)0.0;
                 ptrs = pmats[0][0][0];
                 // sample psi0 / qvpsi0
                 for (int i_site = 0; i_site < n_sites; i_site++) {
@@ -310,7 +303,7 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
                         accp[d + 1] /= accp[phys_dim];
                         if (rand[i_site] < accp[d + 1]) {
                             ptrs = ptrs_save[d];
-                            rnormsq = cp[d];
+                            rnorm = ptrs->data[0];
                             det_string[i_site] = d;
                             break;
                         }
@@ -357,10 +350,9 @@ struct StochasticPDMRG<S, FL, typename S::is_sz_t> {
                         }
                         ptrs = cmp;
                         if (i_site == n_sites - 1)
-                            snorm = cmp->norm();
+                            snorm = cmp->data[0];
                     }
-                    const FP tmp =
-                        norm_qvpsi0 * snorm / (sqrt(rnormsq) * det_ener);
+                    const FP tmp = norm_qvpsi0 * snorm / (rnorm * det_ener);
                     rr[2] += tmp;
                     rr[3] += tmp * tmp;
                 }
@@ -473,7 +465,7 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
     }
     // ityp == 0: sampling a determinant for C term
     // ityp == 1: sampling a determinant for A,B term
-    FP sampling(int ityp, vector<uint8_t> &det_string) const {
+    FL sampling(int ityp, vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 0 ? pinfos_psi0 : pinfos_qvpsi0;
         const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
@@ -496,7 +488,6 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
         Random::fill<FP>((FP *)rand.data(), n_sites);
         vector<FP> cp(phys_dim), accp(phys_dim + 1, 0);
         vector<shared_ptr<SparseMatrix<S, FL>>> ptrs_save(phys_dim);
-        FP rnorm = 0;
         for (int i_site = 0; i_site < n_sites; i_site++) {
             for (uint8_t d = 0; d < phys_dim; d++) {
                 int dd = d >= 2 ? d - 1 : d;
@@ -525,18 +516,17 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
                 accp[d + 1] /= accp[phys_dim];
                 if (rand[i_site] < accp[d + 1]) {
                     ptrs = ptrs_save[d];
-                    rnorm = cp[d];
                     det_string[2 * i_site] = d & 1;
                     det_string[2 * i_site + 1] = (d & 2) >> 1;
                     break;
                 }
             }
         }
-        return sqrt(rnorm);
+        return ptrs->data[0];
     }
     // ityp == 0: <Psi^(0)|VQ|D>
     // ityp == 1: <Psi^(0)|D>
-    FP overlap(int ityp, const vector<uint8_t> &det_string) const {
+    FL overlap(int ityp, const vector<uint8_t> &det_string) const {
         const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos =
             ityp == 1 ? pinfos_psi0 : pinfos_qvpsi0;
         const vector<shared_ptr<SparseTensor<S, FL>>> &tensors =
@@ -572,10 +562,8 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
                                                (*cmp)[ket], 1.0, 1.0);
             }
             ptrs = cmp;
-            if (i_site == n_sites - 1)
-                return cmp->norm();
         }
-        return 0;
+        return ptrs->data[0];
     }
     void
     gen_tmp_mats(const vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
@@ -634,7 +622,8 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
 #pragma omp for schedule(static)
             for (int i_sample = 0; i_sample < n_sample; i_sample++) {
                 rand_mt.fill<FP>((FP *)rand.data(), n_sites);
-                FP det_ener = 0, rnormsq = 0, snorm = 0;
+                FP det_ener = 0;
+                FL rnorm = (FL)0.0, snorm = (FL)0.0;
                 ptrs = pmats[0][0][0];
                 // sample psi0 / qvpsi0
                 for (int i_site = 0; i_site < n_sites; i_site++) {
@@ -666,7 +655,7 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
                         accp[d + 1] /= accp[phys_dim];
                         if (rand[i_site] < accp[d + 1]) {
                             ptrs = ptrs_save[d];
-                            rnormsq = cp[d];
+                            rnorm = ptrs->data[0];
                             det_string[i_site] = d;
                             break;
                         }
@@ -718,10 +707,9 @@ struct StochasticPDMRG<S, FL, typename S::is_su2_t> {
                         }
                         ptrs = cmp;
                         if (i_site == n_sites - 1)
-                            snorm = cmp->norm();
+                            snorm = cmp->data[0];
                     }
-                    const FP tmp =
-                        norm_qvpsi0 * snorm / (sqrt(rnormsq) * det_ener);
+                    const FP tmp = norm_qvpsi0 * snorm / (rnorm * det_ener);
                     rr[2] += tmp;
                     rr[3] += tmp * tmp;
                 }
