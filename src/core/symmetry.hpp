@@ -1197,8 +1197,8 @@ struct SU2LZ {
     }
 };
 
-typedef SZLong SZ;
-typedef SU2Long SU2;
+typedef SZLongLong SZ;
+typedef SU2LongLong SU2;
 typedef SZKLong SZK;
 typedef SU2KLong SU2K;
 typedef SGLong<true> SGF;

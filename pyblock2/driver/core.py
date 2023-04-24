@@ -3501,7 +3501,12 @@ class ExprBuilder:
             and not isinstance(val, tuple)
             and not isinstance(val, np.ndarray)
         ):
-            val = [val]
+            nn = self.bw.b.SpinPermRecoupling.count_cds(expr)
+            if nn != 0:
+                assert len(idx) % nn == 0
+                val = [val] * (len(idx) // nn)
+            else:
+                val = [val]
         self.data.data.append(self.bw.VectorFL(val))
         return self
 

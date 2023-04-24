@@ -727,6 +727,8 @@ struct SparseMatrixInfo<
             memcpy(quanta, qs.data(), n * sizeof(S));
             sort(quanta, quanta + n);
             for (int i = 0; i < n; i++) {
+                // possible assertion failure when the quantum number
+                // exceeds the symmetry type limit
                 assert(ket.find_state(wfn ? -quanta[i].get_ket()
                                           : quanta[i].get_ket()) != -1);
                 n_states_ket[i] = ket.n_states[ket.find_state(
