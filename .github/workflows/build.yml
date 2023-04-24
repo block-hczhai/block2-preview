@@ -23,13 +23,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-latest ]
+        os: [ ubuntu-20.04, macos-11 ]
         python: [ 3.9 ]
         manylinux: [ 2010 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest ]
         exclude:
-          - os: macos-latest
+          - os: macos-11
             parallel: mpi
       fail-fast: false
 
@@ -64,7 +64,7 @@ jobs:
           sudo cp lib/*.a /usr/lib
 
       - name: build gtest (macos)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-11'
         run: |
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
@@ -99,7 +99,7 @@ jobs:
           make -j 2
 
       - name: build test (serial, macos)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-latest'
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-11'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
@@ -124,7 +124,7 @@ jobs:
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-latest'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-11'
         run: |
           python -m pip install pytest 'pyscf==2.0.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -153,13 +153,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-latest ]
+        os: [ ubuntu-20.04, macos-11 ]
         python: [ '3.7', '3.8', '3.9', '3.10' ]
         manylinux: [ 2010 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
         exclude:
-          - os: macos-latest
+          - os: macos-11
             parallel: mpi
           - os: ubuntu-20.04
             plat: arm64
@@ -180,7 +180,7 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 
       - name: build wheels (macos-x86_64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest' && matrix.plat == 'x86_64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-11' && matrix.plat == 'x86_64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '10.9'
@@ -211,7 +211,7 @@ jobs:
           delocate-wheel -k dist/*.whl
 
       - name: build wheels (macos-arm64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-latest' && matrix.plat == 'arm64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-11' && matrix.plat == 'arm64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '11.0'
