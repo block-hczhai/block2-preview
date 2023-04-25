@@ -2394,6 +2394,20 @@ class DMRGDriver:
             elif ket.center == ket.n_sites - 2 and ket.canonical_form[-2] == "L":
                 ket.center = ket.n_sites - 1
 
+        if dot == 2 and ket.center == ket.n_sites - 1:
+            if self.mpi is not None:
+                self.mpi.barrier()
+            if ket.canonical_form[ket.center] in "KJ":
+                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+            ket.center = ket.n_sites - 2
+            ket.save_data()
+            if self.mpi is not None:
+                self.mpi.barrier()
+            ket.load_mutable()
+            ket.info.load_mutable()
+            if self.mpi is not None:
+                self.mpi.barrier()
+
         ket.save_data()
         if self.mpi is not None:
             self.mpi.barrier()
