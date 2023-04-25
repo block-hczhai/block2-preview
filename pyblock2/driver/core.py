@@ -225,6 +225,7 @@ class DMRGDriver:
         symm_type=SymmetryTypes.SU2,
         mpi=None,
         stack_mem_ratio=0.4,
+        fp_codec_cutoff=1e-16,
     ):
         if mpi is not None and mpi:
             self.mpi = True
@@ -236,6 +237,7 @@ class DMRGDriver:
         self._restart_dir = restart_dir
         self.stack_mem = stack_mem
         self.stack_mem_ratio = stack_mem_ratio
+        self.fp_codec_cutoff = fp_codec_cutoff
         self.symm_type = symm_type
         self.clean_scratch = clean_scratch
         bw = self.bw
@@ -470,7 +472,9 @@ class DMRGDriver:
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
-                bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(1e-16, 1024)
+                bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
+                    self.fp_codec_cutoff, 1024
+                )
                 bw.b.Global.frame_float = None
                 self.frame = bw.b.Global.frame
             else:
@@ -481,7 +485,9 @@ class DMRGDriver:
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
-                bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(1e-16, 1024)
+                bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
+                    self.fp_codec_cutoff, 1024
+                )
                 bw.b.Global.frame = None
                 self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True

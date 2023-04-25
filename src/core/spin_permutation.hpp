@@ -690,6 +690,45 @@ struct SpinRecoupling {
         }
         return v;
     }
+    static map<string, double> exchange(const map<string, double> &x, int8_t n,
+                                        int8_t i, SU2CG cg, bool heis) {
+        map<string, double> r = x;
+        if (i != 0)
+            r = recouple(r, 0, i, cg, heis);
+        int8_t ii = i == 0 ? 0 : get_level(r.cbegin()->first, 0).mid_idx;
+        if (i + 2 < n)
+            r = recouple(r, ii, 2, cg, heis);
+        Level h = get_level(r.cbegin()->first, ii);
+        while (h.left_cnt != 1 || h.right_cnt != 1)
+            h = get_level(r.cbegin()->first, h.left_idx);
+        map<string, double> rr;
+        for (const auto &mr : r) {
+            stringstream ss;
+            ss << mr.first.substr(0, h.left_idx)
+               << mr.first.substr(h.mid_idx, h.right_idx - 1 - h.mid_idx) << '+'
+               << mr.first.substr(h.left_idx, h.mid_idx - 1 - h.left_idx)
+               << mr.first.substr(h.right_idx - 1);
+            double fx =
+                -1.0 * cg.phase(1, 1, get_twos(mr.first, h, heis)) * mr.second;
+            if (abs(fx) >= 1E-12)
+                rr[ss.str()] = fx;
+        }
+        return rr;
+    }
+    static map<string, double> sort_indices(const map<string, double> &x,
+                                            const vector<uint16_t> &indices,
+                                            SU2CG cg, bool heis) {
+        int8_t n = (int8_t)indices.size();
+        map<string, double> r = x;
+        vector<uint16_t> idx = indices;
+        for (int8_t i = 0; i < n; i++)
+            for (int8_t j = n - 2; j >= i; j--)
+                if (idx[j] > idx[j + 1]) {
+                    r = exchange(r, n, j, cg, heis);
+                    swap(idx[j], idx[j + 1]);
+                }
+        return r;
+    }
     static map<string, double>
     recouple_split(const map<string, double> &x,
                    const vector<uint16_t> &ref_indices, int split_idx, SU2CG cg,
@@ -1219,9 +1258,69 @@ struct SpinPermScheme {
         return r;
     }
     static SpinPermScheme
-    initialize_su2(int nn, string spin_str, bool is_npdm = false,
+    initialize_su2(int nn, const string &spin_str, bool is_npdm = false,
                    bool is_drt = false,
                    const vector<uint16_t> &mask = vector<uint16_t>()) {
+        using T = SpinPermTensor;
+        using R = SpinPermRecoupling;
+        SU2CG cg;
+        vector<uint8_t> cds;
+        if (spin_str.find('T') != string::npos)
+            return initialize_su2_old(nn, spin_str, is_npdm);
+        string spin_pat_str = R::split_cds(spin_str, cds);
+        bool heis = cds.size() != 0 && cds[0] == 2;
+        int target_twos = R::get_target_twos(spin_pat_str);
+        SpinPermPattern spat(nn, mask);
+        SpinPermScheme r;
+        r.index_patterns.resize(spat.count());
+        r.data.resize(spat.count());
+        int ntg = threading->activate_global();
+        map<vector<uint16_t>, map<string, double>> ref_ps;
+        map<string, double> p = map<string, double>{make_pair(spin_str, 1.0)};
+        for (int i = spat.count() - 1; i >= 0; i--) {
+            vector<uint16_t> irr = spat[i];
+            r.index_patterns[i] = irr;
+            vector<uint16_t> rr = SpinPermPattern::all_reordering(irr, mask);
+            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
+            vector<map<string, double>> ps(nj);
+#pragma omp parallel for schedule(static, 20) num_threads(ntg)
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
+                vector<uint16_t> perm =
+                    SpinPermTensor::find_pattern_perm(indices);
+                ps[jj] = SpinRecoupling::recouple_split(
+                    ref_ps.count(perm)
+                        ? ref_ps.at(perm)
+                        : SpinRecoupling::sort_indices(p, indices, cg, heis),
+                    irr, iq, cg, heis);
+            }
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
+                vector<uint16_t> perm =
+                    SpinPermTensor::find_pattern_perm(indices);
+                r.data[i][perm] = vector<pair<double, string>>();
+                vector<pair<double, string>> &udq = r.data[i].at(perm);
+                udq.reserve(ps[jj].size());
+                for (auto &mr : ps[jj])
+                    udq.push_back(make_pair(mr.second, mr.first));
+                assert(udq.size() != 0);
+                if (i == spat.count() - 1)
+                    ref_ps[perm] = ps[jj];
+            }
+        }
+        threading->activate_normal();
+        r.is_su2 = true;
+        r.left_vacuum = (int8_t)target_twos;
+        r.mask = mask;
+        return r;
+    }
+    static SpinPermScheme
+    initialize_su2_old2(int nn, string spin_str, bool is_npdm = false,
+                        bool is_drt = false,
+                        const vector<uint16_t> &mask = vector<uint16_t>()) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg;

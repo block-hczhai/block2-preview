@@ -2085,6 +2085,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("get_level", &SpinRecoupling::get_level)
         .def_static("get_twos", &SpinRecoupling::get_twos)
         .def_static("recouple", &SpinRecoupling::recouple)
+        .def_static("exchange", &SpinRecoupling::exchange)
+        .def_static("sort_indices", &SpinRecoupling::sort_indices)
         .def_static("recouple_split", &SpinRecoupling::recouple_split);
 
     py::class_<typename SpinRecoupling::Level,
@@ -2135,6 +2137,10 @@ template <typename S = void> void bind_io(py::module &m) {
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false)
         .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
+                    py::arg("nn"), py::arg("spin_str"),
+                    py::arg("is_npdm") = false, py::arg("is_drt") = false,
+                    py::arg("mask") = vector<uint16_t>())
+        .def_static("initialize_su2_old2", &SpinPermScheme::initialize_su2_old2,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false, py::arg("is_drt") = false,
                     py::arg("mask") = vector<uint16_t>())

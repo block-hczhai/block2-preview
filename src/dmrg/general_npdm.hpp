@@ -601,19 +601,20 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             }
             // middle operators
             LL mshape = 0, pmshape = 0;
-            for (int i = 0; i < scheme->middle_blocking.size(); i++) {
-                uint32_t lx = scheme->middle_blocking[i][0].first;
-                uint32_t rx = scheme->middle_blocking[i][0].second;
-                LL lcnt = counter->count_left(
-                    scheme->left_terms[lx].first.first, m - 1, true);
-                const vector<uint16_t> &rpat =
-                    scheme->right_terms[rx].first.first;
-                LL rcnt = counter->count_right(rpat, m);
-                for (auto &r :
-                     middle_patterns.at(scheme->middle_perm_patterns[i]))
-                    for (auto &rr : scheme->perms[r.first]->data[r.second])
-                        mshape += (lcnt * rcnt) * rr.second.size();
-            }
+            for (int i = 0; i < scheme->middle_blocking.size(); i++)
+                if (scheme->middle_blocking[i].size() != 0) {
+                    uint32_t lx = scheme->middle_blocking[i][0].first;
+                    uint32_t rx = scheme->middle_blocking[i][0].second;
+                    LL lcnt = counter->count_left(
+                        scheme->left_terms[lx].first.first, m - 1, true);
+                    const vector<uint16_t> &rpat =
+                        scheme->right_terms[rx].first.first;
+                    LL rcnt = counter->count_right(rpat, m);
+                    for (auto &r :
+                         middle_patterns.at(scheme->middle_perm_patterns[i]))
+                        for (auto &rr : scheme->perms[r.first]->data[r.second])
+                            mshape += (lcnt * rcnt) * rr.second.size();
+                }
             if (parallel_rule == nullptr || parallel_rule->comm->size == 1)
                 pmshape = mshape;
             else
