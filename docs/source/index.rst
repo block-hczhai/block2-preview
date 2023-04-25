@@ -129,6 +129,7 @@ Features
    tutorial/hubbard
    tutorial/heisenberg
    tutorial/qc-hamiltonians
+   tutorial/energy-extrapolation
    tutorial/custom-hamiltonian
 
 .. raw:: latex
