@@ -39,7 +39,8 @@ template <typename S, typename FL> void bind_fl_big_site(py::module &m) {
         .def_readwrite("n_orbs", &BigSite<S, FL>::n_orbs)
         .def_readwrite("basis", &BigSite<S, FL>::basis)
         .def_readwrite("op_infos", &BigSite<S, FL>::op_infos)
-        .def("get_site_ops", &BigSite<S, FL>::get_site_ops);
+        .def("get_site_ops", &BigSite<S, FL>::get_site_ops)
+        .def("get_site_op", &BigSite<S, FL>::get_site_op);
 
     py::class_<SimplifiedBigSite<S, FL>, shared_ptr<SimplifiedBigSite<S, FL>>,
                BigSite<S, FL>>(m, "SimplifiedBigSite")
@@ -202,23 +203,64 @@ template <typename S> void bind_drt_big_site(py::module &m) {
         .def_readwrite("xs", &DRT<S>::xs)
         .def_readwrite("n_sites", &DRT<S>::n_sites)
         .def_readwrite("n_init_qs", &DRT<S>::n_init_qs)
+        .def_readwrite("n_core", &DRT<S>::n_core)
+        .def_readwrite("n_virt", &DRT<S>::n_virt)
+        .def_readwrite("n_ex", &DRT<S>::n_ex)
         .def(py::init<>())
-        .def(py::init<int16_t, int16_t, int16_t>())
-        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t>())
+        .def(py::init<int16_t, int16_t, int16_t>(), py::arg("a"), py::arg("b"),
+             py::arg("c"))
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t>(),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("ipg"))
         .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t,
-                      const vector<typename S::pg_t> &>())
-        .def(py::init<int, S>())
-        .def(py::init<int, S, const vector<typename S::pg_t> &>())
-        .def(py::init<int, const vector<S> &>())
+                      const vector<typename S::pg_t> &>(),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("ipg"),
+             py::arg("orb_sym"))
+        .def(py::init<int16_t, int16_t, int16_t, typename S::pg_t,
+                      const vector<typename S::pg_t> &, int, int, int>(),
+             py::arg("a"), py::arg("b"), py::arg("c"), py::arg("ipg"),
+             py::arg("orb_sym"), py::arg("n_core"), py::arg("n_virt"),
+             py::arg("n_ex"))
+        .def(py::init<int, S>(), py::arg("n_sites"), py::arg("q"))
+        .def(py::init<int, S, const vector<typename S::pg_t> &>(),
+             py::arg("n_sites"), py::arg("q"), py::arg("orb_sym"))
+        .def(
+            py::init<int, S, const vector<typename S::pg_t> &, int, int, int>(),
+            py::arg("n_sites"), py::arg("q"), py::arg("orb_sym"),
+            py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"))
+        .def(py::init<int, const vector<S> &>(), py::arg("n_sites"),
+             py::arg("init_qs"))
         .def(py::init<int, const vector<S> &,
-                      const vector<typename S::pg_t> &>())
+                      const vector<typename S::pg_t> &>(),
+             py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"))
+        .def(py::init<int, const vector<S> &, const vector<typename S::pg_t> &,
+                      int, int, int>(),
+             py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
+             py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"))
         .def_property_readonly("n_rows", &DRT<S>::n_rows)
         .def("initialize", &DRT<S>::initialize)
+        .def("get_init_qs", &DRT<S>::get_init_qs)
         .def("__getitem__", &DRT<S>::operator[], py::arg("i"))
         .def("index", &DRT<S>::index)
         .def("__len__", &DRT<S>::size)
+        .def(
+            "__iter__",
+            [](DRT<S> *self) {
+                struct Iter {
+                    DRT<S> *drt;
+                    typename DRT<S>::LL x;
+                    Iter(DRT<S> *drt, typename DRT<S>::LL x) : drt(drt), x(x) {}
+                    string operator*() const { return (*drt)[x]; }
+                    Iter operator++() { return Iter(drt, ++x); }
+                    bool operator==(Iter other) { return x == other.x; }
+                };
+                return py::make_iterator(Iter(self, 0),
+                                         Iter(self, self->size()));
+            },
+            py::keep_alive<0, 1>())
         .def("q_index", &DRT<S>::q_index)
         .def("q_range", &DRT<S>::q_range)
+        .def("__xor__", &DRT<S>::operator^)
+        .def("__rshift__", &DRT<S>::operator>>)
         .def("get_basis", &DRT<S>::get_basis)
         .def("__repr__", &DRT<S>::to_str);
 
@@ -290,6 +332,13 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
         .def_readwrite("fcidump", &DRTBigSite<S, FL>::fcidump)
         .def_readwrite("gfd", &DRTBigSite<S, FL>::gfd)
         .def_readwrite("drt", &DRTBigSite<S, FL>::drt)
+        .def_property(
+            "drt", [](DRTBigSite<S, FL> *self) { return self->drt; },
+            [](DRTBigSite<S, FL> *self, shared_ptr<DRT<S>> drt) {
+                self->drt = drt;
+                self->basis = drt->get_basis();
+                self->op_infos = self->get_site_op_infos(drt->orb_sym);
+            })
         .def_readwrite("factors", &DRTBigSite<S, FL>::factors)
         .def_readwrite("factor_strides", &DRTBigSite<S, FL>::factor_strides)
         .def_readwrite("is_right", &DRTBigSite<S, FL>::is_right);

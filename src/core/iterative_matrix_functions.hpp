@@ -1432,6 +1432,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     // by applying linear CG method
     // where H is Hermitian and positive-definite
     // H x := op(x) + consta * x
+    // aa should include the effect of consta
+    // op should not include the effect of consta
     template <typename MatMul, typename PComm>
     static FL conjugate_gradient(MatMul &op, const GDiagonalMatrix<FL> &aa,
                                  GMatrix<FL> x, GMatrix<FL> b, int &nmult,
@@ -1535,6 +1537,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     // by applying deflated CG method
     // where H is symmetric and positive-definite
     // H x := op(x) + consta * x
+    // aa should include the effect of consta
+    // op should not include the effect of consta
     template <typename MatMul, typename PComm>
     static FL deflated_conjugate_gradient(
         MatMul &op, const GDiagonalMatrix<FL> &aa, GMatrix<FL> x, GMatrix<FL> b,
@@ -1713,6 +1717,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     }
     // Solve x in linear equation H x = b where H is Hermitian and pd
     // where H x := op(x) + consta * x
+    // aa should include the effect of consta
+    // op should not include the effect of consta
     template <typename MatMul, typename PComm>
     static FL minres(MatMul &op, GMatrix<FL> x, GMatrix<FL> b, int &nmult,
                      FL consta = 0.0, bool iprint = false,
@@ -1820,6 +1826,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         return func;
     }
     // GCROT(m, k) method for solving x in linear equation H x = b
+    // aa should include the effect of consta
+    // op should not include the effect of consta
     template <typename MatMul, typename PComm>
     static FL gcrotmk(MatMul &op, const GDiagonalMatrix<FL> &aa, GMatrix<FL> x,
                       GMatrix<FL> b, int &nmult, int &niter, int m = 20,

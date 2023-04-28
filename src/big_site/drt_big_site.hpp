@@ -50,28 +50,34 @@ struct ElemT<S, typename S::is_sz_t>
 // Distinct Row Table
 template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     typedef long long LL;
-    vector<array<int16_t, 3>> abc;
+    vector<array<int16_t, 4>> abc;
     vector<typename S::pg_t> pgs;
     vector<typename S::pg_t> orb_sym;
     vector<array<int, 4>> jds;
     vector<array<LL, 5>> xs;
     int n_sites, n_init_qs;
-    DRT() : n_sites(0), n_init_qs(0) {}
+    int n_core, n_virt, n_ex;
+    DRT() : n_sites(0), n_init_qs(0), n_core(0), n_virt(0), n_ex(0) {}
     DRT(int16_t a, int16_t b, int16_t c,
         typename S::pg_t ipg = (typename S::pg_t)0,
-        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>())
-        : DRT(a + abs(b) + c, vector<S>{S(a + a + abs(b), b, ipg)}, orb_sym) {}
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int n_core = 0, int n_virt = 0, int n_ex = 0)
+        : DRT(a + abs(b) + c, vector<S>{S(a + a + abs(b), b, ipg)}, orb_sym,
+              n_core, n_virt, n_ex) {}
     DRT(int n_sites, S q,
-        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>())
-        : DRT(n_sites, vector<S>{q}, orb_sym) {}
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int n_core = 0, int n_virt = 0, int n_ex = 0)
+        : DRT(n_sites, vector<S>{q}, orb_sym, n_core, n_virt, n_ex) {}
     DRT(int n_sites, const vector<S> &init_qs,
-        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>())
-        : n_sites(n_sites), orb_sym(orb_sym), n_init_qs((int)init_qs.size()) {
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int n_core = 0, int n_virt = 0, int n_ex = 0)
+        : n_sites(n_sites), orb_sym(orb_sym), n_init_qs((int)init_qs.size()),
+          n_core(n_core), n_virt(n_virt), n_ex(n_ex) {
         if (T == ElemOpTypes::SU2 || T == ElemOpTypes::SZ) {
             for (auto &q : init_qs) {
-                abc.push_back(array<int16_t, 3>{
+                abc.push_back(array<int16_t, 4>{
                     (int16_t)((q.n() - abs(q.twos())) >> 1), (int16_t)q.twos(),
-                    (int16_t)(n_sites - ((q.n() + abs(q.twos())) >> 1))});
+                    (int16_t)(n_sites - ((q.n() + abs(q.twos())) >> 1)), 0});
                 pgs.push_back(q.pg());
             }
         } else
@@ -83,25 +89,26 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     virtual ~DRT() = default;
     int n_rows() const { return (int)abc.size(); }
     void initialize() {
+        int nc = this->n_core, nv = this->n_virt, nx = this->n_ex;
         abc.resize(n_init_qs);
         pgs.resize(n_init_qs);
-        auto make_abc = [](int16_t a, int16_t b, int16_t c,
-                           int16_t d) -> array<int16_t, 3> {
+        auto make_abc = [](int16_t a, int16_t b, int16_t c, int16_t t,
+                           int16_t d) -> array<int16_t, 4> {
             switch (d) {
             case 0:
-                return array<int16_t, 3>{a, b, (int16_t)(c - 1)};
+                return array<int16_t, 4>{a, b, (int16_t)(c - 1), t};
             case 1:
-                return array<int16_t, 3>{(int16_t)(a - (b <= 0)),
+                return array<int16_t, 4>{(int16_t)(a - (b <= 0)),
                                          (int16_t)(b - 1),
-                                         (int16_t)(c - (b <= 0))};
+                                         (int16_t)(c - (b <= 0)), t};
             case 2:
-                return array<int16_t, 3>{(int16_t)(a - (b >= 0)),
+                return array<int16_t, 4>{(int16_t)(a - (b >= 0)),
                                          (int16_t)(b + 1),
-                                         (int16_t)(c - (b >= 0))};
+                                         (int16_t)(c - (b >= 0)), t};
             case 3:
-                return array<int16_t, 3>{(int16_t)(a - 1), b, c};
+                return array<int16_t, 4>{(int16_t)(a - 1), b, c, t};
             default:
-                return array<int16_t, 3>{-1, -1, -1};
+                return array<int16_t, 4>{-1, -1, -1, -1};
             }
         };
         auto allow_abc = [](int16_t a, int16_t b, int16_t c,
@@ -119,6 +126,28 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                 return false;
             }
         };
+        auto make_abct = [&make_abc, &nc, &nv](int k, int16_t a, int16_t b,
+                                               int16_t c, int16_t t,
+                                               int16_t d) -> array<int16_t, 4> {
+            array<int16_t, 4> r = make_abc(a, b, c, t, d);
+            r[3] = (int16_t)(k < nv || k > nc + nv
+                                 ? 0
+                                 : (k < nc + nv ? (int)t
+                                                : max(0, nc + nc -
+                                                             (a + a + abs(b) -
+                                                              (d + 1) / 2))));
+            return r;
+        };
+        auto allow_abct = [&allow_abc, &nc, &nv,
+                           &nx](int k, int16_t a, int16_t b, int16_t c,
+                                int16_t t, int16_t d) -> bool {
+            return allow_abc(a, b, c, d) &&
+                   ((k != nv && k != nc + nv) ||
+                    (k == nv && a + a + abs(b) - (d + 1) / 2 <= nx - t) ||
+                    (k == nc + nv &&
+                     a + a + abs(b) - (d + 1) / 2 <= nc + nc + nx &&
+                     a + a + abs(b) - (d + 1) / 2 >= nc + nc - nx));
+        };
         auto make_pg = [](typename S::pg_t g, typename S::pg_t gk, int16_t d) ->
             typename S::pg_t {
                 return (d & 1) ^ (d >> 1) ? S::pg_mul(gk, g) : g;
@@ -128,27 +157,37 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
             return k != 0 || ((d & 1) ^ (d >> 1) ? S::pg_mul(gk, g) : g) == 0;
         };
         auto compare_abc_pg =
-            [](const pair<array<int16_t, 3>, typename S::pg_t> &p,
-               const pair<array<int16_t, 3>, typename S::pg_t> &q) {
+            [](const pair<array<int16_t, 4>, typename S::pg_t> &p,
+               const pair<array<int16_t, 4>, typename S::pg_t> &q) {
                 return p.first != q.first ? p.first > q.first
                                           : p.second > q.second;
             };
-        vector<vector<pair<array<int16_t, 3>, typename S::pg_t>>> pabc(n_sites +
+        vector<vector<pair<array<int16_t, 4>, typename S::pg_t>>> pabc(n_sites +
                                                                        1);
         for (size_t i = 0; i < abc.size(); i++)
             pabc[0].push_back(make_pair(abc[i], pgs[i]));
         // construct graph
         for (int k = n_sites - 1, j = 0; k >= 0; k--, j++) {
-            vector<pair<array<int16_t, 3>, typename S::pg_t>> &kabc =
+            vector<pair<array<int16_t, 4>, typename S::pg_t>> &kabc =
                 pabc[j + 1];
             for (const auto &abcg : pabc[j]) {
-                const array<int16_t, 3> &x = abcg.first;
+                const array<int16_t, 4> &x = abcg.first;
                 const typename S::pg_t &g = abcg.second;
-                for (int16_t d = 0; d < 4; d++)
-                    if (allow_abc(x[0], x[1], x[2], d) &&
-                        allow_pg(k, g, orb_sym[k], d))
-                        kabc.push_back(make_pair(make_abc(x[0], x[1], x[2], d),
-                                                 make_pg(g, orb_sym[k], d)));
+                if (n_core == 0 && n_virt == 0) {
+                    for (int16_t d = 0; d < 4; d++)
+                        if (allow_abc(x[0], x[1], x[2], d) &&
+                            allow_pg(k, g, orb_sym[k], d))
+                            kabc.push_back(
+                                make_pair(make_abc(x[0], x[1], x[2], x[3], d),
+                                          make_pg(g, orb_sym[k], d)));
+                } else {
+                    for (int16_t d = 0; d < 4; d++)
+                        if (allow_abct(k, x[0], x[1], x[2], x[3], d) &&
+                            allow_pg(k, g, orb_sym[k], d))
+                            kabc.push_back(make_pair(
+                                make_abct(k, x[0], x[1], x[2], x[3], d),
+                                make_pg(g, orb_sym[k], d)));
+                }
             }
             sort(kabc.begin(), kabc.end(), compare_abc_pg);
             kabc.resize(
@@ -157,11 +196,11 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         int n_abc = 1;
         // filter graph
         for (int k = n_sites - 1, j, i; k >= 0; k--, n_abc += j) {
-            vector<pair<array<int16_t, 3>, typename S::pg_t>> &kabc = pabc[k];
-            const vector<pair<array<int16_t, 3>, typename S::pg_t>> &fabc =
+            vector<pair<array<int16_t, 4>, typename S::pg_t>> &kabc = pabc[k];
+            const vector<pair<array<int16_t, 4>, typename S::pg_t>> &fabc =
                 pabc[k + 1];
             for (i = 0, j = 0; i < kabc.size(); i++) {
-                const array<int16_t, 3> &x = kabc[i].first;
+                const array<int16_t, 4> &x = kabc[i].first;
                 const typename S::pg_t &g = kabc[i].second;
                 bool found = false;
                 for (int16_t d = 0; d < 4 && !found; d++)
@@ -169,7 +208,10 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                         found ||
                         binary_search(
                             fabc.begin(), fabc.end(),
-                            make_pair(make_abc(x[0], x[1], x[2], d),
+                            make_pair(n_core == 0 && n_virt == 0
+                                          ? make_abc(x[0], x[1], x[2], x[3], d)
+                                          : make_abct(n_sites - 1 - k, x[0],
+                                                      x[1], x[2], x[3], d),
                                       make_pg(g, orb_sym[n_sites - 1 - k], d)),
                             compare_abc_pg);
                 if (found)
@@ -191,9 +233,13 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
             for (auto &abcg : pabc[j]) {
                 array<int, 4> jd;
                 for (int16_t d = 0; d < 4; d++) {
-                    auto v = make_pair(make_abc(abcg.first[0], abcg.first[1],
-                                                abcg.first[2], d),
-                                       make_pg(abcg.second, orb_sym[k], d));
+                    auto v = make_pair(
+                        n_core == 0 && n_virt == 0
+                            ? make_abc(abcg.first[0], abcg.first[1],
+                                       abcg.first[2], abcg.first[3], d)
+                            : make_abct(k, abcg.first[0], abcg.first[1],
+                                        abcg.first[2], abcg.first[3], d),
+                        make_pg(abcg.second, orb_sym[k], d));
                     auto it = lower_bound(pabc[j + 1].begin(),
                                           pabc[j + 1].end(), v, compare_abc_pg);
                     jd[d] = it != pabc[j + 1].end() && *it == v
@@ -228,27 +274,27 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         LL i = 0;
         int j = 0;
         if (n_init_qs > 1) {
-            array<int16_t, 3> iabc = array<int16_t, 3>{0, 0, 0};
+            array<int16_t, 4> iabc = array<int16_t, 4>{0, 0, 0, 0};
             typename S::pg_t ipg = (typename S::pg_t)0;
             for (int k = 0; k < n_sites; k++)
                 if (x[k] == '0')
-                    iabc = array<int16_t, 3>{iabc[0], iabc[1],
-                                             (int16_t)(iabc[2] + 1)};
+                    iabc = array<int16_t, 4>{iabc[0], iabc[1],
+                                             (int16_t)(iabc[2] + 1), 0};
                 else if (x[k] == '+')
-                    iabc =
-                        array<int16_t, 3>{(int16_t)(iabc[0] + (iabc[1] < 0)),
-                                          (int16_t)(iabc[1] + 1),
-                                          (int16_t)(iabc[2] + (iabc[1] < 0))},
+                    iabc = array<int16_t, 4>{(int16_t)(iabc[0] + (iabc[1] < 0)),
+                                             (int16_t)(iabc[1] + 1),
+                                             (int16_t)(iabc[2] + (iabc[1] < 0)),
+                                             0},
                     ipg = S::pg_mul(ipg, orb_sym[k]);
                 else if (x[k] == '-')
-                    iabc =
-                        array<int16_t, 3>{(int16_t)(iabc[0] + (iabc[1] > 0)),
-                                          (int16_t)(iabc[1] - 1),
-                                          (int16_t)(iabc[2] + (iabc[1] > 0))},
+                    iabc = array<int16_t, 4>{(int16_t)(iabc[0] + (iabc[1] > 0)),
+                                             (int16_t)(iabc[1] - 1),
+                                             (int16_t)(iabc[2] + (iabc[1] > 0)),
+                                             0},
                     ipg = S::pg_mul(ipg, orb_sym[k]);
                 else
-                    iabc = array<int16_t, 3>{(int16_t)(iabc[0] + 1), iabc[1],
-                                             iabc[2]};
+                    iabc = array<int16_t, 4>{(int16_t)(iabc[0] + 1), iabc[1],
+                                             iabc[2], 0};
             for (; j < n_init_qs && (iabc != abc[j] || ipg != pgs[j]); j++)
                 i += xs[j].back();
         }
@@ -272,6 +318,38 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
             a = b, b += xs[j].back();
         return make_pair(a, b);
     }
+    vector<S> get_init_qs() const {
+        vector<S> r(n_init_qs);
+        for (int j = 0; j < n_init_qs; j++)
+            r[j] = S(abc[j][0] + abc[j][0] + abs(abc[j][1]), abc[j][1], pgs[j]);
+        return r;
+    }
+    shared_ptr<DRT<S>> operator^(int n_ex_new) const {
+        return make_shared<DRT<S>>(n_sites, get_init_qs(), orb_sym, n_core,
+                                   n_virt, n_ex_new);
+    }
+    vector<LL> operator>>(const shared_ptr<DRT<S>> &other) const {
+        vector<vector<int>> pbr(2, vector<int>(1, 0)),
+            pkr(2, vector<int>(1, 0));
+        vector<vector<LL>> pb(2, vector<LL>(1, 0));
+        size_t max_sz = min(size(), other->size());
+        pbr[0].reserve(max_sz), pkr[0].reserve(max_sz), pb[0].reserve(max_sz);
+        pbr[1].reserve(max_sz), pkr[1].reserve(max_sz), pb[1].reserve(max_sz);
+        assert(n_sites == other->n_sites);
+        int pi = 0, pj = pi ^ 1;
+        for (int k = 0; k < n_sites; k++, pi ^= 1, pj ^= 1) {
+            pbr[pj].clear(), pkr[pj].clear(), pb[pj].clear();
+            for (int j = 0; j < pbr[pi].size(); j++)
+                for (int d = 0; d < 4; d++)
+                    if (jds[pbr[pi][j]][d] != 0 &&
+                        other->jds[pkr[pi][j]][d] != 0) {
+                        pbr[pj].push_back(jds[pbr[pi][j]][d]);
+                        pkr[pj].push_back(other->jds[pkr[pi][j]][d]);
+                        pb[pj].push_back(pb[pi][j] + xs[pbr[pi][j]][d]);
+                    }
+        }
+        return pb[pi];
+    }
     shared_ptr<StateInfo<S>> get_basis() const {
         shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
         b->allocate(n_init_qs);
@@ -286,8 +364,11 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     string to_str() const {
         stringstream ss;
         ss << setw(4) << "J" << setw(6) << "K" << setw(4) << "A" << setw(4)
-           << "B" << setw(4) << "C" << setw(6) << "PG" << setw(6) << "JD0"
-           << setw(6) << "JD1" << setw(6) << "JD2" << setw(6) << "JD3"
+           << "B" << setw(4) << "C";
+        if (n_core != 0 || n_virt != 0)
+            ss << setw(4) << "T";
+        ss << setw(6) << "PG" << setw(6) << "JD0" << setw(6) << "JD1" << setw(6)
+           << "JD2" << setw(6) << "JD3"
            << " " << setw(12) << "X0"
            << " " << setw(12) << "X1"
            << " " << setw(12) << "X2"
@@ -303,6 +384,8 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                 ss << setw(6) << k;
             ss << setw(4) << abc[i][0] << setw(4) << abc[i][1] << setw(4)
                << abc[i][2];
+            if (n_core != 0 || n_virt != 0)
+                ss << setw(4) << abc[i][3];
             ss << setw(6) << (int)pgs[i];
             for (int16_t dk = 0; dk < 4; dk++)
                 if (jds[i][dk] == 0)
@@ -2651,18 +2734,18 @@ struct DRTBigSite<S, FL, typename S::is_sz_t> : DRTBigSiteBase<S, FL> {
                             op_name == OpNames::P
                                 ? (is_right
                                        ? -fcidump->v(iq & 1, iq >> 1, ix0,
-                                                    n_total_orbs - 1 - arr[0],
-                                                    ix1,
-                                                    n_total_orbs - 1 - arr[1])
+                                                     n_total_orbs - 1 - arr[0],
+                                                     ix1,
+                                                     n_total_orbs - 1 - arr[1])
                                        : -fcidump->v(iq & 1, iq >> 1, ix0,
-                                                    arr[0], ix1, arr[1]))
+                                                     arr[0], ix1, arr[1]))
                                 : (is_right
                                        ? -fcidump->v(
                                              iq & 1, iq >> 1,
                                              n_total_orbs - 1 - arr[1], ix0,
                                              n_total_orbs - 1 - arr[0], ix1)
                                        : -fcidump->v(iq & 1, iq >> 1, arr[1],
-                                                    ix0, arr[0], ix1));
+                                                     ix0, arr[0], ix1));
                         if (abs(v) > cutoff) {
                             idx->insert(idx->end(), arr.begin(), arr.end());
                             dt->push_back(v);

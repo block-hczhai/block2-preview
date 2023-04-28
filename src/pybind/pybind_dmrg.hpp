@@ -1896,9 +1896,9 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
             PYBIND11_OVERRIDE(void, super_t, init_site_ops, );
         }
         void get_site_string_ops(uint16_t m, mp_str_t &ops) override {
-            pybind11::gil_scoped_acquire gil;
-            pybind11::function py_method =
-                pybind11::get_override(this, "get_site_string_ops");
+            py::gil_scoped_acquire gil;
+            py::function py_method =
+                py::get_override(this, "get_site_string_ops");
             if (py_method) {
                 py::object rops = py_method(m, ops);
                 ops = rops.template cast<mp_str_t>();
@@ -1914,9 +1914,9 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         pair<S, S> get_string_quanta(const vector<S> &ref, const string &expr,
                                      const uint16_t *idxs,
                                      uint16_t k) const override {
-            pybind11::gil_scoped_acquire gil;
-            pybind11::function py_method =
-                pybind11::get_override(this, "get_string_quanta");
+            py::gil_scoped_acquire gil;
+            py::function py_method =
+                py::get_override(this, "get_string_quanta");
             if (py_method) {
                 vector<uint16_t> vidxs(idxs, idxs + expr.length());
                 py::object r = py_method(ref, expr, vidxs, k);
@@ -1926,9 +1926,9 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         }
         S get_string_quantum(const string &expr,
                              const uint16_t *idxs) const override {
-            pybind11::gil_scoped_acquire gil;
-            pybind11::function py_method =
-                pybind11::get_override(this, "get_string_quantum");
+            py::gil_scoped_acquire gil;
+            py::function py_method =
+                py::get_override(this, "get_string_quantum");
             if (py_method) {
                 vector<uint16_t> vidxs(idxs, idxs + expr.length());
                 py::object r = py_method(expr, vidxs);

@@ -45,6 +45,14 @@ template <typename S, typename FL> struct BigSite {
         uint16_t m,
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
             &ops) const {}
+    shared_ptr<SparseMatrix<S, FL>>
+    get_site_op(uint16_t m, const shared_ptr<OpExpr<S>> &op) const {
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            ops;
+        ops[op] = nullptr;
+        get_site_ops(m, ops);
+        return ops.at(op);
+    }
     // Find sparse matrix info for site operator with the given delta quantum q
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(S q) const {
         auto p = lower_bound(op_infos.begin(), op_infos.end(), q,
