@@ -58,6 +58,12 @@ namespace block2 {
 #define FNAME(X) X
 #endif
 
+#ifdef _APPLE_ACC_SINGLE_PREC
+#define FRETT double
+#else
+#define FRETT float
+#endif
+
 #ifdef _WIN32
 
 struct timeval {

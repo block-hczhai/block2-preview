@@ -54,11 +54,11 @@ extern void FNAME(saxpy)(const MKL_INT *n, const float *sa, const float *sx,
                          const MKL_INT *incy) noexcept;
 
 // vector dot product
-extern float FNAME(sdot)(const MKL_INT *n, const float *dx, const MKL_INT *incx,
+extern FRETT FNAME(sdot)(const MKL_INT *n, const float *dx, const MKL_INT *incx,
                          const float *dy, const MKL_INT *incy) noexcept;
 
 // Euclidean norm of a vector
-extern float FNAME(snrm2)(const MKL_INT *n, const float *x,
+extern FRETT FNAME(snrm2)(const MKL_INT *n, const float *x,
                           const MKL_INT *incx) noexcept;
 
 // matrix multiplication
@@ -346,7 +346,7 @@ inline double xnrm2<double>(const MKL_INT *n, const double *x,
 template <>
 inline float xnrm2<float>(const MKL_INT *n, const float *x,
                           const MKL_INT *incx) noexcept {
-    return FNAME(snrm2)(n, x, incx);
+    return (float)FNAME(snrm2)(n, x, incx);
 }
 
 template <typename FL>
@@ -380,7 +380,7 @@ inline double xdot<double>(const MKL_INT *n, const double *dx,
 template <>
 inline float xdot<float>(const MKL_INT *n, const float *dx, const MKL_INT *incx,
                          const float *dy, const MKL_INT *incy) noexcept {
-    return FNAME(sdot)(n, dx, incx, dy, incy);
+    return (float)FNAME(sdot)(n, dx, incx, dy, incy);
 }
 
 template <typename FL>
@@ -848,9 +848,9 @@ struct GMatrixFunctions<
     // c(.T) = bra.T * a(.T) * ket
     // return nflop. (.T) is always transpose conjugate
     static size_t left_partial_rotate(const GMatrix<FL> &a, bool conj_a,
-                         const GMatrix<FL> &c, bool conj_c,
-                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                         FL scale) {
+                                      const GMatrix<FL> &c, bool conj_c,
+                                      const GMatrix<FL> &bra,
+                                      const GMatrix<FL> &ket, FL scale) {
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         GMatrix<FL> work(nullptr, conj_a ? a.n : a.m, ket.n);
@@ -866,9 +866,9 @@ struct GMatrixFunctions<
     // c(.T) = bra.c * a(.T) * ket.t = (a(~.T) * bra.t).T * ket.t
     // return nflop. (.T) is always transpose conjugate
     static size_t right_partial_rotate(const GMatrix<FL> &a, bool conj_a,
-                         const GMatrix<FL> &c, bool conj_c,
-                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                         FL scale) {
+                                       const GMatrix<FL> &c, bool conj_c,
+                                       const GMatrix<FL> &bra,
+                                       const GMatrix<FL> &ket, FL scale) {
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         GMatrix<FL> work(nullptr, conj_a ? a.m : a.n, bra.m);
