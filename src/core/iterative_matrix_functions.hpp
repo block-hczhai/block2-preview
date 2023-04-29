@@ -74,8 +74,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                        const GMatrix<FL> &c, FP ld,
                                        const GDiagonalMatrix<FL> &aa) {
         assert(aa.size() == c.size());
+        shared_ptr<VectorAllocator<FP>> x_alloc =
+            make_shared<VectorAllocator<FP>>();
         GMatrix<FL> t(nullptr, c.m, c.n);
-        t.allocate();
+        t.allocate(x_alloc);
         copy(t, c);
         for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12)
@@ -84,14 +86,16 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12)
                 q.data[i] /= ld - aa.data[i];
-        t.deallocate();
+        t.deallocate(x_alloc);
     }
     // q = Kinv q - (c, Kinv q) / (c, Kinv c) Kinv c
     static void olsen_precondition(const GMatrix<FL> &q, const GMatrix<FL> &c,
                                    FP ld, const GDiagonalMatrix<FL> &aa) {
         assert(aa.size() == c.size());
+        shared_ptr<VectorAllocator<FP>> x_alloc =
+            make_shared<VectorAllocator<FP>>();
         GMatrix<FL> t(nullptr, c.m, c.n);
-        t.allocate();
+        t.allocate(x_alloc);
         copy(t, c);
         for (MKL_INT i = 0; i < aa.n; i++)
             if (abs(ld - aa.data[i]) > 1E-12) {
@@ -99,7 +103,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 q.data[i] /= ld - aa.data[i];
             }
         iadd(q, t, -complex_dot(c, q) / complex_dot(c, t));
-        t.deallocate();
+        t.deallocate(x_alloc);
     }
     template <typename MatMul, typename PComm>
     static vector<FP> exact_diagonalization(MatMul &op, vector<GMatrix<FL>> &vs,
@@ -486,6 +490,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         assert(!(davidson_type & DavidsonTypes::Harmonic));
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
+        shared_ptr<VectorAllocator<FP>> x_alloc =
+            make_shared<VectorAllocator<FP>>();
         int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
         if (davidson_type & DavidsonTypes::Exact)
             return exact_diagonalization(op, vs, davidson_type, ndav, iprint,
@@ -552,7 +558,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         vector<int> eigval_idxs(deflation_max_size);
         GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
-            q.allocate();
+            q.allocate(x_alloc);
         int ck = 0, msig = 0, m = k, xiter = 0;
         FL qq;
         if (iprint)
@@ -573,12 +579,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 GDiagonalMatrix<FP> ld(nullptr, m);
                 GMatrix<FL> alpha(nullptr, m, m);
-                ld.allocate();
-                alpha.allocate();
+                ld.allocate(x_alloc);
+                alpha.allocate(x_alloc);
                 vector<GMatrix<FL>> tmp(m,
                                         GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
                 for (int i = 0; i < m; i++)
-                    tmp[i].allocate();
+                    tmp[i].allocate(x_alloc);
                 int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                 {
@@ -622,8 +628,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 threading->activate_normal();
                 for (int i = m - 1; i >= 0; i--)
-                    tmp[i].deallocate();
-                alpha.deallocate();
+                    tmp[i].deallocate(x_alloc);
+                alpha.deallocate(x_alloc);
                 for (int i = 0; i < m; i++)
                     eigval_idxs[i] = i;
                 if (davidson_type & DavidsonTypes::CloseTo)
@@ -682,7 +688,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 if (ck + 1 != 0)
                     for (int i = 0; i <= ck; i++)
                         eigvals[i] = ld.data[eigval_idxs[i]];
-                ld.deallocate();
+                ld.deallocate(x_alloc);
             }
             if (pcomm != nullptr) {
                 pcomm->broadcast(&qq, 1, pcomm->root);
@@ -706,7 +712,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         vector<GMatrix<FL>> tmp(
                             m, GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
                         for (int i = 0; i < m; i++)
-                            tmp[i].allocate();
+                            tmp[i].allocate(x_alloc);
                         int ntg = threading->activate_global();
 #pragma omp parallel num_threads(ntg)
                         {
@@ -725,7 +731,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         }
                         threading->activate_normal();
                         for (int i = m - 1; i >= 0; i--)
-                            tmp[i].deallocate();
+                            tmp[i].deallocate(x_alloc);
                     }
                     for (int j = 0; j < m; j++)
                         iadd(q, bs[j], -complex_dot(bs[j], q));
@@ -756,7 +762,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
         }
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
-            q.deallocate();
+            q.deallocate(x_alloc);
         d_alloc->deallocate(pss.data, deflation_max_size * vs[0].size());
         d_alloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
         ndav = xiter;
@@ -1441,12 +1447,14 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                  const PComm &pcomm = nullptr,
                                  FP conv_thrd = 5E-6, int max_iter = 5000,
                                  int soft_max_iter = -1) {
+        shared_ptr<VectorAllocator<FP>> x_alloc =
+            make_shared<VectorAllocator<FP>>();
         GMatrix<FL> p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
         FL ff[2];
         FL &error = ff[0], &func = ff[1];
         FL beta = 0.0, old_beta = 0.0;
-        r.allocate();
-        p.allocate();
+        r.allocate(x_alloc);
+        p.allocate(x_alloc);
         r.clear();
         p.clear();
         op(x, r);
@@ -1472,8 +1480,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 cout << setw(6) << 0 << fixed << setw(24) << setprecision(8)
                      << func << scientific << setw(13) << setprecision(2)
                      << abs(error) << endl;
-            p.deallocate();
-            r.deallocate();
+            p.deallocate(x_alloc);
+            r.deallocate(x_alloc);
             nmult = 1;
             return func;
         }
@@ -1481,8 +1489,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (pcomm != nullptr)
             pcomm->broadcast(p.data, p.size(), pcomm->root);
         GMatrix<FL> hp(nullptr, x.m, x.n), z(nullptr, x.m, x.n);
-        hp.allocate();
-        z.allocate();
+        hp.allocate(x_alloc);
+        z.allocate(x_alloc);
         int xiter = 0;
         while (xiter < max_iter &&
                (soft_max_iter == -1 || xiter < soft_max_iter)) {
@@ -1525,10 +1533,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             assert(false);
         }
         nmult = xiter + 1;
-        z.deallocate();
-        hp.deallocate();
-        p.deallocate();
-        r.deallocate();
+        z.deallocate(x_alloc);
+        hp.deallocate(x_alloc);
+        p.deallocate(x_alloc);
+        r.deallocate(x_alloc);
         if (pcomm != nullptr)
             pcomm->broadcast(x.data, x.size(), pcomm->root);
         return func;

@@ -2468,14 +2468,17 @@ template <typename FL> void bind_matrix(py::module &m) {
                                              (MKL_INT)ket.size(), 1));
                 }
                 int ndav = 0;
-                return IterativeMatrixFunctions<FL>::davidson(
-                    f,
-                    GDiagonalMatrix<FL>(diag.mutable_data(),
-                                        (MKL_INT)diag.size()),
-                    vs, (typename GMatrix<FL>::FP)0.0, DavidsonTypes::Normal,
-                    ndav, iprint, (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
-                    conv_thrd, max_iter, soft_max_iter, deflation_min_size,
-                    deflation_max_size);
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::davidson(
+                        f,
+                        GDiagonalMatrix<FL>(diag.mutable_data(),
+                                            (MKL_INT)diag.size()),
+                        vs, (typename GMatrix<FL>::FP)0.0,
+                        DavidsonTypes::Normal, ndav, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                        deflation_max_size),
+                    ndav);
             },
             py::arg("op"), py::arg("diag"), py::arg("kets"),
             py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
@@ -2496,15 +2499,17 @@ template <typename FL> void bind_matrix(py::module &m) {
                         (FL)1.0);
                 };
                 int nmult = 0;
-                return IterativeMatrixFunctions<FL>::conjugate_gradient(
-                    f,
-                    GDiagonalMatrix<FL>(diag.mutable_data(),
-                                        (MKL_INT)diag.size()),
-                    GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
-                    GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1), nmult,
-                    consta, iprint,
-                    (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv_thrd,
-                    max_iter, soft_max_iter);
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::conjugate_gradient(
+                        f,
+                        GDiagonalMatrix<FL>(diag.mutable_data(),
+                                            (MKL_INT)diag.size()),
+                        GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                        GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                        nmult, consta, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, max_iter, soft_max_iter),
+                    nmult);
             },
             py::arg("op"), py::arg("diag"), py::arg("x"), py::arg("b"),
             py::arg("consta") = (FL)0.0, py::arg("iprint") = false,
@@ -2523,12 +2528,14 @@ template <typename FL> void bind_matrix(py::module &m) {
                         (FL)1.0);
                 };
                 int nmult = 0;
-                return IterativeMatrixFunctions<FL>::minres(
-                    f, GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
-                    GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1), nmult,
-                    consta, iprint,
-                    (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv_thrd,
-                    max_iter, soft_max_iter);
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::minres(
+                        f, GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                        GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                        nmult, consta, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, max_iter, soft_max_iter),
+                    nmult);
             },
             py::arg("op"), py::arg("x"), py::arg("b"),
             py::arg("consta") = (FL)0.0, py::arg("iprint") = false,
@@ -2548,15 +2555,17 @@ template <typename FL> void bind_matrix(py::module &m) {
                         (FL)1.0);
                 };
                 int nmult = 0, niter = 0;
-                return IterativeMatrixFunctions<FL>::gcrotmk(
-                    f,
-                    GDiagonalMatrix<FL>(diag.mutable_data(),
-                                        (MKL_INT)diag.size()),
-                    GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
-                    GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1), nmult,
-                    niter, m, k, consta, iprint,
-                    (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv_thrd,
-                    max_iter, soft_max_iter);
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::gcrotmk(
+                        f,
+                        GDiagonalMatrix<FL>(diag.mutable_data(),
+                                            (MKL_INT)diag.size()),
+                        GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                        GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                        nmult, niter, m, k, consta, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, max_iter, soft_max_iter),
+                    niter);
             },
             py::arg("op"), py::arg("diag"), py::arg("x"), py::arg("b"),
             py::arg("m") = 20, py::arg("k") = -1, py::arg("consta") = (FL)0.0,
