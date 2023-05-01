@@ -269,14 +269,105 @@ template <typename FL> struct GeneralFCIDUMP {
         }
         return r;
     }
+    void add_eight_fold_term(const FL *vals, size_t len, FP cutoff = (FP)0.0,
+                             FL factor = (FL)1.0) {
+        size_t n = 0, m = 0;
+        for (n = 1; n < len; n++) {
+            m = n * (n + 1) >> 1;
+            if ((m * (m + 1) >> 1) >= len)
+                break;
+        }
+        assert((m * (m + 1) >> 1) == len && m >= n);
+        vector<size_t> xm(m + 1, 0), gm(m + 1, 2), pm(m + 1, 0), qm(m + 1, 0);
+        for (size_t im = 1; im <= m; im++) {
+            xm[im] = xm[im - 1] + im;
+            if (xm[im] - 1 <= m) {
+                gm[xm[im] - 1] = 1;
+                for (size_t jm = xm[im - 1]; jm < xm[im]; jm++)
+                    pm[jm] = im - 1, qm[jm] = jm - xm[im - 1];
+            }
+        }
+        assert(xm[m] == len);
+        int ntg = threading->activate_global();
+        vector<size_t> ms(ntg + 1, 0);
+        const size_t plm = m / ntg + !!(m % ntg);
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            for (size_t im = plm * tid; im < min(m, plm * (tid + 1)); im++)
+                for (size_t jm = 0; jm <= im; jm++)
+                    ms[tid] += (abs(factor * vals[xm[im] + jm]) > cutoff) *
+                               gm[im] * gm[jm] * (2 - (im == jm));
+        }
+        ms[ntg] = accumulate(&ms[0], &ms[ntg], (size_t)0);
+        indices.push_back(vector<uint16_t>(ms[ntg] * 4));
+        data.push_back(vector<FL>(ms[ntg]));
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            size_t istart = 0;
+            for (int i = 0; i < tid; i++)
+                istart += ms[i];
+            for (size_t im = plm * tid; im < min(m, plm * (tid + 1)); im++)
+                for (size_t jm = 0; jm <= im; jm++)
+                    if (abs(factor * vals[xm[im] + jm]) > cutoff) {
+                        for (size_t xxm = 0, xim = im, xjm = jm,
+                                    xs = istart * 4;
+                             xxm < (2 - (im == jm));
+                             xxm++, xim = jm, xjm = im) {
+                            indices.back()[xs + 0] = pm[xim];
+                            indices.back()[xs + 1] = pm[xjm];
+                            indices.back()[xs + 2] = qm[xjm];
+                            indices.back()[xs + 3] = qm[xim];
+                            data.back()[istart] = factor * vals[xm[im] + jm];
+                            istart++, xs += 4;
+                            if (gm[xim] == 2) {
+                                indices.back()[xs + 0] = qm[xim];
+                                indices.back()[xs + 1] = pm[xjm];
+                                indices.back()[xs + 2] = qm[xjm];
+                                indices.back()[xs + 3] = pm[xim];
+                                data.back()[istart] =
+                                    factor * vals[xm[im] + jm];
+                                istart++, xs += 4;
+                            }
+                            if (gm[xjm] == 2) {
+                                indices.back()[xs + 0] = pm[xim];
+                                indices.back()[xs + 1] = qm[xjm];
+                                indices.back()[xs + 2] = pm[xjm];
+                                indices.back()[xs + 3] = qm[xim];
+                                data.back()[istart] =
+                                    factor * vals[xm[im] + jm];
+                                istart++, xs += 4;
+                            }
+                            if (gm[xim] == 2 && gm[xjm] == 2) {
+                                indices.back()[xs + 0] = qm[xim];
+                                indices.back()[xs + 1] = qm[xjm];
+                                indices.back()[xs + 2] = pm[xjm];
+                                indices.back()[xs + 3] = pm[xim];
+                                data.back()[istart] =
+                                    factor * vals[xm[im] + jm];
+                                istart++, xs += 4;
+                            }
+                        }
+                    }
+            for (int i = 0; i < tid + 1; i++)
+                istart -= ms[i];
+            assert(istart == 0);
+        }
+        threading->activate_normal();
+    }
     // array must have the min strides == 1
     void add_sum_term(const FL *vals, size_t len, const vector<int> &shape,
                       const vector<size_t> &strides, FP cutoff = (FP)0.0,
                       FL factor = (FL)1.0,
-                      const vector<int> &orb_sym = vector<int>()) {
+                      const vector<int> &orb_sym = vector<int>(),
+                      vector<uint16_t> rperm = vector<uint16_t>()) {
         int ntg = threading->activate_global();
         vector<size_t> lens(ntg + 1, 0);
         const size_t plen = len / ntg + !!(len % ntg);
+        if (rperm.size() == 0)
+            for (size_t i = 0; i < shape.size(); i++)
+                rperm.push_back(i);
 #pragma omp parallel num_threads(ntg)
         {
             int tid = threading->get_thread_id();
@@ -296,7 +387,7 @@ template <typename FL> struct GeneralFCIDUMP {
                 for (size_t i = plen * tid; i < min(len, plen * (tid + 1)); i++)
                     if (abs(factor * vals[i]) > cutoff) {
                         for (int j = 0; j < (int)shape.size(); j++)
-                            indices.back()[istart * shape.size() + j] =
+                            indices.back()[istart * shape.size() + rperm[j]] =
                                 i / strides[j] % shape[j];
                         data.back()[istart] = factor * vals[i];
                         istart++;
@@ -306,7 +397,7 @@ template <typename FL> struct GeneralFCIDUMP {
                     if (abs(factor * vals[i]) > cutoff) {
                         int irrep = 0;
                         for (int j = 0; j < (int)shape.size(); j++) {
-                            indices.back()[istart * shape.size() + j] =
+                            indices.back()[istart * shape.size() + rperm[j]] =
                                 i / strides[j] % shape[j];
                             irrep ^= orb_sym[i / strides[j] % shape[j]];
                         }

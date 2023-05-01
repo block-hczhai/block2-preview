@@ -983,6 +983,8 @@ class DMRGDriver:
         cutoff=1e-20,
         integral_cutoff=1e-20,
         post_integral_cutoff=1e-20,
+        fast_cutoff=1e-20,
+        unpack_g2e=True,
         algo_type=None,
         normal_order_ref=None,
         normal_order_single_ref=None,
@@ -1005,10 +1007,11 @@ class DMRGDriver:
 
         bw = self.bw
 
-        if isinstance(g2e, np.ndarray):
-            g2e = self.unpack_g2e(g2e)
-        elif isinstance(g2e, tuple):
-            g2e = tuple(self.unpack_g2e(x) for x in g2e)
+        if unpack_g2e:
+            if isinstance(g2e, np.ndarray):
+                    g2e = self.unpack_g2e(g2e)
+            elif isinstance(g2e, tuple):
+                g2e = tuple(self.unpack_g2e(x) for x in g2e)
 
         if SymmetryTypes.SZ in bw.symm_type:
             if h1e is not None and isinstance(h1e, np.ndarray) and h1e.ndim == 2:
@@ -1166,23 +1169,55 @@ class DMRGDriver:
         if normal_order_ref is None:
             if SymmetryTypes.SU2 in bw.symm_type:
                 if h1e is not None:
-                    b.add_sum_term("(C+D)0", np.sqrt(2) * h1e)
+                    b.add_sum_term("(C+D)0", h1e, cutoff=fast_cutoff, factor=np.sqrt(2))
                 if g2e is not None:
-                    b.add_sum_term("((C+(C+D)0)1+D)0", g2e.transpose(0, 2, 3, 1))
+                    if not unpack_g2e and g2e.ndim == 1:
+                        b.data.exprs.append("((C+(C+D)0)1+D)0")
+                        b.data.add_eight_fold_term(g2e, cutoff=fast_cutoff, factor=1.0)
+                    else:
+                        b.add_sum_term(
+                            "((C+(C+D)0)1+D)0", g2e, cutoff=fast_cutoff, perm=[0, 2, 3, 1]
+                        )
             elif SymmetryTypes.SZ in bw.symm_type:
                 if h1e is not None:
-                    b.add_sum_term("cd", h1e[0])
-                    b.add_sum_term("CD", h1e[1])
+                    b.add_sum_term("cd", h1e[0], cutoff=fast_cutoff)
+                    b.add_sum_term("CD", h1e[1], cutoff=fast_cutoff)
                 if g2e is not None:
-                    b.add_sum_term("ccdd", 0.5 * g2e[0].transpose(0, 2, 3, 1))
-                    b.add_sum_term("cCDd", 0.5 * g2e[1].transpose(0, 2, 3, 1))
-                    b.add_sum_term("CcdD", 0.5 * g2e[1].transpose(2, 0, 1, 3))
-                    b.add_sum_term("CCDD", 0.5 * g2e[2].transpose(0, 2, 3, 1))
+                    b.add_sum_term(
+                        "ccdd",
+                        g2e[0],
+                        cutoff=fast_cutoff,
+                        perm=[0, 2, 3, 1],
+                        factor=0.5,
+                    )
+                    b.add_sum_term(
+                        "cCDd",
+                        g2e[1],
+                        cutoff=fast_cutoff,
+                        perm=[0, 2, 3, 1],
+                        factor=0.5,
+                    )
+                    b.add_sum_term(
+                        "CcdD",
+                        g2e[1],
+                        cutoff=fast_cutoff,
+                        perm=[2, 0, 1, 3],
+                        factor=0.5,
+                    )
+                    b.add_sum_term(
+                        "CCDD",
+                        g2e[2],
+                        cutoff=fast_cutoff,
+                        perm=[0, 2, 3, 1],
+                        factor=0.5,
+                    )
             elif SymmetryTypes.SGF in bw.symm_type:
                 if h1e is not None:
-                    b.add_sum_term("CD", h1e)
+                    b.add_sum_term("CD", h1e, cutoff=fast_cutoff)
                 if g2e is not None:
-                    b.add_sum_term("CCDD", 0.5 * g2e.transpose(0, 2, 3, 1))
+                    b.add_sum_term(
+                        "CCDD", g2e, cutoff=fast_cutoff, perm=[0, 2, 3, 1], factor=0.5
+                    )
             elif SymmetryTypes.SGB in bw.symm_type:
                 h_terms = FermionTransform.jordan_wigner(h1e, g2e)
                 for k, (x, v) in h_terms.items():
@@ -3530,18 +3565,25 @@ class ExprBuilder:
         self.data.data.append(self.bw.VectorFL(val))
         return self
 
-    def add_sum_term(self, expr, arr, cutoff=1e-12, fast=True):
+    def add_sum_term(self, expr, arr, cutoff=1e-12, fast=True, factor=1.0, perm=None):
         import numpy as np
 
         self.data.exprs.append(expr)
         if fast:
-            self.data.add_sum_term(np.ascontiguousarray(arr), cutoff)
+            self.data.add_sum_term(
+                np.ascontiguousarray(arr),
+                cutoff,
+                factor,
+                self.bw.b.VectorUInt16([] if perm is None else perm),
+            )
         else:
             idx, dt = [], []
+            if perm is not None:
+                arr = arr.transpose(*perm)
             for ix in np.ndindex(*arr.shape):
                 if abs(arr[ix]) > cutoff:
                     idx.extend(ix)
-                    dt.append(arr[ix])
+                    dt.append(arr[ix] * factor)
             self.data.indices.append(self.bw.b.VectorUInt16(idx))
             self.data.data.append(self.bw.VectorFL(dt))
         return self

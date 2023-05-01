@@ -1846,17 +1846,35 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
         .def_readwrite("data", &GeneralFCIDUMP<FL>::data)
         .def_readwrite("elem_type", &GeneralFCIDUMP<FL>::elem_type)
         .def_readwrite("order_adjusted", &GeneralFCIDUMP<FL>::order_adjusted)
-        .def("add_sum_term",
-             [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
-                typename GeneralFCIDUMP<FL>::FP cutoff) {
-                 vector<int> shape(v.ndim());
-                 vector<size_t> strides(v.ndim());
-                 for (int i = 0; i < v.ndim(); i++)
-                     shape[i] = v.shape()[i],
-                     strides[i] = v.strides()[i] / sizeof(FL);
-                 self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
-                                    cutoff);
-             })
+        .def(
+            "add_eight_fold_term",
+            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
+               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor) {
+                self->add_eight_fold_term(v.data(), (size_t)v.size(), cutoff,
+                                          factor);
+            },
+            py::arg("v"), py::arg("cutoff"), py::arg("factor"))
+        .def(
+            "add_sum_term",
+            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
+               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor,
+               const vector<uint16_t> &perm) {
+                vector<int> shape(v.ndim());
+                vector<size_t> strides(v.ndim());
+                for (int i = 0; i < v.ndim(); i++)
+                    shape[i] = v.shape()[i],
+                    strides[i] = v.strides()[i] / sizeof(FL);
+                vector<uint16_t> rperm(v.ndim());
+                if (perm.size() == 0)
+                    for (int i = 0; i < v.ndim(); i++)
+                        rperm[i] = i;
+                else
+                    for (int i = 0; i < v.ndim(); i++)
+                        rperm[perm[i]] = i;
+                self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
+                                   cutoff, factor, vector<int>(), rperm);
+            },
+            py::arg("v"), py::arg("cutoff"), py::arg("factor"), py::arg("perm"))
         .def_static("initialize_from_qc",
                     &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
                     py::arg("elem_type"),
