@@ -450,6 +450,7 @@ integral_rescale = dic.get("integral_rescale", "auto")
 siv = dic.get("symmetrize_ints", 1E-10)
 init_mps_center = int(dic.get("init_mps_center", 0))
 symmetrize_ints_tol = 1E-10 if siv == "" else float(siv)
+nevpt_symmetrize_ints = float(dic.get("nevpt_symmetrize_ints", 1E-12))
 dynamic_corr_method = None
 condense_mpo = int(dic.get("condense_mpo", "1"))
 sub_spaces =['ijrs', 'ij', 'rs', 'ijr', 'rsi', 'ir', 'i', 'r']
@@ -3555,7 +3556,7 @@ if not pre_run:
         gfd = GeneralFCIDUMP()
         gfd.elem_type = ElemOpTypes.SU2
         gfd.exprs.append("(C+D)0")
-        gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * nevpt_h1e), 1E-12)
+        gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * nevpt_h1e), cutoff=nevpt_symmetrize_ints)
         gfd = gfd.adjust_order(merge=True)
 
         xmpo = GeneralMPO(ghamil, gfd, MPOAlgorithmTypes.FastBipartite, 1E-12, -1, 0)
@@ -3576,13 +3577,13 @@ if not pre_run:
             if is_core:
                 gfd.exprs.append("(C+(C+D)0)1")
                 gfd.exprs.append("C")
-                gfd.add_sum_term(np.ascontiguousarray(2 * g2e_si[:, ix]), 1E-12)
-                gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * h1e_si[:, ix]), 1E-12)
+                gfd.add_sum_term(np.ascontiguousarray(2 * g2e_si[:, ix]), cutoff=nevpt_symmetrize_ints)
+                gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * h1e_si[:, ix]), cutoff=nevpt_symmetrize_ints)
             else:
                 gfd.exprs.append("(D+(C+D)0)1")
                 gfd.exprs.append("D")
-                gfd.add_sum_term(np.ascontiguousarray(2 * g2e_sr[ix]), 1E-12)
-                gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * h1e_sr[ix]), 1E-12)
+                gfd.add_sum_term(np.ascontiguousarray(2 * g2e_sr[ix]), cutoff=nevpt_symmetrize_ints)
+                gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * h1e_sr[ix]), cutoff=nevpt_symmetrize_ints)
             gfd = gfd.adjust_order(merge=True)
 
             pmpo = GeneralMPO(ghamil, gfd, MPOAlgorithmTypes.FastBipartite, 1E-12, -1, 0)

@@ -1874,7 +1874,8 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                 self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
                                    cutoff, factor, vector<int>(), rperm);
             },
-            py::arg("v"), py::arg("cutoff"), py::arg("factor"), py::arg("perm"))
+            py::arg("v"), py::arg("cutoff"), py::arg("factor") = (FL)1.0,
+            py::arg("perm") = vector<uint16_t>())
         .def_static("initialize_from_qc",
                     &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
                     py::arg("elem_type"),
