@@ -277,6 +277,7 @@ This may take 11 minutes, requiring 14 GB memory.
 
 Adding option `-DMPI=ON` will build MPI parallel version. The C++ compiler and MPI library must be matched.
 If necessary, environment variables `CC`, `CXX`, and `MPIHOME` can be used to explicitly set the path.
+For manual compilation, the MPI library can have arbitrary version (openMPI, mpich, intelmpi, etc.).
 
 For mixed `openMP/MPI`, use `mpirun --bind-to none -n ...` or `mpirun --bind-to core --map-by ppr:$NPROC:node:pe=$NOMPT ...` to execute binary.
 
