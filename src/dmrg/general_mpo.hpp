@@ -2295,7 +2295,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 s_kept_total += s_kept;
                 nr_total += szr;
             }
-            if (ii == n_sites - 1 && s_kept_total != 1)
+            if (ii == n_sites - 1 && s_kept_total == 0)
+                throw runtime_error("Empty Hamiltonian!");
+            else if (ii == n_sites - 1 && s_kept_total != 1)
                 throw runtime_error(
                     "Hamiltonian may contain multiple total symmetry blocks "
                     "(small integral elements violating point group "

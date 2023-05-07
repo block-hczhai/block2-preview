@@ -3585,6 +3585,8 @@ if not pre_run:
                 gfd.add_sum_term(np.ascontiguousarray(2 * g2e_sr[ix]), cutoff=nevpt_symmetrize_ints)
                 gfd.add_sum_term(np.ascontiguousarray(np.sqrt(2) * h1e_sr[ix]), cutoff=nevpt_symmetrize_ints)
             gfd = gfd.adjust_order(merge=True)
+            if len(gfd.exprs) == 0:
+                continue
 
             pmpo = GeneralMPO(ghamil, gfd, MPOAlgorithmTypes.FastBipartite, 1E-12, -1, 0)
             pmpo.iprint = 2 if outputlevel >= 4 else min(outputlevel, 1)
