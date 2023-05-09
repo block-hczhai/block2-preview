@@ -2904,7 +2904,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              })
         .def("initialize_sz",
              [](FCIDUMP<FL> *self, uint16_t n_sites, uint16_t n_elec,
-                uint16_t twos, uint16_t isym, FL e, const py::tuple &t,
+                int16_t twos, uint16_t isym, FL e, const py::tuple &t,
                 const py::tuple &v) {
                  assert(t.size() == 2 && v.size() == 3);
                  py::array_t<FL> ta = t[0].cast<py::array_t<FL>>();
@@ -3088,7 +3088,7 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
                  ift.close();
              })
         .def("initialize_sz", [](CompressedFCIDUMP<FL> *self, uint16_t n_sites,
-                                 uint16_t n_elec, uint16_t twos, uint16_t isym,
+                                 uint16_t n_elec, int16_t twos, uint16_t isym,
                                  FL e, const py::tuple &t, const py::tuple &v) {
             assert(t.size() == 2 && v.size() == 3);
             if (py::isinstance<py::array_t<FL>>(t[0])) {

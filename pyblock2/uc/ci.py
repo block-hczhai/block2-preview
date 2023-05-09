@@ -21,12 +21,17 @@ import numpy as np
 
 """Arbitrary order Configuration Interaction."""
 
+
 class CI(lib.StreamObject):
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None, ci_order=2):
-        from pyscf.scf import hf
+        from pyscf.scf import hf, addons
 
         if isinstance(mf, hf.KohnShamDFT):
             raise RuntimeError("CI Warning: The first argument mf is a DFT object.")
+        if isinstance(mf, scf.rohf.ROHF):
+            lib.logger.warn(mf, 'RCI method does not support ROHF method. ROHF object '
+                            'is converted to UHF object and UCI method is called.')
+            mf = addons.convert_to_uhf(mf)
         if mo_coeff is None:
             mo_coeff = mf.mo_coeff
         if mo_occ is None:
@@ -66,7 +71,9 @@ class CI(lib.StreamObject):
                 g2e_symm=1,
             )
             nc, nv = (n_elec - spin) // 2, ncas - (n_elec + spin) // 2
-            idx = np.concatenate([np.mgrid[: nc + nv][nc:], np.mgrid[: nc + nv][:nc]])
+            idx = np.concatenate(
+                [np.mgrid[:ncas][ncas - nv :], np.mgrid[:ncas][: ncas - nv]]
+            )
             orb_sym = np.array(orb_sym)[idx]
             h1e = h1e[idx, :][:, idx]
             g2e = g2e[idx, :][:, idx][:, :, idx][:, :, :, idx]
@@ -84,11 +91,17 @@ class CI(lib.StreamObject):
                 g2e_symm=1,
             )
             nc, nv = (n_elec - abs(spin)) // 2, ncas - (n_elec + abs(spin)) // 2
-            idx = np.concatenate([np.mgrid[: nc + nv][nc:], np.mgrid[: nc + nv][:nc]])
+            idx = np.concatenate(
+                [np.mgrid[:ncas][ncas - nv :], np.mgrid[:ncas][: ncas - nv]]
+            )
             orb_sym = np.array(orb_sym)[idx]
             h1e = tuple(x[idx, :][:, idx] for x in h1e)
             g2e_aa, g2e_ab, g2e_bb = tuple(
                 x[idx, :][:, idx][:, :, idx][:, :, :, idx] for x in g2e
+            )
+            h1e = tuple(np.ascontiguousarray(x) for x in h1e)
+            g2e_aa, g2e_ab, g2e_bb = tuple(
+                np.ascontiguousarray(x) for x in (g2e_aa, g2e_ab, g2e_bb)
             )
             bs = b.sz
             VectorSX = b.VectorSZ
@@ -104,7 +117,13 @@ class CI(lib.StreamObject):
             VectorSX([target]), False, ncas, b.VectorUInt8(orb_sym), fd, 0
         )
         big.drt = bs.DRT(
-            big.drt.n_sites, big.drt.get_init_qs(), big.drt.orb_sym, nc, nv, n_ex=n_elec
+            big.drt.n_sites,
+            big.drt.get_init_qs(),
+            big.drt.orb_sym,
+            nc,
+            nv,
+            n_ex=n_elec,
+            single_ref=True,
         )
 
         if self.verbose >= 5:
@@ -179,6 +198,14 @@ class CI(lib.StreamObject):
             self.ci = kcis if self.nroots > 1 else kcis[0]
             conv = ndav < max_cycle
 
+        if self.ci_order == 0:
+            lib.logger.note(
+                self,
+                "E(%4s) =%s",
+                "CI%d" % 0,
+                "%20.16g" * self.nroots % ((self.e_hf,) * self.nroots),
+            )
+
         return conv, self.e_corr + self.e_hf, self.ci
 
 
@@ -189,4 +216,13 @@ if __name__ == "__main__":
     mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="d2h", verbose=3)
     mf = scf.RHF(mol).run(conv_tol=1e-14)
     ci.CISD(mf).run()
-    CI(mf, ci_order=4).run()
+    CI(mf, ci_order=2).run()
+
+    mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="c1", verbose=3, spin=2)
+    mf = scf.RHF(mol).run(conv_tol=1e-14)
+    ci.CISD(mf).run()
+    CI(mf, ci_order=2).run()
+
+    mf = scf.UHF(mol).run(conv_tol=1e-14)
+    ci.CISD(mf).run()
+    CI(mf, ci_order=2).run()

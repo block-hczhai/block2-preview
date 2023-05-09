@@ -206,6 +206,7 @@ template <typename S> void bind_drt_big_site(py::module &m) {
         .def_readwrite("n_core", &DRT<S>::n_core)
         .def_readwrite("n_virt", &DRT<S>::n_virt)
         .def_readwrite("n_ex", &DRT<S>::n_ex)
+        .def_readwrite("single_ref", &DRT<S>::single_ref)
         .def(py::init<>())
         .def(py::init<int16_t, int16_t, int16_t>(), py::arg("a"), py::arg("b"),
              py::arg("c"))
@@ -236,6 +237,11 @@ template <typename S> void bind_drt_big_site(py::module &m) {
                       int, int, int>(),
              py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
              py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"))
+        .def(py::init<int, const vector<S> &, const vector<typename S::pg_t> &,
+                      int, int, int, bool>(),
+             py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
+             py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"),
+             py::arg("single_ref"))
         .def_property_readonly("n_rows", &DRT<S>::n_rows)
         .def("initialize", &DRT<S>::initialize)
         .def("get_init_qs", &DRT<S>::get_init_qs)

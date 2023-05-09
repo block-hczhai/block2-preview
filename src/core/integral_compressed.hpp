@@ -430,7 +430,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
     // Initialize integrals: U(1) case
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
-    void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+    void initialize_sz(uint16_t n_sites, uint16_t n_elec, int16_t twos,
                        uint16_t isym, typename const_fl_type<FL>::FL e,
                        istream &ta, size_t lta, istream &tb, size_t ltb,
                        istream &va, size_t lva, istream &vb, size_t lvb,

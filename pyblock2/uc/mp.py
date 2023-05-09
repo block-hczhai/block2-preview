@@ -21,12 +21,20 @@ import numpy as np
 
 """Arbitrary order Møller-Plesset Perturbation Theory."""
 
+
 class MP(lib.StreamObject):
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None, mp_order=2):
-        from pyscf.scf import hf
+        from pyscf.scf import hf, addons
 
         if isinstance(mf, hf.KohnShamDFT):
             raise RuntimeError("MP Warning: The first argument mf is a DFT object.")
+        if isinstance(mf, scf.rohf.ROHF):
+            lib.logger.warn(
+                mf,
+                "RMP method does not support ROHF method. ROHF object "
+                "is converted to UHF object and UMP method is called.",
+            )
+            mf = addons.convert_to_uhf(mf)
         if mo_coeff is None:
             mo_coeff = mf.mo_coeff
         if mo_occ is None:
@@ -66,7 +74,9 @@ class MP(lib.StreamObject):
                 g2e_symm=1,
             )
             nc, nv = (n_elec - spin) // 2, ncas - (n_elec + spin) // 2
-            idx = np.concatenate([np.mgrid[: nc + nv][nc:], np.mgrid[: nc + nv][:nc]])
+            idx = np.concatenate(
+                [np.mgrid[:ncas][ncas - nv :], np.mgrid[:ncas][: ncas - nv]]
+            )
             orb_sym = np.array(orb_sym)[idx]
             h1e = h1e[idx, :][:, idx]
             g2e = g2e[idx, :][:, idx][:, :, idx][:, :, :, idx]
@@ -99,7 +109,9 @@ class MP(lib.StreamObject):
                 g2e_symm=1,
             )
             nc, nv = (n_elec - abs(spin)) // 2, ncas - (n_elec + abs(spin)) // 2
-            idx = np.concatenate([np.mgrid[: nc + nv][nc:], np.mgrid[: nc + nv][:nc]])
+            idx = np.concatenate(
+                [np.mgrid[:ncas][ncas - nv :], np.mgrid[:ncas][: ncas - nv]]
+            )
             orb_sym = np.array(orb_sym)[idx]
             h1e = tuple(x[idx, :][:, idx] for x in h1e)
             g2e_aa, g2e_ab, g2e_bb = tuple(
@@ -110,35 +122,51 @@ class MP(lib.StreamObject):
             target = b.SZ(n_elec, spin, 0)
             vacuum = b.SZ(0)
             g2e = g2e_aa, g2e_bb, g2e_ab
+            h1e = tuple(np.ascontiguousarray(x) for x in h1e)
+            g2e = tuple(
+                np.ascontiguousarray(x) for x in g2e
+            )
             fd = b.FCIDUMP()
             fd.initialize_sz(ncas, n_elec, spin, 0, ecore, h1e, g2e)
 
+            if spin == 0:
+                nva = slice(nv, None)
+                nvb = slice(nv, None)
+            elif spin > 0:
+                nva = slice(nv, None)
+                nvb = slice(nv, nv + nc)
+            else:
+                nva = slice(nv, nv + nc)
+                nvb = slice(nv, None)
+
             f1e = (
                 h1e[0]
-                + 0.5 * np.einsum("mnjj->mn", g2e[0][:, :, nv:, nv:])
-                + 0.5 * np.einsum("mnjj->mn", g2e[2][:, :, nv:, nv:])
-                - 0.5 * np.einsum("mjjn->mn", g2e[0][:, nv:, nv:, :]),
+                + np.einsum("mnjj->mn", g2e[0][:, :, nva, nva])
+                + np.einsum("mnjj->mn", g2e[2][:, :, nvb, nvb])
+                - np.einsum("mjjn->mn", g2e[0][:, nva, nva, :]),
                 h1e[1]
-                + 0.5 * np.einsum("mnjj->mn", g2e[1][:, :, nv:, nv:])
-                + 0.5 * np.einsum("jjmn->mn", g2e[2][nv:, nv:, :, :])
-                - 0.5 * np.einsum("mjjn->mn", g2e[1][:, nv:, nv:, :]),
+                + np.einsum("mnjj->mn", g2e[1][:, :, nvb, nvb])
+                + np.einsum("jjmn->mn", g2e[2][nva, nva, :, :])
+                - np.einsum("mjjn->mn", g2e[1][:, nvb, nvb, :]),
             )
             e0 = (
                 ecore
-                + np.einsum("jj->", f1e[0][nv:, nv:])
-                + np.einsum("jj->", f1e[1][nv:, nv:])
+                + np.einsum("jj->", f1e[0][nva, nva])
+                + np.einsum("jj->", f1e[1][nvb, nvb])
             )
             e1 = (
-                -0.5 * np.einsum("iijj->", g2e[0][nv:, nv:, nv:, nv:])
-                - 0.5 * np.einsum("iijj->", g2e[1][nv:, nv:, nv:, nv:])
-                - 1.0 * np.einsum("iijj->", g2e[2][nv:, nv:, nv:, nv:])
-                + 0.5 * np.einsum("ijji->", g2e[0][nv:, nv:, nv:, nv:])
-                + 0.5 * np.einsum("ijji->", g2e[1][nv:, nv:, nv:, nv:])
+                -0.5 * np.einsum("iijj->", g2e[0][nva, nva, nva, nva])
+                - 0.5 * np.einsum("iijj->", g2e[1][nvb, nvb, nvb, nvb])
+                - 1.0 * np.einsum("iijj->", g2e[2][nva, nva, nvb, nvb])
+                + 0.5 * np.einsum("ijji->", g2e[0][nva, nva, nva, nva])
+                + 0.5 * np.einsum("ijji->", g2e[1][nvb, nvb, nvb, nvb])
             )
+
+            f1e = tuple(np.ascontiguousarray(x) for x in f1e)
 
             fd0 = b.FCIDUMP()
             fd0.initialize_sz(
-                ncas, n_elec, spin, 0, ecore - e0, f1e, (0.0 * x for x in g2e)
+                ncas, n_elec, spin, 0, ecore - e0, f1e, tuple(0.0 * x for x in g2e)
             )
             fd1 = b.FCIDUMP()
             fd1.initialize_sz(
@@ -152,7 +180,13 @@ class MP(lib.StreamObject):
             VectorSX([target]), False, ncas, b.VectorUInt8(orb_sym), fd, 0
         )
         big.drt = bs.DRT(
-            big.drt.n_sites, big.drt.get_init_qs(), big.drt.orb_sym, nc, nv, n_ex=n_elec
+            big.drt.n_sites,
+            big.drt.get_init_qs(),
+            big.drt.orb_sym,
+            nc,
+            nv,
+            n_ex=n_elec,
+            single_ref=True,
         )
 
         big0 = bs.DRTBigSite(
@@ -258,6 +292,14 @@ class MP(lib.StreamObject):
             self.e_corr = sum(ecorrs[: self.mp_order + 1]) - self.e_hf
             conv = niter < max_cycle
             self.ci = wfns
+        
+        if self.mp_order == 1:
+            lib.logger.note(
+                self,
+                "E(%4s) =%s",
+                "MP%d" % 1,
+                "%20.16g" % sum(ecorrs[:2]),
+            )
 
         return conv, self.e_corr + self.e_hf, self.ci
 
@@ -268,5 +310,19 @@ if __name__ == "__main__":
 
     mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="d2h", verbose=3)
     mf = scf.RHF(mol).run(conv_tol=1e-14)
+    mp.MP2(mf).run()
+    MP(mf, mp_order=2).run()
+
+    mol = gto.M(
+        atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="c1", verbose=3, spin=2
+    )
+    mf = scf.RHF(mol).run(conv_tol=1e-14)
+    mp.MP2(mf).run()
+    MP(mf, mp_order=2).run() # not okay
+
+    mol = gto.M(
+        atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="c1", verbose=3, spin=2
+    )
+    mf = scf.UHF(mol).run(conv_tol=1e-14)
     mp.MP2(mf).run()
     MP(mf, mp_order=2).run()

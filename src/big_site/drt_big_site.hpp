@@ -57,6 +57,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     vector<array<LL, 5>> xs;
     int n_sites, n_init_qs;
     int n_core, n_virt, n_ex;
+    bool single_ref;
     DRT() : n_sites(0), n_init_qs(0), n_core(0), n_virt(0), n_ex(0) {}
     DRT(int16_t a, int16_t b, int16_t c,
         typename S::pg_t ipg = (typename S::pg_t)0,
@@ -70,9 +71,9 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         : DRT(n_sites, vector<S>{q}, orb_sym, n_core, n_virt, n_ex) {}
     DRT(int n_sites, const vector<S> &init_qs,
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
-        int n_core = 0, int n_virt = 0, int n_ex = 0)
+        int n_core = 0, int n_virt = 0, int n_ex = 0, bool single_ref = false)
         : n_sites(n_sites), orb_sym(orb_sym), n_init_qs((int)init_qs.size()),
-          n_core(n_core), n_virt(n_virt), n_ex(n_ex) {
+          n_core(n_core), n_virt(n_virt), n_ex(n_ex), single_ref(single_ref) {
         if (T == ElemOpTypes::SU2 || T == ElemOpTypes::SZ) {
             for (auto &q : init_qs) {
                 abc.push_back(array<int16_t, 4>{
@@ -89,7 +90,9 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     virtual ~DRT() = default;
     int n_rows() const { return (int)abc.size(); }
     void initialize() {
-        int nc = this->n_core, nv = this->n_virt, nx = this->n_ex;
+        const int nc = this->n_core, nv = this->n_virt, nx = this->n_ex;
+        const bool sr = this->single_ref;
+        const int sp = (int)(n_init_qs > 0 && abc[0][1] > 0);
         abc.resize(n_init_qs);
         pgs.resize(n_init_qs);
         auto make_abc = [](int16_t a, int16_t b, int16_t c, int16_t t,
@@ -126,16 +129,19 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                 return false;
             }
         };
-        auto make_abct = [&make_abc, &nc, &nv](int k, int16_t a, int16_t b,
-                                               int16_t c, int16_t t,
-                                               int16_t d) -> array<int16_t, 4> {
+        auto make_abct = [&make_abc, &nc, &nv, &sr, &sp](int k, int16_t a, int16_t b, int16_t c,
+                               int16_t t, int16_t d) -> array<int16_t, 4> {
             array<int16_t, 4> r = make_abc(a, b, c, t, d);
-            r[3] = (int16_t)(k < nv || k > nc + nv
-                                 ? 0
-                                 : (k < nc + nv ? (int)t
-                                                : max(0, nc + nc -
-                                                             (a + a + abs(b) -
-                                                              (d + 1) / 2))));
+            if (sr && k >= nc + nv)
+                    r[3] = (int16_t)(t + (sp ? d >= 2 : d == 1 || d == 3));
+            else
+                r[3] =
+                    (int16_t)(k < nv || k > nc + nv
+                                  ? 0
+                                  : (k < nc + nv ? (int)t
+                                                 : max(0, nc + nc -
+                                                              (a + a + abs(b) -
+                                                               (d + 1) / 2))));
             return r;
         };
         auto allow_abct = [&allow_abc, &nc, &nv,
@@ -326,7 +332,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
     }
     shared_ptr<DRT<S>> operator^(int n_ex_new) const {
         return make_shared<DRT<S>>(n_sites, get_init_qs(), orb_sym, n_core,
-                                   n_virt, n_ex_new);
+                                   n_virt, n_ex_new, single_ref);
     }
     vector<LL> operator>>(const shared_ptr<DRT<S>> &other) const {
         vector<vector<int>> pbr(2, vector<int>(1, 0)),

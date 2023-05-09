@@ -554,7 +554,7 @@ template <typename FL> struct FCIDUMP {
     // Two-electron integrals can be three general rank-4 arrays
     // or 8-fold, 8-fold, 4-fold rank-1 arrays
     virtual ~FCIDUMP() = default;
-    virtual void initialize_sz(uint16_t n_sites, uint16_t n_elec, uint16_t twos,
+    virtual void initialize_sz(uint16_t n_sites, uint16_t n_elec, int16_t twos,
                                uint16_t isym, typename const_fl_type<FL>::FL e,
                                const FL *ta, size_t lta, const FL *tb,
                                size_t ltb, const FL *va, size_t lva,
@@ -622,10 +622,10 @@ template <typename FL> struct FCIDUMP {
     }
     // Initialize integrals: SU(2) case
     // Two-electron integrals can be general rank-4 array or 8-fold rank-1 array
-    virtual void initialize_su2(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym,
-                                typename const_fl_type<FL>::FL e, const FL *t,
-                                size_t lt, const FL *v, size_t lv) {
+    virtual void initialize_su2(uint16_t n_sites, uint16_t n_elec, int16_t twos,
+                                uint16_t isym, typename const_fl_type<FL>::FL e,
+                                const FL *t, size_t lt, const FL *v,
+                                size_t lv) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -666,10 +666,9 @@ template <typename FL> struct FCIDUMP {
         uhf = false;
     }
     // Initialize with only h1e integral
-    virtual void initialize_h1e(uint16_t n_sites, uint16_t n_elec,
-                                uint16_t twos, uint16_t isym,
-                                typename const_fl_type<FL>::FL e, const FL *t,
-                                size_t lt) {
+    virtual void initialize_h1e(uint16_t n_sites, uint16_t n_elec, int16_t twos,
+                                uint16_t isym, typename const_fl_type<FL>::FL e,
+                                const FL *t, size_t lt) {
         params.clear();
         ts.clear();
         vs.clear();
@@ -1076,9 +1075,7 @@ template <typename FL> struct FCIDUMP {
         return error;
     }
     // Target 2S or 2Sz
-    uint16_t twos() const {
-        return (uint16_t)Parsing::to_int(params.at("ms2"));
-    }
+    int16_t twos() const { return (int16_t)Parsing::to_int(params.at("ms2")); }
     // Number of sites
     uint16_t n_sites() const {
         return (uint16_t)Parsing::to_int(params.at("norb"));
