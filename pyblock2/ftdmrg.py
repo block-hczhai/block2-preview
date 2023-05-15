@@ -445,7 +445,7 @@ class FTDMRG:
         mps.load_data()
 
         # 2PDM MPO
-        pmpo = PDM2MPOQC(self.hamil, mask=PDM2MPOQC.s_minimal)
+        pmpo = PDM2MPOQC(self.hamil, "PHQC", mask=PDM2MPOQC.s_minimal)
         pmpo = AncillaMPO(pmpo, True)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 

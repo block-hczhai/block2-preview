@@ -28,7 +28,7 @@ Author: Huanchen Zhai, Jun 21, 2020
 from block2 import init_memory, release_memory, Threading, ThreadingTypes, Global
 from block2 import VectorUInt8, VectorUBond, VectorInt, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes
-from block2 import SU2, SZ, get_partition_weights, OpNamesSet, OpNames
+from block2 import SU2, SZ, PartitionWeights, OpNamesSet, OpNames
 import numpy as np
 import time
 
@@ -235,28 +235,8 @@ class LTDMRG:
             if self.verbose >= 2:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
-            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis)
-            smps_info.tag = "1NPC"
-            for i in range(0, smps_info.n_sites + 1):
-                smps_info.left_dims[i] = mps_info.left_dims[i]
-                smps_info.right_dims[i] = mps_info.right_dims[i]
-            smps_info.save_mutable()
-
-            mps.load_mutable()
-
-            smps = MultiMPS(smps_info)
-            smps.n_sites = mps.n_sites
-            smps.center = mps.center
-            smps.dot = mps.dot
-            smps.canonical_form = '' + mps.canonical_form
-            smps.tensors = mps.tensors[:]
-            smps.wfns = mps.wfns[iroot:iroot+1]
+            smps = mps.extract(iroot, "1NPC")
             smps.weights = mps.weights[iroot:iroot+1]
-            smps.nroots = 1
-            smps.save_mutable()
-
-            mps.deallocate()
 
             # 1NPC
             pme = MovingEnvironment(pmpo, smps, smps, "1NPC")
@@ -275,7 +255,6 @@ class LTDMRG:
                 dm = np.transpose(dm, (0, 2, 1, 3))
 
             dmr.deallocate()
-            smps_info.deallocate()
 
             if ridx is not None:
                 dm[:, :] = dm[ridx, :][:, ridx]
@@ -289,10 +268,11 @@ class LTDMRG:
             dms.append(dm)
 
         pmpo.deallocate()
-        mps_info.deallocate_mutable()
-        mps_info.deallocate()
+        mps.info.deallocate_mutable()
+        mps.info.deallocate()
 
-        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        pws = PartitionWeights.get_partition_weights(beta, VectorDouble(self.energies),
+            self.multiplicities)
         dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
@@ -332,29 +312,9 @@ class LTDMRG:
         for iroot in range(mps.nroots):
             if self.verbose >= 2:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
-
-            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis)
-            smps_info.tag = "1PDM"
-            for i in range(0, smps_info.n_sites + 1):
-                smps_info.left_dims[i] = mps_info.left_dims[i]
-                smps_info.right_dims[i] = mps_info.right_dims[i]
-            smps_info.save_mutable()
-
-            mps.load_mutable()
-
-            smps = MultiMPS(smps_info)
-            smps.n_sites = mps.n_sites
-            smps.center = mps.center
-            smps.dot = mps.dot
-            smps.canonical_form = '' + mps.canonical_form
-            smps.tensors = mps.tensors[:]
-            smps.wfns = mps.wfns[iroot:iroot+1]
+            
+            smps = mps.extract(iroot, "1PDM")
             smps.weights = mps.weights[iroot:iroot+1]
-            smps.nroots = 1
-            smps.save_mutable()
-
-            mps.deallocate()
 
             # 1PDM
             pme = MovingEnvironment(pmpo, smps, smps, "1PDM")
@@ -373,7 +333,6 @@ class LTDMRG:
                 dm = np.transpose(dm, (0, 2, 1, 3))
 
             dmr.deallocate()
-            smps_info.deallocate()
 
             if ridx is not None:
                 dm[:, :] = dm[ridx, :][:, ridx]
@@ -388,10 +347,11 @@ class LTDMRG:
             dms.append(dm)
 
         pmpo.deallocate()
-        mps_info.deallocate_mutable()
-        mps_info.deallocate()
+        mps.info.deallocate_mutable()
+        mps.info.deallocate()
 
-        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        pws = PartitionWeights.get_partition_weights(beta, VectorDouble(self.energies),
+            self.multiplicities)
         dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
@@ -428,7 +388,7 @@ class LTDMRG:
         mps.load_data()
 
         # 2PDM MPO
-        pmpo = PDM2MPOQC(self.hamil, mask=PDM2MPOQC.s_minimal)
+        pmpo = PDM2MPOQC(self.hamil, "PHQC", mask=PDM2MPOQC.s_minimal)
         pmpo = SimplifiedMPO(pmpo, RuleQC())
 
         dms = []
@@ -437,28 +397,8 @@ class LTDMRG:
             if self.verbose >= 2:
                 print('>>> root = %3d / %3d <<<' % (iroot, mps.nroots))
 
-            smps_info = MultiMPSInfo(self.n_sites, self.hamil.vacuum,
-                                     self.targets, self.hamil.basis)
-            smps_info.tag = "2PDM"
-            for i in range(0, smps_info.n_sites + 1):
-                smps_info.left_dims[i] = mps_info.left_dims[i]
-                smps_info.right_dims[i] = mps_info.right_dims[i]
-            smps_info.save_mutable()
-
-            mps.load_mutable()
-
-            smps = MultiMPS(smps_info)
-            smps.n_sites = mps.n_sites
-            smps.center = mps.center
-            smps.dot = mps.dot
-            smps.canonical_form = '' + mps.canonical_form
-            smps.tensors = mps.tensors[:]
-            smps.wfns = mps.wfns[iroot:iroot+1]
+            smps = mps.extract(iroot, "2PDM")
             smps.weights = mps.weights[iroot:iroot+1]
-            smps.nroots = 1
-            smps.save_mutable()
-
-            mps.deallocate()
 
             # 2PDM
             pme = MovingEnvironment(pmpo, smps, smps, "2PDM")
@@ -473,8 +413,6 @@ class LTDMRG:
                              self.n_sites, 2, self.n_sites, 2))
             dm = np.transpose(dm, (0, 2, 4, 6, 1, 3, 5, 7))
 
-            smps_info.deallocate()
-
             if ridx is not None:
                 dm[:, :, :, :] = dm[ridx, :, :, :] \
                     [:, ridx, :, :][:, :, ridx, :][:, :, :, ridx]
@@ -485,10 +423,11 @@ class LTDMRG:
             dms.append(dm)
 
         pmpo.deallocate()
-        mps_info.deallocate_mutable()
-        mps_info.deallocate()
+        mps.info.deallocate_mutable()
+        mps.info.deallocate()
 
-        pws = get_partition_weights(beta, self.energies, self.multiplicities)
+        pws = PartitionWeights.get_partition_weights(beta, VectorDouble(self.energies),
+            self.multiplicities)
         dm = np.add.reduce([w * dm for w, dm in zip(pws, dms)])
 
         if self.verbose >= 2:
@@ -643,8 +582,8 @@ if __name__ == "__main__":
 
     lt.dmrg(mu, bond_dims, noises, n_steps=max_dmrg_steps, conv_tol=sweep_tol)
 
-    partition_weights = get_partition_weights(
-        beta, lt.energies, lt.multiplicities)
+    partition_weights = PartitionWeights.get_partition_weights(
+        beta, VectorDouble(lt.energies), lt.multiplicities)
 
     print("Partition Function Weights (beta = %9.5f, mu = %9.5f):" % (beta, mu))
     for ii, (e, qs, pw) in enumerate(zip(lt.energies, lt.quanta, partition_weights)):

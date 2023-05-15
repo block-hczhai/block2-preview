@@ -209,6 +209,7 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
     bind_general_fcidump<double>(m);
+    bind_partition_weights<double>(m);
     bind_dmrg<SU2, double>(m_su2, "SU2");
     bind_dmrg<SZ, double>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
@@ -249,6 +250,7 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_SINGLE_PREC
+    bind_partition_weights<float>(m_sp);
     bind_general_fcidump<float>(m_sp);
     bind_dmrg<SU2, float>(m_su2_sp, "SU2");
     bind_dmrg<SZ, float>(m_sz_sp, "SZ");
