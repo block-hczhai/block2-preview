@@ -1019,6 +1019,32 @@ template <typename S, typename FL> void bind_fl_qc_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S, FL>::get_site_ops);
 }
 
+template <typename FL> void bind_partition_weights(py::module &m) {
+
+    py::class_<PartitionWeights<FL>, shared_ptr<PartitionWeights<FL>>>(
+        m, "PartitionWeights")
+        .def_static("get_partition_weights",
+                    (vector<typename GMatrix<FL>::FL>(*)(void)) &
+                        PartitionWeights<FL>::get_partition_weights)
+        .def_static("get_partition_weights",
+                    (vector<typename GMatrix<FL>::FL>(*)(FL, const vector<FL> &,
+                                                         const vector<int> &)) &
+                        PartitionWeights<FL>::get_partition_weights)
+        .def_static("get_type", &PartitionWeights<FL>::get_type);
+
+    py::class_<PartitionWeights<complex<FL>>,
+               shared_ptr<PartitionWeights<complex<FL>>>>(
+        m, "ComplexPartitionWeights")
+        .def_static("get_partition_weights",
+                    (vector<complex<FL>>(*)()) &
+                        PartitionWeights<complex<FL>>::get_partition_weights)
+        .def_static("get_partition_weights",
+                    (vector<complex<FL>>(*)(FL, const vector<FL> &,
+                                            const vector<int> &)) &
+                        PartitionWeights<complex<FL>>::get_partition_weights)
+        .def_static("get_type", &PartitionWeights<complex<FL>>::get_type);
+}
+
 template <typename S, typename FL, typename FLS, typename FLX>
 void bind_fl_expect(py::module &m, const string &name) {
 
