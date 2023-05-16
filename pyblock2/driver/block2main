@@ -34,7 +34,8 @@ from block2 import Random, FCIDUMP, QCTypes, SeqTypes, TETypes, OpNames, VectorI
 from block2 import MatrixFunctions, KuhnMunkres, Matrix, DyallFCIDUMP, FinkFCIDUMP, ConvergenceTypes
 from block2 import HubbardKSpaceFCIDUMP, HubbardFCIDUMP, HeisenbergFCIDUMP, ExpectationAlgorithmTypes
 from block2 import SpinOrbitalFCIDUMP, MRCISFCIDUMP, VectorVectorInt, GeneralFCIDUMP, ElemOpTypes
-from block2 import MPOAlgorithmTypes, EquationTypes
+from block2 import MPOAlgorithmTypes, EquationTypes, VectorActTypes, ActiveTypes
+from block2 import IntVectorAllocator, DoubleVectorAllocator
 import numpy as np
 import time
 import os
@@ -133,11 +134,11 @@ if "single_prec" in dic and "use_complex" not in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite, DRTBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite, DRT
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite, DRTBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite, DRT
     except ImportError:
         pass
 elif "single_prec" in dic and "use_complex" in dic:
@@ -195,11 +196,11 @@ elif "single_prec" in dic and "use_complex" in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite, DRTBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite, DRT
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite, DRTBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite, DRT
     except ImportError:
         pass
 elif "use_complex" not in dic:
@@ -281,11 +282,11 @@ elif "use_complex" not in dic:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite, DRTBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite, DRT
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite, DRTBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite, DRT
     except ImportError:
         pass
 else:
@@ -368,11 +369,11 @@ else:
         if "nonspinadapted" in dic:
             from block2.sz import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.sz import DMRGBigSite, LinearBigSite
-            from block2.sz import SCIFockBigSite, DRTBigSite
+            from block2.sz import SCIFockBigSite, DRTBigSite, DRT
         else:
             from block2.su2 import HamiltonianQCBigSite, SimplifiedBigSite, ParallelBigSite
             from block2.su2 import DMRGBigSite, LinearBigSite
-            from block2.su2 import CSFBigSite, DRTBigSite
+            from block2.su2 import CSFBigSite, DRTBigSite, DRT
     except ImportError:
         pass
 
@@ -951,9 +952,18 @@ if pre_run or not no_pre_run:
         _print("loading reorder for restarting = ", orb_idx)
         fcidump.reorder(VectorUInt16(orb_idx))
     elif "nofiedler" in dic or "noreorder" in dic:
-        orb_idx = None
-        np.save(scratch + '/orbital_reorder.npy',
-                np.arange(0, fcidump.n_sites, dtype=int))
+        if dynamic_corr_method is not None and big_site_method == "bigdrt":
+            orb_idx = np.arange(0, fcidump.n_sites, dtype=int)
+            orb_idx = np.concatenate((orb_idx[(orb_idx >= n_inactive)
+                & (orb_idx < n_cas + n_inactive)], orb_idx[orb_idx < n_inactive],
+                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
+            fcidump.reorder(VectorUInt16(orb_idx))
+            np.save(scratch + '/orbital_reorder.npy', orb_idx)
+        else:
+            orb_idx = None
+            np.save(scratch + '/orbital_reorder.npy',
+                    np.arange(0, fcidump.n_sites, dtype=int))
     else:
         if "gaopt" in dic:
             orb_idx = orbital_reorder(fcidump, method='gaopt ' + dic["gaopt"])
@@ -971,9 +981,14 @@ if pre_run or not no_pre_run:
             orb_idx = orbital_reorder(fcidump, method='fiedler')
             _print("using fiedler reorder = ", orb_idx)
         if dynamic_corr_method is not None:
-            orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
-                orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
-                orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            if big_site_method != "bigdrt":
+                orb_idx = np.concatenate((orb_idx[orb_idx < n_inactive],
+                    orb_idx[(orb_idx >= n_inactive) & (orb_idx < n_cas + n_inactive)],
+                    orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
+            else:
+                orb_idx = np.concatenate((orb_idx[(orb_idx >= n_inactive)
+                    & (orb_idx < n_cas + n_inactive)], orb_idx[orb_idx < n_inactive],
+                    orb_idx[orb_idx >= n_cas + n_inactive]), axis=0)
             _print("reorder indices adjusted for dynamic correlation = ", orb_idx)
         fcidump.reorder(VectorUInt16(orb_idx))
         np.save(scratch + '/orbital_reorder.npy', orb_idx)
@@ -1064,6 +1079,7 @@ if pre_run or not no_pre_run:
                 'center =', qc_mpo_trans_center, "/", fcidump.n_sites)
         else:
             hamil = HamiltonianQC(vacuum, n_sites, orb_sym, fcidump)
+        rhamil = hamil
         ghamil = GeneralHamiltonian(vacuum, n_sites, orb_sym)
         if "use_hybrid_complex" in dic:
             if "simple_parallel" in dic:
@@ -1135,6 +1151,7 @@ if pre_run or not no_pre_run:
             mpo_fold.tensors[-1].ops[k] = smat
         mpo_fold.sparse_form = mpo_fold.sparse_form[:-1] + 'S'
         mpo_fold.tf = TensorFunctions(CSROperatorFunctions(hamil.opf.cg))
+        rhamil = hamil
     else:
         assert dynamic_corr_method is not None
         if dynamic_corr_method[0] in ['mrcisdt']:
@@ -1197,10 +1214,33 @@ if pre_run or not no_pre_run:
                 orb_sym[:n_inactive], fcidump, max(outputlevel, 0))
             big_right_orig = DRTBigSite(right_iqs, True, n_external,
                 orb_sym[-n_external:], fcidump, max(outputlevel, 0))
+        elif big_site_method == "bigdrt":
+            left_iqs = DRTBigSite.get_target_quanta(False, 0, 0, orb_sym[:0])
+            right_iqs = DRTBigSite.get_target_quanta(True, n_inactive + n_external, abs(xr[-1]),
+                orb_sym[-(n_inactive + n_external):], nc_ref=n_inactive)
+            big_left_orig = DRTBigSite(left_iqs, False, 0, orb_sym[:0], fcidump, max(outputlevel, 0))
+            big_right_orig = DRTBigSite(right_iqs, True, n_inactive + n_external,
+                orb_sym[-(n_inactive + n_external):], fcidump, max(outputlevel, 0))
+            big_right_orig.drt = DRT(
+                big_right_orig.drt.n_sites,
+                big_right_orig.drt.get_init_qs(),
+                big_right_orig.drt.orb_sym, n_inactive, n_external, n_ex=abs(xr[-1]), nc_ref=n_inactive,
+            )
+            right_iqs_z = DRTBigSite.get_target_quanta(True, n_inactive + n_external, 0,
+                orb_sym[-(n_inactive + n_external):], nc_ref=n_inactive)
+            big_right_orig_z = DRTBigSite(right_iqs_z, True, n_inactive + n_external,
+                orb_sym[-(n_inactive + n_external):], fcidump, max(outputlevel, 0))
+            big_right_orig_z.drt = DRT(
+                big_right_orig_z.drt.n_sites,
+                big_right_orig_z.drt.get_init_qs(),
+                big_right_orig_z.drt.orb_sym, n_inactive, n_external, n_ex=0, nc_ref=n_inactive,
+            )
         else:
             raise NotImplementedError
         big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
         big_right = SimplifiedBigSite(big_right_orig, simpl_rule)
+        if big_site_method == "bigdrt":
+            big_right_z = SimplifiedBigSite(big_right_orig_z, simpl_rule)
         if MPI is not None:
             big_left_np = big_left
             big_right_np = big_right
@@ -1210,10 +1250,29 @@ if pre_run or not no_pre_run:
             else:
                 big_left = ParallelBigSite(big_left, prule)
                 big_right = ParallelBigSite(big_right, prule)
+            if big_site_method == "bigdrt":
+                big_right_np_z = big_right_z
+                if one_body_only:
+                    big_right_z = ParallelBigSite(big_right_z, prule_one_body)
+                else:
+                    big_right_z = ParallelBigSite(big_right_z, prule)
             hamil_np = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-                    None if n_inactive == 0 else big_left_np, None if n_external == 0 else big_right_np)
+                    None if n_inactive == 0 or big_site_method == "bigdrt" else big_left_np,
+                    None if (n_external == 0 and big_site_method != "bigdrt") or n_inactive + n_external == 0 else big_right_np)
         hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-                    None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                    None if n_inactive == 0 or big_site_method == "bigdrt" else big_left,
+                    None if (n_external == 0 and big_site_method != "bigdrt") or n_inactive + n_external == 0 else big_right)
+        rhamil = hamil
+        if big_site_method == "bigdrt" and dynamic_corr_method[0] in ["casci", "nevpt2s", "nevpt2sd", "nevpt2-ijrs", "nevpt2-ij",
+                        "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
+                        "mrrept2s", "mrrept2sd", "mrrept2-ijrs", "mrrept2-ij",
+                        "mrrept2-rs", "mrrept2-ijr", "mrrept2-rsi", "mrrept2-ir", "mrrept2-i", "mrrept2-r"]:
+            hamil_np = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
+                    None if n_inactive == 0 or big_site_method == "bigdrt" else big_left_np,
+                    None if (n_external == 0 and big_site_method != "bigdrt") or n_inactive + n_external == 0 else big_right_np_z)
+            hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
+                    None if n_inactive == 0 or big_site_method == "bigdrt" else big_left,
+                    None if (n_external == 0 and big_site_method != "bigdrt") or n_inactive + n_external == 0 else big_right_z)
     n_sites = hamil.n_sites
 
 else:
@@ -1343,7 +1402,6 @@ proj_tags = dic.get("proj_mps_tags", "").split()
 soc = "soc" in dic
 overlap = "overlap" in dic
 conv_npdm = ("conventional_npdm" in dic) or soc
-
 
 def fmt_size(i, suffix='B'):
     if i < 1000:
@@ -1506,7 +1564,11 @@ elif pre_run or not no_pre_run:
                         "nevpt2-rs", "nevpt2-ijr", "nevpt2-rsi", "nevpt2-ir", "nevpt2-i", "nevpt2-r",
                         "mrrept2s", "mrrept2sd", "mrrept2-ijrs", "mrrept2-ij",
                         "mrrept2-rs", "mrrept2-ijr", "mrrept2-rsi", "mrrept2-ir", "mrrept2-i", "mrrept2-r"]:
-                    if big_site_method is not None:
+                    if big_site_method == "bigdrt":
+                        acts = VectorActTypes([ActiveTypes.Active] * n_cas + [ActiveTypes.Frozen])
+                        basis = basis.__class__(list(basis))
+                        mps_info = CASCIMPSInfo(mps_n_sites, vacuum, target, basis, acts)
+                    elif big_site_method is not None:
                         mps_info = CASCIMPSInfo(mps_n_sites, vacuum, target, basis,
                                                 1 if n_inactive != 0 else 0, n_cas, 1 if n_external != 0 else 0)
                     else:
@@ -2453,6 +2515,9 @@ if not pre_run:
         dmrg.me.remove_partition_files()
         for xme in dmrg.ext_mes:
             xme.remove_partition_files()
+
+        if mps.center == mps.n_sites - 1 and mps.dot == 2 and dot == 2:
+            mps.center = mps.n_sites - 2
 
         _print("Final canonical form = ", mps.canonical_form, mps.center)
         for x in dmrg.energies:
@@ -3802,18 +3867,28 @@ if not pre_run:
         if MPI is not None:
             MPI.barrier()
         if dynamic_corr_method[0].startswith("nevpt2"):
-            fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)
+            if big_site_method == "bigdrt":
+                fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external, True)
+            else:
+                fd_dyall = DyallFCIDUMP(fcidump, n_inactive, n_external)
             dm = np.load(scratch + "/1pdm.npy")
+            if orb_idx is not None:
+                dm = dm[:, orb_idx][:, :, orb_idx]
+                dm = np.ascontiguousarray(dm)
             if fcidump.uhf:
                 dmx = np.zeros((dm.shape[0] * 2, dm.shape[1] * 2))
                 dmx[0::2, 0::2] = dm[0]
                 dmx[1::2, 1::2] = dm[1]
+                dmx = np.ascontiguousarray(dmx)
                 fd_dyall.initialize_from_1pdm_sz(dmx)
             else:
                 fd_dyall.initialize_from_1pdm_su2(dm[0] + dm[1])
             fd_zero = fd_dyall
         else:
-            fd_fink = FinkFCIDUMP(fcidump, n_inactive, n_external)
+            if big_site_method == "bigdrt":
+                fd_fink = FinkFCIDUMP(fcidump, n_inactive, n_external, True)
+            else:
+                fd_fink = FinkFCIDUMP(fcidump, n_inactive, n_external)
             fd_zero = fd_fink
         e_casci = float(np.load(scratch + "/E_dmrg.npy"))
 
@@ -3840,7 +3915,10 @@ if not pre_run:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
             hamil = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fcidump,
-                                         None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                                         None if n_inactive == 0 or big_site_method == "bigdrt" else big_left,
+                                         None if (n_external == 0 and big_site_method != "bigdrt")
+                                         or n_inactive + n_external == 0 else big_right)
+            rhamil = hamil
         if big_site_method is None:
             hm_zero = HamiltonianQC(vacuum, n_sites, orb_sym, fd_zero)
         elif big_site_method == "folding":
@@ -3944,6 +4022,18 @@ if not pre_run:
                     orb_sym[:n_inactive], fd_zero, max(outputlevel, 0))
                 big_right_orig = DRTBigSite(right_iqs, True, n_external,
                     orb_sym[-n_external:], fd_zero, max(outputlevel, 0))
+            elif big_site_method == "bigdrt":
+                left_iqs = DRTBigSite.get_target_quanta(False, 0, 0, orb_sym[:0])
+                right_iqs = DRTBigSite.get_target_quanta(True, n_inactive + n_external, abs(xr[-1]),
+                    orb_sym[-(n_inactive + n_external):], nc_ref=n_inactive)
+                big_left_orig = DRTBigSite(left_iqs, False, 0, orb_sym[:0], fd_zero, max(outputlevel, 0))
+                big_right_orig = DRTBigSite(right_iqs, True, n_inactive + n_external,
+                    orb_sym[-(n_inactive + n_external):], fd_zero, max(outputlevel, 0))
+                big_right_orig.drt = DRT(
+                    big_right_orig.drt.n_sites,
+                    big_right_orig.drt.get_init_qs(),
+                    big_right_orig.drt.orb_sym, n_inactive, n_external, n_ex=abs(xr[-1]), nc_ref=n_inactive,
+                )
             else:
                 raise NotImplementedError
             big_left = SimplifiedBigSite(big_left_orig, simpl_rule)
@@ -3956,7 +4046,8 @@ if not pre_run:
                     big_left = ParallelBigSite(big_left, prule)
                     big_right = ParallelBigSite(big_right, prule)
             hm_zero = HamiltonianQCBigSite(vacuum, n_orbs, orb_sym, fd_zero,
-                                            None if n_inactive == 0 else big_left, None if n_external == 0 else big_right)
+                                            None if n_inactive == 0 or big_site_method == "bigdrt" else big_left,
+                                            None if (n_external == 0 and big_site_method != "bigdrt") or n_inactive + n_external == 0 else big_right)
 
         # left mpo
         _print("build left mpo", time.perf_counter() - tx)
@@ -3987,7 +4078,7 @@ if not pre_run:
         if big_site_method == "folding":
             rmpo = mpo_fold
         else:
-            rmpo = MPOQC(hamil, qc_type, "RQC")
+            rmpo = MPOQC(rhamil, qc_type, "RQC")
         _print("simpl right mpo", time.perf_counter() - tx)
         rmpo = SimplifiedMPO(rmpo, NoTransposeRule(simpl_rule),
                              True, True, OpNamesSet((OpNames.R, OpNames.RD)))
@@ -4091,6 +4182,44 @@ if not pre_run:
         bra.center = mps.center
         if MPI is not None:
             MPI.barrier()
+        
+        if big_site_method == "bigdrt":
+            bra.load_mutable()
+            xidx = big_right_orig.drt >> big_right_orig_z.drt
+            xlen = 0
+            assert len(xidx) == 1
+            for i in range(big_right_orig.drt.n_init_qs):
+                xa, xb = big_right_orig.drt.q_range(i)
+                if xidx[0] >= xa and xidx[0] < xb:
+                    xidx[0] = xidx[0] - xa
+                    xlen = xb - xa
+                    break
+            mps.load_mutable()
+            mps.info.load_mutable()
+            mps.info.basis[-1] = big_right_orig.drt.get_basis()
+            i_alloc = IntVectorAllocator()
+            d_alloc = DoubleVectorAllocator()
+            minfo = mps.tensors[-1].info.__class__(i_alloc)
+            if mps.canonical_form[-1] in 'SC':
+                minfo.initialize(mps.info.left_dims[-2], mps.info.basis[-1], mps.info.target, False, True)
+            elif mps.canonical_form[-1] in 'R':
+                minfo.initialize(mps.info.right_dims[-2], mps.info.basis[-1], mps.info.vacuum, False, False)
+            else:
+                raise NotImplementedError
+            mat = mps.tensors[-1].__class__(d_alloc)
+            mat.allocate(minfo)
+            assert np.array(mat[0]).shape[1] == xlen
+            xmat = np.zeros(np.array(mat[0]).shape, dtype=np.array(mat[0]).dtype)
+            xmat[:, xidx[0]] = np.array(mps.tensors[-1][0])[:, 0]
+            mat[0] = xmat
+            mps.tensors[-1] = mat
+            mps.info.right_dims_fci[-2:] = bra.info.right_dims_fci[-2:]
+            mps.info.left_dims_fci[-2:] = bra.info.left_dims_fci[-2:]
+
+            mps.save_mutable()
+            mps.deallocate()
+            mps.info.save_mutable()
+            mps.info.deallocate_mutable()
 
         _print("BRA MPS = ", bra.canonical_form,
                bra.center, bra.dot, bra.info.target)
@@ -4108,7 +4237,7 @@ if not pre_run:
 
         _print("env init finished", time.perf_counter() - tx)
 
-        right_bdims = VectorUBond([mps_info.bond_dim + 400])
+        right_bdims = VectorUBond([mps.info.bond_dim + 400])
         if big_site_method is not None and n_cas != 0:
             linear = LinearBigSite(lme, rme, None, VectorUBond(
                 bond_dims), right_bdims, VectorFP(noises))

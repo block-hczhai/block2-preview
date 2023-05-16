@@ -41,10 +41,13 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     uint16_t n_inactive, n_virtual, n_active;
     bool fock_uhf = false;
     long double const_e_dyall;
+    bool merged_external;
     DyallFCIDUMP(const shared_ptr<FCIDUMP<double>> &fcidump,
-                 uint16_t n_inactive, uint16_t n_virtual)
+                 uint16_t n_inactive, uint16_t n_virtual,
+                 bool merged_external = false)
         : fcidump(fcidump), n_inactive(n_inactive), n_virtual(n_virtual),
-          n_active(fcidump->n_sites() - n_inactive - n_virtual) {
+          n_active(fcidump->n_sites() - n_inactive - n_virtual),
+          merged_external(merged_external) {
         params = fcidump->params;
         data = fcidump->data;
     }
@@ -146,17 +149,20 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         fock_uhf = true;
     }
     void initialize_heff() {
+        const uint16_t nash = merged_external ? 0 : n_inactive;
+        const uint16_t nca = merged_external ? n_active : 0,
+                       ncb =
+                           merged_external ? n_active + n_inactive : n_inactive;
         if (!fcidump->uhf) {
             heff.push_back(TInt<double>(n_active, true));
             vdata_heff = make_shared<vector<double>>(heff[0].size());
             heff[0].data = vdata_heff->data();
             for (uint16_t a = 0; a < n_active; a++)
                 for (uint16_t b = 0; b < n_active; b++) {
-                    double v = fcidump->t(a + n_inactive, b + n_inactive);
-                    for (uint16_t i = 0; i < n_inactive; i++)
-                        v += 2 * fcidump->v(a + n_inactive, b + n_inactive, i,
-                                            i) -
-                             fcidump->v(a + n_inactive, i, i, b + n_inactive);
+                    double v = fcidump->t(a + nash, b + nash);
+                    for (uint16_t i = nca; i < ncb; i++)
+                        v += 2 * fcidump->v(a + nash, b + nash, i, i) -
+                             fcidump->v(a + nash, i, i, b + nash);
                     heff[0](a, b) = v;
                 }
         } else {
@@ -169,15 +175,14 @@ struct DyallFCIDUMP : FCIDUMP<double> {
             for (uint8_t s = 0; s < 2; s++)
                 for (uint16_t a = 0; a < n_active; a++)
                     for (uint16_t b = 0; b < n_active; b++) {
-                        double v =
-                            0.5 * fcidump->t(s, a + n_inactive, b + n_inactive);
+                        double v = 0.5 * fcidump->t(s, a + nash, b + nash);
                         for (uint8_t si = 0; si < 2; si++)
-                            for (uint16_t i = 0; i < n_inactive; i++) {
-                                v += 0.5 * fcidump->v(s, si, a + n_inactive,
-                                                      b + n_inactive, i, i);
+                            for (uint16_t i = nca; i < ncb; i++) {
+                                v += 0.5 * fcidump->v(s, si, a + nash, b + nash,
+                                                      i, i);
                                 if (si == s)
-                                    v -= 0.5 * fcidump->v(s, si, a + n_inactive,
-                                                          i, i, b + n_inactive);
+                                    v -= 0.5 * fcidump->v(s, si, a + nash, i, i,
+                                                          b + nash);
                             }
                         heff[s](a, b) = v;
                     }
@@ -186,27 +191,30 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     }
     void initialize_const() {
         const_e_dyall = (long double)0.0;
+        const uint16_t nca = merged_external ? n_active : 0,
+                       ncb =
+                           merged_external ? n_active + n_inactive : n_inactive;
         if (!fock_uhf) {
-            for (uint16_t i = 0; i < n_inactive; i++)
+            for (uint16_t i = nca; i < ncb; i++)
                 const_e_dyall -= (long double)2.0 * fock[0](i, i);
         } else {
             for (uint8_t s = 0; s < 2; s++)
-                for (uint16_t i = 0; i < n_inactive; i++)
+                for (uint16_t i = nca; i < ncb; i++)
                     const_e_dyall -= fock[s](i, i);
         }
         if (!fcidump->uhf) {
-            for (uint16_t i = 0; i < n_inactive; i++) {
+            for (uint16_t i = nca; i < ncb; i++) {
                 const_e_dyall += (long double)2.0 * fcidump->t(i, i);
-                for (uint16_t j = 0; j < n_inactive; j++)
+                for (uint16_t j = nca; j < ncb; j++)
                     const_e_dyall += (long double)2.0 * fcidump->v(i, i, j, j) -
                                      fcidump->v(i, j, i, j);
             }
         } else {
             for (uint8_t s = 0; s < 2; s++)
-                for (uint16_t i = 0; i < n_inactive; i++) {
+                for (uint16_t i = nca; i < ncb; i++) {
                     const_e_dyall += fcidump->t(s, i, i);
                     for (uint8_t sj = 0; sj < 2; sj++)
-                        for (uint16_t j = 0; j < n_inactive; j++) {
+                        for (uint16_t j = nca; j < ncb; j++) {
                             const_e_dyall += (long double)0.5 *
                                              fcidump->v(s, sj, i, i, j, j);
                             if (sj == s)
@@ -225,12 +233,21 @@ struct DyallFCIDUMP : FCIDUMP<double> {
                 for (uint16_t j = 0; j < n; j++)
                     fd->ts[s](i, j) = t(s, i, j);
         }
-        auto is_ext = [this](uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-            return i < n_inactive || j < n_inactive || k < n_inactive ||
-                   l < n_inactive || i >= n_inactive + n_active ||
-                   j >= n_inactive + n_active || k >= n_inactive + n_active ||
-                   l >= n_inactive + n_active;
-        };
+        function<bool(uint16_t, uint16_t, uint16_t, uint16_t)> is_ext;
+        if (merged_external)
+            is_ext = [this](uint16_t i, uint16_t j, uint16_t k,
+                            uint16_t l) -> bool {
+                return i >= n_active || j >= n_active || k >= n_active ||
+                       l >= n_active;
+            };
+        else
+            is_ext = [this](uint16_t i, uint16_t j, uint16_t k,
+                            uint16_t l) -> bool {
+                return i < n_inactive || j < n_inactive || k < n_inactive ||
+                       l < n_inactive || i >= n_inactive + n_active ||
+                       j >= n_inactive + n_active ||
+                       k >= n_inactive + n_active || l >= n_inactive + n_active;
+            };
         for (size_t s = 0; s < vgs.size(); s++) {
             for (uint16_t i = 0; i < n; i++)
                 for (uint16_t j = 0; j < n; j++)
@@ -272,7 +289,8 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         for (auto &x : heff)
             for (int i = 0; i < x.n; i++)
                 for (int j = 0; j < (x.general ? x.n : i + 1); j++)
-                    if (orbsym[i + n_inactive] ^ orbsym[j + n_inactive])
+                    if (orbsym[i + (merged_external ? 0 : n_inactive)] ^
+                        orbsym[j + (merged_external ? 0 : n_inactive)])
                         error += abs(x(i, j)), x(i, j) = 0;
         error += fcidump->symmetrize(orbsym);
         return error;
@@ -291,16 +309,25 @@ struct DyallFCIDUMP : FCIDUMP<double> {
         for (auto &x : heff)
             for (int i = 0; i < x.n; i++)
                 for (int j = 0; j < (x.general ? x.n : i + 1); j++)
-                    if (orbsym[i + n_inactive] - orbsym[j + n_inactive])
+                    if (orbsym[i + (merged_external ? 0 : n_inactive)] -
+                        orbsym[j + (merged_external ? 0 : n_inactive)])
                         error += abs(x(i, j)), x(i, j) = 0;
         error += fcidump->symmetrize(orbsym);
         return error;
     }
     double t(uint16_t i, uint16_t j) const override {
-        if ((i < n_inactive && j < n_inactive) ||
-            (i >= n_inactive + n_active && j >= n_inactive + n_active))
+        if ((merged_external &&
+             ((i >= n_active && i < n_inactive + n_active && j >= n_active &&
+               j < n_inactive + n_active) ||
+              (i >= n_inactive + n_active && j >= n_inactive + n_active))) ||
+            (!merged_external &&
+             ((i < n_inactive && j < n_inactive) ||
+              (i >= n_inactive + n_active && j >= n_inactive + n_active))))
             return fock[0](i, j);
-        else if ((i >= n_inactive && i < n_inactive + n_active) &&
+        else if (merged_external && i < n_active && j < n_active)
+            return heff[0](i, j);
+        else if (!merged_external &&
+                 (i >= n_inactive && i < n_inactive + n_active) &&
                  (j >= n_inactive && j < n_inactive + n_active))
             return heff[0](i - n_inactive, j - n_inactive);
         else
@@ -308,10 +335,18 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     }
     // One-electron integral element (SZ)
     double t(uint8_t s, uint16_t i, uint16_t j) const override {
-        if ((i < n_inactive && j < n_inactive) ||
-            (i >= n_inactive + n_active && j >= n_inactive + n_active))
+        if ((merged_external &&
+             ((i >= n_active && i < n_inactive + n_active && j >= n_active &&
+               j < n_inactive + n_active) ||
+              (i >= n_inactive + n_active && j >= n_inactive + n_active))) ||
+            (!merged_external &&
+             ((i < n_inactive && j < n_inactive) ||
+              (i >= n_inactive + n_active && j >= n_inactive + n_active))))
             return fock_uhf ? fock[s](i, j) : fock[0](i, j);
-        else if ((i >= n_inactive && i < n_inactive + n_active) &&
+        else if (merged_external && i < n_active && j < n_active)
+            return uhf ? heff[s](i, j) : heff[0](i, j);
+        else if (!merged_external &&
+                 (i >= n_inactive && i < n_inactive + n_active) &&
                  (j >= n_inactive && j < n_inactive + n_active))
             return uhf ? heff[s](i - n_inactive, j - n_inactive)
                        : heff[0](i - n_inactive, j - n_inactive);
@@ -320,10 +355,14 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     }
     // Two-electron integral element (SU(2))
     double v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const override {
-        if (i < n_inactive || j < n_inactive || k < n_inactive ||
-            l < n_inactive || i >= n_inactive + n_active ||
-            j >= n_inactive + n_active || k >= n_inactive + n_active ||
-            l >= n_inactive + n_active)
+        if (merged_external &&
+            (i >= n_active || j >= n_active || k >= n_active || l >= n_active))
+            return 0;
+        else if (!merged_external &&
+                 (i < n_inactive || j < n_inactive || k < n_inactive ||
+                  l < n_inactive || i >= n_inactive + n_active ||
+                  j >= n_inactive + n_active || k >= n_inactive + n_active ||
+                  l >= n_inactive + n_active))
             return 0;
         else
             return fcidump->v(i, j, k, l);
@@ -331,10 +370,14 @@ struct DyallFCIDUMP : FCIDUMP<double> {
     // Two-electron integral element (SZ)
     double v(uint8_t sl, uint8_t sr, uint16_t i, uint16_t j, uint16_t k,
              uint16_t l) const override {
-        if (i < n_inactive || j < n_inactive || k < n_inactive ||
-            l < n_inactive || i >= n_inactive + n_active ||
-            j >= n_inactive + n_active || k >= n_inactive + n_active ||
-            l >= n_inactive + n_active)
+        if (merged_external &&
+            (i >= n_active || j >= n_active || k >= n_active || l >= n_active))
+            return 0;
+        else if (!merged_external &&
+                 (i < n_inactive || j < n_inactive || k < n_inactive ||
+                  l < n_inactive || i >= n_inactive + n_active ||
+                  j >= n_inactive + n_active || k >= n_inactive + n_active ||
+                  l >= n_inactive + n_active))
             return 0;
         else
             return fcidump->v(sl, sr, i, j, k, l);

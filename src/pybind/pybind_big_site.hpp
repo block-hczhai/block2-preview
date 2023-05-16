@@ -238,10 +238,15 @@ template <typename S> void bind_drt_big_site(py::module &m) {
              py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
              py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"))
         .def(py::init<int, const vector<S> &, const vector<typename S::pg_t> &,
-                      int, int, int, bool>(),
+                      int, int, int, int>(),
              py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
              py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"),
-             py::arg("single_ref"))
+             py::arg("nc_ref"))
+        .def(py::init<int, const vector<S> &, const vector<typename S::pg_t> &,
+                      int, int, int, int, bool>(),
+             py::arg("n_sites"), py::arg("init_qs"), py::arg("orb_sym"),
+             py::arg("n_core"), py::arg("n_virt"), py::arg("n_ex"),
+             py::arg("nc_ref"), py::arg("single_ref"))
         .def_property_readonly("n_rows", &DRT<S>::n_rows)
         .def("initialize", &DRT<S>::initialize)
         .def("get_init_qs", &DRT<S>::get_init_qs)
@@ -322,7 +327,10 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
         .def(py::init<const vector<S> &, bool, int,
                       const vector<typename S::pg_t> &,
                       const shared_ptr<FCIDUMP<FL>> &, int>())
-        .def_static("get_target_quanta", &DRTBigSite<S, FL>::get_target_quanta)
+        .def_static("get_target_quanta", &DRTBigSite<S, FL>::get_target_quanta,
+                    py::arg("is_right"), py::arg("n_orbs"),
+                    py::arg("n_max_elec"), py::arg("orb_sym"),
+                    py::arg("nc_ref") = 0)
         .def("get_site_op_infos", &DRTBigSite<S, FL>::get_site_op_infos)
         .def("prepare_factors", &DRTBigSite<S, FL>::prepare_factors)
         .def("fill_csr_matrix_from_coo",

@@ -71,14 +71,16 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         : DRT(n_sites, vector<S>{q}, orb_sym, n_core, n_virt, n_ex) {}
     DRT(int n_sites, const vector<S> &init_qs,
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
-        int n_core = 0, int n_virt = 0, int n_ex = 0, bool single_ref = false)
+        int n_core = 0, int n_virt = 0, int n_ex = 0, int nc_ref = 0,
+        bool single_ref = false)
         : n_sites(n_sites), orb_sym(orb_sym), n_init_qs((int)init_qs.size()),
           n_core(n_core), n_virt(n_virt), n_ex(n_ex), single_ref(single_ref) {
         if (T == ElemOpTypes::SU2 || T == ElemOpTypes::SZ) {
             for (auto &q : init_qs) {
                 abc.push_back(array<int16_t, 4>{
                     (int16_t)((q.n() - abs(q.twos())) >> 1), (int16_t)q.twos(),
-                    (int16_t)(n_sites - ((q.n() + abs(q.twos())) >> 1)), 0});
+                    (int16_t)(n_sites - ((q.n() + abs(q.twos())) >> 1)),
+                    (int16_t)max(0, nc_ref + nc_ref - q.n())});
                 pgs.push_back(q.pg());
             }
         } else
@@ -129,11 +131,12 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                 return false;
             }
         };
-        auto make_abct = [&make_abc, &nc, &nv, &sr, &sp](int k, int16_t a, int16_t b, int16_t c,
+        auto make_abct = [&make_abc, &nc, &nv, &sr,
+                          &sp](int k, int16_t a, int16_t b, int16_t c,
                                int16_t t, int16_t d) -> array<int16_t, 4> {
             array<int16_t, 4> r = make_abc(a, b, c, t, d);
             if (sr && k >= nc + nv)
-                    r[3] = (int16_t)(t + (sp ? d >= 2 : d == 1 || d == 3));
+                r[3] = (int16_t)(t + (sp ? d >= 2 : d == 1 || d == 3));
             else
                 r[3] =
                     (int16_t)(k < nv || k > nc + nv
@@ -335,12 +338,20 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
                                    n_virt, n_ex_new, single_ref);
     }
     vector<LL> operator>>(const shared_ptr<DRT<S>> &other) const {
-        vector<vector<int>> pbr(2, vector<int>(1, 0)),
-            pkr(2, vector<int>(1, 0));
-        vector<vector<LL>> pb(2, vector<LL>(1, 0));
+        vector<vector<int>> pbr(2, vector<int>()), pkr(2, vector<int>());
+        vector<vector<LL>> pb(2, vector<LL>());
         size_t max_sz = min(size(), other->size());
         pbr[0].reserve(max_sz), pkr[0].reserve(max_sz), pb[0].reserve(max_sz);
         pbr[1].reserve(max_sz), pkr[1].reserve(max_sz), pb[1].reserve(max_sz);
+        LL x = 0;
+        for (int i = 0; i < n_init_qs; i++) {
+            for (int j = 0; j < other->n_init_qs; j++) {
+                pbr[0].push_back(i);
+                pkr[0].push_back(j);
+                pb[0].push_back(x);
+            }
+            x += xs[i].back();
+        }
         assert(n_sites == other->n_sites);
         int pi = 0, pj = pi ^ 1;
         for (int k = 0; k < n_sites; k++, pi ^= 1, pj ^= 1) {
@@ -1966,9 +1977,10 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : DRTBigSiteBase<S, FL> {
         prepare_factors();
     }
     virtual ~DRTBigSite() = default;
-    static vector<S>
-    get_target_quanta(bool is_right, int n_orbs, int n_max_elec,
-                      const vector<typename S::pg_t> &orb_sym) {
+    static vector<S> get_target_quanta(bool is_right, int n_orbs,
+                                       int n_max_elec,
+                                       const vector<typename S::pg_t> &orb_sym,
+                                       int nc_ref = 0) {
         S vacuum, target(S::invalid);
         vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
         for (int m = 0; m < n_orbs; m++) {
@@ -1994,13 +2006,34 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : DRTBigSiteBase<S, FL> {
                 if (x->quanta[q].n() < max_n - n_max_elec ||
                     x->quanta[q].twos() > n_max_elec)
                     x->n_states[q] = 0;
-        } else {
+        } else if (nc_ref == 0) {
             for (int i = n_orbs - 1; i >= 0; i--)
                 x = make_shared<StateInfo<S>>(
                     StateInfo<S>::tensor_product(*site_basis[i], *x, target));
             for (int q = 0; q < x->n; q++)
                 if (x->quanta[q].n() > n_max_elec)
                     x->n_states[q] = 0;
+        } else {
+            shared_ptr<StateInfo<S>> y = make_shared<StateInfo<S>>(vacuum);
+            for (int i = 0; i < nc_ref; i++)
+                y = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*y, *site_basis[i], target));
+            int max_n = 0;
+            for (int q = 0; q < y->n; q++)
+                if (y->quanta[q].n() > max_n)
+                    max_n = y->quanta[q].n();
+            for (int q = 0; q < y->n; q++)
+                if (y->quanta[q].n() < max_n - n_max_elec ||
+                    y->quanta[q].twos() > n_max_elec)
+                    y->n_states[q] = 0;
+            for (int i = n_orbs - 1; i >= nc_ref; i--)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*site_basis[i], *x, target));
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > n_max_elec)
+                    x->n_states[q] = 0;
+            x = make_shared<StateInfo<S>>(
+                StateInfo<S>::tensor_product(*x, *y, target));
         }
         x->collect();
         return vector<S>(&x->quanta[0], &x->quanta[0] + x->n);
@@ -2393,9 +2426,10 @@ struct DRTBigSite<S, FL, typename S::is_sz_t> : DRTBigSiteBase<S, FL> {
         op_infos = get_site_op_infos(orb_sym);
     }
     virtual ~DRTBigSite() = default;
-    static vector<S>
-    get_target_quanta(bool is_right, int n_orbs, int n_max_elec,
-                      const vector<typename S::pg_t> &orb_sym) {
+    static vector<S> get_target_quanta(bool is_right, int n_orbs,
+                                       int n_max_elec,
+                                       const vector<typename S::pg_t> &orb_sym,
+                                       int nc_ref = 0) {
         S vacuum, target(S::invalid);
         vector<shared_ptr<StateInfo<S>>> site_basis(n_orbs);
         for (int m = 0; m < n_orbs; m++) {
@@ -2423,13 +2457,34 @@ struct DRTBigSite<S, FL, typename S::is_sz_t> : DRTBigSiteBase<S, FL> {
                 if (x->quanta[q].n() < max_n - n_max_elec ||
                     abs(x->quanta[q].twos()) > n_max_elec)
                     x->n_states[q] = 0;
-        } else {
+        } else if (nc_ref == 0) {
             for (int i = n_orbs - 1; i >= 0; i--)
                 x = make_shared<StateInfo<S>>(
                     StateInfo<S>::tensor_product(*site_basis[i], *x, target));
             for (int q = 0; q < x->n; q++)
                 if (x->quanta[q].n() > n_max_elec)
                     x->n_states[q] = 0;
+        } else {
+            shared_ptr<StateInfo<S>> y = make_shared<StateInfo<S>>(vacuum);
+            for (int i = 0; i < nc_ref; i++)
+                y = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*y, *site_basis[i], target));
+            int max_n = 0;
+            for (int q = 0; q < y->n; q++)
+                if (y->quanta[q].n() > max_n)
+                    max_n = y->quanta[q].n();
+            for (int q = 0; q < y->n; q++)
+                if (y->quanta[q].n() < max_n - n_max_elec ||
+                    abs(y->quanta[q].twos()) > n_max_elec)
+                    y->n_states[q] = 0;
+            for (int i = n_orbs - 1; i >= nc_ref; i--)
+                x = make_shared<StateInfo<S>>(
+                    StateInfo<S>::tensor_product(*site_basis[i], *x, target));
+            for (int q = 0; q < x->n; q++)
+                if (x->quanta[q].n() > n_max_elec)
+                    x->n_states[q] = 0;
+            x = make_shared<StateInfo<S>>(
+                StateInfo<S>::tensor_product(*x, *y, target));
         }
         x->collect();
         return vector<S>(&x->quanta[0], &x->quanta[0] + x->n);

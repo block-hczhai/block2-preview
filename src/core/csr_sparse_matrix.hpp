@@ -153,6 +153,9 @@ struct CSRSparseMatrix : SparseMatrix<S, FL> {
     }
     void selective_copy_from(const shared_ptr<SparseMatrix<S, FL>> &other,
                              bool ref = false) override {
+        assert(other != nullptr);
+        // here possible assertion failure due to big site simplified with transpose
+        // but the mpo is not built for non-transpose
         assert(other->get_type() == SparseMatrixTypes::CSR);
         shared_ptr<CSRSparseMatrix> cother =
             dynamic_pointer_cast<CSRSparseMatrix>(other);

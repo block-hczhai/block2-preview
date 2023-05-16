@@ -607,6 +607,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     // canonical form for wavefunction: C = center
     Iteration update_two_dot(int i, bool forward, ubond_t bond_dim, FPS noise,
                              FPS davidson_conv_thrd) {
+        if (i + 1 >= me->ket->tensors.size())
+            throw runtime_error(
+                "Site index exceeds the n_sites of MPS in two-site algorithm!");
         frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss = {me->ket};
         // non-hermitian hamiltonian
@@ -1383,6 +1386,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     // canonical form for wavefunction: M = multi center
     Iteration update_multi_two_dot(int i, bool forward, ubond_t bond_dim,
                                    FPS noise, FPS davidson_conv_thrd) {
+        if (i + 1 >= me->ket->tensors.size())
+            throw runtime_error(
+                "Site index exceeds the n_sites of MPS in two-site algorithm!");
         shared_ptr<MultiMPS<S, FLS>> mket =
             dynamic_pointer_cast<MultiMPS<S, FLS>>(me->ket);
         shared_ptr<MultiMPS<S, FLS>> mbra =
@@ -3339,6 +3345,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
     Iteration update_two_dot(int i, bool forward, ubond_t bra_bond_dim,
                              ubond_t ket_bond_dim, FPS noise,
                              FPS linear_conv_thrd) {
+        if (i + 1 >= rme->ket->tensors.size())
+            throw runtime_error(
+                "Site index exceeds the n_sites of MPS in two-site algorithm!");
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
         frame_<FPS>()->activate(0);
@@ -4873,6 +4882,9 @@ struct Expect {
     }
     Iteration update_two_dot(int i, bool forward, bool propagate,
                              ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
+        if (i + 1 >= me->ket->tensors.size())
+            throw runtime_error(
+                "Site index exceeds the n_sites of MPS in two-site algorithm!");
         frame_<FPS>()->activate(0);
         vector<shared_ptr<MPS<S, FLS>>> mpss =
             me->bra == me->ket
@@ -5242,6 +5254,9 @@ struct Expect {
     }
     Iteration update_multi_two_dot(int i, bool forward, bool propagate,
                                    ubond_t bra_bond_dim, ubond_t ket_bond_dim) {
+        if (i + 1 >= me->ket->tensors.size())
+            throw runtime_error(
+                "Site index exceeds the n_sites of MPS in two-site algorithm!");
         shared_ptr<MultiMPS<S, FLS>> mket =
                                          dynamic_pointer_cast<MultiMPS<S, FLS>>(
                                              me->ket),

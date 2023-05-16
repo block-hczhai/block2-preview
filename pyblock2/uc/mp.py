@@ -186,6 +186,7 @@ class MP(lib.StreamObject):
             nc,
             nv,
             n_ex=n_elec,
+            nc_ref=0,
             single_ref=True,
         )
 

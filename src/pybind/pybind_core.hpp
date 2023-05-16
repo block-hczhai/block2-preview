@@ -2691,10 +2691,13 @@ template <typename S = void> void bind_post_matrix(py::module &m) {
         m, "DyallFCIDUMP")
         .def(
             py::init<const shared_ptr<FCIDUMP<double>> &, uint16_t, uint16_t>())
+        .def(py::init<const shared_ptr<FCIDUMP<double>> &, uint16_t, uint16_t,
+                      bool>())
         .def_readwrite("fcidump", &DyallFCIDUMP::fcidump)
         .def_readwrite("n_inactive", &DyallFCIDUMP::n_inactive)
         .def_readwrite("n_virtual", &DyallFCIDUMP::n_virtual)
         .def_readwrite("n_active", &DyallFCIDUMP::n_active)
+        .def_readwrite("merged_external", &DyallFCIDUMP::merged_external)
         .def("initialize_su2",
              [](DyallFCIDUMP *self, const py::array_t<double> &f) {
                  self->initialize_su2(f.data(), f.size());
@@ -2725,10 +2728,13 @@ template <typename S = void> void bind_post_matrix(py::module &m) {
         m, "FinkFCIDUMP")
         .def(
             py::init<const shared_ptr<FCIDUMP<double>> &, uint16_t, uint16_t>())
+        .def(py::init<const shared_ptr<FCIDUMP<double>> &, uint16_t, uint16_t,
+                      bool>())
         .def_readwrite("fcidump", &FinkFCIDUMP::fcidump)
         .def_readwrite("n_inactive", &FinkFCIDUMP::n_inactive)
         .def_readwrite("n_virtual", &FinkFCIDUMP::n_virtual)
-        .def_readwrite("n_active", &FinkFCIDUMP::n_active);
+        .def_readwrite("n_active", &FinkFCIDUMP::n_active)
+        .def_readwrite("merged_external", &FinkFCIDUMP::merged_external);
 }
 
 template <typename FL> void bind_fl_matrix(py::module &m) {

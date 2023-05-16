@@ -37,22 +37,33 @@ struct FinkFCIDUMP : FCIDUMP<double> {
     using FCIDUMP<double>::vabs;
     shared_ptr<FCIDUMP<double>> fcidump;
     uint16_t n_inactive, n_virtual, n_active;
+    bool merged_external;
     FinkFCIDUMP(const shared_ptr<FCIDUMP<double>> &fcidump, uint16_t n_inactive,
-                uint16_t n_virtual)
+                uint16_t n_virtual, bool merged_external = false)
         : fcidump(fcidump), n_inactive(n_inactive), n_virtual(n_virtual),
-          n_active(fcidump->n_sites() - n_inactive - n_virtual) {
+          n_active(fcidump->n_sites() - n_inactive - n_virtual),
+          merged_external(merged_external) {
         params = fcidump->params;
         data = fcidump->data;
         uhf = fcidump->uhf;
     }
     virtual ~FinkFCIDUMP() = default;
     uint16_t sub_space(uint16_t x) const {
-        if (x < n_inactive)
-            return 2;
-        else if (x >= n_inactive && x < n_inactive + n_active)
-            return 1;
-        else
-            return 0;
+        if (merged_external) {
+            if (x < n_active)
+                return 1;
+            else if (x >= n_active && x < n_inactive + n_active)
+                return 2;
+            else
+                return 0;
+        } else {
+            if (x < n_inactive)
+                return 2;
+            else if (x >= n_inactive && x < n_inactive + n_active)
+                return 1;
+            else
+                return 0;
+        }
     };
     bool is_fink(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return (sub_space(i) == sub_space(j) && sub_space(k) == sub_space(l)) ||
