@@ -688,14 +688,18 @@ template <typename S, typename FL> struct TensorFunctions {
         for (int ii = 0; ii < middle_count; ii++) {
             bool is_last = ii >= middle_base_count;
             int i = is_last ? ii - middle_base_count : ii;
-            if (scheme->n_max_ops == 0 && center != 0)
-                continue;
             if (is_last && scheme->last_middle_blocking[i].size() == 0)
                 continue;
             map<string, int> middle_cd_map;
             for (int j = 0; j < (int)scheme->middle_terms[i].size(); j++)
                 middle_cd_map[scheme->middle_terms[i][j]] = j;
-            for (auto &r : middle_patterns.at(scheme->middle_perm_patterns[i]))
+            for (auto &r :
+                 middle_patterns.at(scheme->middle_perm_patterns[i])) {
+                // avoid multi-counting for zero-length npdm
+                int n_op =
+                    (int)scheme->perms[r.first]->index_patterns[0].size();
+                if (n_op == 0 && center != 0)
+                    continue;
                 for (auto &pr : scheme->perms[r.first]->data[r.second]) {
                     const vector<uint16_t> &mask = scheme->perms[r.first]->mask;
                     const vector<uint16_t> &perm = pr.first;
@@ -764,6 +768,7 @@ template <typename S, typename FL> struct TensorFunctions {
                                     (FLX)(*p->data)[ip + il * rcnt + ir];
                     }
                 }
+            }
         }
         threading->activate_normal();
     }

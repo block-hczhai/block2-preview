@@ -1855,11 +1855,13 @@ class DMRGDriver:
         else:
             exprs, nx = OrbitalEntropy.get_two_orb_rdm_exprs()
 
+        pdms = self.get_npdm(mket,
+            pdm_type=[len(k) // 2 for (k, _), _ in exprs.items()],
+            npdm_expr=[k for (k, _), _ in exprs.items()],
+            mask=[list(m) for (_, m), _ in exprs.items()], iprint=iprint)
+
         rrdms = np.zeros(ents.shape + (nx,))
-        for (k, m), v in exprs.items():
-            pdm = self.get_npdm(
-                mket, pdm_type=len(k) // 2, npdm_expr=k, mask=list(m), iprint=iprint
-            )[0]
+        for ((_, m), v), pdm in zip(exprs.items(), pdms):
             for ix, f in v:
                 if orb_type == 1:
                     rrdms[..., ix] += pdm * f
@@ -2110,13 +2112,25 @@ class DMRGDriver:
                         for cd in op_str
                     ]
                 )
-            else:
+            elif len(mask) != 0 and not isinstance(mask[0], int):
+                assert len(mask) == len(op_str)
+                pts = [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pdm_type * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
                         )
-                        for cd in op_str
+                        for cd, xm, pt in zip(op_str, mask, pts)
+                    ]
+                )
+            else:
+                pts = [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                        )
+                        for cd, pt in zip(op_str, pts)
                     ]
                 )
         elif SymmetryTypes.SGF in bw.symm_type:
