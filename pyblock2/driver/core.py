@@ -1009,7 +1009,7 @@ class DMRGDriver:
 
         if unpack_g2e:
             if isinstance(g2e, np.ndarray):
-                    g2e = self.unpack_g2e(g2e)
+                g2e = self.unpack_g2e(g2e)
             elif isinstance(g2e, tuple):
                 g2e = tuple(self.unpack_g2e(x) for x in g2e)
 
@@ -1176,7 +1176,10 @@ class DMRGDriver:
                         b.data.add_eight_fold_term(g2e, cutoff=fast_cutoff, factor=1.0)
                     else:
                         b.add_sum_term(
-                            "((C+(C+D)0)1+D)0", g2e, cutoff=fast_cutoff, perm=[0, 2, 3, 1]
+                            "((C+(C+D)0)1+D)0",
+                            g2e,
+                            cutoff=fast_cutoff,
+                            perm=[0, 2, 3, 1],
                         )
             elif SymmetryTypes.SZ in bw.symm_type:
                 if h1e is not None:
@@ -1632,6 +1635,7 @@ class DMRGDriver:
         if twosite_to_onesite is None:
             ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
         else:
+            assert twosite_to_onesite < n_sweeps
             ener = dmrg.solve(twosite_to_onesite, ket.center == 0, 0)
             dmrg.me.dot = 1
             for ext_me in dmrg.ext_mes:
@@ -1855,10 +1859,13 @@ class DMRGDriver:
         else:
             exprs, nx = OrbitalEntropy.get_two_orb_rdm_exprs()
 
-        pdms = self.get_npdm(mket,
+        pdms = self.get_npdm(
+            mket,
             pdm_type=[len(k) // 2 for (k, _), _ in exprs.items()],
             npdm_expr=[k for (k, _), _ in exprs.items()],
-            mask=[list(m) for (_, m), _ in exprs.items()], iprint=iprint)
+            mask=[list(m) for (_, m), _ in exprs.items()],
+            iprint=iprint,
+        )
 
         rrdms = np.zeros(ents.shape + (nx,))
         for ((_, m), v), pdm in zip(exprs.items(), pdms):
@@ -2114,7 +2121,9 @@ class DMRGDriver:
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
                 assert len(mask) == len(op_str)
-                pts = [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                pts = (
+                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
@@ -2124,7 +2133,9 @@ class DMRGDriver:
                     ]
                 )
             else:
-                pts = [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                pts = (
+                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
@@ -2367,6 +2378,46 @@ class DMRGDriver:
 
     def get_trans_4pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
+
+    def get_csf_coefficients(self, ket, cutoff=0.1, iprint=1):
+        bw = self.bw
+        iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
+        import numpy as np, time
+
+        tx = time.perf_counter()
+        dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
+        dtrie.evaluate(bw.bs.UnfusedMPS(ket), cutoff)
+        if iprint:
+            print("dtrie finished", time.perf_counter() - tx)
+        dname = "CSF" if SymmetryTypes.SU2 in bw.symm_type else "DET"
+        if iprint:
+            print("Number of %s = %10d (cutoff = %9.5g)" % (dname, len(dtrie), cutoff))
+        ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
+        dvals = np.array(dtrie.vals)
+        gidx = np.argsort(np.abs(dvals))[::-1][:500]
+        if iprint:
+            print(
+                "Sum of weights of included %s = %20.15f\n"
+                % (dname, (dvals ** 2).sum())
+            )
+            for ii, idx in enumerate(gidx):
+                if self.reorder_idx is not None:
+                    rev_idx = np.argsort(self.reorder_idx)
+                    det = "".join([ddstr[x] for x in np.array(dtrie[idx])[rev_idx]])
+                else:
+                    det = "".join([ddstr[x] for x in np.array(dtrie[idx])])
+                val = dvals[idx]
+                print(dname, "%10d" % ii, det, " = %20.15f" % val)
+            if len(dvals) > 500:
+                print(" ... and more ... ")
+        dets = np.zeros((len(dtrie), ket.n_sites), dtype=np.uint8)
+        for i in range(len(dtrie)):
+            if self.reorder_idx is not None:
+                rev_idx = np.argsort(self.reorder_idx)
+                dets[i] = np.array(dtrie[i])[rev_idx]
+            else:
+                dets[i] = np.array(dtrie[i])
+        return dets, dvals
 
     def align_mps_center(self, ket, ref):
         if self.mpi is not None:
