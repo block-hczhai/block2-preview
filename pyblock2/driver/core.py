@@ -944,8 +944,8 @@ class DMRGDriver:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
 
-    def get_identity_mpo(self):
-        return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize())
+    def get_identity_mpo(self, ancilla=False):
+        return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla)
 
     def unpack_g2e(self, g2e, n_sites=None):
         import numpy as np
@@ -1001,6 +1001,7 @@ class DMRGDriver:
         block_max_length=False,
         add_ident=True,
         esptein_nesbet_partition=False,
+        ancilla=False,
         iprint=1,
     ):
         import numpy as np
@@ -1303,6 +1304,7 @@ class DMRGDriver:
             disjoint_multiplier=disjoint_multiplier,
             block_max_length=block_max_length,
             add_ident=add_ident,
+            ancilla=ancilla,
         )
 
     def get_mpo(
@@ -1322,6 +1324,7 @@ class DMRGDriver:
         disjoint_multiplier=1.0,
         block_max_length=False,
         add_ident=True,
+        ancilla=False,
     ):
         bw = self.bw
         import time
@@ -1367,6 +1370,8 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
 
+        if ancilla:
+            mpo = bw.bs.AncillaMPO(mpo)
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         if add_ident:
             mpo = bw.bs.IdentityAddedMPO(mpo)
@@ -2822,6 +2827,35 @@ class DMRGDriver:
         else:
             for xwfn in mps.wfns:
                 xwfn.normalize()
+        mps.save_mutable()
+        mps_info.save_mutable()
+        mps.save_data()
+        mps_info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        return mps
+    
+    def get_ancilla_mps(
+        self,
+        tag,
+        center=0,
+        dot=2,
+        target=None,
+        full_fci=True,
+    ):
+        bw = self.bw
+        if target is None:
+            target = bw.SX(self.n_sites * 2, 0, 0)
+        mps_info = bw.brs.AncillaMPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        mps = bw.bs.MPS(self.n_sites * 2, center, dot)
+        mps_info.tag = tag
+        if full_fci:
+            mps_info.set_bond_dimension_full_fci(self.vacuum, self.vacuum)
+        else:
+            mps_info.set_bond_dimension_fci(self.vacuum, self.vacuum)
+        mps_info.set_thermal_limit()
+        mps_info.bond_dim = mps_info.get_max_bond_dimension()
+        mps.initialize(mps_info)
+        mps.fill_thermal_limit()
+        mps.canonicalize()
         mps.save_mutable()
         mps_info.save_mutable()
         mps.save_data()
