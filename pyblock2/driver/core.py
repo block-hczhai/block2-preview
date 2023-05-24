@@ -1107,11 +1107,9 @@ class DMRGDriver:
             self.reorder_idx = idx
             if SymmetryTypes.SZ in bw.symm_type:
                 if h1e is not None:
-                    for i in enumerate(len(h1e)):
-                        h1e[i] = h1e[i][idx][:, idx]
+                    h1e = [x[idx][:, idx] for x in h1e]
                 if g2e is not None:
-                    for i in enumerate(len(g2e)):
-                        g2e[i] = g2e[i][idx][:, idx][:, :, idx][:, :, :, idx]
+                    g2e = [x[idx][:, idx][:, :, idx][:, :, :, idx] for x in g2e]
             else:
                 if h1e is not None:
                     h1e = h1e[idx][:, idx]
@@ -1555,11 +1553,16 @@ class DMRGDriver:
         bw = self.bw
         import numpy as np
 
+        if np.array(h1e).ndim == 3:
+            h1e = h1e[0] + h1e[1]
+        if np.array(g2e).ndim == 5:
+            g2e = g2e[0] + g2e[1] * 2 + g2e[2]
+
         xmat = np.abs(np.einsum("ijji->ij", g2e, optimize=True))
         kmat = np.abs(h1e) * 1e-7 + xmat
         kmat = bw.b.VectorDouble(kmat.flatten())
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
-        return np.array(idx)
+        return np.array(idx, dtype=int)
 
     def dmrg(
         self,
@@ -1734,17 +1737,25 @@ class DMRGDriver:
                 te.solve(1, delta_t, mket.center == 0)
             if is_imag_te and iprint:
                 print(
-                    "T = %10.5f <E> = %20.15f <Norm^2> = %20.15f"
-                    % ((i + 1) * delta_t, te.energies[-1], te.normsqs[-1])
+                    "T = %10.5f <E> = %20.15f + %10.5fi <Norm^2> = %20.15f + %10.5fi"
+                    % (
+                        (i + 1) * delta_t,
+                        np.real(te.energies[-1]),
+                        np.imag(te.energies[-1]),
+                        np.real(te.normsqs[-1]),
+                        np.imag(te.normsqs[-1]),
+                    )
                 )
             elif iprint:
                 print(
-                    "T = RE %10.5f + IM %10.5f <E> = %20.15f <Norm^2> = %20.15f"
+                    "T = %10.5f + %10.5fi <E> = %20.15f + %10.5fi <Norm^2> = %20.15f + %10.5fi"
                     % (
                         (i + 1) * np.real(delta_t),
                         (i + 1) * np.imag(delta_t),
-                        te.energies[-1],
-                        te.normsqs[-1],
+                        np.real(te.energies[-1]),
+                        np.imag(te.energies[-1]),
+                        np.real(te.normsqs[-1]),
+                        np.imag(te.normsqs[-1]),
                     )
                 )
             te_times.append((i + 1) * delta_t)

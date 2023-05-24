@@ -30,8 +30,10 @@ One can install ``block2`` using ``pip``:
 
 * To install the most recent development version, use: ::
 
-      pip install block2 --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
-      pip install block2-mpi --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+      pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+      pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
+
+  where ``<version>`` can be some development version number like ``0.5.2rc7``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 Manual Installation
 -------------------

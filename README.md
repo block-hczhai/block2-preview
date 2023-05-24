@@ -52,7 +52,7 @@ One can install ``block2`` using ``pip``:
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.1rc14``.
+  where ``<version>`` can be some development version number like ``0.5.2rc7``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 To run a DMRG calculation using the command line interface, please use the following command:
 
