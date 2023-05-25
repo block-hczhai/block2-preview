@@ -256,7 +256,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
             rhhk = np.concatenate((rhhk[..., None], rhhk2[..., None]), axis=-1)
             ener = np.concatenate((ener[..., None], ener12[..., None],
                 ener21[..., None], ener22[..., None]), axis=-1)
-            xr = rhhk.flatten()
+            xr = rhhk.ravel()
             xh = ener.reshape(xr.size // 2, xr.size // 2, 2, 2).transpose(0, 2, 1, 3)
             xh = xh.reshape(xr.size, xr.size)
             xn = norm.reshape(xr.size // 2, xr.size // 2, 2, 2).transpose(0, 2, 1, 3)
@@ -264,7 +264,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
         else:
             exec(nr_eqs, globals(), { "norm": norm, **mdict })
             exec(pt2_eqs, globals(), { "rhhk": rhhk, "ener": ener, **mdict })
-            xr = rhhk.flatten()
+            xr = rhhk.ravel()
             xh = ener.reshape(xr.size, xr.size)
             xn = norm.reshape(xr.size, xr.size)
         xw, xu = np.linalg.eigh(xn)

@@ -70,7 +70,7 @@ class CI(lib.StreamObject):
         # FCIDUMP
         h1e = self.mo_coeff.T @ self._scf.get_hcore() @ self.mo_coeff
         e_core = self.mol.energy_nuc()
-        h1e = h1e.flatten()
+        h1e = h1e.ravel()
         g2e = ao2mo.restore(8, ao2mo.kernel(self.mol, self.mo_coeff), self.mol.nao)
         h1e[np.abs(h1e) < fcidump_tol] = 0
         g2e[np.abs(g2e) < fcidump_tol] = 0

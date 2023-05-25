@@ -36,7 +36,7 @@ class TensorTools:
             ql = bspmat.info.quanta[i].get_bra(bspmat.info.delta_quantum)
             ib = lr.find_state(ql)
             bbed = clr.n if ib == lr.n - 1 else clr.n_states[ib + 1]
-            pmat = np.array(bspmat[i]).flatten()
+            pmat = np.array(bspmat[i]).ravel()
             ip = 0
             for bb in range(clr.n_states[ib], bbed):
                 ibba = clr.quanta[bb].data >> 16

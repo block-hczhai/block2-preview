@@ -77,7 +77,7 @@ for i in range(0, n_sites):
         assert abs(h1e[i, j] - h1e[j, i]) < tol
         mh1e[k] = h1e[i, j]
         k += 1
-mg2e = g2e.flatten().copy()
+mg2e = g2e.ravel()
 mh1e[np.abs(mh1e) < tol] = 0.0
 mg2e[np.abs(mg2e) < tol] = 0.0
 

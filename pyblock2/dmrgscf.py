@@ -143,7 +143,7 @@ class DMRGCI(lib.StreamObject):
         n_orbs = norb
         self.n_orbs = n_orbs
         mp_orb_sym = [tools.fcidump.ORBSYM_MAP[self.mol.groupname][i] for i in orb_sym]
-        h1e = h1e.flatten()
+        h1e = h1e.ravel()
         g2e = ao2mo.restore(8, g2e, n_orbs)
         h1e[np.abs(h1e) < fcidump_tol] = 0
         g2e[np.abs(g2e) < fcidump_tol] = 0

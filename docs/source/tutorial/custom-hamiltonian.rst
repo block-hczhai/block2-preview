@@ -207,9 +207,9 @@ The matrix representation of ``N`` is given in the ``init_site_ops`` method. ::
 
     # make sure the indices in every term are non-descending
     for t, ops in zip([-1, 1, -1, 1], ["cd", "dc", "CD", "DC"]):
-        b.add_term(ops, np.array([[i, i + 1] for i in range(L - 1)]).flatten(),
+        b.add_term(ops, np.array([[i, i + 1] for i in range(L - 1)]).ravel(),
             [t] * (L - 1))
-    b.add_term("N", np.array([[i, ] for i in range(L)]).flatten(), [U] * L)
+    b.add_term("N", np.array([[i, ] for i in range(L)]).ravel(), [U] * L)
     mpo = driver.get_mpo(b.finalize(adjust_order=False), iprint=2)
 
     def run_dmrg(driver, mpo):
