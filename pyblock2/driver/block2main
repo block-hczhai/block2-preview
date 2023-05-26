@@ -829,7 +829,7 @@ if pre_run or not no_pre_run:
         else:
             orb_sym = VectorUInt8(orb_sym)
         kappa = np.load(scratch + "/nat_kappa.npy")
-        kappa = kappa.flatten()
+        kappa = kappa.ravel()
         n_sites = len(orb_sym)
         fcidump = FCIDUMP()
         fcidump.initialize_h1e(n_sites, nelec[0], spin[0], isym[0], 0.0, kappa)
@@ -890,7 +890,7 @@ if pre_run or not no_pre_run:
                 n_sites, twos, ipg, n_elec, orb_sym, nevpt_h1e, nevpt_g2e, nevpt_const_e, orbe, h1e_si, h1e_sr, g2e_si, g2e_sr \
                     = read_nevpt2_compress_fcidump(fints, nevpt_ncas, nevpt_ncore, nevpt_nvirt)
                 fcidump.initialize_su2(
-                    nevpt_ncas, n_elec, twos, ipg, np.real(nevpt_const_e), nevpt_h1e.flatten(), nevpt_g2e.flatten())
+                    nevpt_ncas, n_elec, twos, ipg, np.real(nevpt_const_e), nevpt_h1e.ravel(), nevpt_g2e.flatten())
                 orb_sym = VectorUInt8(orb_sym[:nevpt_ncas])
                 nevpt_orb_sym = orb_sym
                 orb_sym = None
@@ -1387,7 +1387,7 @@ if dic.get("warmup", None) == "occ":
             moccs = np.array(occs).reshape((n_sites, 4))
             f = (1 - cbias) / moccs.sum(axis=1)[:, None]
             moccs = moccs * f + cbias / 4
-            occs = VectorDouble(moccs.flatten())
+            occs = VectorDouble(moccs.ravel())
         else:
             assert False
     bias = float(dic.get("bias", 1.0))
@@ -2965,7 +2965,7 @@ if not pre_run:
                     xpdm = spdm.copy()
                     _print("REORDERED OCC = ", "".join(
                         ["%6.3f" % x for x in np.diag(spdm)]))
-                    spdm = spdm.flatten()
+                    spdm = spdm.ravel()
                     nat_occs = np.zeros((n_sites, ))
                     if orb_sym is None:
                         raise ValueError(
@@ -3068,7 +3068,7 @@ if not pre_run:
                         # since all MPOs are already constructed
                         _print("rotating integrals to natural orbitals ...")
                         # (old, new)
-                        fcidump.rotate(VectorFP(rot.flatten()))
+                        fcidump.rotate(VectorFP(rot.ravel()))
                         _print("finished.")
                         rot_sym_error = fcidump.symmetrize(orb_sym)
                         _print("rotated integral sym error = %12.4g" %
@@ -3246,11 +3246,11 @@ if not pre_run:
             if dm.dtype == np.complex128:
                 f.writelines(("%2d " * n_ops + "%20.14f %20.14f\n") % (tuple(ix) + (x.real, x.imag))
                     for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
-                        dm.flatten()))
+                        dm.ravel()))
             else:
                 f.writelines(("%2d " * n_ops + "%20.14f\n") % (tuple(ix) + (x, ))
                     for ix, x in zip(np.mgrid[(slice(n_orbs), ) * n_ops].reshape(n_ops, -1).T,
-                        dm.flatten()))
+                        dm.ravel()))
 
     # TWOPDM
     if "restart_twopdm" in dic or "twopdm" in dic:
@@ -4540,5 +4540,5 @@ if not pre_run:
             # state_occ += ((1 - state_occ.sum(axis=1)) / 4)[:, None]
             state_occ *= (1 / state_occ.sum(axis=1))[:, None]
             _print("STATE OCC = ", "".join(
-                ["%8.5f" % x for x in state_occ.flatten()]))
+                ["%8.5f" % x for x in state_occ.ravel()]))
             np.save(scratch + "/sample-stocc.npy", state_occ)

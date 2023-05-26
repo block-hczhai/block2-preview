@@ -148,7 +148,7 @@ from the orbitals and ``kappa``, respectively: ::
         mc.mo_coeff[:, mc.ncore:mc.ncore + mc.ncas] = coeff
         mp_orb_sym = [tools.fcidump.ORBSYM_MAP[mol.groupname][i] for i in orb_sym]
         h1e, e_core = mc.get_h1cas()
-        h1e = h1e.flatten()
+        h1e = h1e.ravel()
         g2e = ao2mo.restore(8, mc.get_h2cas(), mc.ncas)
         h1e[np.abs(h1e) < tol] = 0
         g2e[np.abs(g2e) < tol] = 0

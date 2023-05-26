@@ -113,7 +113,7 @@ def orbital_reorder(h1e, g2e, method='gaopt'):
                 xmat[i, j] = 0.25 * abs(g2eaa[i, j, j, i]) \
                     + 0.25 * abs(g2ebb[i, j, j, i]) \
                     + 0.5 * abs(g2eab[i, j, j, i])
-    kmat = VectorDouble((np.array(hmat) * 1E-7 + np.array(xmat)).flatten())
+    kmat = VectorDouble((np.array(hmat) * 1E-7 + np.array(xmat)).ravel())
     if method == 'gaopt':
         n_tasks = 32
         opts = dict(

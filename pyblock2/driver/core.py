@@ -674,10 +674,10 @@ class DMRGDriver:
         bk_map = np.argsort(fw_map) + 1
         if SymmetryTypes.SZ in bw.symm_type:
             if not h1e_symm:
-                mh1e = tuple(x.flatten() for x in h1e)
+                mh1e = tuple(x.ravel() for x in h1e)
             else:
                 mh1e = tuple(x[np.tril_indices(len(x))] for x in h1e)
-            mg2e = tuple(x.flatten() for x in g2e)
+            mg2e = tuple(x.ravel() for x in g2e)
             mg2e = (mg2e[0], mg2e[2], mg2e[1])
             fcidump.initialize_sz(
                 self.n_sites,
@@ -690,7 +690,7 @@ class DMRGDriver:
             )
         elif g2e is not None:
             if not h1e_symm:
-                mh1e = h1e.flatten()
+                mh1e = h1e.ravel()
             else:
                 mh1e = h1e[np.tril_indices(len(h1e))]
             fcidump.initialize_su2(
@@ -700,7 +700,7 @@ class DMRGDriver:
                 bk_map[self.target.pg],
                 ecore,
                 mh1e,
-                g2e.flatten(),
+                g2e.ravel(),
             )
         else:
             fcidump.initialize_h1e(
@@ -709,7 +709,7 @@ class DMRGDriver:
                 self.target.twos,
                 bk_map[self.target.pg],
                 ecore,
-                h1e.flatten(),
+                h1e.ravel(),
             )
         if pg == "d2h" or pg == "c2v":
             orb_sym = [x % 10 for x in self.orb_sym]
@@ -1396,7 +1396,7 @@ class DMRGDriver:
                 np.array([ix2[0], ix2[0], ix2[1], ix2[1]]).T,
             )
         elif SymmetryTypes.SZ in bw.symm_type:
-            ix1 = np.mgrid[: self.n_sites].flatten()
+            ix1 = np.mgrid[: self.n_sites].ravel()
             ix2 = np.mgrid[: self.n_sites, : self.n_sites].reshape((2, -1))
             if self.reorder_idx is not None:
                 ridx = np.argsort(self.reorder_idx)
@@ -1435,8 +1435,8 @@ class DMRGDriver:
                 np.array([ix2[1], ix2[0], ix2[1], ix2[0]]).T,
             )
         elif SymmetryTypes.SGF in bw.symm_type:
-            ixa1 = np.mgrid[0 : self.n_sites : 2].flatten()
-            ixb1 = np.mgrid[1 : self.n_sites : 2].flatten()
+            ixa1 = np.mgrid[0 : self.n_sites : 2].ravel()
+            ixb1 = np.mgrid[1 : self.n_sites : 2].ravel()
             ixaa2 = np.mgrid[0 : self.n_sites : 2, 0 : self.n_sites : 2].reshape(
                 (2, -1)
             )
@@ -1565,7 +1565,7 @@ class DMRGDriver:
 
         xmat = np.abs(np.einsum("ijji->ij", g2e, optimize=True))
         kmat = np.abs(h1e) * 1e-7 + xmat
-        kmat = bw.b.VectorDouble(kmat.flatten())
+        kmat = bw.b.VectorDouble(kmat.ravel())
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
         return np.array(idx, dtype=int)
 
@@ -3336,7 +3336,7 @@ class WickNormalOrder:
                 if len(wex) == 0:
                     const_es += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
             if iprint:
                 xr = ("%20.15f" % const_es) if wex == "" else wex
                 print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -3428,7 +3428,7 @@ class WickNormalOrder:
                 if len(wex) == 0:
                     const_es += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
             if iprint:
                 xr = ("%20.15f" % const_es) if wex == "" else wex
                 print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -3541,7 +3541,7 @@ class WickNormalOrder:
                 if len(wex) == 0:
                     const_es += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
             if iprint:
                 xr = ("%20.15f" % const_es) if wex == "" else wex
                 print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -3627,7 +3627,7 @@ class WickNormalOrder:
                 if len(wex) == 0:
                     const_es += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
             if iprint:
                 xr = ("%20.15f" % const_es) if wex == "" else wex
                 print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -4212,7 +4212,7 @@ class SimilarityTransform:
                 if len(expr) == 0:
                     ecore += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
                 if iprint >= 2:
                     xr = ("%20.15f" % ecore) if expr == "" else expr
                     print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -4436,7 +4436,7 @@ class SimilarityTransform:
                     if len(expr) == 0:
                         ecore += ts
                     else:
-                        dtx[ix(mask)] += ts.flatten()
+                        dtx[ix(mask)] += ts.ravel()
                 if iprint >= 2:
                     xr = ("%20.15f" % ecore) if expr == "" else expr
                     print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
@@ -4612,7 +4612,7 @@ class SimilarityTransform:
                 if len(expr) == 0:
                     ecore += ts
                 else:
-                    dtx[ix(mask)] += ts.flatten()
+                    dtx[ix(mask)] += ts.ravel()
                 if iprint >= 2:
                     xr = ("%20.15f" % ecore) if expr == "" else expr
                     print("%4d / %4d --" % (xiter, len(eq.terms)), xr, np_str, mask, f)
