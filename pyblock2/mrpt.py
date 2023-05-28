@@ -44,6 +44,7 @@ class MRPT(lib.StreamObject):
         self.theory = theory
         self.scratch = './nodex'
         self.spin_adapted = spin_adapted
+        self.use_drt = True
 
     @property
     def e_tot(self):
@@ -62,13 +63,13 @@ class MRPT(lib.StreamObject):
             from block2.su2 import CSFBigSite, SimplifiedBigSite, RuleQC, HamiltonianQCBigSite
             from block2.su2 import CASCIMPSInfo, MPOQC, SimplifiedMPO, IdentityAddedMPO
             from block2.su2 import MovingEnvironment, DMRGBigSite, NoTransposeRule, MPSInfo, MPS
-            from block2.su2 import LinearBigSite
+            from block2.su2 import LinearBigSite, DRTBigSite
         else:
             SX = SZ
             from block2.sz import SCIFockBigSite, SimplifiedBigSite, RuleQC, HamiltonianQCBigSite
             from block2.sz import CASCIMPSInfo, MPOQC, SimplifiedMPO, IdentityAddedMPO
             from block2.sz import MovingEnvironment, DMRGBigSite, NoTransposeRule, MPSInfo, MPS
-            from block2.sz import LinearBigSite
+            from block2.sz import LinearBigSite, DRTBigSite
 
         # Global
         Random.rand_seed(123456)
@@ -127,7 +128,7 @@ class MRPT(lib.StreamObject):
 
         if write_fd is not None:
             fcidump.write(write_fd)
-        
+
         if write_conf is not None:
             with open(write_conf, "w") as conf:
                 conf.write("""
@@ -150,8 +151,14 @@ class MRPT(lib.StreamObject):
                 ))
             self.e_corr = 0.0
             return None
-
-        if self.spin_adapted:
+        if self.use_drt:
+            left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, self.ci_order, VectorUInt8(orb_sym[:n_inactive]))
+            right_iqs = DRTBigSite.get_target_quanta(True, n_external, self.ci_order, VectorUInt8(orb_sym[-n_external:]))
+            big_left_orig = DRTBigSite(left_iqs, False, n_inactive,
+                VectorUInt8(orb_sym[:n_inactive]), fcidump, max(min(self.verbose - 4, 3), 0))
+            big_right_orig = DRTBigSite(right_iqs, True, n_external,
+                VectorUInt8(orb_sym[-n_external:]), fcidump, max(min(self.verbose - 4, 3), 0))
+        elif self.spin_adapted:
             big_left_orig = CSFBigSite(n_inactive, self.ci_order, False,
                 fcidump, VectorUInt8(orb_sym[:n_inactive]), max(min(self.verbose - 4, 3), 0))
             big_right_orig = CSFBigSite(n_external, self.ci_order, True,
@@ -178,8 +185,11 @@ class MRPT(lib.StreamObject):
         sweep_tol = self.dmrg_args["sweep_tol"]
 
         # MPS
-        info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
-            1 if n_inactive != 0 else 0, mc.ncas, 1 if n_external != 0 else 0)
+        if self.theory != 'mrci':
+            info = CASCIMPSInfo(n_sites, vacuum, target, hamil.basis,
+                1 if n_inactive != 0 else 0, mc.ncas, 1 if n_external != 0 else 0)
+        else:
+            info = MPSInfo(n_sites, vacuum, target, hamil.basis)
         info.set_bond_dimension(bond_dims[0])
         mps = MPS(n_sites, 0, 2)
         mps.initialize(info)
@@ -210,10 +220,22 @@ class MRPT(lib.StreamObject):
         dmrg.noise_type = NoiseTypes.ReducedPerturbativeCollected
         ener = dmrg.solve(len(bond_dims), forward, sweep_tol)
 
-        self.converged = True
-        self.e_corr = 0
+        if self.theory == 'mrci':
 
-        lib.logger.note(self, 'E(%s1) = %.16g  E_corr = %.16g', self.theory.upper(), self.e_tot, self.e_corr)
+            self.converged = True
+            self.e_corr = ener - self._casci.e_tot
+
+            lib.logger.note(self, 'E(%s) = %.16g  E_corr = %.16g', self.theory.upper(), self.e_tot, self.e_corr)
+
+            self.mps = mps
+            return self.e_corr, mps
+
+        else:
+
+            self.converged = True
+            self.e_corr = 0
+
+            lib.logger.note(self, 'E(%s1) = %.16g  E_corr = %.16g', self.theory.upper(), self.e_tot, self.e_corr)
 
         self.mps = mps
 
@@ -236,7 +258,14 @@ class MRPT(lib.StreamObject):
         big_right = SimplifiedBigSite(big_right_orig, NoTransposeRule(RuleQC()))
         hamil = HamiltonianQCBigSite(vacuum, n_orbs, VectorUInt8(orb_sym), fcidump,
             big_left, big_right)
-        if self.spin_adapted:
+        if self.use_drt:
+            left_iqs = DRTBigSite.get_target_quanta(False, n_inactive, self.ci_order, VectorUInt8(orb_sym[:n_inactive]))
+            right_iqs = DRTBigSite.get_target_quanta(True, n_external, self.ci_order, VectorUInt8(orb_sym[-n_external:]))
+            big_left_orig = DRTBigSite(left_iqs, False, n_inactive,
+                VectorUInt8(orb_sym[:n_inactive]), fd_zero, max(min(self.verbose - 4, 3), 0))
+            big_right_orig = DRTBigSite(right_iqs, True, n_external,
+                VectorUInt8(orb_sym[-n_external:]), fd_zero, max(min(self.verbose - 4, 3), 0))
+        elif self.spin_adapted:
             big_left_orig = CSFBigSite(n_inactive, self.ci_order, False,
                 fd_zero, VectorUInt8(orb_sym[:n_inactive]), max(min(self.verbose - 4, 3), 0))
             big_right_orig = CSFBigSite(n_external, self.ci_order, True,
@@ -315,11 +344,10 @@ class MRPT(lib.StreamObject):
         dm1[p,q] = <q_alpha^\dagger p_alpha> + <q_beta^\dagger p_beta>
         '''
 
-        from block2 import CG
         if self.spin_adapted:
-            from block2.su2 import PDM1MPOQC, RuleQC, Expect, SimplifiedMPO, MovingEnvironment
+            from block2.su2 import PDM1MPOQC, RuleQC, Expect, SimplifiedMPO, MovingEnvironment, CG
         else:
-            from block2.sz import PDM1MPOQC, RuleQC, Expect, SimplifiedMPO, MovingEnvironment
+            from block2.sz import PDM1MPOQC, RuleQC, Expect, SimplifiedMPO, MovingEnvironment, CG
 
         if state is None:
             state = self.mps
@@ -354,6 +382,11 @@ def UCNEVPT2(*args, **kwargs):
 def UCMRREPT2(*args, **kwargs):
     kwargs['mp_order'] = 2
     kwargs['theory'] = 'mrrept'
+    return MRPT(*args, **kwargs)
+
+def UCMRCISD(*args, **kwargs):
+    kwargs['ci_order'] = 2
+    kwargs['theory'] = 'mrci'
     return MRPT(*args, **kwargs)
 
 if __name__ == '__main__':
