@@ -2803,13 +2803,13 @@ class DMRGDriver:
                     casci_ncas,
                     casci_nvirt,
                 )
-            mps = bw.bs.MPS(self.n_sites, center, dot)
+            mps = bw.bs.MPS(self.n_sites, center, 1)
         else:
             targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
             mps_info = bw.brs.MultiMPSInfo(
                 self.n_sites, self.vacuum, targets, self.ghamil.basis
             )
-            mps = bw.bs.MultiMPS(self.n_sites, center, dot, nroots)
+            mps = bw.bs.MultiMPS(self.n_sites, center, 1, nroots)
         mps_info.tag = tag
         if full_fci:
             mps_info.set_bond_dimension_full_fci(left_vacuum, self.vacuum)
@@ -2831,6 +2831,8 @@ class DMRGDriver:
         mps_info.save_mutable()
         mps.save_data()
         mps_info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        if dot != 1:
+            mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
     
     def get_ancilla_mps(
