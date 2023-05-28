@@ -656,7 +656,7 @@ the following python script can be used to generate the integral with :math:`C_2
     print('h1e imag = ', np.linalg.norm(h1e.imag))
     assert np.linalg.norm(h1e.imag) < 1E-14
     e_core = mol.energy_nuc()
-    h1e = h1e.real.flatten()
+    h1e = h1e.real.ravel()
     _eri = ao2mo.restore(1, mf._eri, mol.nao)
     g2e = np.einsum('pqrs,pi,qj,rk,sl->ijkl', _eri,
         mf.mo_coeff.conj(), mf.mo_coeff, mf.mo_coeff.conj(), mf.mo_coeff, optimize=True)
@@ -665,7 +665,7 @@ the following python script can be used to generate the integral with :math:`C_2
     print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((1, 0, 3, 2))))
     print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((2, 3, 0, 1))))
     print('g2e symm = ', np.linalg.norm(g2e - g2e.transpose((3, 2, 1, 0))))
-    g2e = g2e.real.flatten()
+    g2e = g2e.real.ravel()
 
     fcidump_tol = 1E-13
     na = nb = mol.nelectron // 2

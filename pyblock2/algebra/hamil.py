@@ -154,7 +154,7 @@ class HamilTools:
                     assert abs(h1e[i, j] - h1e[j, i]) < tol
                     mh1e[k] = h1e[i, j]
                     k += 1
-            mg2e = g2e.flatten().copy()
+            mg2e = g2e.flatten()
             mh1e[np.abs(mh1e) < tol] = 0.0
             mg2e[np.abs(mg2e) < tol] = 0.0
             fcidump.initialize_su2(n_sites, n_elec, 0, 1, ecore, mh1e, mg2e)
