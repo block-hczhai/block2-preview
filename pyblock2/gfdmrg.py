@@ -991,7 +991,7 @@ def dmrg_mo_gf(mf, freqs, delta, ao_orbs=None, mo_orbs=None, gmres_tol=1E-7, add
         if save_dir is not None:
             _print('saving ground state ...')
             dmrg.save_gs_mps(save_dir)
-            if mpi.rank == 0:
+            if mpi is None or mpi.rank == 0:
                 np.save(save_dir + "/reorder.npy", re_idx)
     else:
         dmrg.init_hamiltonian_fcidump(pg, load_dir + "/GS_FCIDUMP")

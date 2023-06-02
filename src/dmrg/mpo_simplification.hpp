@@ -61,8 +61,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                   bool collect_terms = true, bool use_intermediate = false,
                   OpNamesSet intermediate_ops = OpNamesSet::all_ops(),
                   const string &tag = "", bool check_indirect_ref = true)
-        : prim_mpo(mpo),
-          rule(rule), MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag),
+        : prim_mpo(mpo), rule(rule),
+          MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag),
           collect_terms(collect_terms), use_intermediate(use_intermediate),
           intermediate_ops(intermediate_ops),
           check_indirect_ref(check_indirect_ref) {
@@ -1134,6 +1134,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 continue;
             shared_ptr<OpElement<S, FL>> op =
                 dynamic_pointer_cast<OpElement<S, FL>>(name->data[j]);
+            if (abs(op->factor) < TINY)
+                continue;
             if (rule->operator()(op) != nullptr)
                 continue;
             name->data[k] = name->data[j];
