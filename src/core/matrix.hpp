@@ -348,6 +348,10 @@ template <typename FL, typename IX = MKL_INT> struct GTensor {
             x = x * (size_t)sh;
         data = make_shared<vector<FL>>(x);
     }
+    GTensor(const GMatrix<FL> &mat) {
+        shape = vector<IX>{(IX)mat.m, (IX)mat.n};
+        data = make_shared<vector<FL>>(mat.data, mat.data + mat.size());
+    }
     size_t size() const { return data->size(); }
     void clear() { memset(data->data(), 0, size() * sizeof(FL)); }
     void truncate(IX n) {

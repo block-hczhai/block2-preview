@@ -1816,7 +1816,7 @@ template <typename S, typename FL> struct SparseMatrix {
                                              : old_fused_cinfo.n_states[ib + 1];
             MKL_INT p = mat->info->n_states_total[i];
             for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
+                uint32_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
                          ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
                 MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 mp[(ibbb << 16) + ik][ibba].push_back(make_tuple(p, lp, ib));

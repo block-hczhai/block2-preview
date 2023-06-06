@@ -472,9 +472,10 @@ class DMRGDriver:
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
-                bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
-                    self.fp_codec_cutoff, 1024
-                )
+                if self.fp_codec_cutoff != -1:
+                    bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
+                        self.fp_codec_cutoff, 1024
+                    )
                 bw.b.Global.frame_float = None
                 self.frame = bw.b.Global.frame
             else:
@@ -485,9 +486,10 @@ class DMRGDriver:
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
-                bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
-                    self.fp_codec_cutoff, 1024
-                )
+                if self.fp_codec_cutoff != -1:
+                    bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
+                        self.fp_codec_cutoff, 1024
+                    )
                 bw.b.Global.frame = None
                 self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True
@@ -2781,6 +2783,7 @@ class DMRGDriver:
         left_vacuum=None,
         casci_ncore=0,
         casci_nvirt=0,
+        orig_dot=False,
     ):
         bw = self.bw
         if target is None:
@@ -2803,13 +2806,13 @@ class DMRGDriver:
                     casci_ncas,
                     casci_nvirt,
                 )
-            mps = bw.bs.MPS(self.n_sites, center, 1)
+            mps = bw.bs.MPS(self.n_sites, center, dot if orig_dot else 1)
         else:
             targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
             mps_info = bw.brs.MultiMPSInfo(
                 self.n_sites, self.vacuum, targets, self.ghamil.basis
             )
-            mps = bw.bs.MultiMPS(self.n_sites, center, 1, nroots)
+            mps = bw.bs.MultiMPS(self.n_sites, center, dot if orig_dot else 1, nroots)
         mps_info.tag = tag
         if full_fci:
             mps_info.set_bond_dimension_full_fci(left_vacuum, self.vacuum)
@@ -2831,7 +2834,7 @@ class DMRGDriver:
         mps_info.save_mutable()
         mps.save_data()
         mps_info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
-        if dot != 1:
+        if dot != 1 and not orig_dot:
             mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
     
