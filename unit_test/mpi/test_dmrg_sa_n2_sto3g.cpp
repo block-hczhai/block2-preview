@@ -37,7 +37,7 @@ class TestDMRGN2STO3GSA : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 22;
+    size_t isize = 1L << 24;
     size_t dsize = 1L << 30;
     typedef double FP;
 
