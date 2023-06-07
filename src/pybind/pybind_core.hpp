@@ -39,6 +39,7 @@ PYBIND11_MAKE_OPAQUE(vector<uint8_t>);
 PYBIND11_MAKE_OPAQUE(vector<int16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint16_t>);
 PYBIND11_MAKE_OPAQUE(vector<uint32_t>);
+PYBIND11_MAKE_OPAQUE(vector<pair<uint32_t, uint32_t>>);
 PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<long double>);
 PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
@@ -658,6 +659,14 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
             ss << *self;
             return ss.str();
         });
+
+    py::class_<typename StateInfo<S>::ConnectionInfo,
+               shared_ptr<typename StateInfo<S>::ConnectionInfo>>(
+        m, "StateConnectionInfo")
+        .def(py::init<>())
+        .def_readwrite("acc_n_states",
+                       &StateInfo<S>::ConnectionInfo::acc_n_states)
+        .def_readwrite("ij_indices", &StateInfo<S>::ConnectionInfo::ij_indices);
 }
 
 template <typename S, typename FL>
@@ -673,7 +682,7 @@ template <typename S> void bind_sparse(py::module &m) {
 
     py::class_<typename SparseMatrixInfo<S>::ConnectionInfo,
                shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>(
-        m, "ConnectionInfo")
+        m, "SpMatConnectionInfo")
         .def(py::init<>())
         .def_property_readonly(
             "n",
@@ -1383,6 +1392,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<int16_t>>(m, "VectorInt16");
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
+    py::bind_vector<vector<pair<uint32_t, uint32_t>>>(m, "VectorPUInt32UInt32");
     py::bind_vector<vector<double>>(m, "VectorDouble");
     py::bind_vector<vector<long double>>(m, "VectorLDouble");
     py::bind_vector<vector<complex<double>>>(m, "VectorComplexDouble");

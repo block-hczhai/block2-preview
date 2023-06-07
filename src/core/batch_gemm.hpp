@@ -409,7 +409,7 @@ struct AdvancedGEMM<FL,
     static void tensor_product(const shared_ptr<BatchGEMM<FL>> &batch,
                                const GMatrix<FL> &a, bool conja,
                                const GMatrix<FL> &b, bool conjb,
-                               const GMatrix<FL> &c, FL scale, uint32_t stride,
+                               const GMatrix<FL> &c, FL scale, uint64_t stride,
                                FL cfactor = 1.0) {
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
@@ -495,9 +495,9 @@ struct AdvancedGEMM<FL,
         const shared_ptr<BatchGEMM<FL>> &batch, uint8_t abconj,
         const GMatrix<FL> &a, const GMatrix<FL> &b, const GMatrix<FL> &c,
         const GMatrix<FL> &da, bool dconja, const GMatrix<FL> &db, bool dconjb,
-        bool dleft, FL scale, uint32_t stride) {
-        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
-        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        bool dleft, FL scale, uint64_t stride) {
+        const MKL_INT dstrm = (MKL_INT)(stride / (dleft ? a.m : b.m));
+        const MKL_INT dstrn = (MKL_INT)(stride % (dleft ? a.m : b.m));
         if (dstrn != dstrm)
             return;
         assert(da.m == da.n && db.m == db.n);
@@ -585,7 +585,7 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
     static void tensor_product(const shared_ptr<BatchGEMM<FL>> &batch,
                                const GMatrix<FL> &a, bool conja,
                                const GMatrix<FL> &b, bool conjb,
-                               const GMatrix<FL> &c, FL scale, uint32_t stride,
+                               const GMatrix<FL> &c, FL scale, uint64_t stride,
                                FL cfactor = 1.0) {
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
@@ -679,9 +679,9 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
         const shared_ptr<BatchGEMM<FL>> &batch, uint8_t abconj,
         const GMatrix<FL> &a, const GMatrix<FL> &b, const GMatrix<FL> &c,
         const GMatrix<FL> &da, bool dconja, const GMatrix<FL> &db, bool dconjb,
-        bool dleft, FL scale, uint32_t stride) {
-        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
-        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        bool dleft, FL scale, uint64_t stride) {
+        const MKL_INT dstrm = (MKL_INT)(stride / (dleft ? a.m : b.m));
+        const MKL_INT dstrn = (MKL_INT)(stride % (dleft ? a.m : b.m));
         if (dstrn != dstrm)
             return;
         assert(da.m == da.n && db.m == db.n);
@@ -921,7 +921,7 @@ template <typename FL> struct BatchGEMMSeq {
                       const GMatrix<FL> &bra, bool conj_bra,
                       const GMatrix<FL> &ket, bool conj_ket,
                       const GMatrix<FL> &da, bool dconja, const GMatrix<FL> &db,
-                      bool dconjb, bool dleft, FL scale, uint32_t stride) {
+                      bool dconjb, bool dleft, FL scale, uint64_t stride) {
         GMatrix<FL> work(nullptr, 0, 0);
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
@@ -991,7 +991,7 @@ template <typename FL> struct BatchGEMMSeq {
                               const GMatrix<FL> &ket, bool conj_ket,
                               const GMatrix<FL> &da, bool dconja,
                               const GMatrix<FL> &db, bool dconjb, bool dleft,
-                              FL scale, uint32_t stride) {
+                              FL scale, uint64_t stride) {
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
@@ -1028,7 +1028,7 @@ template <typename FL> struct BatchGEMMSeq {
                                const GMatrix<FL> &ket, bool conj_ket,
                                const GMatrix<FL> &da, bool dconja,
                                const GMatrix<FL> &db, bool dconjb, bool dleft,
-                               FL scale, uint32_t stride) {
+                               FL scale, uint64_t stride) {
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
@@ -1077,7 +1077,7 @@ template <typename FL> struct BatchGEMMSeq {
                                        const GMatrix<FL> &c,
                                        const GMatrix<FL> &da, bool dconja,
                                        const GMatrix<FL> &db, bool dconjb,
-                                       bool dleft, FL scale, uint32_t stride) {
+                                       bool dleft, FL scale, uint64_t stride) {
         AdvancedGEMM<FL>::three_tensor_product_diagonal(
             batch[1], abconj, a, b, c, da, dconja, db, dconjb, dleft, scale,
             stride);
@@ -1085,7 +1085,7 @@ template <typename FL> struct BatchGEMMSeq {
     // [c + stride] = [a] * (scalar b) or [c] = (scalar a) * [b]
     void tensor_product(const GMatrix<FL> &a, bool conja, const GMatrix<FL> &b,
                         bool conjb, const GMatrix<FL> &c, FL scale,
-                        uint32_t stride) {
+                        uint64_t stride) {
         AdvancedGEMM<FL>::tensor_product(batch[1], a, conja, b, conjb, c, scale,
                                          stride);
     }

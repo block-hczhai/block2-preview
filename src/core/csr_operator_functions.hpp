@@ -220,7 +220,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
-                iv = cinfo->stride[il];
+                iv = (int)cinfo->stride[il];
             double factor = cinfo->factor[il];
             seq->cumulative_nflop +=
                 (size_t)(*c)[ic].m * (*c)[ic].n *
@@ -272,7 +272,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
-                iv = cinfo->stride[il];
+                iv = (int)cinfo->stride[il];
             double factor = cinfo->factor[il];
             seq->cumulative_nflop +=
                 (size_t)(*c)[ic].m * (*c)[ic].n *
@@ -323,7 +323,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il],
-                iv = cinfo->stride[il];
+                iv = (int)cinfo->stride[il];
             double factor = cinfo->factor[il];
             seq->cumulative_nflop +=
                 (size_t)(*c)[ic].m * (*c)[ic].n *
@@ -409,7 +409,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
-            uint32_t stride = cinfo->stride[il];
+            uint64_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
             switch (itp) {
             case 5:

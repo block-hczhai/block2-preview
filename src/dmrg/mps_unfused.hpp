@@ -257,7 +257,8 @@ template <typename S, typename FL> struct UnfusedMPS {
         StateInfo<S> l = *mps->info->left_dims[ii];
         StateInfo<S> lm = StateInfo<S>::tensor_product(
             l, m, *mps->info->left_dims_fci[ii + 1]);
-        StateInfo<S> clm = StateInfo<S>::get_connection_info(l, m, lm);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
+            StateInfo<S>::get_connection_info(l, m, lm);
         shared_ptr<SparseMatrix<S, FL>> mat = mps->tensors[ii];
         assert(wfn == mat->info->is_wavefunction);
         for (int i = 0; i < mat->info->n; i++) {
@@ -266,11 +267,11 @@ template <typename S, typename FL> struct UnfusedMPS {
             if (wfn)
                 ket = -ket;
             int ib = lm.find_state(bra);
-            int bbed = ib == lm.n - 1 ? clm.n : clm.n_states[ib + 1];
+            int bbed = clm->acc_n_states[ib + 1];
             uint32_t p = mat->info->n_states_total[i];
-            for (int bb = clm.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = clm.quanta[bb].data >> 16,
-                         ibbb = clm.quanta[bb].data & (0xFFFFU);
+            for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = clm->ij_indices[bb].first,
+                         ibbb = clm->ij_indices[bb].second;
                 uint32_t lp = (uint32_t)l.n_states[ibba] * m.n_states[ibbb] *
                               mat->info->n_states_ket[i];
                 ts->data[ibbb].push_back(make_pair(
@@ -278,15 +279,14 @@ template <typename S, typename FL> struct UnfusedMPS {
                               wfn ? mps->info->target - ket : ket),
                     make_shared<GTensor<FL>>(l.n_states[ibba], m.n_states[ibbb],
                                              mat->info->n_states_ket[i])));
-                memcpy(ts->data[ibbb].back().second->data->data(), mat->data + p,
-                       lp * sizeof(FL));
+                memcpy(ts->data[ibbb].back().second->data->data(),
+                       mat->data + p, lp * sizeof(FL));
                 p += lp;
             }
             assert(p == (i != mat->info->n - 1
                              ? mat->info->n_states_total[i + 1]
                              : mat->total_memory));
         }
-        clm.deallocate();
         lm.deallocate();
         l.deallocate();
         return ts;
@@ -300,7 +300,8 @@ template <typename S, typename FL> struct UnfusedMPS {
         StateInfo<S> r = *mps->info->right_dims[ii + 1];
         StateInfo<S> mr =
             StateInfo<S>::tensor_product(m, r, *mps->info->right_dims_fci[ii]);
-        StateInfo<S> cmr = StateInfo<S>::get_connection_info(m, r, mr);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
+            StateInfo<S>::get_connection_info(m, r, mr);
         shared_ptr<SparseMatrix<S, FL>> mat = mps->tensors[ii];
         assert(wfn == mat->info->is_wavefunction);
         for (int i = 0; i < mat->info->n; i++) {
@@ -309,11 +310,11 @@ template <typename S, typename FL> struct UnfusedMPS {
             if (wfn)
                 ket = -ket;
             int ik = mr.find_state(ket);
-            int kked = ik == mr.n - 1 ? cmr.n : cmr.n_states[ik + 1];
+            int kked = cmr->acc_n_states[ik + 1];
             uint32_t p = mat->info->n_states_total[i];
-            for (int kk = cmr.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = cmr.quanta[kk].data >> 16,
-                         ikkb = cmr.quanta[kk].data & (0xFFFFU);
+            for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = cmr->ij_indices[kk].first,
+                         ikkb = cmr->ij_indices[kk].second;
                 uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
                 ts->data[ikka].push_back(make_pair(
                     make_pair(wfn ? bra : mps->info->target - bra,
@@ -330,7 +331,6 @@ template <typename S, typename FL> struct UnfusedMPS {
             assert(p - mat->info->n_states_total[i] ==
                    mat->info->n_states_ket[i]);
         }
-        cmr.deallocate();
         mr.deallocate();
         r.deallocate();
         return ts;
@@ -367,7 +367,8 @@ template <typename S, typename FL> struct UnfusedMPS {
         StateInfo<S> l = *mps->info->left_dims[ii];
         StateInfo<S> lm = StateInfo<S>::tensor_product(
             l, m, *mps->info->left_dims_fci[ii + 1]);
-        StateInfo<S> clm = StateInfo<S>::get_connection_info(l, m, lm);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
+            StateInfo<S>::get_connection_info(l, m, lm);
         shared_ptr<SparseMatrixInfo<S>> minfo =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         if (wfn)
@@ -390,11 +391,11 @@ template <typename S, typename FL> struct UnfusedMPS {
             if (wfn)
                 ket = -ket;
             int ib = lm.find_state(bra);
-            int bbed = ib == lm.n - 1 ? clm.n : clm.n_states[ib + 1];
+            int bbed = clm->acc_n_states[ib + 1];
             uint32_t p = mat->info->n_states_total[i];
-            for (int bb = clm.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = clm.quanta[bb].data >> 16,
-                         ibbb = clm.quanta[bb].data & (0xFFFFU);
+            for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = clm->ij_indices[bb].first,
+                         ibbb = clm->ij_indices[bb].second;
                 uint32_t lp = (uint32_t)l.n_states[ibba] * m.n_states[ibbb] *
                               mat->info->n_states_ket[i];
                 pair<S, S> qq = make_pair(l.quanta[ibba],
@@ -412,7 +413,6 @@ template <typename S, typename FL> struct UnfusedMPS {
                              ? mat->info->n_states_total[i + 1]
                              : mat->total_memory));
         }
-        clm.deallocate();
         lm.deallocate();
         return mat;
     }
@@ -427,7 +427,8 @@ template <typename S, typename FL> struct UnfusedMPS {
         StateInfo<S> r = *mps->info->right_dims[ii + 1];
         StateInfo<S> mr =
             StateInfo<S>::tensor_product(m, r, *mps->info->right_dims_fci[ii]);
-        StateInfo<S> cmr = StateInfo<S>::get_connection_info(m, r, mr);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
+            StateInfo<S>::get_connection_info(m, r, mr);
         shared_ptr<SparseMatrixInfo<S>> minfo =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         if (wfn)
@@ -450,11 +451,11 @@ template <typename S, typename FL> struct UnfusedMPS {
             if (wfn)
                 ket = -ket;
             int ik = mr.find_state(ket);
-            int kked = ik == mr.n - 1 ? cmr.n : cmr.n_states[ik + 1];
+            int kked = cmr->acc_n_states[ik + 1];
             uint32_t p = mat->info->n_states_total[i];
-            for (int kk = cmr.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = cmr.quanta[kk].data >> 16,
-                         ikkb = cmr.quanta[kk].data & (0xFFFFU);
+            for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = cmr->ij_indices[kk].first,
+                         ikkb = cmr->ij_indices[kk].second;
                 uint32_t lp = (uint32_t)m.n_states[ikka] * r.n_states[ikkb];
                 pair<S, S> qq = make_pair(wfn ? bra : mps->info->target - bra,
                                           mps->info->target - r.quanta[ikkb]);
@@ -472,7 +473,6 @@ template <typename S, typename FL> struct UnfusedMPS {
             assert(p - mat->info->n_states_total[i] ==
                    mat->info->n_states_ket[i]);
         }
-        cmr.deallocate();
         mr.deallocate();
         return mat;
     }

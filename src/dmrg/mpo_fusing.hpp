@@ -532,10 +532,10 @@ template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {
         info->initialize(*basis, *basis, dq, dq.is_fermion());
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
             make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
-        shared_ptr<StateInfo<S>> bas_cinfo = make_shared<StateInfo<S>>(
-            StateInfo<S>::get_connection_info(*basis_a, *basis_b, *basis));
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> bas_cinfo =
+            StateInfo<S>::get_connection_info(*basis_a, *basis_b, *basis);
         cinfo->initialize_tp(dq, subsl, *basis, *basis, *basis_a, *basis_b,
-                             *basis_a, *basis_b, *bas_cinfo, *bas_cinfo, ainfos,
+                             *basis_a, *basis_b, bas_cinfo, bas_cinfo, ainfos,
                              binfos, info, opf->cg);
         info->cinfo = cinfo;
         shared_ptr<SparseMatrix<S, FL>> spmat =
@@ -619,9 +619,9 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         else
             fused_basis = make_shared<StateInfo<S>>(
                 StateInfo<S>::tensor_product(*basis[a], *basis[b], *ref));
-        shared_ptr<StateInfo<S>> fused_cinfo =
-            make_shared<StateInfo<S>>(StateInfo<S>::get_connection_info(
-                *basis[a], *basis[b], *fused_basis));
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> fused_cinfo =
+            StateInfo<S>::get_connection_info(*basis[a], *basis[b],
+                                              *fused_basis);
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> fused_op_infos;
         shared_ptr<OperatorTensor<S, FL>> opt =
             make_shared<OperatorTensor<S, FL>>();
@@ -661,7 +661,7 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
             cinfo->initialize_tp(sl[i], subsl[i], *fused_basis, *fused_basis,
                                  *basis[a], *basis[b], *basis[a], *basis[b],
-                                 *fused_cinfo, *fused_cinfo,
+                                 fused_cinfo, fused_cinfo,
                                  mpo->site_op_infos[a], mpo->site_op_infos[b],
                                  op_notrunc, mpo->tf->opf->cg);
             op_notrunc->cinfo = cinfo;

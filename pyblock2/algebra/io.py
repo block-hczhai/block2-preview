@@ -35,12 +35,10 @@ class TensorTools:
         for i in range(bspmat.info.n):
             ql = bspmat.info.quanta[i].get_bra(bspmat.info.delta_quantum)
             ib = lr.find_state(ql)
-            bbed = clr.n if ib == lr.n - 1 else clr.n_states[ib + 1]
             pmat = np.array(bspmat[i]).ravel()
             ip = 0
-            for bb in range(clr.n_states[ib], bbed):
-                ibba = clr.quanta[bb].data >> 16
-                ibbb = clr.quanta[bb].data & 0xFFFF
+            for bb in range(clr.acc_n_states[ib], clr.acc_n_states[ib + 1]):
+                ibba, ibbb = clr.ij_indices[bb]
                 ql, nl = l.quanta[ibba], l.n_states[ibba]
                 qr, nr = r.quanta[ibbb], r.n_states[ibbb]
                 rmat = pmat[ip: ip + nl * nr].reshape((nl, nr))
@@ -74,13 +72,11 @@ class TensorTools:
             if bspmat.info.is_wavefunction:
                 qr = -qr
             ib = lm.find_state(qlm)
-            bbed = clm.n if ib == lm.n - 1 else clm.n_states[ib + 1]
             pmat = np.array(bspmat[i])
             nr = pmat.shape[1]
             ip = 0
-            for bb in range(clm.n_states[ib], bbed):
-                ibba = clm.quanta[bb].data >> 16
-                ibbb = clm.quanta[bb].data & 0xFFFF
+            for bb in range(clm.acc_n_states[ib], clm.acc_n_states[ib + 1]):
+                ibba, ibbb = clm.ij_indices[bb]
                 ql, nl = l.quanta[ibba], l.n_states[ibba]
                 qm, nm = m.quanta[ibbb], m.n_states[ibbb]
                 rmat = pmat[ip: ip + nl * nm, :].reshape((nl, nm, nr))
@@ -104,9 +100,8 @@ class TensorTools:
             pmat = np.array(bspmat[i])
             nl = pmat.shape[0]
             ip = 0
-            for kk in range(cmr.n_states[ik], kked):
-                ikka = cmr.quanta[kk].data >> 16
-                ikkb = cmr.quanta[kk].data & 0xFFFF
+            for kk in range(cmr.acc_n_states[ik], cmr.acc_n_states[ik + 1]):
+                ikka, ikkb = cmr.ij_indices[kk]
                 qm, nm = m.quanta[ikka], m.n_states[ikka]
                 qr, nr = r.quanta[ikkb], r.n_states[ikkb]
                 rmat = pmat[:, ip:ip + nm * nr].reshape((nl, nm, nr))
@@ -126,20 +121,16 @@ class TensorTools:
             if bspmat.info.is_wavefunction:
                 qmr = -qmr
             ib = lm.find_state(qlm)
-            bbed = clm.n if ib == lm.n - 1 else clm.n_states[ib + 1]
             ik = mr.find_state(qmr)
-            kked = cmr.n if ik == mr.n - 1 else cmr.n_states[ik + 1]
             pmat = np.array(bspmat[i])
             ipl = 0
-            for bb in range(clm.n_states[ib], bbed):
-                ibba = clm.quanta[bb].data >> 16
-                ibbb = clm.quanta[bb].data & 0xFFFF
+            for bb in range(clm.acc_n_states[ib], clm.acc_n_states[ib + 1]):
+                ibba, ibbb = clm.ij_indices[bb]
                 ql, nl = l.quanta[ibba], l.n_states[ibba]
                 qma, nma = ma.quanta[ibbb], ma.n_states[ibbb]
                 ipr = 0
-                for kk in range(cmr.n_states[ik], kked):
-                    ikka = cmr.quanta[kk].data >> 16
-                    ikkb = cmr.quanta[kk].data & 0xFFFF
+                for kk in range(cmr.acc_n_states[ik], cmr.acc_n_states[ik + 1]):
+                    ikka, ikkb = cmr.ij_indices[kk]
                     qmb, nmb = mb.quanta[ikka], mb.n_states[ikka]
                     qr, nr = r.quanta[ikkb], r.n_states[ikkb]
                     rmat = pmat[ipl: ipl + nl * nma, ipr: ipr
@@ -193,7 +184,6 @@ class MPSTools:
                     tensors[i] = TensorTools.from_block2_left_fused(
                         bmps.tensors[i], l, m, lm, clm)
                 bmps.unload_tensor(i)
-                clm.deallocate()
                 lm.deallocate()
                 l.deallocate()
             elif i >= bmps.center + bmps.dot or (
@@ -215,7 +205,6 @@ class MPSTools:
                 tensors[i] = TensorTools.from_block2_right_fused(
                     bmps.tensors[i], m, r, mr, cmr)
                 bmps.unload_tensor(i)
-                cmr.deallocate()
                 mr.deallocate()
                 r.deallocate()
             elif i == bmps.center and i != 0 and i != bmps.n_sites - 2 and bmps.dot == 2:
@@ -235,8 +224,6 @@ class MPSTools:
                 tensors[i] = TensorTools.from_block2_left_and_right_fused(
                     bmps.tensors[i], l, ma, mb, r, lm, clm, mr, cmr)
                 bmps.unload_tensor(i)
-                cmr.deallocate()
-                clm.deallocate()
                 mr.deallocate()
                 lm.deallocate()
                 r.deallocate()

@@ -933,7 +933,7 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     static void tensor_product(const GCSRMatrix<FL> &a, bool conja,
                                const GCSRMatrix<FL> &b, bool conjb,
-                               GCSRMatrix<FL> &c, FL scale, uint32_t stride) {
+                               GCSRMatrix<FL> &c, FL scale, uint64_t stride) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         if (a.nnz == a.size() || b.nnz == b.size()) {
@@ -1005,7 +1005,7 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     static void tensor_product(const GCSRMatrix<FL> &a, bool conja,
                                const GMatrix<FL> &b, bool conjb,
-                               GCSRMatrix<FL> &c, FL scale, uint32_t stride) {
+                               GCSRMatrix<FL> &c, FL scale, uint64_t stride) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         if (a.nnz == a.size() || c.nnz == c.size()) {
@@ -1084,7 +1084,7 @@ template <typename FL> struct GCSRMatrixFunctions {
     }
     static void tensor_product(const GMatrix<FL> &a, bool conja,
                                const GCSRMatrix<FL> &b, bool conjb,
-                               GCSRMatrix<FL> &c, FL scale, uint32_t stride) {
+                               GCSRMatrix<FL> &c, FL scale, uint64_t stride) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         if (b.nnz == b.size() || c.nnz == c.size()) {

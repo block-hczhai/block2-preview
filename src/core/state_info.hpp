@@ -66,6 +66,11 @@ struct StateInfo<S,
     ubond_t *n_states;
     int n;
     total_bond_t n_states_total;
+    struct ConnectionInfo {
+        vector<uint32_t> acc_n_states;
+        vector<pair<uint32_t, uint32_t>> ij_indices;
+        ConnectionInfo() {}
+    };
     StateInfo()
         : quanta(nullptr), n_states(nullptr), n_states_total(0), n(0),
           vdata(nullptr) {}
@@ -274,27 +279,33 @@ struct StateInfo<S,
     }
     // Connection info for tensor product c of StateInfo a and b
     // For determining stride in tensor product of two SparseMatrix
-    static StateInfo get_connection_info(const StateInfo &a, const StateInfo &b,
-                                         const StateInfo &c) {
-        map<S, vector<S>> mp;
+    static shared_ptr<typename StateInfo::ConnectionInfo>
+    get_connection_info(const StateInfo &a, const StateInfo &b,
+                        const StateInfo &c) {
+        map<S, vector<pair<uint32_t, uint32_t>>> mp;
         int nc = 0, iab = 0;
         for (int i = 0; i < a.n; i++)
             for (int j = 0; j < b.n; j++) {
                 S qc = a.quanta[i] + b.quanta[j];
                 nc += qc.count();
                 for (int k = 0; k < qc.count(); k++)
-                    mp[qc[k]].push_back(S((i << 16) + j));
+                    mp[qc[k]].push_back(make_pair(i, j));
             }
-        StateInfo ci;
-        ci.allocate(nc);
+        nc = 0;
+        for (int ic = 0; ic < c.n; ic++)
+            nc += mp.at(c.quanta[ic]).size();
+        shared_ptr<typename StateInfo::ConnectionInfo> ci =
+            make_shared<typename StateInfo::ConnectionInfo>();
+        ci->acc_n_states.reserve(c.n + 1);
+        ci->ij_indices.reserve(nc);
         for (int ic = 0; ic < c.n; ic++) {
-            vector<S> &v = mp.at(c.quanta[ic]);
-            ci.n_states[ic] = iab;
-            memcpy(ci.quanta + iab, v.data(), v.size() * sizeof(S));
+            vector<pair<uint32_t, uint32_t>> &v = mp.at(c.quanta[ic]);
+            ci->acc_n_states.push_back(iab);
+            ci->ij_indices.insert(ci->ij_indices.end(), v.begin(), v.end());
             iab += (int)v.size();
         }
-        ci.reallocate(iab);
-        ci.n_states_total = c.n;
+        ci->acc_n_states.push_back(iab);
+        assert(iab == nc && ci->ij_indices.size() == nc);
         return ci;
     }
     // Remove unmatched quantum numbers in left or right blocks

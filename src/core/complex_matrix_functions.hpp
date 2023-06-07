@@ -962,7 +962,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                                const GMatrix<FL> &ket, bool conj_ket,
                                const GMatrix<FL> &da, bool dconja,
                                const GMatrix<FL> &db, bool dconjb, bool dleft,
-                               FL scale, uint32_t stride) {
+                               FL scale, uint64_t stride) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         if (dleft) {
@@ -1027,7 +1027,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                                        const GMatrix<FL> &ket, bool conj_ket,
                                        const GMatrix<FL> &da, bool dconja,
                                        const GMatrix<FL> &db, bool dconjb,
-                                       bool dleft, FL scale, uint32_t stride) {
+                                       bool dleft, FL scale, uint64_t stride) {
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
@@ -1068,7 +1068,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                                         const GMatrix<FL> &ket, bool conj_ket,
                                         const GMatrix<FL> &da, bool dconja,
                                         const GMatrix<FL> &db, bool dconjb,
-                                        bool dleft, FL scale, uint32_t stride) {
+                                        bool dleft, FL scale, uint64_t stride) {
         if (dleft) {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
@@ -1123,11 +1123,11 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                                   const GMatrix<FL> &b, const GMatrix<FL> &c,
                                   const GMatrix<FL> &da, bool dconja,
                                   const GMatrix<FL> &db, bool dconjb,
-                                  bool dleft, FL scale, uint32_t stride) {
+                                  bool dleft, FL scale, uint64_t stride) {
         assert(a.m == a.n && b.m == b.n && c.m == a.n && c.n == b.n);
         const FL cfactor = 1.0;
-        const MKL_INT dstrm = (MKL_INT)stride / (dleft ? a.m : b.m);
-        const MKL_INT dstrn = (MKL_INT)stride % (dleft ? a.m : b.m);
+        const MKL_INT dstrm = (MKL_INT)(stride / (dleft ? a.m : b.m));
+        const MKL_INT dstrn = (MKL_INT)(stride % (dleft ? a.m : b.m));
         if (dstrn != dstrm)
             return;
         assert(da.m == da.n && db.m == db.n);
@@ -1212,7 +1212,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     static void tensor_product(const GMatrix<FL> &a, bool conja,
                                const GMatrix<FL> &b, bool conjb,
                                const GMatrix<FL> &c, FL scale,
-                               uint32_t stride) {
+                               uint64_t stride) {
         const FL cfactor = 1.0;
         switch ((uint8_t)conja | (conjb << 1)) {
         case 0:

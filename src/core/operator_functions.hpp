@@ -300,7 +300,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
-                    uint32_t stride = dinfo->stride[idl];
+                    uint64_t stride = dinfo->stride[idl];
                     double dfactor = dinfo->factor[idl];
                     if (seq->mode != SeqTypes::None) {
                         seq->three_tensor_product_diagonal(
@@ -601,7 +601,7 @@ template <typename S, typename FL> struct OperatorFunctions {
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
-                    uint32_t stride = dinfo->stride[idl];
+                    uint64_t stride = dinfo->stride[idl];
                     double dfactor = dinfo->factor[idl];
                     switch (tt) {
                     case TraceTypes::None:
@@ -691,7 +691,7 @@ template <typename S, typename FL> struct OperatorFunctions {
         int ixb = ik == cinfo->n[4] - 1 ? cinfo->nc : cinfo->idx[ik + 1];
         for (int il = ixa; il < ixb; il++) {
             int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
-            uint32_t stride = cinfo->stride[il];
+            uint64_t stride = cinfo->stride[il];
             double factor = cinfo->factor[il];
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
                 seq->tensor_product((*a)[ia], conj & 1, (*b)[ib],

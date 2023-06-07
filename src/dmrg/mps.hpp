@@ -689,7 +689,8 @@ template <typename S> struct MPSInfo {
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
             make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        StateInfo<S> l, m, r, lm, mr, p;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc, mrc;
         shared_ptr<SparseMatrixInfo<S>> wfn_info =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         shared_ptr<SparseMatrix<S, FL>> wfn =
@@ -706,8 +707,7 @@ template <typename S> struct MPSInfo {
                              owinfo->is_wavefunction);
         wfn->allocate(wfn_info);
         wfn->swap_to_fused_left(old_wfn, l, m, r, mr, mrc, lm, lmc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
+        mr.deallocate(), lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
     template <typename FL>
@@ -719,7 +719,8 @@ template <typename S> struct MPSInfo {
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
             make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        StateInfo<S> l, m, r, lm, mr, p;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc, mrc;
         shared_ptr<SparseMatrixInfo<S>> wfn_info =
             make_shared<SparseMatrixInfo<S>>(i_alloc);
         shared_ptr<SparseMatrix<S, FL>> wfn =
@@ -736,8 +737,7 @@ template <typename S> struct MPSInfo {
                              owinfo->is_wavefunction);
         wfn->allocate(wfn_info);
         wfn->swap_to_fused_right(old_wfn, l, m, r, lm, lmc, mr, mrc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
+        mr.deallocate(), lm.deallocate(), r.deallocate(), l.deallocate();
         return wfn;
     }
     template <typename FL>
@@ -748,7 +748,8 @@ template <typename S> struct MPSInfo {
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
             make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        StateInfo<S> l, m, r, lm, mr, p;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc, mrc;
         vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> wfns;
         load_left_dims(i);
@@ -775,8 +776,7 @@ template <typename S> struct MPSInfo {
             for (int j = 0; j < old_wfns[k]->n; j++)
                 (*wfns[k])[j]->swap_to_fused_left((*old_wfns[k])[j], l, m, r,
                                                   mr, mrc, lm, lmc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
+        mr.deallocate(), lm.deallocate(), r.deallocate(), l.deallocate();
         return wfns;
     }
     template <typename FL>
@@ -787,7 +787,8 @@ template <typename S> struct MPSInfo {
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<typename GMatrix<FL>::FP>> d_alloc =
             make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
-        StateInfo<S> l, m, r, lm, lmc, mr, mrc, p;
+        StateInfo<S> l, m, r, lm, mr, p;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc, mrc;
         vector<shared_ptr<SparseMatrixInfo<S>>> wfn_infos;
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> wfns;
         load_left_dims(i);
@@ -814,8 +815,7 @@ template <typename S> struct MPSInfo {
             for (int j = 0; j < old_wfns[k]->n; j++)
                 (*wfns[k])[j]->swap_to_fused_right((*old_wfns[k])[j], l, m, r,
                                                    lm, lmc, mr, mrc, cg);
-        mrc.deallocate(), mr.deallocate(), lmc.deallocate();
-        lm.deallocate(), r.deallocate(), l.deallocate();
+        mr.deallocate(), lm.deallocate(), r.deallocate(), l.deallocate();
         return wfns;
     }
     string get_filename(bool left, int i, const string &dir = "") const {
@@ -1238,8 +1238,8 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
     CASCIMPSInfo(int n_sites, S vacuum, S target,
                  const vector<shared_ptr<StateInfo<S>>> &basis,
                  const vector<ActiveTypes> &casci_mask, bool init_fci = true)
-        : casci_mask(casci_mask), MPSInfo<S>(n_sites, vacuum, target, basis,
-                                             false) {
+        : casci_mask(casci_mask),
+          MPSInfo<S>(n_sites, vacuum, target, basis, false) {
         if (init_fci)
             set_bond_dimension_fci();
     }
@@ -1509,9 +1509,9 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
     AncillaMPSInfo(int n_sites, S vacuum, S target,
                    const vector<shared_ptr<StateInfo<S>>> &basis,
                    bool init_fci = true)
-        : n_physical_sites(n_sites), MPSInfo<S>(n_sites << 1, vacuum, target,
-                                                trans_basis(basis, n_sites),
-                                                init_fci) {}
+        : n_physical_sites(n_sites),
+          MPSInfo<S>(n_sites << 1, vacuum, target, trans_basis(basis, n_sites),
+                     init_fci) {}
     AncillaTypes get_ancilla_type() const override {
         return AncillaTypes::Ancilla;
     }
@@ -2074,7 +2074,8 @@ template <typename S, typename FL> struct MPS {
                          r;
             StateInfo<S> nlm = StateInfo<S>::tensor_product(
                 *nl, m, *info->left_dims_fci[i + 2]);
-            StateInfo<S> lmc = StateInfo<S>::get_connection_info(l, m, lm);
+            shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc =
+                StateInfo<S>::get_connection_info(l, m, lm);
             if (i + 1 == center && dot == 1)
                 r = *info->right_dims[center + dot];
             else if (i + 1 == center && dot == 2)
@@ -2088,7 +2089,6 @@ template <typename S, typename FL> struct MPS {
                 tensors[i + 1]->left_multiply(right, l, m, r, lm, lmc, nlm);
             if (i + 1 == center && dot == 2)
                 r.deallocate();
-            lmc.deallocate();
             nlm.deallocate();
             lm.deallocate();
             info->left_dims[i + 1] = nl;
@@ -2119,7 +2119,8 @@ template <typename S, typename FL> struct MPS {
                     m, r, *info->right_dims_fci[i - 1]);
                 StateInfo<S> nmr = StateInfo<S>::tensor_product(
                     m, *nr, *info->right_dims_fci[i - 1]);
-                StateInfo<S> mrc = StateInfo<S>::get_connection_info(m, r, mr);
+                shared_ptr<typename StateInfo<S>::ConnectionInfo> mrc =
+                    StateInfo<S>::get_connection_info(m, r, mr);
                 StateInfo<S> l;
                 if (i - 1 == center + 1 && dot == 2) {
                     l = StateInfo<S>::tensor_product(
@@ -2136,7 +2137,6 @@ template <typename S, typename FL> struct MPS {
                 }
                 if (i - 1 == center + 1 && dot == 2)
                     l.deallocate();
-                mrc.deallocate();
                 nmr.deallocate();
                 mr.deallocate();
             }
@@ -2165,7 +2165,8 @@ template <typename S, typename FL> struct MPS {
             StateInfo<S> lm = StateInfo<S>::tensor_product(
                              l, m, *info->left_dims_fci[i + 2]),
                          r;
-            StateInfo<S> lmc = StateInfo<S>::get_connection_info(l, m, lm);
+            shared_ptr<typename StateInfo<S>::ConnectionInfo> lmc =
+                StateInfo<S>::get_connection_info(l, m, lm);
             if (i + 1 == center && dot == 1)
                 r = *info->right_dims[center + dot];
             else if (i + 1 == center && dot == 2)
@@ -2178,7 +2179,6 @@ template <typename S, typename FL> struct MPS {
             tensors[i + 1]->left_multiply_inplace(tmat, l, m, r, lm, lmc);
             if (i + 1 == center && dot == 2)
                 r.deallocate();
-            lmc.deallocate();
             lm.deallocate();
             tmat_info->deallocate();
             tmat->deallocate();
@@ -2205,7 +2205,8 @@ template <typename S, typename FL> struct MPS {
                 StateInfo<S> m = *info->basis[i - 1], r = *info->right_dims[i];
                 StateInfo<S> mr = StateInfo<S>::tensor_product(
                     m, r, *info->right_dims_fci[i - 1]);
-                StateInfo<S> mrc = StateInfo<S>::get_connection_info(m, r, mr);
+                shared_ptr<typename StateInfo<S>::ConnectionInfo> mrc =
+                    StateInfo<S>::get_connection_info(m, r, mr);
                 StateInfo<S> l;
                 if (i - 1 == center + 1 && dot == 2) {
                     l = StateInfo<S>::tensor_product(
@@ -2222,7 +2223,6 @@ template <typename S, typename FL> struct MPS {
                 }
                 if (i - 1 == center + 1 && dot == 2)
                     l.deallocate();
-                mrc.deallocate();
                 mr.deallocate();
             }
             tmat_info->deallocate();

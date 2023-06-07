@@ -397,9 +397,10 @@ template <typename S, typename FL> struct Partition {
                          ibra_prev, *bra_info->basis[m],
                          *bra_info->left_dims_fci[m + 1]),
                      iket_notrunc = ibra_notrunc;
-        StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         ibra_prev, *bra_info->basis[m], ibra_notrunc),
-                     iket_cinfo = ibra_cinfo;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo>
+            ibra_cinfo = StateInfo<S>::get_connection_info(
+                ibra_prev, *bra_info->basis[m], ibra_notrunc),
+            iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_left_dims(m);
             iket_prev = *ket_info->left_dims[m];
@@ -427,11 +428,9 @@ template <typename S, typename FL> struct Partition {
         }
         frame_<FP>()->activate(1);
         if (bra_info != ket_info) {
-            iket_cinfo.deallocate();
             iket_notrunc.deallocate();
             iket_prev.deallocate();
         }
-        ibra_cinfo.deallocate();
         ibra_notrunc.deallocate();
         ibra_prev.deallocate();
     }
@@ -481,9 +480,10 @@ template <typename S, typename FL> struct Partition {
                          *bra_info->basis[m], ibra_prev,
                          *bra_info->right_dims_fci[m]),
                      iket_notrunc = ibra_notrunc;
-        StateInfo<S> ibra_cinfo = StateInfo<S>::get_connection_info(
-                         *bra_info->basis[m], ibra_prev, ibra_notrunc),
-                     iket_cinfo = ibra_cinfo;
+        shared_ptr<typename StateInfo<S>::ConnectionInfo>
+            ibra_cinfo = StateInfo<S>::get_connection_info(
+                *bra_info->basis[m], ibra_prev, ibra_notrunc),
+            iket_cinfo = ibra_cinfo;
         if (bra_info != ket_info) {
             ket_info->load_right_dims(m + 1);
             iket_prev = *ket_info->right_dims[m + 1];
@@ -511,11 +511,9 @@ template <typename S, typename FL> struct Partition {
         }
         frame_<FP>()->activate(1);
         if (bra_info != ket_info) {
-            iket_cinfo.deallocate();
             iket_notrunc.deallocate();
             iket_prev.deallocate();
         }
-        ibra_cinfo.deallocate();
         ibra_notrunc.deallocate();
         ibra_prev.deallocate();
     }

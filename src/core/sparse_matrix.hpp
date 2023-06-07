@@ -71,9 +71,9 @@ struct SparseMatrixInfo<
     struct ConnectionInfo {
         S *quanta;
         uint32_t *idx;
-        uint32_t *stride;
+        uint64_t *stride;
         double *factor;
-        uint16_t *ia, *ib, *ic;
+        uint32_t *ia, *ib, *ic;
         int n[5], nc;
         ConnectionInfo() : nc(-1) { memset(n, -1, sizeof(n)); }
         // Compute non-zero-block indices for 'tensor_product_diagonal'
@@ -88,7 +88,7 @@ struct SparseMatrixInfo<
                 return;
             }
             vector<uint32_t> vidx(subdq.size());
-            vector<uint16_t> via, vib, vic;
+            vector<uint32_t> via, vib, vic;
             vector<double> vf;
             memset(n, -1, sizeof(n));
             for (size_t k = 0; k < subdq.size(); k++) {
@@ -142,20 +142,20 @@ struct SparseMatrixInfo<
                     n[i] = n[i + 1];
             nc = (int)vic.size();
             uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
-            uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
+            uint32_t *cptr = ialloc->allocate(nc * 7);
             quanta = (S *)ptr;
             idx = ptr + n[4] * (sizeof(S) >> 2);
-            stride = cptr;
-            factor = (double *)(cptr + nc);
-            ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
+            stride = (uint64_t *)cptr;
+            factor = (double *)(cptr + nc * 2);
+            ia = (uint32_t *)(cptr + nc * 4), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
             memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
-            memset(stride, 0, nc * sizeof(uint32_t));
+            memset(stride, 0, nc * sizeof(uint64_t));
             memcpy(factor, vf.data(), nc * sizeof(double));
-            memcpy(ia, via.data(), nc * sizeof(uint16_t));
-            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
-            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
+            memcpy(ia, via.data(), nc * sizeof(uint32_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint32_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint32_t));
         }
         // Compute non-zero-block indices for 'tensor_product_multiply'
         void initialize_wfn(
@@ -169,8 +169,9 @@ struct SparseMatrixInfo<
                 n[4] = nc = 0;
                 return;
             }
-            vector<uint32_t> vidx(subdq.size()), viv;
-            vector<uint16_t> via, vib, vic;
+            vector<uint32_t> vidx(subdq.size());
+            vector<uint64_t> viv;
+            vector<uint32_t> via, vib, vic;
             vector<double> vf;
             memset(n, -1, sizeof(n));
             for (size_t k = 0; k < subdq.size(); k++) {
@@ -179,7 +180,7 @@ struct SparseMatrixInfo<
                 bool cja = subdq[k].first & 1, cjb = (subdq[k].first & 2) >> 1;
                 vidx[k] = (uint32_t)viv.size();
                 vector<vector<
-                    tuple<double, uint32_t, uint16_t, uint16_t, uint16_t>>>
+                    tuple<double, uint64_t, uint32_t, uint32_t, uint32_t>>>
                     pv;
                 size_t ip = 0;
                 S adq = cja ? -subdq[k].second.get_bra(opdq)
@@ -235,9 +236,9 @@ struct SparseMatrixInfo<
                                     if (abs(factor) >= TINY) {
                                         if (pv.size() <= ip)
                                             pv.push_back(
-                                                vector<tuple<double, uint32_t,
-                                                             uint16_t, uint16_t,
-                                                             uint16_t>>());
+                                                vector<tuple<double, uint64_t,
+                                                             uint32_t, uint32_t,
+                                                             uint32_t>>());
                                         pv[ip].push_back(
                                             make_tuple(factor, iv, ia, ib, ic));
                                         ip++;
@@ -271,20 +272,20 @@ struct SparseMatrixInfo<
                     n[i] = n[i + 1];
             nc = (int)viv.size();
             uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
-            uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
+            uint32_t *cptr = ialloc->allocate(nc * 7);
             quanta = (S *)ptr;
             idx = ptr + n[4] * (sizeof(S) >> 2);
-            stride = cptr;
-            factor = (double *)(cptr + nc);
-            ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
+            stride = (uint64_t *)cptr;
+            factor = (double *)(cptr + nc * 2);
+            ia = (uint32_t *)(cptr + nc * 4), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
             memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
-            memcpy(stride, viv.data(), nc * sizeof(uint32_t));
+            memcpy(stride, viv.data(), nc * sizeof(uint64_t));
             memcpy(factor, vf.data(), nc * sizeof(double));
-            memcpy(ia, via.data(), nc * sizeof(uint16_t));
-            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
-            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
+            memcpy(ia, via.data(), nc * sizeof(uint32_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint32_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint32_t));
         }
         // Compute non-zero-block indices for 'tensor_product'
         void initialize_tp(
@@ -292,7 +293,8 @@ struct SparseMatrixInfo<
             const StateInfo<S> &bra, const StateInfo<S> &ket,
             const StateInfo<S> &bra_a, const StateInfo<S> &bra_b,
             const StateInfo<S> &ket_a, const StateInfo<S> &ket_b,
-            const StateInfo<S> &bra_cinfo, const StateInfo<S> &ket_cinfo,
+            const shared_ptr<typename StateInfo<S>::ConnectionInfo> &bra_cinfo,
+            const shared_ptr<typename StateInfo<S>::ConnectionInfo> &ket_cinfo,
             const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &ainfos,
             const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &binfos,
             const shared_ptr<SparseMatrixInfo<S>> &cinfo,
@@ -301,8 +303,9 @@ struct SparseMatrixInfo<
                 n[4] = nc = 0;
                 return;
             }
-            vector<uint32_t> vidx(subdq.size()), vstride;
-            vector<uint16_t> via, vib, vic;
+            vector<uint32_t> vidx(subdq.size());
+            vector<uint64_t> vstride;
+            vector<uint32_t> via, vib, vic;
             vector<double> vf;
             memset(n, -1, sizeof(n));
             for (size_t k = 0; k < subdq.size(); k++) {
@@ -325,19 +328,18 @@ struct SparseMatrixInfo<
                 for (int ic = 0; ic < cinfo->n; ic++) {
                     int ib = bra.find_state(cinfo->quanta[ic].get_bra(cdq));
                     int ik = ket.find_state(cinfo->quanta[ic].get_ket());
-                    int kbed = ib == bra.n - 1 ? bra_cinfo.n
-                                               : bra_cinfo.n_states[ib + 1];
-                    int kked = ik == ket.n - 1 ? ket_cinfo.n
-                                               : ket_cinfo.n_states[ik + 1];
-                    uint32_t bra_stride = 0, ket_stride = 0;
-                    for (int kb = bra_cinfo.n_states[ib]; kb < kbed; kb++) {
-                        uint16_t jba = bra_cinfo.quanta[kb].data >> 16,
-                                 jbb = bra_cinfo.quanta[kb].data & (0xFFFFU);
+                    int kbed = bra_cinfo->acc_n_states[ib + 1];
+                    int kked = ket_cinfo->acc_n_states[ik + 1];
+                    uint64_t bra_stride = 0, ket_stride = 0;
+                    for (int kb = bra_cinfo->acc_n_states[ib]; kb < kbed;
+                         kb++) {
+                        uint32_t jba = bra_cinfo->ij_indices[kb].first,
+                                 jbb = bra_cinfo->ij_indices[kb].second;
                         ket_stride = 0;
-                        for (int kk = ket_cinfo.n_states[ik]; kk < kked; kk++) {
-                            uint16_t jka = ket_cinfo.quanta[kk].data >> 16,
-                                     jkb =
-                                         ket_cinfo.quanta[kk].data & (0xFFFFU);
+                        for (int kk = ket_cinfo->acc_n_states[ik]; kk < kked;
+                             kk++) {
+                            uint32_t jka = ket_cinfo->ij_indices[kk].first,
+                                     jkb = ket_cinfo->ij_indices[kk].second;
                             S qa = cja ? adq.combine(ket_a.quanta[jka],
                                                      bra_a.quanta[jba])
                                        : adq.combine(bra_a.quanta[jba],
@@ -386,11 +388,11 @@ struct SparseMatrixInfo<
                                     }
                                 }
                             }
-                            ket_stride += (uint32_t)ket_a.n_states[jka] *
+                            ket_stride += (uint64_t)ket_a.n_states[jka] *
                                           ket_b.n_states[jkb];
                         }
                         bra_stride +=
-                            (uint32_t)bra_a.n_states[jba] * bra_b.n_states[jbb];
+                            (uint64_t)bra_a.n_states[jba] * bra_b.n_states[jbb];
                     }
                 }
             }
@@ -400,33 +402,33 @@ struct SparseMatrixInfo<
                     n[i] = n[i + 1];
             nc = (int)vstride.size();
             uint32_t *ptr = ialloc->allocate(n[4] * (sizeof(S) >> 2) + n[4]);
-            uint32_t *cptr = ialloc->allocate((nc << 2) + nc - (nc >> 1));
+            uint32_t *cptr = ialloc->allocate(nc * 7);
             quanta = (S *)ptr;
             idx = ptr + n[4] * (sizeof(S) >> 2);
-            stride = cptr;
-            factor = (double *)(cptr + nc);
-            ia = (uint16_t *)(cptr + nc + nc + nc), ib = ia + nc, ic = ib + nc;
+            stride = (uint64_t *)cptr;
+            factor = (double *)(cptr + nc * 2);
+            ia = (uint32_t *)(cptr + nc * 4), ib = ia + nc, ic = ib + nc;
             for (int i = 0; i < n[4]; i++)
                 quanta[i] = subdq[i].second;
             memcpy(idx, vidx.data(), n[4] * sizeof(uint32_t));
-            memcpy(stride, vstride.data(), nc * sizeof(uint32_t));
+            memcpy(stride, vstride.data(), nc * sizeof(uint64_t));
             memcpy(factor, vf.data(), nc * sizeof(double));
-            memcpy(ia, via.data(), nc * sizeof(uint16_t));
-            memcpy(ib, vib.data(), nc * sizeof(uint16_t));
-            memcpy(ic, vic.data(), nc * sizeof(uint16_t));
+            memcpy(ia, via.data(), nc * sizeof(uint32_t));
+            memcpy(ib, vib.data(), nc * sizeof(uint32_t));
+            memcpy(ic, vic.data(), nc * sizeof(uint32_t));
         }
         void reallocate(bool clean) {
-            size_t length =
-                n[4] * (sizeof(S) >> 2) + n[4] + (nc << 2) + nc - (nc >> 1);
+            size_t length = n[4] * (sizeof(S) >> 2) + n[4] + nc * 7;
             uint32_t *ptr = ialloc->reallocate((uint32_t *)quanta, length,
                                                clean ? 0 : length);
             if (ptr != (uint32_t *)quanta) {
                 memmove(ptr, quanta, length * sizeof(uint32_t));
                 quanta = (S *)ptr;
                 idx = ptr + n[4] * (sizeof(S) >> 2);
-                stride = ptr + n[4] * (sizeof(S) >> 2) + n[4];
-                factor = (double *)(ptr + n[4] * (sizeof(S) >> 2) + n[4] + nc);
-                ia = (uint16_t *)(stride + nc + nc + nc), ib = ia + nc,
+                stride = (uint64_t *)(ptr + n[4] * (sizeof(S) >> 2) + n[4]);
+                factor =
+                    (double *)(ptr + n[4] * (sizeof(S) >> 2) + n[4] + nc * 2);
+                ia = (uint32_t *)((uint32_t *)stride + nc * 4), ib = ia + nc,
                 ic = ib + nc;
             }
             if (clean) {
@@ -442,9 +444,8 @@ struct SparseMatrixInfo<
         void deallocate() {
             assert(n[4] != -1);
             if (n[4] != 0 || nc != 0)
-                ialloc->deallocate((uint32_t *)quanta, n[4] * (sizeof(S) >> 2) +
-                                                           n[4] + (nc << 2) +
-                                                           nc - (nc >> 1));
+                ialloc->deallocate((uint32_t *)quanta,
+                                   n[4] * (sizeof(S) >> 2) + n[4] + nc * 7);
             quanta = nullptr;
             idx = nullptr;
             stride = nullptr;
@@ -876,6 +877,11 @@ template <typename S, typename FL> struct SparseMatrix {
     FL *data;
     FL factor;
     size_t total_memory;
+    struct pair_uint32_t_hasher {
+        size_t operator()(const pair<uint32_t, uint32_t> &p) const {
+            return (((size_t)p.first) << 32) | p.second;
+        }
+    };
     SparseMatrix(const shared_ptr<Allocator<FP>> &alloc = nullptr)
         : info(nullptr), data(nullptr), factor(1.0), total_memory(0),
           alloc(alloc) {}
@@ -1177,13 +1183,13 @@ template <typename S, typename FL> struct SparseMatrix {
         shared_ptr<SparseMatrix> pinv = make_shared<SparseMatrix>(d_alloc);
         pinv->allocate(
             make_shared<SparseMatrixInfo<S>>(info->deep_copy(i_alloc)));
-        map<S, int> qsmp;
+        map<S, int> qs_mp;
         for (int i = 0; i < (int)qs.size(); i++)
-            qsmp[qs[i]] = i;
+            qs_mp[qs[i]] = i;
         for (int i = 0; i < info->n; i++) {
             GMatrix<FL> mm = (*pinv)[info->quanta[i]];
             S ql = info->quanta[i].get_bra(info->delta_quantum);
-            int k = qsmp.at(ql);
+            int k = qs_mp.at(ql);
             GMatrix<FL> ll = l[k]->ref(), rr = r[i]->ref();
             GMatrix<FP> ss = s[k]->ref();
             for (MKL_INT j = 0; j < r[i]->shape[0]; j++)
@@ -1484,7 +1490,8 @@ template <typename S, typename FL> struct SparseMatrix {
     left_multiply(const shared_ptr<SparseMatrix> &lmat, const StateInfo<S> &l,
                   const StateInfo<S> &m, const StateInfo<S> &r,
                   const StateInfo<S> &old_fused,
-                  const StateInfo<S> &old_fused_cinfo,
+                  const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                      &old_fused_cinfo,
                   const StateInfo<S> &new_fused) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -1507,12 +1514,11 @@ template <typename S, typename FL> struct SparseMatrix {
                 continue;
             int ib = old_fused.find_state(bra);
             int ik = r.find_state(ket);
-            int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ib + 1];
+            int bbed = old_fused_cinfo->acc_n_states[ib + 1];
             MKL_INT p = info->n_states_total[i], xp = xinfo->n_states_total[i];
-            for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
-                         ibbb = old_fused_cinfo.quanta[bb].data & 0xFFFFU;
+            for (int bb = old_fused_cinfo->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = old_fused_cinfo->ij_indices[bb].first,
+                         ibbb = old_fused_cinfo->ij_indices[bb].second;
                 int il = lmat->info->find_state(l.quanta[ibba]);
                 MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 if (il != -1) {
@@ -1542,7 +1548,8 @@ template <typename S, typename FL> struct SparseMatrix {
     right_multiply(const shared_ptr<SparseMatrix> &rmat, const StateInfo<S> &l,
                    const StateInfo<S> &m, const StateInfo<S> &r,
                    const StateInfo<S> &old_fused,
-                   const StateInfo<S> &old_fused_cinfo,
+                   const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                       &old_fused_cinfo,
                    const StateInfo<S> &new_fused) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
@@ -1566,12 +1573,11 @@ template <typename S, typename FL> struct SparseMatrix {
             int ib = l.find_state(bra);
             int ik = old_fused.find_state(ket);
             int ikn = new_fused.find_state(ket);
-            int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ik + 1];
+            int kked = old_fused_cinfo->acc_n_states[ik + 1];
             MKL_INT p = info->n_states_total[i], xp = xinfo->n_states_total[ix];
-            for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
-                         ikkb = old_fused_cinfo.quanta[kk].data & 0xFFFFU;
+            for (int kk = old_fused_cinfo->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = old_fused_cinfo->ij_indices[kk].first,
+                         ikkb = old_fused_cinfo->ij_indices[kk].second;
                 int ir = rmat->info->find_state(r.quanta[ikkb]);
                 MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
                 if (ir != -1) {
@@ -1595,23 +1601,23 @@ template <typename S, typename FL> struct SparseMatrix {
         return xmat;
     }
     // lmat must be square-block diagonal
-    void left_multiply_inplace(const shared_ptr<SparseMatrix> &lmat,
-                               const StateInfo<S> &l, const StateInfo<S> &m,
-                               const StateInfo<S> &r,
-                               const StateInfo<S> &old_fused,
-                               const StateInfo<S> &old_fused_cinfo) const {
+    void left_multiply_inplace(
+        const shared_ptr<SparseMatrix> &lmat, const StateInfo<S> &l,
+        const StateInfo<S> &m, const StateInfo<S> &r,
+        const StateInfo<S> &old_fused,
+        const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+            &old_fused_cinfo) const {
         for (int i = 0; i < info->n; i++) {
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
                                           : info->quanta[i].get_ket();
             int ib = old_fused.find_state(bra);
             int ik = r.find_state(ket);
-            int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ib + 1];
+            int bbed = old_fused_cinfo->acc_n_states[ib + 1];
             MKL_INT p = info->n_states_total[i];
-            for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
-                         ibbb = old_fused_cinfo.quanta[bb].data & 0xFFFFU;
+            for (int bb = old_fused_cinfo->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = old_fused_cinfo->ij_indices[bb].first,
+                         ibbb = old_fused_cinfo->ij_indices[bb].second;
                 int il = lmat->info->find_state(l.quanta[ibba]);
                 MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 if (il != -1) {
@@ -1634,23 +1640,23 @@ template <typename S, typename FL> struct SparseMatrix {
         }
     }
     // rmat must be square-block diagonal
-    void right_multiply_inplace(const shared_ptr<SparseMatrix> &rmat,
-                                const StateInfo<S> &l, const StateInfo<S> &m,
-                                const StateInfo<S> &r,
-                                const StateInfo<S> &old_fused,
-                                const StateInfo<S> &old_fused_cinfo) const {
+    void right_multiply_inplace(
+        const shared_ptr<SparseMatrix> &rmat, const StateInfo<S> &l,
+        const StateInfo<S> &m, const StateInfo<S> &r,
+        const StateInfo<S> &old_fused,
+        const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+            &old_fused_cinfo) const {
         for (int i = 0; i < info->n; i++) {
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             S ket = info->is_wavefunction ? -info->quanta[i].get_ket()
                                           : info->quanta[i].get_ket();
             int ib = l.find_state(bra);
             int ik = old_fused.find_state(ket);
-            int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ik + 1];
+            int kked = old_fused_cinfo->acc_n_states[ik + 1];
             MKL_INT p = info->n_states_total[i];
-            for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
-                         ikkb = old_fused_cinfo.quanta[kk].data & 0xFFFFU;
+            for (int kk = old_fused_cinfo->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = old_fused_cinfo->ij_indices[kk].first,
+                         ikkb = old_fused_cinfo->ij_indices[kk].second;
                 int ir = rmat->info->find_state(r.quanta[ikkb]);
                 MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
                 if (ir != -1) {
@@ -1724,33 +1730,37 @@ template <typename S, typename FL> struct SparseMatrix {
         }
     }
     // Change from [l x (fused m and r)] to [(fused l and m) x r]
-    void swap_to_fused_left(const shared_ptr<SparseMatrix> &mat,
-                            const StateInfo<S> &l, const StateInfo<S> &m,
-                            const StateInfo<S> &r,
-                            const StateInfo<S> &old_fused,
-                            const StateInfo<S> &old_fused_cinfo,
-                            const StateInfo<S> &new_fused,
-                            const StateInfo<S> &new_fused_cinfo,
-                            const shared_ptr<CG<S>> &cg) {
+    void
+    swap_to_fused_left(const shared_ptr<SparseMatrix> &mat,
+                       const StateInfo<S> &l, const StateInfo<S> &m,
+                       const StateInfo<S> &r, const StateInfo<S> &old_fused,
+                       const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                           &old_fused_cinfo,
+                       const StateInfo<S> &new_fused,
+                       const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                           &new_fused_cinfo,
+                       const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
         // for SU2 with target 2S != 0, for each l m r there can be multiple mr
         // mp is the three-index wavefunction
-        unordered_map<uint32_t, map<uint16_t, vector<pair<MKL_INT, int>>>> mp;
+        unordered_map<pair<uint32_t, uint32_t>,
+                      map<uint16_t, vector<pair<MKL_INT, int>>>,
+                      pair_uint32_t_hasher>
+            mp;
         mp.reserve(mat->info->n);
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = -mat->info->quanta[i].get_ket();
             int ib = l.find_state(bra);
             int ik = old_fused.find_state(ket);
-            int kked = ik == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ik + 1];
+            int kked = old_fused_cinfo->acc_n_states[ik + 1];
             MKL_INT p = mat->info->n_states_total[i];
-            for (int kk = old_fused_cinfo.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = old_fused_cinfo.quanta[kk].data >> 16,
-                         ikkb = old_fused_cinfo.quanta[kk].data & (0xFFFFU);
+            for (int kk = old_fused_cinfo->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = old_fused_cinfo->ij_indices[kk].first,
+                         ikkb = old_fused_cinfo->ij_indices[kk].second;
                 MKL_INT lp = (MKL_INT)m.n_states[ikka] * r.n_states[ikkb];
-                mp[(ib << 16) + ikka][ikkb].push_back(make_pair(p, ik));
+                mp[make_pair(ib, ikka)][ikkb].push_back(make_pair(p, ik));
                 p += lp;
             }
         }
@@ -1759,18 +1769,17 @@ template <typename S, typename FL> struct SparseMatrix {
             S ket = -info->quanta[i].get_ket();
             int ib = new_fused.find_state(bra);
             int ik = r.find_state(ket);
-            int bbed = ib == new_fused.n - 1 ? new_fused_cinfo.n
-                                             : new_fused_cinfo.n_states[ib + 1];
+            int bbed = new_fused_cinfo->acc_n_states[ib + 1];
             FL *ptr = data + info->n_states_total[i];
-            for (int bb = new_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
-                uint16_t ibba = new_fused_cinfo.quanta[bb].data >> 16,
-                         ibbb = new_fused_cinfo.quanta[bb].data & (0xFFFFU);
+            for (int bb = new_fused_cinfo->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = new_fused_cinfo->ij_indices[bb].first,
+                         ibbb = new_fused_cinfo->ij_indices[bb].second;
                 MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
                 S bra_l = l.quanta[ibba], bra_m = m.quanta[ibbb];
-                if (mp.count(new_fused_cinfo.quanta[bb].data) &&
-                    mp[new_fused_cinfo.quanta[bb].data].count(ik))
+                if (mp.count(new_fused_cinfo->ij_indices[bb]) &&
+                    mp[new_fused_cinfo->ij_indices[bb]].count(ik))
                     for (pair<MKL_INT, int> &t :
-                         mp.at(new_fused_cinfo.quanta[bb].data).at(ik)) {
+                         mp.at(new_fused_cinfo->ij_indices[bb]).at(ik)) {
                         S ket_mr = old_fused.quanta[t.second];
                         FP factor =
                             (FP)(cg->racah(bra_l, bra_m, info->delta_quantum,
@@ -1793,18 +1802,21 @@ template <typename S, typename FL> struct SparseMatrix {
         }
     }
     // Change from [(fused l and m) x r] to [l x (fused m and r)]
-    void swap_to_fused_right(const shared_ptr<SparseMatrix> &mat,
-                             const StateInfo<S> &l, const StateInfo<S> &m,
-                             const StateInfo<S> &r,
-                             const StateInfo<S> &old_fused,
-                             const StateInfo<S> &old_fused_cinfo,
-                             const StateInfo<S> &new_fused,
-                             const StateInfo<S> &new_fused_cinfo,
-                             const shared_ptr<CG<S>> &cg) {
+    void
+    swap_to_fused_right(const shared_ptr<SparseMatrix> &mat,
+                        const StateInfo<S> &l, const StateInfo<S> &m,
+                        const StateInfo<S> &r, const StateInfo<S> &old_fused,
+                        const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                            &old_fused_cinfo,
+                        const StateInfo<S> &new_fused,
+                        const shared_ptr<typename StateInfo<S>::ConnectionInfo>
+                            &new_fused_cinfo,
+                        const shared_ptr<CG<S>> &cg) {
         assert(mat->info->is_wavefunction);
         factor = mat->factor;
-        unordered_map<uint32_t,
-                      map<uint16_t, vector<tuple<MKL_INT, MKL_INT, int>>>>
+        unordered_map<pair<uint32_t, uint32_t>,
+                      map<uint16_t, vector<tuple<MKL_INT, MKL_INT, int>>>,
+                      pair_uint32_t_hasher>
             mp;
         mp.reserve(mat->info->n);
         for (int i = 0; i < mat->info->n; i++) {
@@ -1812,14 +1824,13 @@ template <typename S, typename FL> struct SparseMatrix {
             S ket = -mat->info->quanta[i].get_ket();
             int ib = old_fused.find_state(bra);
             int ik = r.find_state(ket);
-            int bbed = ib == old_fused.n - 1 ? old_fused_cinfo.n
-                                             : old_fused_cinfo.n_states[ib + 1];
+            int bbed = old_fused_cinfo->acc_n_states[ib + 1];
             MKL_INT p = mat->info->n_states_total[i];
-            for (int bb = old_fused_cinfo.n_states[ib]; bb < bbed; bb++) {
-                uint32_t ibba = old_fused_cinfo.quanta[bb].data >> 16,
-                         ibbb = old_fused_cinfo.quanta[bb].data & (0xFFFFU);
+            for (int bb = old_fused_cinfo->acc_n_states[ib]; bb < bbed; bb++) {
+                uint32_t ibba = old_fused_cinfo->ij_indices[bb].first,
+                         ibbb = old_fused_cinfo->ij_indices[bb].second;
                 MKL_INT lp = (MKL_INT)m.n_states[ibbb] * r.n_states[ik];
-                mp[(ibbb << 16) + ik][ibba].push_back(make_tuple(p, lp, ib));
+                mp[make_pair(ibbb, ik)][ibba].push_back(make_tuple(p, lp, ib));
                 p += l.n_states[ibba] * lp;
             }
             assert(p == (i != mat->info->n - 1
@@ -1831,18 +1842,17 @@ template <typename S, typename FL> struct SparseMatrix {
             S ket = -info->quanta[i].get_ket();
             int ib = l.find_state(bra);
             int ik = new_fused.find_state(ket);
-            int kked = ik == new_fused.n - 1 ? new_fused_cinfo.n
-                                             : new_fused_cinfo.n_states[ik + 1];
+            int kked = new_fused_cinfo->acc_n_states[ik + 1];
             FL *ptr = data + info->n_states_total[i];
             MKL_INT lp = new_fused.n_states[ik];
-            for (int kk = new_fused_cinfo.n_states[ik]; kk < kked; kk++) {
-                uint16_t ikka = new_fused_cinfo.quanta[kk].data >> 16,
-                         ikkb = new_fused_cinfo.quanta[kk].data & (0xFFFFU);
+            for (int kk = new_fused_cinfo->acc_n_states[ik]; kk < kked; kk++) {
+                uint32_t ikka = new_fused_cinfo->ij_indices[kk].first,
+                         ikkb = new_fused_cinfo->ij_indices[kk].second;
                 S ket_m = m.quanta[ikka], ket_r = r.quanta[ikkb];
-                if (mp.count(new_fused_cinfo.quanta[kk].data) &&
-                    mp[new_fused_cinfo.quanta[kk].data].count(ib))
+                if (mp.count(new_fused_cinfo->ij_indices[kk]) &&
+                    mp[new_fused_cinfo->ij_indices[kk]].count(ib))
                     for (tuple<MKL_INT, MKL_INT, int> &t :
-                         mp.at(new_fused_cinfo.quanta[kk].data).at(ib)) {
+                         mp.at(new_fused_cinfo->ij_indices[kk]).at(ib)) {
                         S bra_lm = old_fused.quanta[get<2>(t)];
                         FP factor =
                             (FP)(cg->racah(ket_r, ket_m, info->delta_quantum,
