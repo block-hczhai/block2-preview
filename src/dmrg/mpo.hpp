@@ -288,14 +288,16 @@ template <typename S, typename FL> struct MPO {
                 tensors[m]->deallocate();
     }
     // nnz, size, bond dimension
-    tuple<size_t, size_t, int> get_summary() const {
+    tuple<size_t, size_t, int> get_summary() {
         size_t lnnz = 0, lsz = 0, rnnz = 0, rsz = 0;
         int bdim = 0;
         for (int ii = 0; ii < n_sites; ii++) {
+            this->load_tensor(ii);
             shared_ptr<OperatorTensor<S, FL>> opt = tensors[ii];
             lnnz += opt->lmat->nnz(), rnnz += opt->rmat->nnz();
             lsz += opt->lmat->size(), rsz += opt->rmat->size();
             bdim = max(max(bdim, (int)opt->lmat->n), (int)opt->lmat->m);
+            this->unload_tensor(ii);
         }
         return make_tuple(max(lnnz, rnnz), max(lsz, rsz), bdim);
     }
@@ -1557,12 +1559,15 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                 assert(x->get_type() == SymTypes::RVec);
                 x->n = y->n = (int)x->data.size();
                 if (m == 0) {
+                    MPO<S, FL>::load_tensor(m);
                     auto &z = MPO<S, FL>::tensors[m]->lmat;
                     mpo->load_tensor(m);
                     z = mpo->tensors[m]->lmat->copy();
                     mpo->unload_tensor(m);
                     z->data.push_back(i_op);
                     z->n = (int)z->data.size();
+                    MPO<S, FL>::save_tensor(m);
+                    MPO<S, FL>::unload_tensor(m);
                 }
             }
             MPO<S, FL>::save_left_operators(m);
@@ -1594,12 +1599,15 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                 assert(x->get_type() == SymTypes::CVec);
                 x->m = y->m = (int)x->data.size();
                 if (m == mpo->n_sites - 1) {
+                    MPO<S, FL>::load_tensor(m);
                     auto &z = MPO<S, FL>::tensors[m]->rmat;
                     mpo->load_tensor(m);
                     z = mpo->tensors[m]->rmat->copy();
                     mpo->unload_tensor(m);
                     z->data.push_back(i_op);
                     z->m = (int)z->data.size();
+                    MPO<S, FL>::save_tensor(m);
+                    MPO<S, FL>::unload_tensor(m);
                 }
             }
             MPO<S, FL>::save_right_operators(m);

@@ -597,6 +597,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     cout << endl;
                     tsite_total += tsite;
                 }
+                this->save_tensor(m);
+                this->unload_tensor(m);
                 continue;
             }
             // middle operators
@@ -951,11 +953,25 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 cout << endl;
                 tsite_total += tsite;
             }
+            this->save_tensor(m);
+            this->unload_tensor(m);
         }
         if (iprint)
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
                  << tsite_total << endl
                  << endl;
+        for (size_t i = 0; i < middle_operator_names.size(); i++) {
+            this->save_middle_operators(i);
+            this->unload_middle_operators(i);
+        }
+        for (size_t i = 0; i < left_operator_names.size(); i++) {
+            this->save_left_operators(i);
+            this->unload_left_operators(i);
+        }
+        for (size_t i = 0; i < right_operator_names.size(); i++) {
+            this->save_right_operators(i);
+            this->unload_right_operators(i);
+        }
     }
     virtual ~GeneralNPDMMPO() = default;
 };

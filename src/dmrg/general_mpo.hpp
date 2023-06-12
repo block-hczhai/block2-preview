@@ -2998,6 +2998,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 tsite_total += tsite;
                 tsvd_total += tsvd;
             }
+            this->save_tensor(ii);
+            this->unload_tensor(ii);
         }
         if (n_terms != 0) {
             // end of loop; check last term is identity with cur_values = 1
@@ -3028,6 +3030,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             cout << " SPT = " << fixed << setprecision(4) << setw(6)
                  << (double)(size_total - nnz_total) / size_total << endl
                  << endl;
+        }
+        for (size_t i = 0; i < left_operator_names.size(); i++) {
+            this->save_left_operators(i);
+            this->unload_left_operators(i);
+        }
+        for (size_t i = 0; i < right_operator_names.size(); i++) {
+            this->save_right_operators(i);
+            this->unload_right_operators(i);
         }
     }
     virtual ~GeneralMPO() = default;

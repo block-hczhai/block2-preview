@@ -1382,6 +1382,11 @@ template <typename S> struct MRCIMPSInfo : MPSInfo<S> {
                 if (state_info->quanta[q].n() > ci_order)
                     state_info->n_states[q] = 0;
         }
+        // zero states may occur
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i]->collect();
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<MRCIMPSInfo<S>>(*this);
@@ -1476,6 +1481,11 @@ template <typename S> struct NEVPTMPSInfo : MPSInfo<S> {
                          state_info->quanta[q].n() != n_ex_external)
                     state_info->n_states[q] = 0;
         }
+        // zero states may occur
+        for (int i = 0; i <= n_sites; i++)
+            left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            right_dims_fci[i]->collect();
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<NEVPTMPSInfo<S>>(*this);

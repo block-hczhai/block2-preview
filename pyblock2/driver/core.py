@@ -947,7 +947,9 @@ class DMRGDriver:
         return mpo
 
     def get_identity_mpo(self, ancilla=False):
-        return self.get_mpo(self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla)
+        return self.get_mpo(
+            self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla
+        )
 
     def unpack_g2e(self, g2e, n_sites=None):
         import numpy as np
@@ -1571,6 +1573,7 @@ class DMRGDriver:
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
         return np.array(idx, dtype=int)
 
+    # return min_ket < ket | mpo | ket > / < ket | ket >
     def dmrg(
         self,
         mpo,
@@ -1670,6 +1673,7 @@ class DMRGDriver:
             self.mpi.barrier()
         return ener
 
+    # return exp(-target_t * mpo) @ ket
     def td_dmrg(
         self,
         mpo,
@@ -2556,6 +2560,8 @@ class DMRGDriver:
         iket.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return iket
 
+    # bra = mpo @ ket
+    # bra = (left_mpo)^(-1) @ (mpo @ ket)
     def multiply(
         self,
         bra,
@@ -2631,6 +2637,91 @@ class DMRGDriver:
             self.mpi.barrier()
         return norm
 
+    # bra = mpo_a @ ket_a + mpo_b @ ket_b
+    def addition(
+        self,
+        bra,
+        ket_a,
+        ket_b,
+        mpo_a=None,
+        mpo_b=None,
+        n_sweeps=10,
+        tol=1e-8,
+        bra_bond_dims=None,
+        ket_a_bond_dims=None,
+        ket_b_bond_dims=None,
+        noises=None,
+        noise_mpo=None,
+        cutoff=1e-24,
+        iprint=0,
+    ):
+        bw = self.bw
+        if bra.info.tag == ket_a.info.tag or bra.info.tag == ket_b.info.tag:
+            raise RuntimeError("Same tag for bra and ket!!")
+        if ket_a_bond_dims is None:
+            ket_a_bond_dims = [ket_a.info.bond_dim]
+        if ket_b_bond_dims is None:
+            ket_b_bond_dims = [ket_b.info.bond_dim]
+        if bra_bond_dims is None:
+            bra_bond_dims = [bra.info.bond_dim]
+        self.align_mps_center(ket_b, ket_a)
+        self.align_mps_center(bra, ket_a)
+        if noises is not None and noises[0] != 0 and noise_mpo is not None:
+            pme = bw.bs.MovingEnvironment(noise_mpo, bra, bra, "PERT-CPS")
+            pme.init_environments(iprint >= 2)
+        else:
+            pme = None
+        if mpo_a is None:
+            mpo_a = self.get_identity_mpo()
+        elif isinstance(mpo_a, (int, float, complex)):
+            mpo_a = mpo_a * self.get_identity_mpo()
+        if mpo_b is None:
+            mpo_b = self.get_identity_mpo()
+        elif isinstance(mpo_b, (int, float, complex)):
+            mpo_b = mpo_b * self.get_identity_mpo()
+        lme = bw.bs.MovingEnvironment(mpo_a, bra, ket_a, "ADD-L")
+        lme.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        lme.init_environments(iprint >= 2)
+        rme = bw.bs.MovingEnvironment(mpo_b, bra, ket_b, "ADD-R")
+        rme.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        rme.init_environments(iprint >= 2)
+        if noises is None or noises[0] == 0:
+            cps = bw.bs.Linear(
+                pme,
+                lme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_a_bond_dims),
+            )
+        else:
+            cps = bw.bs.Linear(
+                pme,
+                lme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_a_bond_dims),
+                bw.VectorFP(noises),
+            )
+        cps.target_ket_bond_dim = ket_b_bond_dims[-1]
+        if noises is not None and noises[0] != 0:
+            cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+            cps.decomp_type = bw.b.DecompositionTypes.SVD
+        cps.eq_type = bw.b.EquationTypes.FitAddition
+        cps.iprint = iprint
+        cps.cutoff = cutoff
+        norm = cps.solve(n_sweeps, ket_a.center == 0, tol)
+
+        if self.clean_scratch:
+            lme.remove_partition_files()
+            rme.remove_partition_files()
+            if pme is not None:
+                pme.remove_partition_files()
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return norm
+
+    # return < bra | mpo | ket >
     def expectation(self, bra, mpo, ket, iprint=0):
         bw = self.bw
         mbra = bra.deep_copy("EXPE-BRA@TMP")
@@ -2654,6 +2745,84 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
         return ex
+
+    # bra = (mpo + omega + 1j * eta)^(-1) @ (rmpo @ ket)
+    # return < bra | rmpo | ket >
+    def greens_function(
+        self,
+        bra,
+        mpo,
+        rmpo,
+        ket,
+        omega,
+        eta,
+        n_sweeps=10,
+        tol=1e-8,
+        bra_bond_dims=None,
+        ket_bond_dims=None,
+        noises=None,
+        thrds=None,
+        cutoff=1e-24,
+        linear_max_iter=4000,
+        iprint=0,
+    ):
+        bw = self.bw
+        if bra.info.tag == ket.info.tag:
+            raise RuntimeError("Same tag for bra and ket!!")
+        if ket_bond_dims is None:
+            ket_bond_dims = [ket.info.bond_dim]
+        if bra_bond_dims is None:
+            bra_bond_dims = [bra.info.bond_dim]
+        self.align_mps_center(bra, ket)
+        if thrds is None:
+            if SymmetryTypes.SP not in bw.symm_type:
+                thrds = [1e-6] * 4 + [1e-7] * 1
+            else:
+                thrds = [1e-5] * 4 + [5e-6] * 1
+        lme = bw.bs.MovingEnvironment(mpo, bra, bra, "LHS")
+        lme.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        lme.init_environments(iprint >= 2)
+        rme = bw.bs.MovingEnvironment(rmpo, bra, ket, "RHS")
+        rme.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        rme.init_environments(iprint >= 2)
+
+        if noises is None or noises[0] == 0:
+            cps = bw.bs.Linear(
+                lme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_bond_dims),
+            )
+        else:
+            cps = bw.bs.Linear(
+                lme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_bond_dims),
+                bw.VectorFP(noises),
+            )
+        if noises is not None and noises[0] != 0:
+            cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+            cps.decomp_type = bw.b.DecompositionTypes.SVD
+        cps.iprint = iprint
+        cps.cutoff = cutoff
+        cps.eq_type = bw.b.EquationTypes.GreensFunction
+        cps.linear_conv_thrds = bw.VectorFP(thrds)
+        cps.linear_max_iter = linear_max_iter + 100
+        cps.linear_soft_max_iter = linear_max_iter
+        cps.gf_eta = eta
+        cps.gf_omega = omega
+
+        cps.solve(n_sweeps, ket.center == 0, tol)
+        rgf, igf = cps.targets[-1]
+
+        if self.clean_scratch:
+            lme.remove_partition_files()
+            rme.remove_partition_files()
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return rgf + 1j * igf
 
     def fix_restarting_mps(self, mps):
         cg = self.ghamil.opf.cg
@@ -2783,6 +2952,7 @@ class DMRGDriver:
         left_vacuum=None,
         casci_ncore=0,
         casci_nvirt=0,
+        mrci_order=0,
         orig_dot=False,
     ):
         bw = self.bw
@@ -2795,7 +2965,7 @@ class DMRGDriver:
                 mps_info = bw.brs.MPSInfo(
                     self.n_sites, self.vacuum, target, self.ghamil.basis
                 )
-            else:
+            elif mrci_order == 0:
                 casci_ncas = self.n_sites - casci_ncore - casci_nvirt
                 mps_info = bw.brs.CASCIMPSInfo(
                     self.n_sites,
@@ -2805,6 +2975,16 @@ class DMRGDriver:
                     casci_ncore,
                     casci_ncas,
                     casci_nvirt,
+                )
+            else:
+                mps_info = bw.brs.MRCIMPSInfo(
+                    self.n_sites,
+                    casci_ncore,
+                    casci_nvirt,
+                    mrci_order,
+                    self.vacuum,
+                    target,
+                    self.ghamil.basis,
                 )
             mps = bw.bs.MPS(self.n_sites, center, dot if orig_dot else 1)
         else:
@@ -2837,19 +3017,16 @@ class DMRGDriver:
         if dot != 1 and not orig_dot:
             mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
-    
+
     def get_ancilla_mps(
-        self,
-        tag,
-        center=0,
-        dot=2,
-        target=None,
-        full_fci=True,
+        self, tag, center=0, dot=2, target=None, full_fci=True,
     ):
         bw = self.bw
         if target is None:
             target = bw.SX(self.n_sites * 2, 0, 0)
-        mps_info = bw.brs.AncillaMPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        mps_info = bw.brs.AncillaMPSInfo(
+            self.n_sites, self.vacuum, target, self.ghamil.basis
+        )
         mps = bw.bs.MPS(self.n_sites * 2, center, dot)
         mps_info.tag = tag
         if full_fci:
