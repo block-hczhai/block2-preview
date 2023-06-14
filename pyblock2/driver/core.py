@@ -1689,6 +1689,8 @@ class DMRGDriver:
         hermitian=False,
         iprint=0,
         cutoff=1e-20,
+        krylov_conv_thrd=5E-6,
+        krylov_subspace_size=20,
     ):
         bw = self.bw
         import numpy as np
@@ -1736,6 +1738,8 @@ class DMRGDriver:
             te.n_sub_sweeps = n_sub_sweeps
         te.normalize_mps = normalize_mps
         te.cutoff = cutoff
+        te.krylov_conv_thrd = krylov_conv_thrd
+        te.krylov_subspace_size = krylov_subspace_size
 
         te_times = []
         te_energies = []
