@@ -405,7 +405,8 @@ struct EffectiveFunctions<
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         FC beta, typename const_fl_type<FL>::FL const_e, bool iprint = false,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+        FP conv_thrd = 5E-6, int deflation_max_size = 20) {
         assert(h_eff->compute_diag);
         assert(h_eff->ket.size() == 2);
         FP anorm = GMatrixFunctions<FL>::norm(GMatrix<FL>(
@@ -423,10 +424,12 @@ struct EffectiveFunctions<
              (h_eff->tf->opf->seq->mode & SeqTypes::Tasked))
                 ? GMatrixFunctions<FC>::expo_apply(
                       *h_eff->tf, beta, anorm, vr, vi, (FL)const_e, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm)
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, deflation_max_size)
                 : GMatrixFunctions<FC>::expo_apply(
                       *h_eff, beta, anorm, vr, vi, (FL)const_e, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm);
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, deflation_max_size);
         FP norm_re = GMatrixFunctions<FL>::norm(vr);
         FP norm_im = GMatrixFunctions<FL>::norm(vi);
         FP norm = sqrt(norm_re * norm_re + norm_im * norm_im);
@@ -683,7 +686,8 @@ struct EffectiveFunctions<S, FL,
     static tuple<FL, FP, int, size_t, double> expo_apply(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         FC beta, typename const_fl_type<FL>::FL const_e, bool iprint = false,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+        FP conv_thrd = 5E-6, int deflation_max_size = 20) {
         assert(false);
         return make_tuple(0.0, 0.0, 0, (size_t)0, 0.0);
     }

@@ -600,7 +600,9 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
              py::arg("eval_energy") = false, py::arg("para_rule") = nullptr)
         .def("expo_apply", &EffectiveHamiltonian<S, FL>::expo_apply,
              py::arg("beta"), py::arg("const_e"), py::arg("symmetric"),
-             py::arg("iprint") = false, py::arg("para_rule") = nullptr)
+             py::arg("iprint") = false, py::arg("para_rule") = nullptr,
+             py::arg("conv_thrd") = (typename GMatrix<FL>::FP)5E-6,
+             py::arg("deflation_max_size") = 20)
         .def("deallocate", &EffectiveHamiltonian<S, FL>::deallocate);
 
     py::class_<EffectiveFunctions<S, FL>,
@@ -1349,6 +1351,10 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("wfn_spectra", &TimeEvolution<S, FL, FLS>::wfn_spectra)
         .def_readwrite("sweep_wfn_spectra",
                        &TimeEvolution<S, FL, FLS>::sweep_wfn_spectra)
+        .def_readwrite("krylov_conv_thrd",
+                       &TimeEvolution<S, FL, FLS>::krylov_conv_thrd)
+        .def_readwrite("krylov_subspace_size",
+                       &TimeEvolution<S, FL, FLS>::krylov_subspace_size)
         .def("update_one_dot", &TimeEvolution<S, FL, FLS>::update_one_dot)
         .def("update_two_dot", &TimeEvolution<S, FL, FLS>::update_two_dot)
         .def("update_multi_one_dot",

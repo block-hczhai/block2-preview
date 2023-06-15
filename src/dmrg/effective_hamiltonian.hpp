@@ -891,7 +891,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     tuple<FL, FP, int, size_t, double>
     expo_apply(FL beta, typename const_fl_type<FL>::FL const_e, bool symmetric,
                bool iprint = false,
-               const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+               const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+               FP conv_thrd = 5E-6, int deflation_max_size = 20) {
         assert(compute_diag);
         FP anorm = GMatrixFunctions<FL>::norm(
             GMatrix<FL>(diag->data, (MKL_INT)diag->total_memory, 1));
@@ -905,10 +906,12 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
              (tf->opf->seq->mode & SeqTypes::Tasked))
                 ? IterativeMatrixFunctions<FL>::expo_apply(
                       *tf, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm)
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, deflation_max_size)
                 : IterativeMatrixFunctions<FL>::expo_apply(
                       *this, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm);
+                      para_rule == nullptr ? nullptr : para_rule->comm,
+                      conv_thrd, deflation_max_size);
         FP norm = GMatrixFunctions<FL>::norm(v);
         GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
         tmp.allocate();
