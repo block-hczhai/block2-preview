@@ -668,7 +668,7 @@ refined A\ :sub:`1g` states: ::
     num_thrds 16
 
 The transition density matrices between states with different point group irreducible representations are also available by simply
-adding the keyword ``tran_twopdm`` after the corresponding multi-target state-averaged calculation. [#note1]_
+adding the keyword ``tran_twopdm`` and ``conventional_npdm`` after the corresponding multi-target state-averaged calculation. [#note1]_
 
 Restart DMRG Energy Calculation
 -------------------------------
@@ -767,6 +767,7 @@ The keyword ``mps_tags`` can be used to assign a tag to the mps for later refere
     maxiter 30
 
     mps_tags KET
+    num_thrds 16
 
 The following input file computes the energy for a single A\ :sub:`1g` state in D\ :sub:`2h` point group: ::
 
@@ -783,6 +784,7 @@ The following input file computes the energy for a single A\ :sub:`1g` state in 
     maxiter 30
 
     mps_tags BRA
+    num_thrds 16
 
 The output looks like the following: ::
 
@@ -806,6 +808,8 @@ The following input file computes the 2-particle transition density matrix for t
     maxM 500
     maxiter 30
     restart_tran_twopdm
+    conventional_npdm
+    num_thrds 16
 
 Note that in the above input file, keywords such as ``nelec``, ``spin``, ``irrep``, and ``nroots`` will be unimportant.
 The keyword ``mps_tags`` lists the tags for the MPSs that should be loaded. [#note1]_
