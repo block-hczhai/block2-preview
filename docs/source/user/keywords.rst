@@ -528,9 +528,10 @@ real\_density\_matrix
 davidson\_max\_iter
     Optional. Maximal number of iterations in Davidson. Default is 5000.
     If this number is reached but convergence is not achieved, the calculation will abort.
+    If this numebr is larger than ``davidson_soft_max_iter``, this keyword has no effect.
 
 davidson\_soft\_max\_iter
-    Optional. Maximal number of iterations in Davidson. Default is -1.
+    Optional. Maximal number of iterations in Davidson. Default is 4000.
     If this number is reached but convergence is not achieved, the calculation will continue as if the convergence is achieved.
     If this numebr is -1, or larger than or equal to ``davidson_max_iter``,
     this keyword has no effect and ``davidson_max_iter`` is used instead.

@@ -2323,7 +2323,7 @@ if not pre_run:
             dmrg.davidson_conv_thrds = VectorFP(dav_thrds)
             dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
             dmrg.davidson_soft_max_iter = int(
-                dic.get("davidson_soft_max_iter", -1))
+                dic.get("davidson_soft_max_iter", 4000))
             dmrg.store_wfn_spectra = store_wfn_spectra
             dmrg.site_dependent_bond_dims = site_dependent_bdims
 
@@ -2465,7 +2465,7 @@ if not pre_run:
         dmrg.cutoff = float(dic.get("cutoff", 1E-14))
         dmrg.davidson_max_iter = int(dic.get("davidson_max_iter", 5000))
         dmrg.davidson_soft_max_iter = int(
-            dic.get("davidson_soft_max_iter", -1))
+            dic.get("davidson_soft_max_iter", 4000))
         dmrg.decomp_type = decomp_type
         dmrg.trunc_type = trunc_type
         dmrg.davidson_conv_thrds = VectorFP(dav_thrds)
