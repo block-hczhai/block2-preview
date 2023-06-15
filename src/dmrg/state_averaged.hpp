@@ -487,10 +487,15 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
     void load_mutable() const override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         for (int i = 0; i < n_sites; i++)
-            if (tensors[i] != nullptr)
+            if (tensors[i] != nullptr) {
+                tensors[i]->alloc = d_alloc;
                 tensors[i]->load_data(get_filename(i), true, i_alloc);
+            }
         for (int j = 0; j < nroots; j++) {
+            wfns[j]->alloc = d_alloc;
             wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
             wfns[j]->infos = wfns[0]->infos;
         }
@@ -514,8 +519,11 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
     void load_wavefunction(int i) {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(tensors[i] == nullptr);
         for (int j = 0; j < nroots; j++) {
+            wfns[j]->alloc = d_alloc;
             wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
             wfns[j]->infos = wfns[0]->infos;
         }
@@ -540,11 +548,15 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
     void load_tensor(int i) override {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
         assert(tensors[i] != nullptr || i == center);
-        if (tensors[i] != nullptr)
+        if (tensors[i] != nullptr) {
+            tensors[i]->alloc = d_alloc;
             tensors[i]->load_data(get_filename(i), true, i_alloc);
-        else
+        } else
             for (int j = 0; j < nroots; j++) {
+                wfns[j]->alloc = d_alloc;
                 wfns[j]->load_data(get_wfn_filename(j), j == 0, i_alloc);
                 wfns[j]->infos = wfns[0]->infos;
             }

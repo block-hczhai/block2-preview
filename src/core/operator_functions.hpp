@@ -136,6 +136,8 @@ template <typename S, typename FL> struct OperatorFunctions {
                       bool conj = false) const {
         assert(a->get_type() == SparseMatrixTypes::Normal &&
                b->get_type() == SparseMatrixTypes::Normal);
+        if (abs(b->factor * scale) < TINY)
+            return;
         if (a->info == b->info && !conj) {
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
                 seq->iadd(GMatrix<FL>(a->data, 1, (MKL_INT)a->total_memory),

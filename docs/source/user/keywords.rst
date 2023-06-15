@@ -330,7 +330,7 @@ conventional\_npdm
     Optional, mainly for backward compatibility. If given, will use the conventional manual npdm code.
     This is only available for 1- and 2- particle density matrices.
     For most cases, the conventional manual code is slower.
-    For soc 1-particle density matrix, only the conventional manual code is available.
+    For soc 1-particle density matrix and transition density matrix between different irreps, only the conventional manual code is available.
 
 simple\_parallel
     Optional. Followed by an empty string (same as ``ij``) or ``ij`` or ``kl``. When this keyword is not given,
