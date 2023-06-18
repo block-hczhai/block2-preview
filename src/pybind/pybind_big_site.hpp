@@ -303,6 +303,64 @@ template <typename S> void bind_drt_big_site(py::module &m) {
 
 template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
 
+    py::class_<typename ElemMatT<S, FL>::MT,
+               shared_ptr<typename ElemMatT<S, FL>::MT>>(m, "SiteMatrix")
+        .def(py::init<int16_t, const vector<FL> &,
+                      const vector<pair<int16_t, int16_t>> &>())
+        .def_readwrite("data", &ElemMatT<S, FL>::MT::data)
+        .def_readwrite("indices", &ElemMatT<S, FL>::MT::indices)
+        .def_readwrite("dq", &ElemMatT<S, FL>::MT::dq)
+        .def_static("op_matrices", &ElemMatT<S, FL>::MT::op_matrices)
+        .def_static("multiply", &ElemMatT<S, FL>::MT::multiply)
+        .def_static("build_matrix", &ElemMatT<S, FL>::MT::build_matrix)
+        .def("expand", &ElemMatT<S, FL>::MT::expand);
+
+    py::bind_vector<vector<typename ElemMatT<S, FL>::MT>>(m,
+                                                          "VectorSiteMatrix");
+    py::bind_vector<vector<vector<typename ElemMatT<S, FL>::MT>>>(
+        m, "VectorVectorSiteMatrix");
+
+    py::class_<DRTMPS<S, FL>, shared_ptr<DRTMPS<S, FL>>>(m, "DRTMPS")
+        .def(py::init<const shared_ptr<DRT<S>> &,
+                      const vector<typename DRTMPS<S, FL>::LL> &,
+                      const vector<vector<FL>> &>())
+        .def_static("get_k", &DRTMPS<S, FL>::get_k)
+        .def_static("get_offsets", &DRTMPS<S, FL>::get_offsets)
+        .def_static("from_ci_vector",
+                    [](const shared_ptr<DRT<S>> &drt, py::array_t<FL> ci) {
+                        return DRTMPS<S, FL>::from_ci_vector(drt, ci.data());
+                    })
+        .def("to_ci_vector", &DRTMPS<S, FL>::to_ci_vector)
+        .def("get_bond_dimensions", &DRTMPS<S, FL>::get_bond_dimensions)
+        .def("qr", &DRTMPS<S, FL>::qr)
+        .def("svd", &DRTMPS<S, FL>::svd, py::arg("max_bond_dim") = -1,
+             py::arg("cutoff") = (FL)0.0)
+        .def("dot", &DRTMPS<S, FL>::dot)
+        .def("expect", &DRTMPS<S, FL>::expect)
+        .def_readwrite("drt", &DRTMPS<S, FL>::drt)
+        .def_readwrite("shapes", &DRTMPS<S, FL>::shapes)
+        .def_readwrite("offsets", &DRTMPS<S, FL>::offsets)
+        .def_readwrite("data", &DRTMPS<S, FL>::data);
+
+    py::class_<HDRTMPO<S, FL>, shared_ptr<HDRTMPO<S, FL>>>(m, "HDRTMPO")
+        .def(py::init<const shared_ptr<HDRT<S>> &,
+                      const vector<typename HDRTMPO<S, FL>::LL> &,
+                      const vector<vector<FL>> &>())
+        .def_static("get_offsets", &HDRTMPO<S, FL>::get_offsets)
+        .def_static("from_ci_vector",
+                    [](const shared_ptr<HDRT<S>> &hdrt, py::array_t<FL> ci) {
+                        return HDRTMPO<S, FL>::from_ci_vector(hdrt, ci.data());
+                    })
+        .def("to_ci_vector", &HDRTMPO<S, FL>::to_ci_vector)
+        .def("get_bond_dimensions", &HDRTMPO<S, FL>::get_bond_dimensions)
+        .def("qr", &HDRTMPO<S, FL>::qr)
+        .def("svd", &HDRTMPO<S, FL>::svd, py::arg("max_bond_dim") = -1,
+             py::arg("cutoff") = (FL)0.0)
+        .def_readwrite("hdrt", &HDRTMPO<S, FL>::hdrt)
+        .def_readwrite("shapes", &HDRTMPO<S, FL>::shapes)
+        .def_readwrite("offsets", &HDRTMPO<S, FL>::offsets)
+        .def_readwrite("data", &HDRTMPO<S, FL>::data);
+
     py::class_<HDRTScheme<S, FL>, shared_ptr<HDRTScheme<S, FL>>>(m,
                                                                  "HDRTScheme")
         .def(py::init<const shared_ptr<HDRT<S>> &,
@@ -336,6 +394,7 @@ template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
         .def("fill_csr_matrix_from_coo",
              &DRTBigSite<S, FL>::fill_csr_matrix_from_coo)
         .def("fill_csr_matrix", &DRTBigSite<S, FL>::fill_csr_matrix)
+        .def("get_site_matrices", &DRTBigSite<S, FL>::get_site_matrices)
         .def("build_npdm",
              [](DRTBigSite<S, FL> *self, const string &expr,
                 py::array_t<FL> bra_ci, py::array_t<FL> ket_ci) {

@@ -49,7 +49,9 @@ PYBIND11_MAKE_OPAQUE(vector<string>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint16_t>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint32_t>>);
+PYBIND11_MAKE_OPAQUE(vector<vector<long long int>>);
 PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 4>>);
+PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 5>>);
 PYBIND11_MAKE_OPAQUE(vector<std::array<int16_t, 6>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<long double>>);
@@ -1393,15 +1395,22 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<uint16_t>>(m, "VectorUInt16");
     py::bind_vector<vector<uint32_t>>(m, "VectorUInt32");
     py::bind_vector<vector<pair<uint32_t, uint32_t>>>(m, "VectorPUInt32UInt32");
-    py::bind_vector<vector<double>>(m, "VectorDouble");
-    py::bind_vector<vector<long double>>(m, "VectorLDouble");
-    py::bind_vector<vector<complex<double>>>(m, "VectorComplexDouble");
-    py::bind_vector<vector<complex<long double>>>(m, "VectorComplexLDouble");
+    py::bind_vector<vector<double>, shared_ptr<vector<double>>>(m,
+                                                                "VectorDouble");
+    py::bind_vector<vector<long double>, shared_ptr<vector<long double>>>(
+        m, "VectorLDouble");
+    py::bind_vector<vector<complex<double>>,
+                    shared_ptr<vector<complex<double>>>>(m,
+                                                         "VectorComplexDouble");
+    py::bind_vector<vector<complex<long double>>,
+                    shared_ptr<vector<complex<long double>>>>(
+        m, "VectorComplexLDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<string>>(m, "VectorString");
     py::bind_vector<vector<vector<uint8_t>>>(m, "VectorVectorUInt8");
     py::bind_vector<vector<vector<uint16_t>>>(m, "VectorVectorUInt16");
     py::bind_vector<vector<vector<uint32_t>>>(m, "VectorVectorUInt32");
+    py::bind_vector<vector<vector<long long int>>>(m, "VectorVectorLLInt");
     py::bind_vector<vector<vector<double>>>(m, "VectorVectorDouble");
     py::bind_vector<vector<vector<long double>>>(m, "VectorVectorLDouble");
     py::bind_vector<vector<vector<complex<double>>>>(
@@ -1456,10 +1465,12 @@ template <typename S = void> void bind_data(py::module &m) {
 
     bind_array_fixed<int, 4>(m, "Array4Int");
     bind_array_fixed<int16_t, 4>(m, "Array4Int16");
+    bind_array_fixed<int16_t, 5>(m, "Array5Int16");
     bind_array_fixed<int16_t, 6>(m, "Array6Int16");
 
     py::bind_vector<vector<array<int, 4>>>(m, "VectorArray4Int");
     py::bind_vector<vector<array<int16_t, 4>>>(m, "VectorArray4Int16");
+    py::bind_vector<vector<array<int16_t, 5>>>(m, "VectorArray5Int16");
     py::bind_vector<vector<array<int16_t, 6>>>(m, "VectorArray6Int16");
 
     bind_array<uint8_t>(m, "ArrayUInt8")
