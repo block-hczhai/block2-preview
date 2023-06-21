@@ -60,6 +60,7 @@ class MPOAlgorithmTypes(IntFlag):
     Sum = 32
     Constrained = 64
     Disjoint = 128
+    Length = 8192
     DisjointSVD = 128 | 2
     BlockedSumDisjointSVD = 128 | 32 | 16 | 2
     FastBlockedSumDisjointSVD = 128 | 32 | 16 | 8 | 2
@@ -94,6 +95,8 @@ class MPOAlgorithmTypes(IntFlag):
     FastBlockedSVD = 16 | 8 | 2
     BlockedRescaledSVD = 16 | 4 | 2
     FastBlockedRescaledSVD = 16 | 8 | 4 | 2
+    BlockedLengthSVD = 16 | 2 | 8192
+    FastBlockedLengthSVD = 16 | 8 | 2 | 8192
     BlockedBipartite = 16 | 1
     FastBlockedBipartite = 16 | 8 | 1
     RescaledSVD = 4 | 2
@@ -308,7 +311,7 @@ class DMRGDriver:
     def parallelize_integrals(self, para_type, h1e, g2e, const, msize=None, mrank=None):
         import numpy as np
 
-        if para_type == ParallelTypes.Nothing or self.mpi is None:
+        if para_type == ParallelTypes.Nothing or (self.mpi is None and msize is None):
             return h1e, g2e, const
 
         if msize is None:
@@ -454,7 +457,7 @@ class DMRGDriver:
             h1e[~mask1.reshape(h1e.shape)] = 0.0
         if g2e is not None:
             g2e[~mask2.reshape(g2e.shape)] = 0.0
-        if self.mpi.rank != self.mpi.root:
+        if (self.mpi is not None and self.mpi.rank != self.mpi.root) or (self.mpi is None and mrank != 0):
             const = 0
         return h1e, g2e, const
 

@@ -2294,6 +2294,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Sum", MPOAlgorithmTypes::Sum)
         .value("Constrained", MPOAlgorithmTypes::Constrained)
         .value("Disjoint", MPOAlgorithmTypes::Disjoint)
+        .value("Length", MPOAlgorithmTypes::Length)
         .value("NC", MPOAlgorithmTypes::NC)
         .value("CN", MPOAlgorithmTypes::CN)
         .value("DisjointSVD", MPOAlgorithmTypes::DisjointSVD)
@@ -2357,6 +2358,8 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("RescaledSVD", MPOAlgorithmTypes::RescaledSVD)
         .value("FastSVD", MPOAlgorithmTypes::FastSVD)
         .value("FastRescaledSVD", MPOAlgorithmTypes::FastRescaledSVD)
+        .value("BlockedLengthSVD", MPOAlgorithmTypes::BlockedLengthSVD)
+        .value("FastBlockedLengthSVD", MPOAlgorithmTypes::FastBlockedLengthSVD)
         .value("FastBipartite", MPOAlgorithmTypes::FastBipartite)
         .def(py::self & py::self)
         .def(py::self | py::self);

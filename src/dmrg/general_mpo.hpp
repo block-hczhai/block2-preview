@@ -57,6 +57,7 @@ enum struct MPOAlgorithmTypes : uint16_t {
     Disjoint = 128,
     NC = 256,
     CN = 512,
+    Length = 1024,
     DisjointSVD = 128 | 2,
     BlockedSumDisjointSVD = 128 | 32 | 16 | 2,
     FastBlockedSumDisjointSVD = 128 | 32 | 16 | 8 | 2,
@@ -91,6 +92,8 @@ enum struct MPOAlgorithmTypes : uint16_t {
     FastBlockedSVD = 16 | 8 | 2,
     BlockedRescaledSVD = 16 | 4 | 2,
     FastBlockedRescaledSVD = 16 | 8 | 4 | 2,
+    BlockedLengthSVD = 16 | 2 | 1024,
+    FastBlockedLengthSVD = 16 | 8 | 2 | 1024,
     BlockedBipartite = 16 | 1,
     FastBlockedBipartite = 16 | 8 | 1,
     RescaledSVD = 4 | 2,
@@ -126,6 +129,8 @@ inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
         os << "Constrained";
     else if (c == MPOAlgorithmTypes::Disjoint)
         os << "Disjoint";
+    else if (c == MPOAlgorithmTypes::Length)
+        os << "Length";
     else {
         if (c & MPOAlgorithmTypes::Fast)
             os << "Fast";
@@ -139,6 +144,8 @@ inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
             os << "Cons";
         if (c & MPOAlgorithmTypes::Disjoint)
             os << "Dis";
+        if (c & MPOAlgorithmTypes::Length)
+            os << "Len";
         if (c & MPOAlgorithmTypes::Bipartite)
             os << "BIP";
         if (c & MPOAlgorithmTypes::SVD)
@@ -1702,6 +1709,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         bool sum_mpo = algo_type & MPOAlgorithmTypes::Sum;
         bool constrain = algo_type & MPOAlgorithmTypes::Constrained;
         bool disjoint = algo_type & MPOAlgorithmTypes::Disjoint;
+        bool length = algo_type & MPOAlgorithmTypes::Length;
         if (!disjoint)
             disjoint_multiplier = (FP)1.0;
         if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
@@ -1743,6 +1751,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         vector<vector<uint16_t>> term_i(afd->exprs.size());
         vector<vector<uint16_t>> term_k(afd->exprs.size());
         LL n_terms = 0;
+        int max_term_l = 0;
         for (int ix = 0; ix < (int)afd->exprs.size(); ix++) {
             const int nn = SpinPermRecoupling::count_cds(afd->exprs[ix]);
             term_l[ix] = nn;
@@ -1750,6 +1759,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             term_k[ix].resize(afd->data[ix].size(), -1);
             assert(afd->indices[ix].size() == nn * term_i[ix].size());
             n_terms += (LL)afd->data[ix].size();
+            max_term_l = max(max_term_l, nn);
         }
         vector<vector<S>> quanta_ref =
             hamil->init_string_quanta(afd->exprs, term_l, left_vacuum);
@@ -1976,6 +1986,10 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     // (left block part and right block part)
                     for (; k < kmax && afd->indices[ix][itt + k] <= ii; k++)
                         ;
+                    int iw = k == kmax ? 0 : 1, iwl = kmax - k;
+                    for (int iwk = k + 1; iwk < kmax; iwk++)
+                        iw += (afd->indices[ix][itt + iwk] ==
+                               afd->indices[ix][itt + iwk - 1]);
                     if (!sub_exprs[ix].count(make_pair(ik, k)))
                         sub_exprs[ix][make_pair(ik, k)] =
                             GeneralHamiltonian<S, FL>::get_sub_expr(
@@ -2026,6 +2040,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         pqq.first, make_pair(pqq.second, (uint16_t)0));
                     if (block_max_length && ii != n_sites - 1)
                         ppqq.second.second = (uint16_t)kmax;
+                    if (length)
+                        ppqq.second.second = (uint16_t)(iw * max_term_l + iwl);
                     if (q_map.count(make_pair(ppqq, qq)) == 0) {
                         q_map[make_pair(ppqq, qq)] = (int)q_map.size();
                         map_ls.emplace_back();
@@ -2435,11 +2451,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
                             1;
                     int s_kept = svds[iq].second.size();
-                    vector<FL> smat, stmp;
-                    smat.reserve(
-                        max((size_t)szl * szr, (size_t)s_kept * s_kept));
+                    vector<FL> smat(
+                        max((size_t)szl * szr, (size_t)s_kept * s_kept),
+                        (FL)0.0);
+                    vector<FL> stmp;
                     stmp.reserve((size_t)s_kept * szr);
-                    memset(smat.data(), 0, sizeof(FL) * s_kept * s_kept);
                     for (int i = 0; i < s_kept; i++)
                         smat[(size_t)i * s_kept + i] =
                             svds[iq].second[i] * res_factor;
