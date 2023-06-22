@@ -4,6 +4,59 @@
 
 using namespace block2;
 
+struct WickCCSD {
+    map<WickIndexTypes, set<WickIndex>> idx_map;
+    map<pair<string, int>, vector<WickPermutation>> perm_map;
+    WickExpr h1, h2, h, t1, t2, t, ex1, ex2;
+    WickCCSD(bool anti_integral = true) {
+        idx_map[WickIndexTypes::Inactive] = WickIndex::parse_set("pqrsijklmno");
+        idx_map[WickIndexTypes::External] = WickIndex::parse_set("pqrsabcdefg");
+        perm_map[make_pair("v", 4)] = anti_integral
+                                          ? WickPermutation::four_anti()
+                                          : WickPermutation::qc_phys();
+        perm_map[make_pair("t", 2)] = WickPermutation::non_symmetric();
+        perm_map[make_pair("t", 4)] = WickPermutation::four_anti();
+        h1 = WickExpr::parse("SUM <pq> h[pq] C[p] D[q]", idx_map, perm_map);
+        h2 = (anti_integral ? 0.25 : 0.5) *
+             WickExpr::parse("SUM <pqrs> v[pqrs] C[p] C[q] D[s] D[r]", idx_map,
+                             perm_map);
+        t1 = WickExpr::parse("SUM <ai> t[ai] C[a] D[i]", idx_map, perm_map);
+        t2 = 0.25 * WickExpr::parse("SUM <abij> t[abij] C[a] C[b] D[j] D[i]",
+                                    idx_map, perm_map);
+        ex1 = WickExpr::parse("C[i] D[a]", idx_map, perm_map);
+        ex2 = WickExpr::parse("C[i] C[j] D[b] D[a]", idx_map, perm_map);
+        h = (h1 + h2).expand(-1, true).simplify();
+        t = (t1 + t2).expand(-1, true).simplify();
+    }
+    // h + [h, t] + 0.5 [[h, t1], t1]
+    WickExpr energy_equations(int order = 2) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) *
+                        (hx[i] ^ t).expand((order - 1 - i) * 2).simplify();
+        return amp.expand(0).simplify();
+    }
+    // ex1 * (h + [h, t] + 0.5 [[h, t], t] + (1/6) [[[h2, t1], t1], t1])
+    WickExpr t1_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) *
+                        (hx[i] ^ t).expand((order - i) * 2).simplify();
+        return (ex1 * amp).expand(0).simplify();
+    }
+    // MEST Eq. (5.7.16)
+    WickExpr t2_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) *
+                        (hx[i] ^ t).expand((order - i) * 4).simplify();
+        return (ex2 * amp).expand(0).simplify();
+    }
+};
+
 class TestWickCCSD : public ::testing::Test {
   protected:
     void SetUp() override {}

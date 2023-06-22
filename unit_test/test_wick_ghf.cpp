@@ -4,6 +4,50 @@
 
 using namespace block2;
 
+struct WickGHF {
+    vector<map<WickIndexTypes, set<WickIndex>>> idx_map; // aa, bb, ab, ba
+    map<pair<string, int>, vector<WickPermutation>> perm_map;
+    WickGHF() {
+        idx_map.resize(4);
+        idx_map[0][WickIndexTypes::Alpha] = WickIndex::parse_set("ijkl");
+        idx_map[1][WickIndexTypes::Beta] = WickIndex::parse_set("ijkl");
+        idx_map[2][WickIndexTypes::Alpha] = WickIndex::parse_set("ij");
+        idx_map[2][WickIndexTypes::Beta] = WickIndex::parse_set("kl");
+        idx_map[3][WickIndexTypes::Beta] = WickIndex::parse_set("ij");
+        idx_map[3][WickIndexTypes::Alpha] = WickIndex::parse_set("kl");
+        perm_map[make_pair("v", 4)] = WickPermutation::qc_chem();
+    }
+    WickExpr make_h1b() const {
+        WickExpr expr =
+            WickExpr::parse("SUM <ij> h[ij] D[i] C[j]", idx_map[1], perm_map);
+        return expr.expand().simplify();
+    }
+    WickExpr make_h2aa() const {
+        WickExpr expr =
+            0.5 * WickExpr::parse("SUM <ijkl> v[ijkl] C[i] C[k] D[l] D[j]",
+                                  idx_map[0], perm_map);
+        return expr.expand().simplify();
+    }
+    WickExpr make_h2bb() const {
+        WickExpr expr =
+            0.5 * WickExpr::parse("SUM <ijkl> v[ijkl] D[i] D[k] C[l] C[j]",
+                                  idx_map[1], perm_map);
+        return expr.expand().simplify();
+    }
+    WickExpr make_h2ab() const {
+        WickExpr expr =
+            0.5 * WickExpr::parse("SUM <ijkl> v[ijkl] C[i] D[k] C[l] D[j]",
+                                  idx_map[2], perm_map);
+        return expr.expand().simplify();
+    }
+    WickExpr make_h2ba() const {
+        WickExpr expr =
+            0.5 * WickExpr::parse("SUM <ijkl> v[ijkl] D[i] C[k] D[l] C[j]",
+                                  idx_map[3], perm_map);
+        return expr.expand().simplify();
+    }
+};
+
 class TestWickGHF : public ::testing::Test {
   protected:
     void SetUp() override {}

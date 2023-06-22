@@ -4,6 +4,77 @@
 
 using namespace block2;
 
+struct WickUGACCSD {
+    map<WickIndexTypes, set<WickIndex>> idx_map;
+    map<pair<string, int>, vector<WickPermutation>> perm_map;
+    map<string, pair<WickTensor, WickExpr>> defs;
+    WickExpr h1, h2, e0, h, t1, t2, t, ex1, ex2;
+    WickUGACCSD() {
+        idx_map[WickIndexTypes::Inactive] = WickIndex::parse_set("pqrsijklmno");
+        idx_map[WickIndexTypes::External] = WickIndex::parse_set("pqrsabcdefg");
+        perm_map[make_pair("v", 4)] = WickPermutation::qc_phys();
+        perm_map[make_pair("t", 2)] = WickPermutation::non_symmetric();
+        perm_map[make_pair("t", 4)] = WickPermutation::pair_symmetric(2, false);
+        // def of fock matrix
+        defs["h"] = WickExpr::parse_def(
+            "h[pq] = f[pq] \n - 2.0 SUM <j> v[pjqj] \n + SUM <j> v[pjjq]",
+            idx_map, perm_map);
+        h1 = WickExpr::parse("SUM <pq> h[pq] E1[p,q]", idx_map, perm_map)
+                 .substitute(defs);
+        h2 = WickExpr::parse("0.5 SUM <pqrs> v[pqrs] E2[pq,rs]", idx_map,
+                             perm_map);
+        t1 = WickExpr::parse("SUM <ai> t[ai] E1[a,i]", idx_map, perm_map);
+        t2 = WickExpr::parse("0.5 SUM <abij> t[abij] E1[a,i] E1[b,j]", idx_map,
+                             perm_map);
+        ex1 = WickExpr::parse("E1[i,a]", idx_map, perm_map);
+        ex2 = WickExpr::parse("E1[i,a] E1[j,b]", idx_map, perm_map);
+        // hartree-fock reference
+        e0 =
+            WickExpr::parse(
+                "2 SUM <i> h[ii] \n + 2 SUM <ij> v[ijij] \n - SUM <ij> v[ijji]",
+                idx_map, perm_map)
+                .substitute(defs);
+        h = (h1 + h2 - e0).simplify();
+        t = (t1 + t2).simplify();
+    }
+    // h + [h, t] + 0.5 [[h, t1], t1]
+    WickExpr energy_equations(int order = 2) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        for (int i = 0; i < order; amp = amp + hx[++i])
+            hx[i + 1] = (1.0 / (i + 1)) * (hx[i] ^ t);
+        return amp.expand(0).simplify();
+    }
+    // ex1 * (h + [h, t] + 0.5 [[h, t], t] + (1/6) [[[h2, t1], t1], t1])
+    WickExpr t1_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        if (order >= 1)
+            amp = amp + (h ^ t);
+        if (order >= 2)
+            amp = amp + 0.5 * ((h ^ t1) ^ t1) + ((h ^ t2) ^ t1);
+        if (order >= 3)
+            amp = amp + (1 / 6.0) * (((h ^ t1) ^ t1) ^ t1);
+        return (ex1 * amp).expand(0).simplify();
+    }
+    // J. Chem. Phys. 89, 7382 (1988) Eq. (17)
+    WickExpr t2_equations(int order = 4) const {
+        vector<WickExpr> hx(5, h);
+        WickExpr amp = h;
+        if (order >= 1)
+            amp = amp + (h ^ t);
+        if (order >= 2)
+            amp = amp + 0.5 * ((h ^ t1) ^ t1) + ((h ^ t2) ^ t1) +
+                  0.5 * ((h ^ t2) ^ t2);
+        if (order >= 3)
+            amp = amp + (1 / 6.0) * (((h ^ t1) ^ t1) ^ t1) +
+                  0.5 * (((h ^ t2) ^ t1) ^ t1);
+        if (order >= 4)
+            amp = amp + (1 / 24.0) * ((((h ^ t1) ^ t1) ^ t1) ^ t1);
+        return (ex2 * amp).expand(0).simplify();
+    }
+};
+
 class TestWickUGACCSD : public ::testing::Test {
   protected:
     void SetUp() override {}

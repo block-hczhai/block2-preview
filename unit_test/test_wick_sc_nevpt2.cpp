@@ -4,6 +4,148 @@
 
 using namespace block2;
 
+struct WickSCNEVPT2 {
+    map<WickIndexTypes, set<WickIndex>> idx_map;
+    map<pair<string, int>, vector<WickPermutation>> perm_map;
+    map<string, pair<WickTensor, WickExpr>> defs;
+    vector<pair<string, string>> sub_spaces;
+    WickExpr heff, hw, hd;
+    WickSCNEVPT2() {
+        idx_map[WickIndexTypes::Inactive] = WickIndex::parse_set("mnxyijkl");
+        idx_map[WickIndexTypes::Active] =
+            WickIndex::parse_set("mnxyabcdefghpq");
+        idx_map[WickIndexTypes::External] = WickIndex::parse_set("mnxyrstu");
+        perm_map[make_pair("w", 4)] = WickPermutation::qc_phys();
+        heff = WickExpr::parse("SUM <ab> h[ab] E1[a,b]", idx_map, perm_map);
+        hw = WickExpr::parse("0.5 SUM <abcd> w[abcd] E2[ab,cd]", idx_map,
+                             perm_map);
+        hd = heff + hw;
+        sub_spaces = {{"ijrs", "gamma[ij] gamma[rs] w[rsij] E1[r,i] E1[s,j] \n"
+                               "gamma[ij] gamma[rs] w[rsji] E1[s,i] E1[r,j]"},
+                      {"rsi", "SUM <a> gamma[rs] w[rsia] E1[r,i] E1[s,a] \n"
+                              "SUM <a> gamma[rs] w[sria] E1[s,i] E1[r,a]"},
+                      {"ijr", "SUM <a> gamma[ij] w[raji] E1[r,j] E1[a,i] \n"
+                              "SUM <a> gamma[ij] w[raij] E1[r,i] E1[a,j]"},
+                      {"rs", "SUM <ab> gamma[rs] w[rsba] E1[r,b] E1[s,a]"},
+                      {"ij", "SUM <ab> gamma[ij] w[baij] E1[b,i] E1[a,j]"},
+                      {"ir", "SUM <ab> w[raib] E1[r,i] E1[a,b] \n"
+                             "SUM <ab> w[rabi] E1[a,i] E1[r,b] \n"
+                             "h[ri] E1[r,i]"},
+                      {"r", "SUM <abc> w[rabc] E1[r,b] E1[a,c] \n"
+                            "SUM <a> h[ra] E1[r,a] \n"
+                            "- SUM <ab> w[rbba] E1[r,a]"},
+                      {"i", "SUM <abc> w[baic] E1[b,i] E1[a,c] \n"
+                            "SUM <a> h[ai] E1[a,i]"}};
+        defs["gamma"] = WickExpr::parse_def(
+            "gamma[mn] = 1.0 \n - 0.5 delta[mn]", idx_map, perm_map);
+    }
+    WickExpr build_communicator(const string &bra, const string &ket,
+                                bool do_sum = true) const {
+        WickExpr xbra = WickExpr::parse(bra, idx_map, perm_map)
+                            .substitute(defs)
+                            .expand()
+                            .simplify();
+        WickExpr xket = WickExpr::parse(ket, idx_map, perm_map)
+                            .substitute(defs)
+                            .expand()
+                            .simplify();
+        WickExpr expr =
+            do_sum ? (xbra.conjugate() & (hd ^ xket).expand().simplify())
+                   : (xbra.conjugate() * (hd ^ xket).expand().simplify());
+        return expr.expand()
+            .remove_external()
+            .add_spin_free_trans_symm()
+            .simplify();
+    }
+    WickExpr build_communicator(const string &ket, bool do_sum = true) const {
+        WickExpr xket = WickExpr::parse(ket, idx_map, perm_map)
+                            .substitute(defs)
+                            .expand()
+                            .simplify();
+        WickExpr expr =
+            do_sum ? (xket.conjugate() & (hd ^ xket).expand().simplify())
+                   : (xket.conjugate() * (hd ^ xket).expand().simplify());
+        return expr.expand()
+            .remove_external()
+            .add_spin_free_trans_symm()
+            .simplify();
+    }
+    WickExpr build_norm(const string &ket, bool do_sum = true) const {
+        WickExpr xket = WickExpr::parse(ket, idx_map, perm_map)
+                            .substitute(defs)
+                            .expand()
+                            .simplify();
+        WickExpr expr =
+            do_sum ? (xket.conjugate() & xket) : (xket.conjugate() * xket);
+        return expr.expand()
+            .add_spin_free_trans_symm()
+            .remove_external()
+            .simplify();
+    }
+    string to_einsum_orb_energies(const WickTensor &tensor) const {
+        stringstream ss;
+        ss << tensor.name << " = ";
+        for (int i = 0; i < (int)tensor.indices.size(); i++) {
+            auto &wi = tensor.indices[i];
+            if (wi.types == WickIndexTypes::Inactive)
+                ss << "(-1) * ";
+            ss << "orbe" << to_str(wi.types);
+            ss << "[";
+            for (int j = 0; j < (int)tensor.indices.size(); j++) {
+                ss << (i == j ? ":" : "None");
+                if (j != (int)tensor.indices.size() - 1)
+                    ss << ", ";
+            }
+            ss << "]";
+            if (i != (int)tensor.indices.size() - 1)
+                ss << " + ";
+        }
+        return ss.str();
+    }
+    string to_einsum_sum_restriction(const WickTensor &tensor) const {
+        stringstream ss, sr;
+        ss << "grid = np.indices((";
+        for (int i = 0; i < (int)tensor.indices.size(); i++) {
+            auto &wi = tensor.indices[i];
+            ss << (wi.types == WickIndexTypes::Inactive ? "ncore" : "nvirt");
+            if (i != (int)tensor.indices.size() - 1 || i == 0)
+                ss << ", ";
+            if (i != 0 &&
+                tensor.indices[i].types == tensor.indices[i - 1].types)
+                sr << "idx &= grid[" << i - 1 << "] <= grid[" << i << "]"
+                   << endl;
+        }
+        ss << "))" << endl;
+        return ss.str() + sr.str();
+    }
+    string to_einsum() const {
+        stringstream ss;
+        WickTensor norm, ener, deno;
+        for (int i = 0; i < (int)sub_spaces.size(); i++) {
+            string key = sub_spaces[i].first, expr = sub_spaces[i].second;
+            stringstream sr;
+            ss << "def compute_" << key << "():" << endl;
+            norm = WickTensor::parse("norm[" + key + "]", idx_map, perm_map);
+            ener = WickTensor::parse("hexp[" + key + "]", idx_map, perm_map);
+            deno = WickTensor::parse("deno[" + key + "]", idx_map, perm_map);
+            sr << to_einsum_orb_energies(deno) << endl;
+            sr << "norm = np.zeros_like(deno)" << endl;
+            sr << build_norm(expr, false).to_einsum(norm) << endl;
+            sr << "hexp = np.zeros_like(deno)" << endl;
+            sr << build_communicator(expr, false).to_einsum(ener) << endl;
+            sr << "idx = abs(norm) > 1E-14" << endl;
+            if (key.length() >= 2)
+                sr << to_einsum_sum_restriction(deno) << endl;
+            sr << "hexp[idx] = deno[idx] + hexp[idx] / norm[idx]" << endl;
+            sr << "xener = -(norm[idx] / hexp[idx]).sum()" << endl;
+            sr << "xnorm = norm[idx].sum()" << endl;
+            sr << "return xnorm, xener" << endl;
+            ss << WickExpr::to_einsum_add_indent(sr.str()) << endl;
+        }
+        return ss.str();
+    }
+};
+
 class TestWickSCNEVPT2 : public ::testing::Test {
   protected:
     void SetUp() override {}
