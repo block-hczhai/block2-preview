@@ -24,6 +24,7 @@ need internal contraction module of block2.
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
+    from block2 import WickGraph
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
@@ -85,7 +86,7 @@ en_eq = FC(HBar(h, t12, 2))
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E", WickIndexTypes.Inactive: "I"}
     allowed_perms = {"IIII", "IIIE", "IIEE", "IEEI", "IEIE", "IEEE", "EEEE"}
-    for term in eq.terms:
+    for term in (eq.terms if isinstance(eq, WickExpr) else [t for g in eq.right for t in g.terms]):
         for wt in term.tensors:
             if wt.name == "v":
                 k = "".join([imap[wi.types] for wi in wt.indices])
@@ -102,6 +103,7 @@ def fix_eri_permutations(eq):
                             break
                     assert found
 
+gr_en_eq = WickGraph().add_term(PT("E"), en_eq).simplify()
 
 def get_cc_amps_eqs(order):
     import time
@@ -114,7 +116,8 @@ def get_cc_amps_eqs(order):
         t1_eq = FC(ex1 * HBar(h, t, 3))
         t1_eq = t1_eq + P("h[ii]\n - h[aa]") * P("t[ia]")
         fix_eri_permutations(t1_eq)
-        eqs.append(t1_eq.to_einsum(PT("t1new[ia]")))
+        # eqs.append(t1_eq.to_einsum(PT("t1new[ia]")))
+        eqs.append(WickGraph().add_term(PT("t1new[ia]"), t1_eq).simplify().to_einsum())
         print("%8.3f sec" % (time.perf_counter() - tt))
     if order >= 2:
         print("2...", end="", flush=True)
@@ -122,7 +125,8 @@ def get_cc_amps_eqs(order):
         t2_eq = FC(ex2 * HBar(h, t, 4))
         t2_eq = t2_eq + P("h[ii]\n + h[jj]\n - h[aa]\n - h[bb]") * P("t[ijab]")
         fix_eri_permutations(t2_eq)
-        eqs.append(t2_eq.to_einsum(PT("t2new[ijab]")))
+        # eqs.append(t2_eq.to_einsum(PT("t2new[ijab]")))
+        eqs.append(WickGraph().add_term(PT("t2new[ijab]"), t2_eq).simplify().to_einsum())
         print("%8.3f sec" % (time.perf_counter() - tt))
     if order >= 3:
         print("3...", end="", flush=True)
@@ -132,7 +136,8 @@ def get_cc_amps_eqs(order):
             "h[ii]\n + h[jj]\n + h[kk]\n - h[aa]\n - h[bb]\n - h[cc]"
         ) * P("t[ijkabc]")
         fix_eri_permutations(t3_eq)
-        eqs.append(t3_eq.to_einsum(PT("t3new[ijkabc]")))
+        # eqs.append(t3_eq.to_einsum(PT("t3new[ijkabc]")))
+        eqs.append(WickGraph().add_term(PT("t3new[ijkabc]"), t3_eq).simplify().to_einsum())
         print("%8.3f sec" % (time.perf_counter() - tt))
     # if order >= 4:
     #     print('4...', end='', flush=True)
@@ -140,7 +145,8 @@ def get_cc_amps_eqs(order):
     #     t4_eq = FC(ex4 * HBar(h, t, 6))
     #     t4_eq = t4_eq + P("h[ii]\n + h[jj]\n + h[kk]\n + h[ll]\n - h[aa]\n - h[bb]\n - h[cc]\n - h[dd]") * P("t[ijklabcd]")
     #     fix_eri_permutations(t4_eq)
-    #     eqs.append(t4_eq.to_einsum(PT("t4new[ijklabcd]")))
+    #     # eqs.append(t4_eq.to_einsum(PT("t4new[ijklabcd]")))
+    #     eqs.append(WickGraph().add_term(PT("t4new[ijklabcd]"), t4_eq).simplify().to_einsum())
     #     print("%8.3f sec" % (time.perf_counter() - tt))
     return eqs
 
@@ -159,7 +165,7 @@ def wick_energy(cc, tamps, eris):
     for it, t in enumerate(tamps):
         tdics["t" + "I" * (it + 1) + "E" * (it + 1)] = t
     exec(
-        en_eq.to_einsum(PT("E")),
+        gr_en_eq.to_einsum(),
         globals(),
         {"hIE": eris.fock[:nocc, nocc:], "vIIEE": np.array(eris.oovv), **tdics, "E": E},
     )
@@ -365,6 +371,7 @@ class WickGCC(gccsd.GCCSD):
     def __init__(self, mf, order=3, **kwargs):
         self.order = order
         gccsd.GCCSD.__init__(self, mf, **kwargs)
+        self.e_hf = mf.e_tot
 
     energy = wick_energy
     update_amps = wick_update_amps
@@ -429,10 +436,10 @@ if __name__ == "__main__":
     wccsdt = GCCSDT(mf).run()
     # wccsdtq = GCCSDTQ(mf).run()
 
-    # 1...   3.880 sec ->  0.647 sec
-    # 2...  15.781 sec ->  2.584 sec
-    # 3... 102.674 sec -> 14.604 sec
-    # pvdz basis / 204 sec per iter
+    # 1...   3.880 sec ->  0.647 sec ->  0.824 sec
+    # 2...  15.781 sec ->  2.584 sec ->  4.812 sec
+    # 3... 102.674 sec -> 14.604 sec -> 20.678 sec
+    # pvdz basis / 204 sec -> 53 sec per iter
     # E(HF)     = -76.0167894720743
     # E(GCCSD)  = -76.23486336279412
     # E(T)(ref) =  -0.003466431834820524

@@ -487,7 +487,8 @@ template <typename S = void> void bind_wick(py::module &m) {
                         WickExpr::split_index_types)
         .def("split_index_types",
              (WickExpr(WickExpr::*)() const) & WickExpr::split_index_types)
-        .def("to_einsum", &WickExpr::to_einsum)
+        .def("to_einsum", &WickExpr::to_einsum, py::arg("x"),
+             py::arg("first_eq") = false)
         .def_static("to_einsum_add_indent", &WickExpr::to_einsum_add_indent,
                     py::arg("x"), py::arg("indent") = 4)
         .def("substitute", &WickExpr::substitute)
@@ -512,6 +513,53 @@ template <typename S = void> void bind_wick(py::module &m) {
     py::bind_vector<vector<WickExpr>>(m, "VectorWickExpr");
     py::bind_map<map<string, pair<WickTensor, WickExpr>>>(
         m, "MapStrPWickTensorExpr");
+    py::bind_vector<vector<pair<double, map<string, string>>>>(
+        m, "VectorPDoubleMapStrStr");
+    py::bind_vector<vector<vector<pair<double, map<string, string>>>>>(
+        m, "VectorVectorPDoubleMapStrStr");
+    py::bind_vector<vector<pair<WickTensor, WickExpr>>>(
+        m, "VectorPWickTensorWickExpr");
+
+    py::bind_map<map<WickIndexTypes, double>>(m, "MapWickIndexTypesDouble");
+
+    py::class_<WickGraph, shared_ptr<WickGraph>>(m, "WickGraph")
+        .def(py::init<>())
+        .def(py::init<
+             const vector<WickTensor> &, const vector<WickExpr> &,
+             const vector<vector<pair<double, map<string, string>>>> &>())
+        .def_readwrite("left", &WickGraph::left)
+        .def_readwrite("right", &WickGraph::right)
+        .def_readwrite("index_maps", &WickGraph::index_maps)
+        .def_readwrite("idx_scales", &WickGraph::idx_scales)
+        .def_readwrite("multiply_scale", &WickGraph::multiply_scale)
+        .def_readwrite("add_scale", &WickGraph::add_scale)
+        .def_readwrite("intermediate_name", &WickGraph::intermediate_name)
+        .def_static("init_idx_scales", &WickGraph::init_idx_scales)
+        .def_static("from_expr", &WickGraph::from_expr)
+        .def_static("merge_index_maps", &WickGraph::merge_index_maps)
+        .def("n_terms", &WickGraph::n_terms)
+        .def("add_term",
+             [](WickGraph *wg, const WickTensor &wt, const WickExpr &wx) {
+                 wg->add_term(wt, wx);
+                 return wg;
+             })
+        .def("get_intermediate_start", &WickGraph::get_intermediate_start)
+        .def("simplify_binary_sort", &WickGraph::simplify_binary_sort)
+        .def("simplify_binary_split", &WickGraph::simplify_binary_split)
+        .def("simplify_binary_unique", &WickGraph::simplify_binary_unique)
+        .def("simplify_binary_factor", &WickGraph::simplify_binary_factor)
+        .def("simplify_permutations", &WickGraph::simplify_permutations)
+        .def("expand_permutations", &WickGraph::expand_permutations)
+        .def("expand_binary", &WickGraph::expand_binary)
+        .def("topological_sort", &WickGraph::topological_sort)
+        .def("simplify", &WickGraph::simplify)
+        .def("to_einsum", &WickGraph::to_einsum)
+        .def("expand", &WickGraph::expand)
+        .def("__repr__", [](WickGraph *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
 }
 
 template <typename S = void>
