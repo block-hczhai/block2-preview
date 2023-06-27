@@ -25,7 +25,7 @@ need internal contraction module of block2.
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation, VectorInt16
-    from block2 import VectorWickPermutation, MapStrPWickTensorExpr
+    from block2 import VectorWickPermutation, MapStrPWickTensorExpr, WickGraph
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 
@@ -170,7 +170,7 @@ def fix_eri_permutations(eq):
         "OOOO", "OVOO", "OVOV", "OOVV", "OVVO", "OVVV", "VVVV",
         "ooOO", "ovOO", "ovOV", "ooVV", "ovVO", "ovVV", "vvVV",
         "OVoo", "OOvv", "OVvo", "OVvv"}
-    for term in eq.terms:
+    for term in (eq.terms if isinstance(eq, WickExpr) else [t for g in eq.right for t in g.terms]):
         for wt in term.tensors:
             if wt.name.startswith("v"):
                 k = ''.join([imap[wi.types] for wi in wt.indices])
@@ -195,9 +195,23 @@ def fix_eri_permutations(eq):
                                 break
                     assert found
 
-for eq in [en_eq, t1a_eq, t1b_eq, t2aa_eq, t2bb_eq, t2ab_eq, t2ba_eq, pt3_en_eq]:
-    fix_eri_permutations(eq)
-for eq in pt3_eqs:
+gr_en_eq = WickGraph().add_term(PT("E"), en_eq).simplify()
+
+gr_amps_eq = WickGraph()
+for tn, eq in zip(["tanew[ia]", "tbnew[IA]", "taanew[ijab]", "tbbnew[IJAB]", "tabnew[iJaB]",
+    "tabnew[jIbA]"], [t1a_eq, t1b_eq, t2aa_eq, t2bb_eq, t2ab_eq, t2ba_eq]):
+    gr_amps_eq.add_term(PT(tn), eq)
+gr_amps_eq = gr_amps_eq.simplify()
+
+gr_pt3_eq = WickGraph()
+for tn, eq in zip(["taaa[ijkabc]", "taab[ijKabC]", "taab[ikJacB]", "tabb[iJKaBC]", "taab[jkIbcA]",
+    "tabb[jIKbAC]", "tabb[kIJcAB]", "tbbb[IJKABC]"], pt3_eqs):
+    gr_pt3_eq.add_term(PT(tn), eq)
+gr_pt3_eq = gr_pt3_eq.simplify()
+
+gr_pt3_en_eq = WickGraph().add_term(PT("E"), pt3_en_eq).simplify()
+
+for eq in [gr_en_eq, gr_amps_eq, gr_pt3_eq, gr_pt3_en_eq]:
     fix_eri_permutations(eq)
 
 from pyscf import ao2mo
@@ -210,7 +224,7 @@ def wick_energy(cc, t1, t2, eris):
     t2aa, t2ab, t2bb = t2
     nocca, noccb = t2ab.shape[:2]
     E = np.array(0.0)
-    exec(en_eq.to_einsum(PT("E")), globals(), {
+    exec(gr_en_eq.to_einsum(), globals(), {
         "haie": eris.focka[:nocca, nocca:],
         "hbIE": eris.fockb[:noccb, noccb:],
         "vaaieie": np.asarray(eris.ovov),
@@ -237,9 +251,6 @@ def wick_update_amps(cc, t1, t2, eris):
     t2aanew = np.zeros_like(t2aa)
     t2bbnew = np.zeros_like(t2bb)
     t2abnew = np.zeros_like(t2ab)
-    amps_eq = t1a_eq.to_einsum(PT("tanew[ia]")) + t1b_eq.to_einsum(PT("tbnew[IA]"))
-    amps_eq += t2aa_eq.to_einsum(PT("taanew[ijab]")) + t2bb_eq.to_einsum(PT("tbbnew[IJAB]"))
-    amps_eq += t2ab_eq.to_einsum(PT("tabnew[iJaB]")) + t2ba_eq.to_einsum(PT("tabnew[jIbA]"))
     eris_vvVV = np.zeros((nvira**2, nvirb**2), dtype=np.asarray(eris.vvVV).dtype)
     vtrila = np.tril_indices(nvira)
     vtrilb = np.tril_indices(nvirb)
@@ -248,7 +259,7 @@ def wick_update_amps(cc, t1, t2, eris):
     eris_vvVV[(vtrila[0]*nvira+vtrila[1])[:, None], vtrilb[1]*nvirb+vtrilb[0]] = np.asarray(eris.vvVV)
     eris_vvVV[(vtrila[1]*nvira+vtrila[0])[:, None], vtrilb[0]*nvirb+vtrilb[1]] = np.asarray(eris.vvVV)
     eris_vvVV = eris_vvVV.reshape(nvira, nvira, nvirb, nvirb)
-    exec(amps_eq, globals(), {
+    exec(gr_amps_eq.to_einsum(), globals(), {
         "haie": eris.focka[:nocca, nocca:],
         "haei": eris.focka[nocca:, :nocca],
         "haee": eris.focka[nocca:, nocca:],
@@ -323,13 +334,6 @@ def wick_t3_amps(cc, t1=None, t2=None, eris=None):
     t3abb = np.zeros((nocca, ) + (noccb, ) * 2 + (nvira, ) + (nvirb, ) * 2)
     t3bbb = np.zeros((noccb, ) * 3 + (nvirb, ) * 3)
 
-    eqaaa, eqaab, eqaba, eqabb, eqbaa, eqbab, eqbba, eqbbb = pt3_eqs
-    amps_eq = "".join([
-        eqaaa.to_einsum(PT("taaa[ijkabc]")), eqaab.to_einsum(PT("taab[ijKabC]")),
-        eqaba.to_einsum(PT("taab[ikJacB]")), eqabb.to_einsum(PT("tabb[iJKaBC]")),
-        eqbaa.to_einsum(PT("taab[jkIbcA]")), eqbab.to_einsum(PT("tabb[jIKbAC]")),
-        eqbba.to_einsum(PT("tabb[kIJcAB]")), eqbbb.to_einsum(PT("tbbb[IJKABC]")),
-    ])
     eris_vvVV = np.zeros((nvira**2, nvirb**2), dtype=np.asarray(eris.vvVV).dtype)
     vtrila = np.tril_indices(nvira)
     vtrilb = np.tril_indices(nvirb)
@@ -338,7 +342,7 @@ def wick_t3_amps(cc, t1=None, t2=None, eris=None):
     eris_vvVV[(vtrila[0]*nvira+vtrila[1])[:, None], vtrilb[1]*nvirb+vtrilb[0]] = np.asarray(eris.vvVV)
     eris_vvVV[(vtrila[1]*nvira+vtrila[0])[:, None], vtrilb[0]*nvirb+vtrilb[1]] = np.asarray(eris.vvVV)
     eris_vvVV = eris_vvVV.reshape(nvira, nvira, nvirb, nvirb)
-    exec(amps_eq, globals(), {
+    exec(gr_pt3_eq.to_einsum(), globals(), {
         "haie": eris.focka[:nocca, nocca:],
         "haei": eris.focka[nocca:, :nocca],
         "haee": eris.focka[nocca:, nocca:],
@@ -411,7 +415,7 @@ def wick_ccsd_t(cc, t1=None, t2=None, eris=None, t3=None):
         t3 = wick_t3_amps(cc, t1=t1, t2=t2, eris=eris)
     t3aaa, t3aab, t3abb, t3bbb = t3
     e_t = np.array(0.0)
-    exec(pt3_en_eq.to_einsum(PT("E")), globals(), {
+    exec(gr_pt3_en_eq.to_einsum(), globals(), {
         "haie": eris.focka[:nocca, nocca:],
         "hbIE": eris.fockb[:noccb, noccb:],
         "vaaieii": np.asarray(eris.ovoo),

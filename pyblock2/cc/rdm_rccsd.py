@@ -21,9 +21,9 @@ Spin-free CCSD rdm with equations derived on the fly.
 """
 
 try:
-    from .rccsd import HBarTerms, Z, P, PT, SP, NR, FC
+    from .rccsd import HBarTerms, Z, P, PT, SP, NR, FC, WickGraph
 except ImportError:
-    from rccsd import HBarTerms, Z, P, PT, SP, NR, FC
+    from rccsd import HBarTerms, Z, P, PT, SP, NR, FC, WickGraph
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] E1[i,a]")
@@ -60,6 +60,18 @@ dovvo_eq = FC((I + l) * sum(HBarTerms(dovvo)[:5], Z))
 dovvv_eq = FC((I + l) * sum(HBarTerms(dovvv)[:5], Z))
 dooov_eq = FC((I + l) * sum(HBarTerms(dooov)[:5], Z))
 
+gr_rdm1_eq = WickGraph()
+for tn, eq in zip(["doo[ji]", "dov[ja]", "dvo[bi]", "dvv[ba]"], [doo_eq, dov_eq, dvo_eq, dvv_eq]):
+    gr_rdm1_eq.add_term(PT(tn), eq)
+gr_rdm1_eq = gr_rdm1_eq.simplify()
+
+gr_rdm2_eq = WickGraph()
+for tn, eq in zip(["dovov[iajb]", "dvvvv[abcd]", "doooo[ijkl]", "doovv[ijab]", "dovvo[iabj]",
+    "dovvv[iabc]", "dooov[ijka]"], [dovov_eq, dvvvv_eq, doooo_eq, doovv_eq, dovvo_eq,
+    dovvv_eq, dooov_eq]):
+    gr_rdm2_eq.add_term(PT(tn), eq)
+gr_rdm2_eq = gr_rdm2_eq.simplify()
+
 from pyscf.cc import ccsd_rdm
 
 def wick_gamma1_intermediates(mycc, t1, t2, l1, l2):
@@ -68,11 +80,7 @@ def wick_gamma1_intermediates(mycc, t1, t2, l1, l2):
     dov = np.zeros((nocc, nvir), dtype=t1.dtype)
     dvo = np.zeros((nvir, nocc), dtype=t1.dtype)
     dvv = np.zeros((nvir, nvir), dtype=t1.dtype)
-    rdm_eq =  doo_eq.to_einsum(PT("doo[ji]"))
-    rdm_eq += dov_eq.to_einsum(PT("dov[ja]"))
-    rdm_eq += dvo_eq.to_einsum(PT("dvo[bi]"))
-    rdm_eq += dvv_eq.to_einsum(PT("dvv[ba]"))
-    exec(rdm_eq, globals(), {
+    exec(gr_rdm1_eq.to_einsum(), globals(), {
         "tIE": t1,
         "tIIEE": t2,
         "lIE": l1,
@@ -93,14 +101,7 @@ def wick_gamma2_intermediates(mycc, t1, t2, l1, l2):
     dovvo = np.zeros((nocc, nvir, nvir, nocc), dtype=t1.dtype)
     dovvv = np.zeros((nocc, nvir, nvir, nvir), dtype=t1.dtype)
     dooov = np.zeros((nocc, nocc, nocc, nvir), dtype=t1.dtype)
-    rdm_eq =  dovov_eq.to_einsum(PT("dovov[iajb]"))
-    rdm_eq += dvvvv_eq.to_einsum(PT("dvvvv[abcd]"))
-    rdm_eq += doooo_eq.to_einsum(PT("doooo[ijkl]"))
-    rdm_eq += doovv_eq.to_einsum(PT("doovv[ijab]"))
-    rdm_eq += dovvo_eq.to_einsum(PT("dovvo[iabj]"))
-    rdm_eq += dovvv_eq.to_einsum(PT("dovvv[iabc]"))
-    rdm_eq += dooov_eq.to_einsum(PT("dooov[ijka]"))
-    exec(rdm_eq, globals(), {
+    exec(gr_rdm2_eq.to_einsum(), globals(), {
         "tIE": t1,
         "tIIEE": t2,
         "lIE": l1,

@@ -21,9 +21,9 @@ UHF/CCSD rdm in spatial orbitals with equations derived on the fly.
 """
 
 try:
-    from .uccsd import HBar, t, P, PT, NR, FC
+    from .uccsd import HBar, t, P, PT, NR, FC, WickGraph
 except ImportError:
-    from uccsd import HBar, t, P, PT, NR, FC
+    from uccsd import HBar, t, P, PT, NR, FC, WickGraph
 import numpy as np
 
 l1 = P("SUM <ai> la[ia] C[i] D[a]\n + SUM <AI> lb[IA] C[I] D[A]")
@@ -89,6 +89,53 @@ dovvo_eq, dovVO_eq, dOVvo_eq, dOVVO_eq = (FC((I + l) * HBar(d, t, 4)) for d in [
 dovvv_eq, dovVV_eq, dOVvv_eq, dOVVV_eq = (FC((I + l) * HBar(d, t, 4)) for d in [dovvv, dovVV, dOVvv, dOVVV])
 dooov_eq, dooOV_eq, dOOov_eq, dOOOV_eq = (FC((I + l) * HBar(d, t, 4)) for d in [dooov, dooOV, dOOov, dOOOV])
 
+gr_rdm1_eq = WickGraph()
+gr_rdm1_eq.add_term(PT("dooa[ji]"), doo_eq)
+gr_rdm1_eq.add_term(PT("dova[ja]"), dov_eq)
+gr_rdm1_eq.add_term(PT("dvoa[bi]"), dvo_eq)
+gr_rdm1_eq.add_term(PT("dvva[ba]"), dvv_eq)
+gr_rdm1_eq.add_term(PT("doob[JI]"), dOO_eq)
+gr_rdm1_eq.add_term(PT("dovb[JA]"), dOV_eq)
+gr_rdm1_eq.add_term(PT("dvob[BI]"), dVO_eq)
+gr_rdm1_eq.add_term(PT("dvvb[BA]"), dVV_eq)
+gr_rdm1_eq = gr_rdm1_eq.simplify()
+
+gr_rdm2_eq = WickGraph()
+
+gr_rdm2_eq.add_term(PT("dovovaa[iajb]"), dovov_eq)
+gr_rdm2_eq.add_term(PT("dovovab[iaJB]"), dovOV_eq)
+gr_rdm2_eq.add_term(PT("dovovbb[IAJB]"), dOVOV_eq)
+
+gr_rdm2_eq.add_term(PT("dvvvvaa[abcd]"), dvvvv_eq)
+gr_rdm2_eq.add_term(PT("dvvvvab[abCD]"), dvvVV_eq)
+gr_rdm2_eq.add_term(PT("dvvvvbb[ABCD]"), dVVVV_eq)
+
+gr_rdm2_eq.add_term(PT("dooooaa[ijkl]"), doooo_eq)
+gr_rdm2_eq.add_term(PT("dooooab[ijKL]"), dooOO_eq)
+gr_rdm2_eq.add_term(PT("doooobb[IJKL]"), dOOOO_eq)
+
+gr_rdm2_eq.add_term(PT("doovvaa[ijab]"), doovv_eq)
+gr_rdm2_eq.add_term(PT("doovvab[ijAB]"), dooVV_eq)
+gr_rdm2_eq.add_term(PT("doovvba[IJab]"), dOOvv_eq)
+gr_rdm2_eq.add_term(PT("doovvbb[IJAB]"), dOOVV_eq)
+
+gr_rdm2_eq.add_term(PT("dovvoaa[iabj]"), dovvo_eq)
+gr_rdm2_eq.add_term(PT("dovvoab[iaBJ]"), dovVO_eq)
+gr_rdm2_eq.add_term(PT("dovvoba[IAbj]"), dOVvo_eq)
+gr_rdm2_eq.add_term(PT("dovvobb[IABJ]"), dOVVO_eq)
+
+gr_rdm2_eq.add_term(PT("dovvvaa[iabc]"), dovvv_eq)
+gr_rdm2_eq.add_term(PT("dovvvab[iaBC]"), dovVV_eq)
+gr_rdm2_eq.add_term(PT("dovvvba[IAbc]"), dOVvv_eq)
+gr_rdm2_eq.add_term(PT("dovvvbb[IABC]"), dOVVV_eq)
+
+gr_rdm2_eq.add_term(PT("dooovaa[ijka]"), dooov_eq)
+gr_rdm2_eq.add_term(PT("dooovab[ijKA]"), dooOV_eq)
+gr_rdm2_eq.add_term(PT("dooovba[IJka]"), dOOov_eq)
+gr_rdm2_eq.add_term(PT("dooovbb[IJKA]"), dOOOV_eq)
+
+gr_rdm2_eq = gr_rdm2_eq.simplify()
+
 from pyscf.cc import uccsd_rdm
 
 def wick_gamma1_intermediates(mycc, t1, t2, l1, l2):
@@ -106,15 +153,7 @@ def wick_gamma1_intermediates(mycc, t1, t2, l1, l2):
     dovb = np.zeros((noccb, nvirb), dtype=t1b.dtype)
     dvob = np.zeros((nvirb, noccb), dtype=t1b.dtype)
     dvvb = np.zeros((nvirb, nvirb), dtype=t1b.dtype)
-    rdm_eq =  doo_eq.to_einsum(PT("dooa[ji]"))
-    rdm_eq += dov_eq.to_einsum(PT("dova[ja]"))
-    rdm_eq += dvo_eq.to_einsum(PT("dvoa[bi]"))
-    rdm_eq += dvv_eq.to_einsum(PT("dvva[ba]"))
-    rdm_eq += dOO_eq.to_einsum(PT("doob[JI]"))
-    rdm_eq += dOV_eq.to_einsum(PT("dovb[JA]"))
-    rdm_eq += dVO_eq.to_einsum(PT("dvob[BI]"))
-    rdm_eq += dVV_eq.to_einsum(PT("dvvb[BA]"))
-    exec(rdm_eq, globals(), {
+    exec(gr_rdm1_eq.to_einsum(), globals(), {
         "taie": t1a,
         "tbIE": t1b,
         "taaiiee": t2aa,
@@ -173,39 +212,7 @@ def wick_gamma2_intermediates(mycc, t1, t2, l1, l2):
     dovvvbb = np.zeros((noccb, nvirb, nvirb, nvirb), dtype=t1b.dtype)
     dooovbb = np.zeros((noccb, noccb, noccb, nvirb), dtype=t1b.dtype)
 
-    rdm_eq =  dovov_eq.to_einsum(PT("dovovaa[iajb]"))
-    rdm_eq += dovOV_eq.to_einsum(PT("dovovab[iaJB]"))
-    rdm_eq += dOVOV_eq.to_einsum(PT("dovovbb[IAJB]"))
-
-    rdm_eq += dvvvv_eq.to_einsum(PT("dvvvvaa[abcd]"))
-    rdm_eq += dvvVV_eq.to_einsum(PT("dvvvvab[abCD]"))
-    rdm_eq += dVVVV_eq.to_einsum(PT("dvvvvbb[ABCD]"))
-
-    rdm_eq += doooo_eq.to_einsum(PT("dooooaa[ijkl]"))
-    rdm_eq += dooOO_eq.to_einsum(PT("dooooab[ijKL]"))
-    rdm_eq += dOOOO_eq.to_einsum(PT("doooobb[IJKL]"))
-
-    rdm_eq += doovv_eq.to_einsum(PT("doovvaa[ijab]"))
-    rdm_eq += dooVV_eq.to_einsum(PT("doovvab[ijAB]"))
-    rdm_eq += dOOvv_eq.to_einsum(PT("doovvba[IJab]"))
-    rdm_eq += dOOVV_eq.to_einsum(PT("doovvbb[IJAB]"))
-
-    rdm_eq += dovvo_eq.to_einsum(PT("dovvoaa[iabj]"))
-    rdm_eq += dovVO_eq.to_einsum(PT("dovvoab[iaBJ]"))
-    rdm_eq += dOVvo_eq.to_einsum(PT("dovvoba[IAbj]"))
-    rdm_eq += dOVVO_eq.to_einsum(PT("dovvobb[IABJ]"))
-
-    rdm_eq += dovvv_eq.to_einsum(PT("dovvvaa[iabc]"))
-    rdm_eq += dovVV_eq.to_einsum(PT("dovvvab[iaBC]"))
-    rdm_eq += dOVvv_eq.to_einsum(PT("dovvvba[IAbc]"))
-    rdm_eq += dOVVV_eq.to_einsum(PT("dovvvbb[IABC]"))
-
-    rdm_eq += dooov_eq.to_einsum(PT("dooovaa[ijka]"))
-    rdm_eq += dooOV_eq.to_einsum(PT("dooovab[ijKA]"))
-    rdm_eq += dOOov_eq.to_einsum(PT("dooovba[IJka]"))
-    rdm_eq += dOOOV_eq.to_einsum(PT("dooovbb[IJKA]"))
-
-    exec(rdm_eq, globals(), {
+    exec(gr_rdm2_eq.to_einsum(), globals(), {
         "taie": t1a,
         "tbIE": t1b,
         "taaiiee": t2aa,

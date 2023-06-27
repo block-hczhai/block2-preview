@@ -114,11 +114,6 @@ def fix_eri_permutations(eq):
                             break
                     assert found
 
-fix_eri_permutations(t1_eq)
-fix_eri_permutations(t2_eq)
-fix_eri_permutations(pt3_eq)
-fix_eri_permutations(pt3_en_eq)
-
 gr_en_eq = WickGraph().add_term(PT("E"), en_eq).simplify()
 gr_amps_eq = WickGraph().add_term(PT("t1new[ia]"), t1_eq).add_term(PT("t2new[ijab]"), t2_eq).simplify()
 gr_pt3_eq = WickGraph().add_term(PT("t3[ijkabc]"), pt3_eq).simplify()

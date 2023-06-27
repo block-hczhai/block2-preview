@@ -21,9 +21,9 @@ UHF/CCSD lambda equation in spatial orbitals with equations derived on the fly.
 """
 
 try:
-    from .uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+    from .uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations, WickGraph
 except ImportError:
-    from uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+    from uccsd import h4, en_eq, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations, WickGraph
 import numpy as np
 
 l1 = P("SUM <ai> la[ia] C[i] D[a]\n + SUM <AI> lb[IA] C[I] D[A]")
@@ -52,8 +52,13 @@ l2bb_eq = l2bb_eq + P("hb[II]\n + hb[JJ]\n - hb[AA]\n - hb[BB]") * P("lbb[IJAB]"
 l2ab_eq = l2ab_eq + P("ha[ii]\n + hb[JJ]\n - ha[aa]\n - hb[BB]") * P("lab[iJaB]")
 l2ba_eq = l2ba_eq + P("hb[II]\n + ha[jj]\n - hb[AA]\n - ha[bb]") * P("lab[jIbA]")
 
-for eq in [l1a_eq, l1b_eq, l2aa_eq, l2bb_eq, l2ab_eq, l2ba_eq]:
-    fix_eri_permutations(eq)
+gr_lambda_eq = WickGraph()
+for tn, eq in zip(["lanew[ia]", "lbnew[IA]", "laanew[ijab]", "lbbnew[IJAB]", "labnew[iJaB]",
+    "labnew[jIbA]"], [l1a_eq, l1b_eq, l2aa_eq, l2bb_eq, l2ab_eq, l2ba_eq]):
+    gr_lambda_eq.add_term(PT(tn), eq)
+gr_lambda_eq = gr_lambda_eq.simplify()
+
+fix_eri_permutations(gr_lambda_eq)
 
 from pyscf.cc import uccsd, ccsd_lambda
 from pyscf.lib import logger
@@ -72,9 +77,6 @@ def wick_update_lambda(cc, t1, t2, l1, l2, eris, imds):
     l2aanew = np.zeros_like(l2aa)
     l2bbnew = np.zeros_like(l2bb)
     l2abnew = np.zeros_like(l2ab)
-    lambda_eq = l1a_eq.to_einsum(PT("lanew[ia]")) + l1b_eq.to_einsum(PT("lbnew[IA]"))
-    lambda_eq += l2aa_eq.to_einsum(PT("laanew[ijab]")) + l2bb_eq.to_einsum(PT("lbbnew[IJAB]"))
-    lambda_eq += l2ab_eq.to_einsum(PT("labnew[iJaB]")) + l2ba_eq.to_einsum(PT("labnew[jIbA]"))
     eris_vvVV = np.zeros((nvira**2, nvirb**2), dtype=np.asarray(eris.vvVV).dtype)
     vtrila = np.tril_indices(nvira)
     vtrilb = np.tril_indices(nvirb)
@@ -83,7 +85,7 @@ def wick_update_lambda(cc, t1, t2, l1, l2, eris, imds):
     eris_vvVV[(vtrila[0]*nvira+vtrila[1])[:, None], vtrilb[1]*nvirb+vtrilb[0]] = np.asarray(eris.vvVV)
     eris_vvVV[(vtrila[1]*nvira+vtrila[0])[:, None], vtrilb[0]*nvirb+vtrilb[1]] = np.asarray(eris.vvVV)
     eris_vvVV = eris_vvVV.reshape(nvira, nvira, nvirb, nvirb)
-    exec(lambda_eq, globals(), {
+    exec(gr_lambda_eq.to_einsum(), globals(), {
         "haie": eris.focka[:nocca, nocca:],
         "haei": eris.focka[nocca:, :nocca],
         "haee": eris.focka[nocca:, nocca:],

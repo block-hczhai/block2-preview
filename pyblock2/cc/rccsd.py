@@ -25,7 +25,7 @@ need internal contraction module of block2.
 try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation
-    from block2 import MapStrPWickTensorExpr, MapStrStr
+    from block2 import MapStrPWickTensorExpr, MapStrStr, WickGraph
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 import numpy as np
@@ -132,7 +132,7 @@ def purify_pt3_eq(pt3_eq):
 def fix_eri_permutations(eq):
     imap = {WickIndexTypes.External: "E",  WickIndexTypes.Inactive: "I"}
     allowed_perms = {"IIII", "IEII", "IIEE", "IEEI", "IEIE", "IEEE", "EEEE"}
-    for term in eq.terms:
+    for term in (eq.terms if isinstance(eq, WickExpr) else [t for g in eq.right for t in g.terms]):
         for wt in term.tensors:
             if wt.name == "v":
                 k = ''.join([imap[wi.types] for wi in wt.indices])
@@ -147,11 +147,16 @@ def fix_eri_permutations(eq):
                             break
                     assert found
 
-fix_eri_permutations(t1_eq)
-fix_eri_permutations(t2_eq)
-fix_eri_permutations(pt3_eq)
-fix_eri_permutations(pt3_en_eq)
 purify_pt3_eq(pt3_eq)
+
+gr_en_eq = WickGraph().add_term(PT("E"), en_eq).simplify()
+gr_amps_eq = WickGraph().add_term(PT("t1new[ia]"), t1_eq).add_term(PT("t2new[ijab]"), t2_eq).simplify()
+gr_pt3_eq = WickGraph().add_term(PT("t3[ijkabc]"), pt3_eq).simplify()
+gr_pt3_en_eq = WickGraph().add_term(PT("E"), pt3_en_eq).simplify()
+
+fix_eri_permutations(gr_amps_eq)
+fix_eri_permutations(gr_pt3_eq)
+fix_eri_permutations(gr_pt3_en_eq)
 
 from pyscf.cc import rccsd
 
@@ -160,7 +165,7 @@ def wick_energy(cc, t1, t2, eris):
     assert cc.level_shift == 0
     nocc = t1.shape[0]
     E = np.array(0.0)
-    exec(en_eq.to_einsum(PT("E")), globals(), {
+    exec(gr_en_eq.to_einsum(), globals(), {
         "fIE": eris.fock[:nocc, nocc:],
         "vIEIE": np.array(eris.ovov),
         "tIE": t1,
@@ -175,8 +180,7 @@ def wick_update_amps(cc, t1, t2, eris):
     nocc = t1.shape[0]
     t1new = np.zeros_like(t1)
     t2new = np.zeros_like(t2)
-    amps_eq = t1_eq.to_einsum(PT("t1new[ia]")) + t2_eq.to_einsum(PT("t2new[ijab]"))
-    exec(amps_eq, globals(), {
+    exec(gr_amps_eq.to_einsum(), globals(), {
         "fIE": eris.fock[:nocc, nocc:],
         "fEI": eris.fock[nocc:, :nocc],
         "fEE": eris.fock[nocc:, nocc:],
@@ -209,8 +213,7 @@ def wick_t3_amps(cc, t1=None, t2=None, eris=None):
     nocc, nvir = t1.shape
 
     t3 = np.zeros((nocc, ) * 3 + (nvir, ) * 3)
-    amps_eq = pt3_eq.to_einsum(PT("t3[ijkabc]"))
-    exec(amps_eq, globals(), {
+    exec(gr_pt3_eq.to_einsum(), globals(), {
         "vIIII": np.array(eris.oooo),
         "vIEII": np.array(eris.ovoo),
         "vIIEE": np.array(eris.oovv),
@@ -238,7 +241,7 @@ def wick_ccsd_t(cc, t1=None, t2=None, eris=None, t3=None):
     if t3 is None:
         t3 = wick_t3_amps(cc, t1=t1, t2=t2, eris=eris)
     e_t = np.array(0.0)
-    exec(pt3_en_eq.to_einsum(PT("E")), globals(), {
+    exec(gr_pt3_en_eq.to_einsum(), globals(), {
         "fIE": eris.fock[:nocc, nocc:],
         "vIIEE": np.array(eris.oovv),
         "vIEII": np.array(eris.ovoo),

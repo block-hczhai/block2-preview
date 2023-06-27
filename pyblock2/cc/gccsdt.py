@@ -436,9 +436,9 @@ if __name__ == "__main__":
     wccsdt = GCCSDT(mf).run()
     # wccsdtq = GCCSDTQ(mf).run()
 
-    # 1...   3.880 sec ->  0.647 sec ->  0.824 sec
-    # 2...  15.781 sec ->  2.584 sec ->  4.812 sec
-    # 3... 102.674 sec -> 14.604 sec -> 20.678 sec
+    # 1...   3.880 sec ->  0.647 sec ->  0.533 sec
+    # 2...  15.781 sec ->  2.584 sec ->  2.194 sec
+    # 3... 102.674 sec -> 14.604 sec -> 12.316 sec
     # pvdz basis / 204 sec -> 53 sec per iter
     # E(HF)     = -76.0167894720743
     # E(GCCSD)  = -76.23486336279412

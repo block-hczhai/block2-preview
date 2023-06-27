@@ -21,9 +21,9 @@ Spin-free CCSD lambda equation with equations derived on the fly.
 """
 
 try:
-    from .rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+    from .rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr, WickGraph
 except ImportError:
-    from rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr
+    from rccsd import hbar, ex1, ex2, en_eq, P, PT, SP, FC, fix_eri_permutations, MapStrStr, WickGraph
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] E1[i,a]")
@@ -44,8 +44,9 @@ l2_eq = SP((1.0 / 3.0) * (l2_eq + 0.5 * l2_eq.index_map(ijmap)))
 l1_eq = SP(l1_eq + P("f[ii]\n - f[aa]") * P("l[ia]"))
 l2_eq = SP(l2_eq + P("f[ii]\n + f[jj]\n - f[aa]\n - f[bb]") * P("l[ijab]"))
 
-fix_eri_permutations(l1_eq)
-fix_eri_permutations(l2_eq)
+gr_lambda_eq = WickGraph().add_term(PT("l1new[ia]"), l1_eq).add_term(PT("l2new[ijab]"), l2_eq).simplify()
+
+fix_eri_permutations(gr_lambda_eq)
 
 from pyscf.cc import rccsd, ccsd_lambda
 from pyscf.lib import logger
@@ -56,8 +57,7 @@ def wick_update_lambda(cc, t1, t2, l1, l2, eris, imds):
     nocc = t1.shape[0]
     l1new = np.zeros_like(l1)
     l2new = np.zeros_like(l2)
-    lambda_eq = l1_eq.to_einsum(PT("l1new[ia]")) + l2_eq.to_einsum(PT("l2new[ijab]"))
-    exec(lambda_eq, globals(), {
+    exec(gr_lambda_eq.to_einsum(), globals(), {
         "fIE": eris.fock[:nocc, nocc:],
         "fEI": eris.fock[nocc:, :nocc],
         "fEE": eris.fock[nocc:, nocc:],

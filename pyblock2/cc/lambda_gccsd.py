@@ -21,9 +21,9 @@ CCSD lambda equation in general orbitals with equations derived on the fly.
 """
 
 try:
-    from .gccsd import hbar, ex1, ex2, P, PT, NR, FC, en_eq, fix_eri_permutations
+    from .gccsd import hbar, ex1, ex2, P, PT, NR, FC, en_eq, fix_eri_permutations, WickGraph
 except ImportError:
-    from gccsd import hbar, ex1, ex2, P, PT, NR, FC, en_eq, fix_eri_permutations
+    from gccsd import hbar, ex1, ex2, P, PT, NR, FC, en_eq, fix_eri_permutations, WickGraph
 import numpy as np
 
 l1 = P("SUM <ai> l[ia] C[i] D[a]")
@@ -39,8 +39,9 @@ l2_eq = FC((I + l) * (hbar - en_eq) * ex2.conjugate())
 l1_eq = l1_eq + P("h[ii]\n - h[aa]") * P("l[ia]")
 l2_eq = l2_eq + P("h[ii]\n + h[jj]\n - h[aa]\n - h[bb]") * P("l[ijab]")
 
-fix_eri_permutations(l1_eq)
-fix_eri_permutations(l2_eq)
+gr_lambda_eq = WickGraph().add_term(PT("l1new[ia]"), l1_eq).add_term(PT("l2new[ijab]"), l2_eq).simplify()
+
+fix_eri_permutations(gr_lambda_eq)
 
 from pyscf.cc import gccsd, ccsd_lambda
 from pyscf.lib import logger
@@ -51,8 +52,7 @@ def wick_update_lambda(cc, t1, t2, l1, l2, eris, imds):
     nocc = t1.shape[0]
     l1new = np.zeros_like(l1)
     l2new = np.zeros_like(l2)
-    lambda_eq = l1_eq.to_einsum(PT("l1new[ia]")) + l2_eq.to_einsum(PT("l2new[ijab]"))
-    exec(lambda_eq, globals(), {
+    exec(gr_lambda_eq.to_einsum(), globals(), {
         "hIE": eris.fock[:nocc, nocc:],
         "hEI": eris.fock[nocc:, :nocc],
         "hEE": eris.fock[nocc:, nocc:],

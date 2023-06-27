@@ -488,7 +488,8 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("split_index_types",
              (WickExpr(WickExpr::*)() const) & WickExpr::split_index_types)
         .def("to_einsum", &WickExpr::to_einsum, py::arg("x"),
-             py::arg("first_eq") = false)
+             py::arg("first_eq") = false,
+             py::arg("intermediate_name") = string(""))
         .def_static("to_einsum_add_indent", &WickExpr::to_einsum_add_indent,
                     py::arg("x"), py::arg("indent") = 4)
         .def("substitute", &WickExpr::substitute)
@@ -546,8 +547,10 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("get_intermediate_start", &WickGraph::get_intermediate_start)
         .def("simplify_binary_sort", &WickGraph::simplify_binary_sort)
         .def("simplify_binary_split", &WickGraph::simplify_binary_split)
-        .def("simplify_binary_unique", &WickGraph::simplify_binary_unique)
-        .def("simplify_binary_factor", &WickGraph::simplify_binary_factor)
+        .def("simplify_binary_unique", &WickGraph::simplify_binary_unique,
+             py::arg("iprint") = 0)
+        .def("simplify_binary_factor", &WickGraph::simplify_binary_factor,
+             py::arg("iprint") = 0)
         .def("simplify_permutations", &WickGraph::simplify_permutations)
         .def("expand_permutations", &WickGraph::expand_permutations)
         .def("expand_binary", &WickGraph::expand_binary)

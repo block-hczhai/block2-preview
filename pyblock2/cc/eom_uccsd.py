@@ -21,9 +21,9 @@ UHF/EOM-CCSD (EE/IP/EA) in spatial orbitals with equations derived on the fly.
 """
 
 try:
-    from .uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+    from .uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations, WickGraph
 except ImportError:
-    from uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations
+    from uccsd import h4, ex1a, ex1b, ex2aa, ex2ab, ex2ba, ex2bb, P, PT, NR, FC, fix_eri_permutations, WickGraph
 import numpy as np
 import functools
 
@@ -92,6 +92,18 @@ eomee_r2ab_diag_eq = FC(ex2ab * (h4 ^ ex2ab.conjugate()))
 eomee_r2ba_diag_eq = FC(ex2ba * (h4 ^ ex2ba.conjugate()))
 eomee_r2bb_diag_eq = FC(ex2bb * (h4 ^ ex2bb.conjugate()))
 
+gr_eomee_eq = WickGraph()
+for tn, eq in zip(["hra[ia]", "hrb[IA]", "hraa[ijab]", "hrab[iJaB]", "hrbb[IJAB]"],
+    [eomee_r1a_eq, eomee_r1b_eq, eomee_r2aa_eq, eomee_r2ab_eq, eomee_r2bb_eq]):
+    gr_eomee_eq.add_term(PT(tn), eq)
+gr_eomee_eq = gr_eomee_eq.simplify()
+
+gr_eomee_diag_eq = WickGraph()
+for tn, eq in zip(["hra[ia]", "hrb[IA]", "hraa[ijab]", "hrab[iJaB]", "hrbb[IJAB]"],
+    [eomee_r1a_diag_eq, eomee_r1b_diag_eq, eomee_r2aa_diag_eq, eomee_r2ab_diag_eq, eomee_r2bb_diag_eq]):
+    gr_eomee_diag_eq.add_term(PT(tn), eq)
+gr_eomee_diag_eq = gr_eomee_diag_eq.simplify()
+
 # eom-ip-ccsd
 h4r = SP((h4 ^ rip).expand(4))
 rh4 = SP((rip.conjugate() * h4).expand(4))
@@ -113,6 +125,26 @@ eomip_r2aa_diag_eq = FC(exip2aa * (h4 ^ exip2aa.conjugate()))
 eomip_r2ab_diag_eq = FC(exip2ab * (h4 ^ exip2ab.conjugate()))
 eomip_r2ba_diag_eq = FC(exip2ba * (h4 ^ exip2ba.conjugate()))
 eomip_r2bb_diag_eq = FC(exip2bb * (h4 ^ exip2bb.conjugate()))
+
+gr_eomip_eq = WickGraph()
+for tn, eq in zip(["hra[i]", "hrb[I]", "hraaa[ijb]", "hrabb[iJB]", "hrbaa[Ijb]", "hrbbb[IJB]"],
+    [eomip_r1a_eq, eomip_r1b_eq, eomip_r2aa_eq, eomip_r2ab_eq, eomip_r2ba_eq, eomip_r2bb_eq]):
+    gr_eomip_eq.add_term(PT(tn), eq)
+gr_eomip_eq = gr_eomip_eq.simplify()
+
+gr_eomip_left_eq = WickGraph()
+for tn, eq in zip(["hra[i]", "hrb[I]", "hraaa[ijb]", "hrabb[iJB]", "hrbaa[Ijb]", "hrbbb[IJB]"],
+    [eomip_r1a_left_eq, eomip_r1b_left_eq, eomip_r2aa_left_eq, eomip_r2ab_left_eq,
+    eomip_r2ba_left_eq, eomip_r2bb_left_eq]):
+    gr_eomip_left_eq.add_term(PT(tn), eq)
+gr_eomip_left_eq = gr_eomip_left_eq.simplify()
+
+gr_eomip_diag_eq = WickGraph()
+for tn, eq in zip(["hra[i]", "hrb[I]", "hraaa[ijb]", "hrabb[iJB]", "hrbaa[Ijb]", "hrbbb[IJB]"],
+    [eomip_r1a_diag_eq, eomip_r1b_diag_eq, eomip_r2aa_diag_eq, eomip_r2ab_diag_eq,
+    eomip_r2ba_diag_eq, eomip_r2bb_diag_eq]):
+    gr_eomip_diag_eq.add_term(PT(tn), eq)
+gr_eomip_diag_eq = gr_eomip_diag_eq.simplify()
 
 # eom-ea-ccsd
 h4r = SP((h4 ^ rea).expand(4))
@@ -136,55 +168,35 @@ eomea_r2ab_diag_eq = FC(exea2ab * (h4 ^ exea2ab.conjugate()))
 eomea_r2ba_diag_eq = FC(exea2ba * (h4 ^ exea2ba.conjugate()))
 eomea_r2bb_diag_eq = FC(exea2bb * (h4 ^ exea2bb.conjugate()))
 
+gr_eomea_eq = WickGraph()
+for tn, eq in zip(["hra[a]", "hrb[A]", "hraaa[jab]", "hraba[jAb]", "hrbab[JaB]", "hrbbb[JAB]"],
+    [eomea_r1a_eq, eomea_r1b_eq, eomea_r2aa_eq, eomea_r2ba_eq, eomea_r2ab_eq, eomea_r2bb_eq]):
+    gr_eomea_eq.add_term(PT(tn), eq)
+gr_eomea_eq = gr_eomea_eq.simplify()
+
+gr_eomea_left_eq = WickGraph()
+for tn, eq in zip(["hra[a]", "hrb[A]", "hraaa[jab]", "hraba[jAb]", "hrbab[JaB]", "hrbbb[JAB]"],
+    [eomea_r1a_left_eq, eomea_r1b_left_eq, eomea_r2aa_left_eq, eomea_r2ba_left_eq,
+    eomea_r2ab_left_eq, eomea_r2bb_left_eq]):
+    gr_eomea_left_eq.add_term(PT(tn), eq)
+gr_eomea_left_eq = gr_eomea_left_eq.simplify()
+
+gr_eomea_diag_eq = WickGraph()
+for tn, eq in zip(["hra[a]", "hrb[A]", "hraaa[jab]", "hraba[jAb]", "hrbab[JaB]", "hrbbb[JAB]"],
+    [eomea_r1a_diag_eq, eomea_r1b_diag_eq, eomea_r2aa_diag_eq, eomea_r2ba_diag_eq,
+    eomea_r2ab_diag_eq, eomea_r2bb_diag_eq]):
+    gr_eomea_diag_eq.add_term(PT(tn), eq)
+gr_eomea_diag_eq = gr_eomea_diag_eq.simplify()
+
 for eq in [
-    eomee_r1a_eq,
-    eomee_r1b_eq,
-    eomee_r2aa_eq,
-    eomee_r2ab_eq,
-    eomee_r2ba_eq,
-    eomee_r2bb_eq,
-    eomee_r1a_diag_eq,
-    eomee_r1b_diag_eq,
-    eomee_r2aa_diag_eq,
-    eomee_r2ab_diag_eq,
-    eomee_r2ba_diag_eq,
-    eomee_r2bb_diag_eq,
-    eomip_r1a_eq,
-    eomip_r1b_eq,
-    eomip_r2aa_eq,
-    eomip_r2ab_eq,
-    eomip_r2ba_eq,
-    eomip_r2bb_eq,
-    eomip_r1a_left_eq,
-    eomip_r1b_left_eq,
-    eomip_r2aa_left_eq,
-    eomip_r2ab_left_eq,
-    eomip_r2ba_left_eq,
-    eomip_r2bb_left_eq,
-    eomip_r1a_diag_eq,
-    eomip_r1b_diag_eq,
-    eomip_r2aa_diag_eq,
-    eomip_r2ab_diag_eq,
-    eomip_r2ba_diag_eq,
-    eomip_r2bb_diag_eq,
-    eomea_r1a_eq,
-    eomea_r1b_eq,
-    eomea_r2aa_eq,
-    eomea_r2ab_eq,
-    eomea_r2ba_eq,
-    eomea_r2bb_eq,
-    eomea_r1a_left_eq,
-    eomea_r1b_left_eq,
-    eomea_r2aa_left_eq,
-    eomea_r2ab_left_eq,
-    eomea_r2ba_left_eq,
-    eomea_r2bb_left_eq,
-    eomea_r1a_diag_eq,
-    eomea_r1b_diag_eq,
-    eomea_r2aa_diag_eq,
-    eomea_r2ab_diag_eq,
-    eomea_r2ba_diag_eq,
-    eomea_r2bb_diag_eq,
+    gr_eomee_eq,
+    gr_eomee_diag_eq,
+    gr_eomip_eq,
+    gr_eomip_left_eq,
+    gr_eomip_diag_eq,
+    gr_eomea_eq,
+    gr_eomea_left_eq,
+    gr_eomea_diag_eq,
 ]:
     fix_eri_permutations(eq)
 
@@ -274,11 +286,7 @@ def wick_eomccsd_diag(eom, eq_type, imds=None):
         hr2aa = np.zeros((nocca, nocca, nvira, nvira), dtype=t2[0].dtype)
         hr2ab = np.zeros((nocca, noccb, nvira, nvirb), dtype=t2[1].dtype)
         hr2bb = np.zeros((noccb, noccb, nvirb, nvirb), dtype=t2[2].dtype)
-        eom_eq = eomee_r1a_diag_eq.to_einsum(PT("hra[ia]"))
-        eom_eq += eomee_r1b_diag_eq.to_einsum(PT("hrb[IA]"))
-        eom_eq += eomee_r2aa_diag_eq.to_einsum(PT("hraa[ijab]"))
-        eom_eq += eomee_r2ab_diag_eq.to_einsum(PT("hrab[iJaB]"))
-        eom_eq += eomee_r2bb_diag_eq.to_einsum(PT("hrbb[IJAB]"))
+        eom_eq = gr_eomee_diag_eq.to_einsum()
         hr_amps = {
             "hra": hr1a,
             "hrb": hr1b,
@@ -295,12 +303,7 @@ def wick_eomccsd_diag(eom, eq_type, imds=None):
         hr2abb = np.zeros((nocca, noccb, nvirb), dtype=t2[1].dtype)
         hr2baa = np.zeros((noccb, nocca, nvira), dtype=t2[1].dtype)
         hr2bbb = np.zeros((noccb, noccb, nvirb), dtype=t2[2].dtype)
-        eom_eq = eomip_r1a_diag_eq.to_einsum(PT("hra[i]"))
-        eom_eq += eomip_r1b_diag_eq.to_einsum(PT("hrb[I]"))
-        eom_eq += eomip_r2aa_diag_eq.to_einsum(PT("hraaa[ijb]"))
-        eom_eq += eomip_r2ab_diag_eq.to_einsum(PT("hrabb[iJB]"))
-        eom_eq += eomip_r2ba_diag_eq.to_einsum(PT("hrbaa[Ijb]"))
-        eom_eq += eomip_r2bb_diag_eq.to_einsum(PT("hrbbb[IJB]"))
+        eom_eq = gr_eomip_diag_eq.to_einsum()
         hr_amps = {
             "hra": hr1a,
             "hrb": hr1b,
@@ -318,12 +321,7 @@ def wick_eomccsd_diag(eom, eq_type, imds=None):
         hr2aba = np.zeros((nocca, nvirb, nvira), dtype=t2[1].dtype)
         hr2bab = np.zeros((noccb, nvira, nvirb), dtype=t2[1].dtype)
         hr2bbb = np.zeros((noccb, nvirb, nvirb), dtype=t2[2].dtype)
-        eom_eq = eomea_r1a_diag_eq.to_einsum(PT("hra[a]"))
-        eom_eq += eomea_r1b_diag_eq.to_einsum(PT("hrb[A]"))
-        eom_eq += eomea_r2aa_diag_eq.to_einsum(PT("hraaa[jab]"))
-        eom_eq += eomea_r2ba_diag_eq.to_einsum(PT("hraba[jAb]"))
-        eom_eq += eomea_r2ab_diag_eq.to_einsum(PT("hrbab[JaB]"))
-        eom_eq += eomea_r2bb_diag_eq.to_einsum(PT("hrbbb[JAB]"))
+        eom_eq = gr_eomea_diag_eq.to_einsum()
         hr_amps = {
             "hra": hr1a,
             "hrb": hr1b,
@@ -355,11 +353,7 @@ def wick_eomccsd_matvec(eom, eq_type, vector, imds=None, diag=None):
         hr2aa = np.zeros_like(r2aa)
         hr2ab = np.zeros_like(r2ab)
         hr2bb = np.zeros_like(r2bb)
-        eom_eq = eomee_r1a_eq.to_einsum(PT("hra[ia]"))
-        eom_eq += eomee_r1b_eq.to_einsum(PT("hrb[IA]"))
-        eom_eq += eomee_r2aa_eq.to_einsum(PT("hraa[ijab]"))
-        eom_eq += eomee_r2ab_eq.to_einsum(PT("hrab[iJaB]"))
-        eom_eq += eomee_r2bb_eq.to_einsum(PT("hrbb[IJAB]"))
+        eom_eq = gr_eomee_eq.to_einsum()
         r_amps = {
             "raie": r1a,
             "rbIE": r1b,
@@ -386,19 +380,9 @@ def wick_eomccsd_matvec(eom, eq_type, vector, imds=None, diag=None):
         hr2baa = np.zeros_like(r2baa)
         hr2bbb = np.zeros_like(r2bbb)
         if eq_type == "ip":
-            eom_eq = eomip_r1a_eq.to_einsum(PT("hra[i]"))
-            eom_eq += eomip_r1b_eq.to_einsum(PT("hrb[I]"))
-            eom_eq += eomip_r2aa_eq.to_einsum(PT("hraaa[ijb]"))
-            eom_eq += eomip_r2ab_eq.to_einsum(PT("hrabb[iJB]"))
-            eom_eq += eomip_r2ba_eq.to_einsum(PT("hrbaa[Ijb]"))
-            eom_eq += eomip_r2bb_eq.to_einsum(PT("hrbbb[IJB]"))
+            eom_eq = gr_eomip_eq.to_einsum()
         else:
-            eom_eq = eomip_r1a_left_eq.to_einsum(PT("hra[i]"))
-            eom_eq += eomip_r1b_left_eq.to_einsum(PT("hrb[I]"))
-            eom_eq += eomip_r2aa_left_eq.to_einsum(PT("hraaa[ijb]"))
-            eom_eq += eomip_r2ab_left_eq.to_einsum(PT("hrabb[iJB]"))
-            eom_eq += eomip_r2ba_left_eq.to_einsum(PT("hrbaa[Ijb]"))
-            eom_eq += eomip_r2bb_left_eq.to_einsum(PT("hrbbb[IJB]"))
+            eom_eq = gr_eomip_left_eq.to_einsum()
         r_amps = {
             "rai": r1a,
             "rbI": r1b,
@@ -427,19 +411,9 @@ def wick_eomccsd_matvec(eom, eq_type, vector, imds=None, diag=None):
         hr2bab = np.zeros_like(r2bab)
         hr2bbb = np.zeros_like(r2bbb)
         if eq_type == "ea":
-            eom_eq = eomea_r1a_eq.to_einsum(PT("hra[a]"))
-            eom_eq += eomea_r1b_eq.to_einsum(PT("hrb[A]"))
-            eom_eq += eomea_r2aa_eq.to_einsum(PT("hraaa[jab]"))
-            eom_eq += eomea_r2ba_eq.to_einsum(PT("hraba[jAb]"))
-            eom_eq += eomea_r2ab_eq.to_einsum(PT("hrbab[JaB]"))
-            eom_eq += eomea_r2bb_eq.to_einsum(PT("hrbbb[JAB]"))
+            eom_eq = gr_eomea_eq.to_einsum()
         else:
-            eom_eq = eomea_r1a_left_eq.to_einsum(PT("hra[a]"))
-            eom_eq += eomea_r1b_left_eq.to_einsum(PT("hrb[A]"))
-            eom_eq += eomea_r2aa_left_eq.to_einsum(PT("hraaa[jab]"))
-            eom_eq += eomea_r2ba_left_eq.to_einsum(PT("hraba[jAb]"))
-            eom_eq += eomea_r2ab_left_eq.to_einsum(PT("hrbab[JaB]"))
-            eom_eq += eomea_r2bb_left_eq.to_einsum(PT("hrbbb[JAB]"))
+            eom_eq = gr_eomea_left_eq.to_einsum()
         r_amps = {
             "rae": r1a,
             "rbE": r1b,

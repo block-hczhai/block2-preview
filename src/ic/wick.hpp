@@ -1510,9 +1510,22 @@ struct WickExpr {
             os << we.terms[i] << endl;
         return os;
     }
-    string to_einsum(const WickTensor &x, bool first_eq = false) const {
+    string to_einsum(const WickTensor &x, bool first_eq = false,
+                     const string &intermediate_name = "") const {
         stringstream ss;
         bool first = true;
+        bool has_br = false;
+        for (auto &term : terms) {
+            set<WickIndex> gstr;
+            for (auto &wt : term.tensors)
+                for (auto &wi : wt.indices)
+                    gstr.insert(wi);
+            int n_br = 0;
+            for (auto &wi : x.indices)
+                n_br += !gstr.count(wi);
+            if (has_br = (n_br > 0))
+                break;
+        }
         for (auto &term : terms) {
             map<WickIndex, string> mp;
             set<string> pstr, gstr;
@@ -1539,7 +1552,14 @@ struct WickExpr {
                         x[0]++;
                     mp[wi] = x, pstr.insert(x);
                 }
-            ss << x.name << (first_eq ? " = " : " += ");
+            if (first_eq)
+                ss << x.name << " = ";
+            else if (!has_br || intermediate_name == "" ||
+                     x.name.substr(0, intermediate_name.length()) !=
+                         intermediate_name)
+                ss << x.name << " += ";
+            else
+                ss << x.name << " = " << x.name << " + ";
             first_eq = false;
             int n_const = 0;
             for (auto &wt : term.tensors)
@@ -1593,7 +1613,10 @@ struct WickExpr {
                     continue;
                 ss << ", " << wt.name;
                 if (wt.type == WickTensorTypes::KroneckerDelta ||
-                    wt.type == WickTensorTypes::Tensor)
+                    wt.type == WickTensorTypes::Tensor &&
+                        (intermediate_name == "" ||
+                         wt.name.substr(0, intermediate_name.length()) !=
+                             intermediate_name))
                     for (auto &wi : wt.indices)
                         ss << to_str(wi.types);
             }
@@ -2877,31 +2900,43 @@ struct WickGraph {
         return gr;
     }
     // delete/merge duplicate binary contractions
-    WickGraph simplify_binary_unique() const {
+    WickGraph simplify_binary_unique(int iprint = 0) const {
         vector<pair<pair<WickTensor, WickExpr>,
                     vector<pair<double, map<string, string>>>>>
             new_terms;
-        vector<pair<WickTensor, WickExpr>> uniq_terms;
+        vector<pair<WickTensor, int>> uniq_terms;
         map<pair<string, int>, pair<pair<string, vector<int>>, double>>
             dup_index_perms;
+        vector<vector<WickString>> sorted(n_terms());
+        vector<pair<int, int>> sorted_idx;
+        for (int ix = 0; ix < n_terms(); ix++) {
+            if (index_maps[ix].size() != 1)
+                continue;
+            for (int ig = 0; ig < (int)right[ix].terms.size(); ig++)
+                sorted_idx.push_back(make_pair(ix, ig));
+            sorted[ix].resize(right[ix].terms.size());
+        }
+        int ntg = threading->activate_global();
+#pragma omp parallel for schedule(static) num_threads(ntg)
+        for (int k = 0; k < (int)sorted_idx.size(); k++) {
+            int ix = sorted_idx[k].first, ig = sorted_idx[k].second;
+            sorted[ix][ig] = right[ix].terms[ig].abs().quick_sort();
+        }
+        threading->activate_normal();
         for (int ix = 0; ix < n_terms(); ix++) {
             if (index_maps[ix].size() != 1) {
                 new_terms.push_back(
                     make_pair(make_pair(left[ix], right[ix]), index_maps[ix]));
                 continue;
             }
-            vector<WickString> gg;
-            for (auto &gt : right[ix].terms)
-                gg.push_back(gt.abs().quick_sort());
+            const vector<WickString> &gg = sorted[ix];
             bool ufound = false;
             for (auto &ut : uniq_terms) {
-                vector<WickString> uu;
-                for (auto &gt : ut.second.terms)
-                    uu.push_back(gt.abs().quick_sort());
+                const vector<WickString> &uu = sorted[ut.second];
                 bool ok = true;
                 for (size_t igu = 0; igu < gg.size() && ok; igu++) {
-                    WickString &g = gg[igu], &u = uu[igu];
-                    if (right[ix].terms.size() != ut.second.terms.size() ||
+                    const WickString &g = gg[igu], &u = uu[igu];
+                    if (right[ix].terms.size() != uu.size() ||
                         g.ctr_indices.size() != u.ctr_indices.size() ||
                         g.tensors.size() != u.tensors.size())
                         ok = false;
@@ -2920,9 +2955,10 @@ struct WickGraph {
                 }
                 if (!ok)
                     continue;
+                // FIXME: here need to consider tensor permutations
                 map<WickIndex, WickIndex> gtu, gtuctr;
                 if (gg.size() > 0) {
-                    WickString &g = gg[0], &u = uu[0];
+                    const WickString &g = gg[0], &u = uu[0];
                     for (int ip = 0; ip < (int)g.tensors.size() && ok; ip++)
                         for (size_t ig = 0;
                              ig < g.tensors[ip].indices.size() && ok; ig++)
@@ -2936,23 +2972,33 @@ struct WickGraph {
                                             u.tensors[ip].indices[ig].types)))
                                     break;
                                 if (!g.ctr_indices.count(
-                                        g.tensors[ip].indices[ig]))
-                                    gtu[g.tensors[ip].indices[ig]] =
-                                        u.tensors[ip].indices[ig];
-                                else if (!gtuctr.count(
-                                             g.tensors[ip].indices[ig]))
-                                    gtuctr[g.tensors[ip].indices[ig]] =
-                                        u.tensors[ip].indices[ig];
-                                else if (!(ok = (gtuctr.at(g.tensors[ip]
+                                        g.tensors[ip].indices[ig])) {
+                                    if (!gtu.count(g.tensors[ip].indices[ig]))
+                                        gtu[g.tensors[ip].indices[ig]] =
+                                            u.tensors[ip].indices[ig];
+                                    else if (!(ok =
+                                                   (gtu.at(g.tensors[ip]
                                                                .indices[ig]) ==
-                                                 u.tensors[ip].indices[ig])))
-                                    break;
+                                                    u.tensors[ip].indices[ig])))
+                                        break;
+                                } else {
+                                    if (!gtuctr.count(
+                                            g.tensors[ip].indices[ig]))
+                                        gtuctr[g.tensors[ip].indices[ig]] =
+                                            u.tensors[ip].indices[ig];
+                                    else if (!(ok =
+                                                   (gtuctr.at(
+                                                        g.tensors[ip]
+                                                            .indices[ig]) ==
+                                                    u.tensors[ip].indices[ig])))
+                                        break;
+                                }
                             }
                 }
                 if (!ok || gtu.size() != left[ix].indices.size())
                     continue;
                 for (size_t igu = 1; igu < gg.size() && ok; igu++) {
-                    WickString &g = gg[igu], &u = uu[igu];
+                    const WickString &g = gg[igu], &u = uu[igu];
                     for (int ip = 0; ip < (int)g.tensors.size() && ok; ip++)
                         for (size_t ig = 0;
                              ig < g.tensors[ip].indices.size() && ok; ig++)
@@ -2977,11 +3023,11 @@ struct WickGraph {
                                     break;
                             }
                     ok = ok || (abs(right[ix].terms[0].factor *
-                                        ut.second.terms[igu].factor *
+                                        right[ut.second].terms[igu].factor *
                                         gg[0].factor * uu[0].factor -
                                     right[ix].terms[igu].factor *
-                                        ut.second.terms[0].factor * g.factor *
-                                        u.factor) < 1E-12);
+                                        right[ut.second].terms[0].factor *
+                                        g.factor * u.factor) < 1E-12);
                 }
                 if (!ok)
                     continue;
@@ -2996,23 +3042,32 @@ struct WickGraph {
                                           left[ix].indices.size())] =
                     make_pair(make_pair(ut.first.name, pgw),
                               right[ix].terms[0].factor /
-                                  ut.second.terms[0].factor * gg[0].factor *
-                                  uu[0].factor);
-                cout << "found equal = " << left[ix].name << " -> "
-                     << ut.first.name << " ";
-                for (int i = 0; i < pgw.size(); i++)
-                    cout << pgw[i] << " ";
-                cout << " f = "
-                     << (right[ix].terms[0].factor / ut.second.terms[0].factor *
-                         gg[0].factor * uu[0].factor)
-                     << endl;
+                                  right[ut.second].terms[0].factor *
+                                  gg[0].factor * uu[0].factor);
+                if (iprint) {
+                    cout << "found equal = " << left[ix].name << " -> "
+                         << ut.first.name << " ";
+                    for (int i = 0; i < pgw.size(); i++)
+                        cout << pgw[i] << " ";
+                    cout << " f = "
+                         << (right[ix].terms[0].factor /
+                             right[ut.second].terms[0].factor * gg[0].factor *
+                             uu[0].factor)
+                         << endl;
+                }
                 ufound = true;
                 break;
             }
             if (!ufound)
-                uniq_terms.push_back(make_pair(left[ix], right[ix]));
+                uniq_terms.push_back(make_pair(left[ix], ix));
         }
-        WickGraph gr = WickGraph::from_expr(uniq_terms);
+        WickGraph gr;
+        for (auto &wt : uniq_terms) {
+            gr.left.push_back(wt.first);
+            gr.right.push_back(right[wt.second]);
+            gr.index_maps.push_back(vector<pair<double, map<string, string>>>{
+                make_pair(1.0, map<string, string>())});
+        }
         for (auto &wt : new_terms) {
             gr.left.push_back(wt.first.first);
             gr.right.push_back(wt.first.second);
@@ -3036,7 +3091,7 @@ struct WickGraph {
         return dup_index_perms.size() == 0 ? gr : gr.simplify_binary_unique();
     }
     // for each expr, detect common factors
-    WickGraph simplify_binary_factor() const {
+    WickGraph simplify_binary_factor(int iprint = 0) const {
         WickGraph gr;
         int tmp_start = get_intermediate_start();
         for (int ix = 0; ix < n_terms(); ix++) {
@@ -3153,8 +3208,9 @@ struct WickGraph {
                                         make_pair(wc, WickExpr(rw)));
                                     wr.factor = 1.0;
                                     wr.tensors[!iwr] = wc;
-                                    cout << "found " << wc << " = "
-                                         << new_terms.back().second << endl;
+                                    if (iprint)
+                                        cout << "found " << wc << " = "
+                                             << new_terms.back().second << endl;
                                     found = true;
                                     break;
                                 }
@@ -3527,8 +3583,8 @@ struct WickGraph {
                 nwg.left[ix].name.substr(0, intermediate_name.length()) ==
                 intermediate_name;
             if (need_einsum)
-                ss << nwg.right[ix].to_einsum(nwg.left[ix],
-                                              is_int && long_first[ix]);
+                ss << nwg.right[ix].to_einsum(
+                    nwg.left[ix], is_int && long_first[ix], intermediate_name);
             else {
                 for (int ip = 0; ip < (int)nwg.right[ix].terms.size(); ip++) {
                     bool is_eq = ip == 0 && is_int && long_first[ix];
@@ -3705,7 +3761,13 @@ struct WickGraph {
                 ss << intermediate_name << tmp_start << " = "
                    << nwg.left[ix].name << ".copy()\n";
                 for (int ii = 0; ii < (int)nwg.index_maps[ix].size(); ii++) {
-                    ss << nwg.left[ix].name << (ii == 0 ? "[:] = " : " += ");
+                    if (ii == 0)
+                        ss << nwg.left[ix].name << "[:] = ";
+                    else if (is_int && need_einsum)
+                        ss << nwg.left[ix].name << " = " << nwg.left[ix].name
+                           << " + ";
+                    else
+                        ss << nwg.left[ix].name << " += ";
                     if (nwg.index_maps[ix][ii].first != 1.0)
                         ss << nwg.index_maps[ix][ii].first << " * ";
                     ss << intermediate_name << tmp_start;
