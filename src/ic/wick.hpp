@@ -1524,7 +1524,7 @@ struct WickExpr {
             int n_br = 0;
             for (auto &wi : x.indices)
                 n_br += !gstr.count(wi);
-            if (has_br = (n_br > 0))
+            if ((has_br = (n_br > 0)))
                 break;
         }
         for (auto &term : terms) {
@@ -3423,6 +3423,7 @@ struct WickGraph {
             if (uroots[i] == 0)
                 tt.push_back(i);
         size_t tx = 0;
+        array<double, 4> empty = {};
         auto fw = [&tscale, &uout, &inv_edges, &edges, &uroots,
                    &mscale](int a) -> array<double, 4> {
             double rs = 0.0, rd = 0.0, rp = 0.0, rg = 0.0;
@@ -3493,7 +3494,7 @@ struct WickGraph {
                 int nsz = 0;
                 for (auto &wt : term.tensors)
                     nsz += wt.indices.size() != 0;
-                if (need_einsum = nsz > 2)
+                if ((need_einsum = nsz > 2))
                     break;
                 if (term.ctr_indices.size() == 0)
                     continue;
@@ -3502,14 +3503,14 @@ struct WickGraph {
                     for (auto &wi : wt.indices)
                         idx_cnt[wi]++;
                 for (auto &wi : idx_cnt)
-                    if (need_einsum = (wi.second > 2 ||
-                                       (wi.second == 2 &&
-                                        !term.ctr_indices.count(wi.first))))
+                    if ((need_einsum = (wi.second > 2 ||
+                                        (wi.second == 2 &&
+                                         !term.ctr_indices.count(wi.first)))))
                         break;
                 if (need_einsum)
                     break;
                 for (auto &wi : left_idx)
-                    if (need_einsum = (idx_cnt.count(wi) != 1))
+                    if ((need_einsum = (idx_cnt.count(wi) != 1)))
                         break;
                 if (need_einsum)
                     break;

@@ -119,14 +119,14 @@ jobs:
       - name: run test (serial-pytest, linux)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
-          python -m pip install pytest 'pyscf==2.1.0'
+          python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-11'
         run: |
-          python -m pip install pytest 'pyscf==2.0.1'
+          python -m pip install pytest 'pyscf==2.0.1' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
 
