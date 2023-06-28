@@ -24,7 +24,7 @@
 
 #include "../core/parallel_rule.hpp"
 #include "../core/spin_permutation.hpp"
-#include "general_mpo.hpp"
+#include "general_hamiltonian.hpp"
 #include "mpo.hpp"
 #include <array>
 #include <cstring>

@@ -26,6 +26,7 @@
 #include "../dmrg/dmrg_driver.hpp"
 #include "../dmrg/effective_functions.hpp"
 #include "../dmrg/effective_hamiltonian.hpp"
+#include "../dmrg/general_hamiltonian.hpp"
 #include "../dmrg/general_mpo.hpp"
 #include "../dmrg/general_npdm.hpp"
 #include "../dmrg/moving_environment.hpp"
@@ -85,13 +86,14 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SU2, double>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SU2, double, block2::MultiMPS<block2::SU2, double>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralFCIDUMP<double>;
 
 extern template struct block2::GeneralHamiltonian<block2::SZ, double>;
-extern template struct block2::GeneralMPO<block2::SZ, double>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2, double>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZ, double>;
 extern template struct block2::GeneralMPO<block2::SU2, double>;
 
 // general_npdm.hpp
@@ -292,11 +294,12 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SU2K, double>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SU2K, double, block2::MultiMPS<block2::SU2K, double>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SZK, double>;
-extern template struct block2::GeneralMPO<block2::SZK, double>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2K, double>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZK, double>;
 extern template struct block2::GeneralMPO<block2::SU2K, double>;
 
 // general_npdm.hpp
@@ -494,11 +497,12 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SGB, double>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SGB, double, block2::MultiMPS<block2::SGB, double>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SGF, double>;
-extern template struct block2::GeneralMPO<block2::SGF, double>;
-
 extern template struct block2::GeneralHamiltonian<block2::SGB, double>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SGF, double>;
 extern template struct block2::GeneralMPO<block2::SGB, double>;
 
 // general_npdm.hpp
@@ -698,13 +702,14 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SU2, complex<double>,
     block2::MultiMPS<block2::SU2, complex<double>>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralFCIDUMP<complex<double>>;
 
 extern template struct block2::GeneralHamiltonian<block2::SZ, complex<double>>;
-extern template struct block2::GeneralMPO<block2::SZ, complex<double>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2, complex<double>>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZ, complex<double>>;
 extern template struct block2::GeneralMPO<block2::SU2, complex<double>>;
 
 // general_npdm.hpp
@@ -907,12 +912,13 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SU2K, complex<double>,
     block2::MultiMPS<block2::SU2K, complex<double>>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SZK, complex<double>>;
-extern template struct block2::GeneralMPO<block2::SZK, complex<double>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2K,
                                                   complex<double>>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZK, complex<double>>;
 extern template struct block2::GeneralMPO<block2::SU2K, complex<double>>;
 
 // general_npdm.hpp
@@ -1117,11 +1123,12 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SGB, complex<double>,
     block2::MultiMPS<block2::SGB, complex<double>>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SGF, complex<double>>;
-extern template struct block2::GeneralMPO<block2::SGF, complex<double>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SGB, complex<double>>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SGF, complex<double>>;
 extern template struct block2::GeneralMPO<block2::SGB, complex<double>>;
 
 // general_npdm.hpp
@@ -1320,13 +1327,14 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SU2, float>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SU2, float, block2::MultiMPS<block2::SU2, float>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralFCIDUMP<float>;
 
 extern template struct block2::GeneralHamiltonian<block2::SZ, float>;
-extern template struct block2::GeneralMPO<block2::SZ, float>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2, float>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZ, float>;
 extern template struct block2::GeneralMPO<block2::SU2, float>;
 
 // general_npdm.hpp
@@ -1505,11 +1513,12 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SGB, float>;
 extern template struct block2::EffectiveHamiltonian<
     block2::SGB, float, block2::MultiMPS<block2::SGB, float>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SGF, float>;
-extern template struct block2::GeneralMPO<block2::SGF, float>;
-
 extern template struct block2::GeneralHamiltonian<block2::SGB, float>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SGF, float>;
 extern template struct block2::GeneralMPO<block2::SGB, float>;
 
 // general_npdm.hpp
@@ -1695,13 +1704,14 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SU2,
 extern template struct block2::EffectiveHamiltonian<
     block2::SU2, complex<float>, block2::MultiMPS<block2::SU2, complex<float>>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralFCIDUMP<complex<float>>;
 
 extern template struct block2::GeneralHamiltonian<block2::SZ, complex<float>>;
-extern template struct block2::GeneralMPO<block2::SZ, complex<float>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SU2, complex<float>>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SZ, complex<float>>;
 extern template struct block2::GeneralMPO<block2::SU2, complex<float>>;
 
 // general_npdm.hpp
@@ -1901,11 +1911,12 @@ extern template struct block2::LinearEffectiveHamiltonian<block2::SGB,
 extern template struct block2::EffectiveHamiltonian<
     block2::SGB, complex<float>, block2::MultiMPS<block2::SGB, complex<float>>>;
 
-// general_mpo.hpp
+// general_hamiltonian.hpp
 extern template struct block2::GeneralHamiltonian<block2::SGF, complex<float>>;
-extern template struct block2::GeneralMPO<block2::SGF, complex<float>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SGB, complex<float>>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SGF, complex<float>>;
 extern template struct block2::GeneralMPO<block2::SGB, complex<float>>;
 
 // general_npdm.hpp

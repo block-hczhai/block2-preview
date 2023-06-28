@@ -25,6 +25,7 @@
 #include "dmrg/dmrg_driver.hpp"
 #include "dmrg/effective_functions.hpp"
 #include "dmrg/effective_hamiltonian.hpp"
+#include "dmrg/general_hamiltonian.hpp"
 #include "dmrg/general_mpo.hpp"
 #include "dmrg/general_npdm.hpp"
 #include "dmrg/moving_environment.hpp"

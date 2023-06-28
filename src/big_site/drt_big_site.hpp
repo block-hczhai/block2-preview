@@ -24,7 +24,7 @@
 #include "../core/cg.hpp"
 #include "../core/state_info.hpp"
 #include "../core/threading.hpp"
-#include "../dmrg/general_mpo.hpp"
+#include "../dmrg/general_hamiltonian.hpp"
 #include "big_site.hpp"
 #include <array>
 #include <cassert>
