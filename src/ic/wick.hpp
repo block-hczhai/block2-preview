@@ -3423,9 +3423,8 @@ struct WickGraph {
             if (uroots[i] == 0)
                 tt.push_back(i);
         size_t tx = 0;
-        array<double, 4> empty = {};
         auto fw = [&tscale, &uout, &inv_edges, &edges, &uroots,
-                   &mscale](int a) -> array<double, 4> {
+                   &mscale](int a) -> vector<double> {
             double rs = 0.0, rd = 0.0, rp = 0.0, rg = 0.0;
             for (auto &g : inv_edges[a])
                 rs -= (uout[g] == 1) * tscale[g],
@@ -3435,10 +3434,10 @@ struct WickGraph {
                     rp -= (gg != a && uroots[gg] == 0) * tscale[g];
                 rg -= (uout[g] == 1) * tscale[g];
             }
-            return array<double, 4>{rs == 0.0 ? mscale : rs + tscale[a],
-                                    rd == 0.0 ? mscale : rd + tscale[a],
-                                    rp == 0.0 ? mscale : rp + tscale[a],
-                                    rg == 0.0 ? mscale : rg + tscale[a]};
+            return vector<double>{rs == 0.0 ? mscale : rs + tscale[a],
+                                  rd == 0.0 ? mscale : rd + tscale[a],
+                                  rp == 0.0 ? mscale : rp + tscale[a],
+                                  rg == 0.0 ? mscale : rg + tscale[a]};
         };
         while (tx != tt.size()) {
             sort(tt.begin() + tx, tt.end(),
