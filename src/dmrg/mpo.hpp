@@ -1182,12 +1182,11 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
     shared_ptr<MPO<S, FL>> prim_mpo;
     AncillaMPO(const shared_ptr<MPO<S, FL>> &mpo, bool npdm = false,
                bool trace_right = true, const string &tag = "")
-        : n_physical_sites(mpo->n_sites),
-          prim_mpo(mpo), MPO<S, FL>(mpo->n_sites << 1,
-                                    tag == "" ? mpo->tag + "@ANC" : tag) {
+        : n_physical_sites(mpo->n_sites), prim_mpo(mpo),
+          MPO<S, FL>(mpo->n_sites << 1, tag == "" ? mpo->tag + "@ANC" : tag) {
         const auto n_sites = MPO<S, FL>::n_sites;
-        const shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        const shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), (mpo->left_vacuum - mpo->left_vacuum)[0]);
         MPO<S, FL>::hamil = mpo->hamil;
         MPO<S, FL>::const_e = mpo->const_e;
         MPO<S, FL>::op = mpo->op;
@@ -1276,8 +1275,9 @@ template <typename S, typename FL> struct AncillaMPO : MPO<S, FL> {
             MPO<S, FL>::middle_operator_exprs.resize(n_sites - 1);
             shared_ptr<SymbolicColumnVector<S>> zero_mat =
                 make_shared<SymbolicColumnVector<S>>(1);
-            (*zero_mat)[0] =
-                make_shared<OpElement<S, FL>>(OpNames::Zero, SiteIndex(), S());
+            (*zero_mat)[0] = make_shared<OpElement<S, FL>>(
+                OpNames::Zero, SiteIndex(),
+                (mpo->left_vacuum - mpo->left_vacuum)[0]);
             shared_ptr<SymbolicColumnVector<S>> zero_expr =
                 make_shared<SymbolicColumnVector<S>>(1);
             (*zero_expr)[0] = make_shared<OpExpr<S>>();
@@ -1532,8 +1532,8 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
                 MPO<S, FL>::unload_tensor(i);
             }
         }
-        const shared_ptr<OpExpr<S>> i_op =
-            make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        const shared_ptr<OpExpr<S>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(), (mpo->left_vacuum - mpo->left_vacuum)[0]);
         const shared_ptr<OpExpr<S>> i_op_lv = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), mpo->left_vacuum);
         for (size_t m = 0; m < MPO<S, FL>::left_operator_names.size(); m++) {

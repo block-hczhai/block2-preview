@@ -179,7 +179,7 @@ struct StateInfo<S,
         for (int i = 0; i < n; i++)
             if (n_states[i] == 0)
                 continue;
-            else if (quanta[i].n() > target.n())
+            else if (target < quanta[i])
                 continue;
             else if (k != -1 && quanta[i] == quanta[k])
                 n_states[k] =

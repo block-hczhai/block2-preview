@@ -181,7 +181,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
         assert(ref.size() == n_sites || ref.size() == 0);
-        if (max_rank < 0) max_rank = mps->info->target.n();
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
@@ -256,7 +257,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
                     make_shared<VectorAllocator<FP>>();
                 auto &p = ptrs[ip];
-                int j = get<1>(p), d = get<2>(p), nh = get<5>(p), np = get<6>(p);
+                int j = get<1>(p), d = get<2>(p), nh = get<5>(p),
+                    np = get<6>(p);
                 shared_ptr<SparseMatrix<S, FL>> pmp = get<3>(p);
                 shared_ptr<SparseMatrix<S, FL>> cmp =
                     make_shared<SparseMatrix<S, FL>>(pd_alloc);
@@ -269,9 +271,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                                    m.second->ref(), false,
                                                    (*cmp)[ket], 1.0, 1.0);
                 }
-                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff) )
+                if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
                     ccmp[ip - pstart] = nullptr;
-                else if (ref.size() != 0 && (nh > max_rank || np > max_rank) )
+                else if (ref.size() != 0 && (nh > max_rank || np > max_rank))
                     ccmp[ip - pstart] = nullptr;
                 else
                     ccmp[ip - pstart] = cmp;
@@ -315,17 +317,22 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                              jj++)
-                            if (data[cur][jj] != 0){
+                            if (data[cur][jj] != 0) {
                                 int nh_n = nh;
                                 int np_n = np;
-                                if (ref.size() != 0) { 
-                                    if (!(j & 1) &&  (ref[d] & 1) ) nh_n += 1;
-                                    if (!(j & 2) &&  (ref[d] & 2) ) nh_n += 1;
-                                    if ( (j & 1) && !(ref[d] & 1) ) np_n += 1;
-                                    if ( (j & 2) && !(ref[d] & 2) ) np_n += 1;
+                                if (ref.size() != 0) {
+                                    if (!(j & 1) && (ref[d] & 1))
+                                        nh_n += 1;
+                                    if (!(j & 2) && (ref[d] & 2))
+                                        nh_n += 1;
+                                    if ((j & 1) && !(ref[d] & 1))
+                                        np_n += 1;
+                                    if ((j & 2) && !(ref[d] & 2))
+                                        np_n += 1;
                                 }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
-                                                           d + 1, cmp, det, nh_n, np_n));
+                                                           d + 1, cmp, det,
+                                                           nh_n, np_n));
                             }
                     }
                     ccmp[ip - pstart] = nullptr;
@@ -384,12 +391,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     void convert_phase(const vector<int> &reorder) {
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)
-            for (int i = 0; i < vals.size(); i++) {
-                vector<uint8_t> det = (*this)[i];
-                vals[i] *= phase_change_spin_order(det);
-                if (reorder.size() != 0)
-                    vals[i] *= phase_change_orb_order(det, reorder);
-            }
+        for (int i = 0; i < vals.size(); i++) {
+            vector<uint8_t> det = (*this)[i];
+            vals[i] *= phase_change_spin_order(det);
+            if (reorder.size() != 0)
+                vals[i] *= phase_change_orb_order(det, reorder);
+        }
         threading->activate_normal();
     }
 };
@@ -410,9 +417,10 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0, 
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
-        if (max_rank < 0) max_rank = mps->info->target.n();
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
@@ -564,7 +572,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         sort_dets();
         threading->activate_normal();
     }
-    void convert_phase(const vector<int> &reorder) {} 
+    void convert_phase(const vector<int> &reorder) {}
 };
 
 // Prefix trie structure of determinants (general spin)
@@ -586,7 +594,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
         assert(ref.size() == n_sites || ref.size() == 0);
-        if (max_rank < 0) max_rank = mps->info->target.n();
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
         vals.resize(dets.size());
         memset(vals.data(), 0, sizeof(FL) * vals.size());
         bool has_dets = dets.size() != 0;
@@ -659,7 +668,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 shared_ptr<VectorAllocator<FP>> pd_alloc =
                     make_shared<VectorAllocator<FP>>();
                 auto &p = ptrs[ip];
-                int j = get<1>(p), d = get<2>(p), nh = get<5>(p), np = get<6>(p);
+                int j = get<1>(p), d = get<2>(p), nh = get<5>(p),
+                    np = get<6>(p);
                 shared_ptr<SparseMatrix<S, FL>> pmp = get<3>(p);
                 shared_ptr<SparseMatrix<S, FL>> cmp =
                     make_shared<SparseMatrix<S, FL>>(pd_alloc);
@@ -674,7 +684,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 }
                 if (cmp->info->n == 0 || (cutoff != 0 && cmp->norm() < cutoff))
                     ccmp[ip - pstart] = nullptr;
-                else if (ref.size() != 0 && (nh > max_rank || np > max_rank) )
+                else if (ref.size() != 0 && (nh > max_rank || np > max_rank))
                     ccmp[ip - pstart] = nullptr;
                 else
                     ccmp[ip - pstart] = cmp;
@@ -721,12 +731,15 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                             if (data[cur][jj] != 0) {
                                 int nh_n = nh;
                                 int np_n = np;
-                                if (ref.size() != 0) { 
-                                    if (!j &&  ref[d] ) nh_n += 1;
-                                    if ( j && !ref[d] ) np_n += 1;
+                                if (ref.size() != 0) {
+                                    if (!j && ref[d])
+                                        nh_n += 1;
+                                    if (j && !ref[d])
+                                        np_n += 1;
                                 }
                                 pptrs.push_back(make_tuple(data[cur][jj], jj,
-                                                           d + 1, cmp, det, nh_n, np_n));
+                                                           d + 1, cmp, det,
+                                                           nh_n, np_n));
                             }
                     }
                     ccmp[ip - pstart] = nullptr;
@@ -769,15 +782,15 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     void convert_phase(const vector<int> &reorder) {
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(static) num_threads(ntg)
-            for (int i = 0; i < vals.size(); i++) {
-                vector<uint8_t> det = (*this)[i];
-                vals[i] *= phase_change_orb_order(det, reorder);
-            }
+        for (int i = 0; i < vals.size(); i++) {
+            vector<uint8_t> det = (*this)[i];
+            vals[i] *= phase_change_orb_order(det, reorder);
+        }
         threading->activate_normal();
     }
 };
 
-template <typename S, typename FL> struct DeterminantQC {
+template <typename S, typename FL, typename = void> struct DeterminantQC {
     vector<uint8_t> hf_occ;
     vector<typename S::pg_t> orb_sym;
     vector<FL> h1e_energy;
@@ -836,6 +849,37 @@ template <typename S, typename FL> struct DeterminantQC {
                     r.push_back(iocc);
             }
         return r;
+    }
+};
+
+template <typename S, typename FL>
+struct DeterminantQC<S, FL, typename S::is_sany_t> {
+    vector<uint8_t> hf_occ;
+    vector<typename S::pg_t> orb_sym;
+    vector<FL> h1e_energy;
+    int n_trials = 20, n_outer_trials = 50000;
+    DeterminantQC(const vector<uint8_t> &hf_occ,
+                  const vector<typename S::pg_t> &orb_sym,
+                  const vector<FL> &h1e_energy)
+        : hf_occ(hf_occ), orb_sym(orb_sym), h1e_energy(h1e_energy) {}
+    struct det_less {
+        bool operator()(const vector<uint8_t> &a,
+                        const vector<uint8_t> &b) const {
+            assert(a.size() == b.size());
+            for (size_t i = 0; i < a.size(); i++)
+                if (a[i] != b[i])
+                    return a[i] < b[i];
+            return false;
+        }
+    };
+    S det_quantum(const vector<uint8_t> &det, int i_begin, int i_end) const {
+        assert(false);
+        return S();
+    }
+    // generate determinants for quantum number q for block [i_begin, i_end)
+    vector<vector<uint8_t>> distribute(S q, int i_begin, int i_end) const {
+        assert(false);
+        return vector<vector<uint8_t>>();
     }
 };
 

@@ -20,14 +20,365 @@
 
 #pragma once
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
 namespace block2 {
+
+enum struct SAnySymmTypes : uint16_t {
+    None = 0,
+    U1Fermi = 1,
+    U1 = 2,
+    SU2Fermi = 3,
+    LZ = 5,
+    AbelianPG = 6,
+    ZNFermi = 8,
+    ZNFermiMax = 2056,
+    ZN = 2056,
+    ZNMax = 4104,
+    Invalid = 16384
+};
+
+inline SAnySymmTypes operator+(SAnySymmTypes a, int32_t b) {
+    return (SAnySymmTypes)(uint16_t)((int32_t)a + b);
+}
+
+inline int32_t operator-(SAnySymmTypes a, SAnySymmTypes b) {
+    return (int32_t)a - (int32_t)b;
+}
+
+// Arbitrary quantum number
+template <int8_t L = 6> struct SAnyT {
+    const static int8_t ll = L;
+    typedef void is_sany_t;
+    typedef uint32_t pg_t;
+    array<SAnySymmTypes, L> types;
+    array<int32_t, L> values;
+    static array<int32_t, L> invalid_init() {
+        array<int32_t, L> _invalid = {};
+        for (int8_t i = 0; i < L; i++)
+            _invalid[i] = 0x7FFFFFFF;
+        return _invalid;
+    }
+    static array<SAnySymmTypes, L> empty_types_init() {
+        array<SAnySymmTypes, L> _empty = {};
+        for (int8_t i = 0; i < L; i++)
+            _empty[i] = SAnySymmTypes::None;
+        return _empty;
+    }
+    static array<int32_t, L> empty_values_init() {
+        array<int32_t, L> _empty = {};
+        for (int8_t i = 0; i < L; i++)
+            _empty[i] = 0;
+        return _empty;
+    }
+    const static SAnySymmTypes invalid = SAnySymmTypes::Invalid;
+    SAnyT() : types(empty_types_init()), values(empty_values_init()) {}
+    SAnyT(const array<SAnySymmTypes, L> &types)
+        : types(types), values(empty_values_init()) {}
+    SAnyT(const array<SAnySymmTypes, L> &types, const array<int32_t, L> &values)
+        : types(types), values(values) {}
+    SAnyT(SAnySymmTypes t) : types(empty_types_init()), values(invalid_init()) {
+        types[0] = t;
+    }
+    static SAnyT init_su2(int n = 0, int twos = 0, int pg = 0) {
+        SAnyT r;
+        r.types[0] = SAnySymmTypes::U1Fermi;
+        r.types[1] = SAnySymmTypes::SU2Fermi;
+        r.types[2] = SAnySymmTypes::SU2Fermi;
+        r.types[3] = SAnySymmTypes::AbelianPG;
+        r.values[0] = n, r.values[1] = r.values[2] = twos, r.values[3] = pg;
+        return r;
+    }
+    static SAnyT init_su2(int n, int twos_low, int twos, int pg) {
+        SAnyT r;
+        r.types[0] = SAnySymmTypes::U1Fermi;
+        r.types[1] = SAnySymmTypes::SU2Fermi;
+        r.types[2] = SAnySymmTypes::SU2Fermi;
+        r.types[3] = SAnySymmTypes::AbelianPG;
+        r.values[0] = n, r.values[1] = twos_low, r.values[2] = twos,
+        r.values[3] = pg;
+        return r;
+    }
+    static SAnyT init_sz(int n = 0, int twos = 0, int pg = 0) {
+        SAnyT r;
+        r.types[0] = SAnySymmTypes::U1Fermi;
+        r.types[1] = SAnySymmTypes::U1Fermi;
+        r.types[2] = SAnySymmTypes::AbelianPG;
+        r.values[0] = n, r.values[1] = twos, r.values[2] = pg;
+        return r;
+    }
+    static SAnyT init_sgf(int n = 0, int pg = 0) {
+        SAnyT r;
+        r.types[0] = SAnySymmTypes::U1Fermi;
+        r.types[1] = SAnySymmTypes::AbelianPG;
+        r.values[0] = n, r.values[1] = pg;
+        return r;
+    }
+    static SAnyT init_sgb(int n = 0, int pg = 0) {
+        SAnyT r;
+        r.types[0] = SAnySymmTypes::U1;
+        r.types[1] = SAnySymmTypes::AbelianPG;
+        r.values[0] = n, r.values[1] = pg;
+        return r;
+    }
+    int n() const {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::U1 ||
+                types[k] == SAnySymmTypes::U1Fermi)
+                return (int)values[k];
+        return 0;
+    }
+    int twos() const {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                return (int)values[k + 1];
+        return 0;
+    }
+    int twos_low() const {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                return (int)values[k];
+        return 0;
+    }
+    int pg() const {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::AbelianPG)
+                return (int)values[k];
+        return 0;
+    }
+    void set_n(int n) {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::U1 ||
+                types[k] == SAnySymmTypes::U1Fermi) {
+                values[k] = n;
+                break;
+            }
+    }
+    void set_twos(int twos) {
+        for (int8_t i = 0, k = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi) {
+                values[++i] = twos;
+                break;
+            }
+    }
+    void set_twos_low(int twos) {
+        for (int8_t i = 0, k = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi) {
+                values[i++] = twos;
+                break;
+            }
+    }
+    void set_pg(int n) {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::AbelianPG) {
+                values[k] = n;
+                break;
+            }
+    }
+    vector<int> su2_indices() const {
+        vector<int> r;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                r.push_back(++k);
+        return r;
+    }
+    int multiplicity() const {
+        int r = 1;
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi)
+                r *= values[++i] + 1; // skip su2 low
+        return r;
+    }
+    bool is_fermion() const {
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi ||
+                types[i] == SAnySymmTypes::U1Fermi ||
+                (types[i] >= SAnySymmTypes::ZNFermi &&
+                 types[i] < SAnySymmTypes::ZNFermiMax))
+                return values[i] & 1;
+        return false;
+    }
+    bool operator==(SAnyT other) const {
+        return types == other.types && values == other.values;
+    }
+    bool operator!=(SAnyT other) const {
+        return types != other.types || values != other.values;
+    }
+    bool operator<(SAnyT other) const {
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::None &&
+                other.types[i] == SAnySymmTypes::None)
+                return false;
+            else if (types[i] != other.types[i]) {
+                if (other.types[i] == SAnySymmTypes::Invalid)
+                    return true;
+                else if (types[i] == SAnySymmTypes::Invalid)
+                    return false;
+                else
+                    // cannot assert(false) since me.cached_contraction may
+                    // compare some invalid data
+                    return (int)types[i] < (int)other.types[i];
+            } else if (values[i] != other.values[i])
+                return values[i] < other.values[i];
+        return false;
+    }
+    SAnyT operator-() const {
+        SAnyT r(types);
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi)
+                r.values[i] = values[i];
+            else if (types[i] == SAnySymmTypes::U1 ||
+                     types[i] == SAnySymmTypes::LZ ||
+                     types[i] == SAnySymmTypes::U1Fermi)
+                r.values[i] = -values[i];
+            else if (types[i] >= SAnySymmTypes::ZN &&
+                     types[i] < SAnySymmTypes::ZNMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZN;
+                r.values[i] = (int32_t)(zmod - values[i]);
+            } else if (types[i] >= SAnySymmTypes::ZNFermi &&
+                       types[i] < SAnySymmTypes::ZNFermiMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZNFermi;
+                r.values[i] = (int32_t)(zmod - values[i]);
+            } else
+                r.values[i] = values[i];
+        return r;
+    }
+    SAnyT operator-(SAnyT other) const noexcept { return *this + (-other); }
+    SAnyT operator+(SAnyT other) const noexcept {
+        // other.types is ignored
+        SAnyT r(types);
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi) {
+                r.values[i] = abs(values[i + 1] - other.values[i + 1]);
+                r.values[i + 1] = values[i + 1] + other.values[i + 1];
+                i++;
+            } else if (types[i] == SAnySymmTypes::U1 ||
+                       types[i] == SAnySymmTypes::LZ ||
+                       types[i] == SAnySymmTypes::U1Fermi)
+                r.values[i] = values[i] + other.values[i];
+            else if (types[i] >= SAnySymmTypes::ZN &&
+                     types[i] < SAnySymmTypes::ZNMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZN;
+                r.values[i] =
+                    (int32_t)((zmod + values[i] + other.values[i]) % zmod);
+            } else if (types[i] >= SAnySymmTypes::ZNFermi &&
+                       types[i] < SAnySymmTypes::ZNFermiMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZNFermi;
+                r.values[i] =
+                    (int32_t)((zmod + values[i] + other.values[i]) % zmod);
+            } else
+                r.values[i] = values[i] ^ other.values[i];
+        return r;
+    }
+    SAnyT operator[](int i) const noexcept {
+        SAnyT r = *this;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi) {
+                const int cnt = ((values[k + 1] - values[k]) >> 1) + 1;
+                r.values[k] = r.values[k + 1] = values[k] + ((i % cnt) << 1);
+                k++, i /= cnt;
+            }
+        return r;
+    }
+    SAnyT get_ket() const noexcept {
+        SAnyT r = *this;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                r.values[k] = r.values[k + 1] = values[k + 1], k++;
+        return r;
+    }
+    SAnyT get_bra(SAnyT dq) const noexcept {
+        SAnyT r = *this + dq;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                r.values[k] = r.values[k + 1] = values[k], k++;
+        return r;
+    }
+    static bool triangle(int tja, int tjb, int tjc) {
+        return !((tja + tjb + tjc) & 1) && tjc <= tja + tjb &&
+               tjc >= abs(tja - tjb);
+    }
+    SAnyT combine(SAnyT bra, SAnyT ket) const {
+        // ket.types is ignored
+        SAnyT pbra = *this + ket, r(types, ket.values);
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi) {
+                if (!triangle(ket.values[k + 1], values[k + 1],
+                              bra.values[k + 1]))
+                    return SAnyT(invalid);
+                r.values[k] = bra.values[k + 1];
+                r.values[k + 1] = ket.values[k + 1];
+                k++;
+            } else if (pbra.values[k] != bra.values[k])
+                return SAnyT(invalid);
+        return r;
+    }
+    static inline int pg_inv(int a) noexcept { return a; }
+    static inline int pg_mul(int a, int b) noexcept { return a ^ b; }
+    static inline pg_t pg_combine(int pg, int k = 0, int kmod = 0) noexcept {
+        return (pg_t)pg;
+    }
+    static inline bool pg_equal(int a, int b) noexcept { return a == b; }
+    size_t hash() const {
+        size_t h = (size_t)L;
+        for (int8_t i = 0; i < L; i++) {
+            h ^= (uint16_t)types[i] + 0x9E3779B9 + (h << 6) + (h >> 2);
+            h ^= (uint16_t)values[i] + 0x9E3779B9 + (h << 6) + (h >> 2);
+        }
+        return h;
+    }
+    int count() const noexcept {
+        int r = 1;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi)
+                r *= ((values[k + 1] - values[k]) >> 1) + 1, k++;
+        return r;
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "< ";
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::SU2Fermi) {
+                if (values[i] == values[i + 1])
+                    ss << "SU2F=" << values[i] << " ";
+                else
+                    ss << "SU2F=" << values[i] << "~" << values[i + 1] << " ";
+                i++;
+            } else if (types[i] == SAnySymmTypes::U1Fermi)
+                ss << "U1F=" << values[i] << " ";
+            else if (types[i] == SAnySymmTypes::U1)
+                ss << "U1=" << values[i] << " ";
+            else if (types[i] == SAnySymmTypes::LZ)
+                ss << "LZ=" << values[i] << " ";
+            else if (types[i] == SAnySymmTypes::AbelianPG)
+                ss << "PG=" << values[i] << " ";
+            else if (types[i] >= SAnySymmTypes::ZN &&
+                     types[i] < SAnySymmTypes::ZNMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZN;
+                ss << "Z" << zmod << "=" << values[i] << " ";
+            } else if (types[i] >= SAnySymmTypes::ZNFermi &&
+                       types[i] < SAnySymmTypes::ZNFermiMax) {
+                const int32_t zmod = types[i] - SAnySymmTypes::ZNFermi;
+                ss << "Z" << zmod << "F=" << values[i] << " ";
+            } else if (types[i] == SAnySymmTypes::Invalid)
+                ss << "Invalid ";
+        ss << ">";
+        return ss.str();
+    }
+    friend ostream &operator<<(ostream &os, SAnyT c) {
+        os << c.to_str();
+        return os;
+    }
+};
+
+typedef SAnyT<> SAny;
 
 // Quantum number with particle number, projected spin
 // and point group irreducible representation (non-spin-adapted)
@@ -1296,6 +1647,24 @@ template <> struct less<block2::SGB> {
 
 inline void swap(block2::SGB &a, block2::SGB &b) {
     a.data ^= b.data, b.data ^= a.data, a.data ^= b.data;
+}
+
+template <> struct hash<block2::SAny> {
+    size_t operator()(const block2::SAny &s) const noexcept { return s.hash(); }
+};
+
+template <> struct less<block2::SAny> {
+    bool operator()(const block2::SAny &lhs,
+                    const block2::SAny &rhs) const noexcept {
+        return lhs < rhs;
+    }
+};
+
+inline void swap(block2::SAny &a, block2::SAny &b) {
+    decltype(a.types) types;
+    decltype(a.values) values;
+    types = a.types, a.types = b.types, b.types = types;
+    values = a.values, a.values = b.values, b.values = values;
 }
 
 } // namespace std

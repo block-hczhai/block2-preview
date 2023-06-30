@@ -540,3 +540,191 @@ TEST_F(TestQ, TestSU2LZ) {
     for (int i = 0; i < n_tests; i++)
         QULabel<SU2LZ>::check();
 }
+
+TEST_F(TestQ, TestSAnySU2) {
+    typedef SAny S;
+    for (int i = 0; i < n_tests; i++) {
+        QULabel<SU2> qq(0), qq2(0), qq3(0);
+        S q = S::init_su2(qq.n, qq.twosl, qq.twos, qq.composite_pg());
+        // getter
+        EXPECT_EQ(q.n(), qq.n);
+        EXPECT_EQ(q.twos(), qq.twos);
+        EXPECT_EQ(q.twos_low(), qq.twosl);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        EXPECT_EQ(q.multiplicity(), qq.multi());
+        EXPECT_EQ(q.is_fermion(), qq.fermion());
+        if (qq.twosl <= qq.twos) {
+            EXPECT_EQ(q.count(), qq.count());
+            int kk = Random::rand_int(0, qq.count());
+            EXPECT_EQ(q[kk].n(), qq[kk].n);
+            EXPECT_EQ(q[kk].twos(), qq[kk].twos);
+            EXPECT_EQ(q[kk].twos_low(), qq[kk].twosl);
+            EXPECT_TRUE(S::pg_equal(q[kk].pg(), qq[kk].composite_pg()));
+        }
+        // setter
+        q.set_n(qq2.n);
+        EXPECT_EQ(q.n(), qq2.n);
+        if ((qq2.n & 1) == (qq.n & 1)) {
+            EXPECT_EQ(q.twos(), qq.twos);
+            EXPECT_EQ(q.twos_low(), qq.twosl);
+        }
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        q.set_twos({qq2.twos});
+        EXPECT_EQ(q.n(), qq2.n);
+        EXPECT_EQ(q.twos(), qq2.twos);
+        if ((qq2.n & 1) == (qq.n & 1)) {
+            EXPECT_EQ(q.twos_low(), qq.twosl);
+        }
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        q.set_twos_low({qq2.twosl});
+        EXPECT_EQ(q.n(), qq2.n);
+        EXPECT_EQ(q.twos(), qq2.twos);
+        EXPECT_EQ(q.twos_low(), qq2.twosl);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        EXPECT_EQ(q.multiplicity(), qq2.multi());
+        EXPECT_EQ(q.is_fermion(), qq2.fermion());
+        if (qq2.twosl <= qq2.twos) {
+            EXPECT_EQ(q.count(), qq2.count());
+            int kk = Random::rand_int(0, qq2.count());
+            EXPECT_EQ(q[kk].n(), qq2[kk].n);
+            EXPECT_EQ(q[kk].twos(), qq2[kk].twos);
+            EXPECT_EQ(q[kk].twos_low(), qq2[kk].twosl);
+            EXPECT_TRUE(S::pg_equal(q[kk].pg(), qq.composite_pg()));
+        }
+        q.set_pg(qq2.composite_pg());
+        EXPECT_EQ(q.n(), qq2.n);
+        EXPECT_EQ(q.twos(), qq2.twos);
+        EXPECT_EQ(q.twos_low(), qq2.twosl);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq2.composite_pg()));
+        EXPECT_EQ(q.multiplicity(), qq2.multi());
+        EXPECT_EQ(q.is_fermion(), qq2.fermion());
+        // setter different order
+        q.set_twos_low({qq3.twosl});
+        EXPECT_EQ(q.twos_low(), qq3.twosl);
+        if ((qq3.n & 1) == (qq2.n & 1)) {
+            EXPECT_EQ(q.twos(), qq2.twos);
+            EXPECT_EQ(q.n(), qq2.n);
+        }
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq2.composite_pg()));
+        q.set_twos({qq3.twos});
+        if ((qq3.n & 1) == (qq2.n & 1)) {
+            EXPECT_EQ(q.n(), qq2.n);
+        }
+        EXPECT_EQ(q.twos_low(), qq3.twosl);
+        EXPECT_EQ(q.twos(), qq3.twos);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq2.composite_pg()));
+        q.set_pg(qq.composite_pg());
+        if ((qq3.n & 1) == (qq2.n & 1))
+            EXPECT_EQ(q.n(), qq2.n);
+        EXPECT_EQ(q.twos(), qq3.twos);
+        EXPECT_EQ(q.twos_low(), qq3.twosl);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        q.set_n(qq3.n);
+        EXPECT_EQ(q.n(), qq3.n);
+        EXPECT_EQ(q.twos_low(), qq3.twosl);
+        EXPECT_EQ(q.twos(), qq3.twos);
+        EXPECT_TRUE(S::pg_equal(q.pg(), qq.composite_pg()));
+        EXPECT_EQ(q.multiplicity(), qq3.multi());
+        EXPECT_EQ(q.is_fermion(), qq3.fermion());
+        q.set_pg(qq3.composite_pg());
+        // negate
+        if ((-qq3).in_range()) {
+            EXPECT_EQ((-q).n(), (-qq3).n);
+            EXPECT_EQ((-q).twos(), (-qq3).twos);
+            EXPECT_EQ((-q).twos_low(), (-qq3).twosl);
+            EXPECT_TRUE(S::pg_equal((-q).pg(), (-qq3).composite_pg()));
+            EXPECT_EQ((-q).multiplicity(), (-qq3).multi());
+            EXPECT_EQ((-q).is_fermion(), (-qq3).fermion());
+            if ((-qq3).twosl <= (-qq3).twos) {
+                EXPECT_EQ((-q).count(), (-qq3).count());
+                int kk = Random::rand_int(0, (-qq3).count());
+                EXPECT_EQ((-q)[kk].n(), (-qq3)[kk].n);
+                EXPECT_EQ((-q)[kk].twos(), (-qq3)[kk].twos);
+                EXPECT_EQ((-q)[kk].twos_low(), (-qq3)[kk].twosl);
+                EXPECT_TRUE(S::pg_equal((-q)[kk].pg(), (-qq3)[kk].composite_pg()));
+            }
+        }
+        // addition
+        q.set_twos_low({qq3.twos});
+        S q2 = S::init_su2(qq2.n, qq2.twos, qq2.twos, qq2.composite_pg());
+        QULabel<SU2> qq4 = qq2 + qq3;
+        if (qq4.in_range()) {
+            EXPECT_EQ((q + q2).n(), qq4.n);
+            EXPECT_EQ((q + q2).twos_low(), qq4.twosl);
+            EXPECT_EQ((q + q2).twos(), qq4.twos);
+            EXPECT_TRUE(S::pg_equal((q + q2).pg(), qq4.composite_pg()));
+            EXPECT_EQ((q + q2).multiplicity(), qq4.multi());
+            EXPECT_EQ((q + q2).is_fermion(), qq4.fermion());
+            if (qq4.twosl <= qq4.twos) {
+                EXPECT_EQ((q + q2).count(), qq4.count());
+                int kk = Random::rand_int(0, qq4.count());
+                EXPECT_EQ((q + q2)[kk].n(), qq4[kk].n);
+                EXPECT_EQ((q + q2)[kk].twos(), qq4[kk].twos);
+                EXPECT_EQ((q + q2)[kk].twos_low(), qq4[kk].twosl);
+                EXPECT_TRUE(
+                    S::pg_equal((q + q2)[kk].pg(), qq4[kk].composite_pg()));
+            }
+        }
+        // subtraction
+        QULabel<SU2> qq5 = qq3 - qq2;
+        if (qq5.in_range()) {
+            EXPECT_EQ((q - q2).n(), qq5.n);
+            EXPECT_EQ((q - q2).twos_low(), qq5.twosl);
+            EXPECT_EQ((q - q2).twos(), qq5.twos);
+            EXPECT_TRUE(S::pg_equal((q - q2).pg(), qq5.composite_pg()));
+            EXPECT_EQ((q - q2).multiplicity(), qq5.multi());
+            EXPECT_EQ((q - q2).is_fermion(), qq5.fermion());
+            if (qq5.twosl <= qq5.twos) {
+                EXPECT_EQ((q - q2).count(), qq5.count());
+                int kk = Random::rand_int(0, qq5.count());
+                EXPECT_EQ((q - q2)[kk].n(), qq5[kk].n);
+                EXPECT_EQ((q - q2)[kk].twos(), qq5[kk].twos);
+                EXPECT_EQ((q - q2)[kk].twos_low(), qq5[kk].twosl);
+                EXPECT_TRUE(
+                    S::pg_equal((q - q2)[kk].pg(), qq5[kk].composite_pg()));
+            }
+        }
+        // combine
+        if (qq5.in_range()) {
+            QULabel<SU2> qc = qq5.combine(qq3, qq2);
+            EXPECT_EQ((q - q2).combine(q, q2).n(), qc.n);
+            // EXPECT_EQ((q - q2).combine(q, q2).twos_low(), qc.twosl);
+            EXPECT_EQ((q - q2).combine(q, q2).twos(), qc.twos);
+            EXPECT_TRUE(
+                S::pg_equal((q - q2).combine(q, q2).pg(), qc.composite_pg()));
+            EXPECT_EQ((q - q2).combine(q, q2).get_bra(q - q2).n(), qq3.n);
+            EXPECT_EQ((q - q2).combine(q, q2).get_bra(q - q2).twos_low(),
+                      qq3.twos);
+            EXPECT_EQ((q - q2).combine(q, q2).get_bra(q - q2).twos(), qq3.twos);
+            EXPECT_TRUE(S::pg_equal((q - q2).combine(q, q2).get_bra(q - q2).pg(),
+                                 qq3.composite_pg()));
+            EXPECT_EQ((q - q2).combine(q, q2).get_ket().n(), qq2.n);
+            EXPECT_EQ((q - q2).combine(q, q2).get_ket().twos_low(), qq2.twos);
+            EXPECT_EQ((q - q2).combine(q, q2).get_ket().twos(), qq2.twos);
+            EXPECT_TRUE(S::pg_equal((q - q2).combine(q, q2).get_ket().pg(),
+                                 qq2.composite_pg()));
+        }
+        if ((-qq5).in_range()) {
+            QULabel<SU2> qc = (-qq5).combine(qq2, qq3);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).n(), qc.n);
+            // EXPECT_EQ((-(q - q2)).combine(q2, q).twos_low(), qc.twosl);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).twos(), qc.twos);
+            EXPECT_TRUE(
+                S::pg_equal((-(q - q2)).combine(q2, q).pg(), qc.composite_pg()));
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).n(), qq2.n);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).twos_low(),
+                      qq2.twos);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_bra(q2 - q).twos(),
+                      qq2.twos);
+            EXPECT_TRUE(
+                S::pg_equal((-(q - q2)).combine(q2, q).get_bra(q2 - q).pg(),
+                         qq2.composite_pg()));
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().n(), qq3.n);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().twos_low(),
+                      qq3.twos);
+            EXPECT_EQ((-(q - q2)).combine(q2, q).get_ket().twos(), qq3.twos);
+            EXPECT_TRUE(S::pg_equal((-(q - q2)).combine(q2, q).get_ket().pg(),
+                                 qq3.composite_pg()));
+        }
+    }
+}

@@ -168,6 +168,9 @@ PYBIND11_MAKE_OPAQUE(vector<vector<SGF>>);
 // SGB
 PYBIND11_MAKE_OPAQUE(vector<SGB>);
 PYBIND11_MAKE_OPAQUE(vector<vector<SGB>>);
+// SAny
+PYBIND11_MAKE_OPAQUE(vector<SAny>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SAny>>);
 
 #ifdef _USE_COMPLEX
 // complex
@@ -1360,7 +1363,7 @@ void bind_array_fixed(py::module &m, const string &name) {
 
     py::class_<array<T, L>>(m, name.c_str())
         .def("__setitem__",
-             [](array<T, L> *self, size_t i, int t) { (*self)[i] = t; })
+             [](array<T, L> *self, size_t i, int t) { (*self)[i] = (T)t; })
         .def("__getitem__",
              [](array<T, L> *self, size_t i) { return (*self)[i]; })
         .def("__len__", [](array<T, L> *self) { return self->size(); })
@@ -1369,7 +1372,7 @@ void bind_array_fixed(py::module &m, const string &name) {
                  stringstream ss;
                  ss << "(LEN=" << self->size() << ")[";
                  for (auto x : *self)
-                     ss << x << ",";
+                     ss << (int64_t)x << ",";
                  ss << "]";
                  return ss.str();
              })
@@ -1531,6 +1534,21 @@ template <typename S = void> void bind_types(py::module &m) {
         .def_static("swap_d2", &PointGroup::swap_d2)
         .def_static("swap_d2h", &PointGroup::swap_d2h)
         .def_static("swap_nopg", &PointGroup::swap_nopg);
+
+    py::enum_<SAnySymmTypes>(m, "SAnySymmTypes", py::arithmetic())
+        .value("Nothing", SAnySymmTypes::None)
+        .value("U1Fermi", SAnySymmTypes::U1Fermi)
+        .value("U1", SAnySymmTypes::U1)
+        .value("SU2Fermi", SAnySymmTypes::SU2Fermi)
+        .value("LZ", SAnySymmTypes::LZ)
+        .value("AbelianPG", SAnySymmTypes::AbelianPG)
+        .value("ZNFermi", SAnySymmTypes::ZNFermi)
+        .value("ZNFermiMax", SAnySymmTypes::ZNFermiMax)
+        .value("ZN", SAnySymmTypes::ZN)
+        .value("ZNMax", SAnySymmTypes::ZNMax)
+        .value("Invalid", SAnySymmTypes::Invalid)
+        .def(py::self + int32_t())
+        .def(py::self - py::self);
 
     py::enum_<OpNames>(m, "OpNames", py::arithmetic())
         .value("H", OpNames::H)
@@ -3319,6 +3337,61 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def(py::self < py::self)
         .def("__hash__", &SiteIndex::hash)
         .def("__repr__", &SiteIndex::to_str);
+
+    bind_array_fixed<SAnySymmTypes, SAny::ll>(m, "ArrayLSAnySymmTypes");
+    bind_array_fixed<int32_t, SAny::ll>(m, "ArrayLInt32");
+
+    py::class_<SAny>(m, "SAny")
+        .def(py::init<>())
+        .def(py::init<const array<SAnySymmTypes, SAny::ll> &>())
+        .def(py::init<const array<SAnySymmTypes, SAny::ll> &,
+                      const array<int32_t, SAny::ll> &>())
+        .def(py::init<SAnySymmTypes>())
+        .def_property_readonly_static(
+            "invalid", [](py::object) { return SAny(SAny::invalid); })
+        .def_readwrite("types", &SAny::types)
+        .def_readwrite("values", &SAny::values)
+        .def_static("invalid_init", &SAny::invalid_init)
+        .def_static("empty_types_init", &SAny::empty_types_init)
+        .def_static("empty_values_init", &SAny::empty_values_init)
+        .def_static("init_su2", (SAny(*)(int, int, int)) & SAny::init_su2,
+                    py::arg("n") = 0, py::arg("twos") = 0, py::arg("pg") = 0)
+        .def_static("init_su2", (SAny(*)(int, int, int, int)) & SAny::init_su2,
+                    py::arg("n"), py::arg("twos_low"), py::arg("twos"),
+                    py::arg("pg"))
+        .def_static("init_sz", &SAny::init_sz, py::arg("n") = 0,
+                    py::arg("twos") = 0, py::arg("pg") = 0)
+        .def_static("init_sgf", &SAny::init_sgf, py::arg("n") = 0,
+                    py::arg("pg") = 0)
+        .def_static("init_sgb", &SAny::init_sgb, py::arg("n") = 0,
+                    py::arg("pg") = 0)
+        .def_property("n", &SAny::n, &SAny::set_n)
+        .def_property("twos", &SAny::twos, &SAny::set_twos)
+        .def_property("twos_low", &SAny::twos_low, &SAny::set_twos_low)
+        .def_property("pg", &SAny::pg, &SAny::set_pg)
+        .def_property_readonly("multiplicity", &SAny::multiplicity)
+        .def_property_readonly("is_fermion", &SAny::is_fermion)
+        .def_property_readonly("count", &SAny::count)
+        .def_static("pg_mul", &SAny::pg_mul)
+        .def_static("pg_inv", &SAny::pg_inv)
+        .def_static("pg_combine", &SAny::pg_combine, py::arg("pg"),
+                    py::arg("k") = 0, py::arg("kmod") = 0)
+        .def_static("pg_equal", &SAny::pg_equal)
+        .def("combine", &SAny::combine)
+        .def("__getitem__", &SAny::operator[])
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def(py::self < py::self)
+        .def(-py::self)
+        .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def("get_ket", &SAny::get_ket)
+        .def("get_bra", &SAny::get_bra, py::arg("dq"))
+        .def("__hash__", &SAny::hash)
+        .def("__repr__", &SAny::to_str);
+
+    py::bind_vector<vector<SAny>>(m, "VectorSAny");
+    py::bind_vector<vector<vector<SAny>>>(m, "VectorVectorSAny");
 
     py::class_<SZ>(m, "SZ")
         .def(py::init<>())

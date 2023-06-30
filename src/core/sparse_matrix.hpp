@@ -100,7 +100,7 @@ struct SparseMatrixInfo<
                             : subdq[k].second.get_bra(opdq),
                   bdq = cjb ? subdq[k].second.get_ket()
                             : -subdq[k].second.get_ket();
-                if ((adq + bdq)[0].data != 0)
+                if ((adq + bdq)[0] != (adq - adq)[0])
                     continue;
                 shared_ptr<SparseMatrixInfo> ainfo =
                     lower_bound(ainfos.begin(), ainfos.end(), adq, cmp_op_info)
@@ -747,7 +747,8 @@ struct SparseMatrixInfo<
     // Extract row or column StateInfo from SparseMatrixInfo
     shared_ptr<StateInfo<S>> extract_state_info(bool right) {
         shared_ptr<StateInfo<S>> info = make_shared<StateInfo<S>>();
-        if (delta_quantum.data == 0 && !is_wavefunction) {
+        if (delta_quantum == (delta_quantum - delta_quantum)[0] &&
+            !is_wavefunction) {
             info->allocate(n);
             memcpy(info->quanta, quanta, n * sizeof(S));
             memcpy(info->n_states, right ? n_states_ket : n_states_bra,
@@ -1080,7 +1081,7 @@ template <typename S, typename FL> struct SparseMatrix {
         winfo->sort_states();
         linfo->is_fermion = false;
         linfo->is_wavefunction = false;
-        linfo->delta_quantum = S();
+        linfo->delta_quantum = (info->delta_quantum - info->delta_quantum)[0];
         linfo->allocate((int)l.size());
         for (int i = 0; i < linfo->n; i++) {
             linfo->quanta[i] = qs[i];
@@ -1137,7 +1138,7 @@ template <typename S, typename FL> struct SparseMatrix {
         winfo->sort_states();
         rinfo->is_fermion = false;
         rinfo->is_wavefunction = false;
-        rinfo->delta_quantum = S();
+        rinfo->delta_quantum = (info->delta_quantum - info->delta_quantum)[0];
         rinfo->allocate((int)r.size());
         for (int i = 0; i < rinfo->n; i++) {
             rinfo->quanta[i] = qs[i];

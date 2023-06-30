@@ -1536,13 +1536,13 @@ template <typename S> struct AncillaMPSInfo : MPSInfo<S> {
             } else
                 left_dims[i + 1] =
                     make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *left_dims[i], *basis[i], target));
+                        *left_dims[i], *basis[i], S(S::invalid)));
         right_dims[n_sites] = make_shared<StateInfo<S>>(vacuum);
         for (int i = n_sites - 1; i >= 0; i--)
             if (i & 1)
                 right_dims[i] =
                     make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                        *basis[i], *right_dims[i + 1], target));
+                        *basis[i], *right_dims[i + 1], S(S::invalid)));
             else {
                 S q = basis[i]->quanta[0] +
                       right_dims[i + 1]->quanta[right_dims[i + 1]->n - 1];

@@ -316,7 +316,7 @@ template <typename S, typename FL> struct Partition {
             }
             if (uniq_sorted) {
                 // needed for iop x iop in me delayed contraction with MPI
-                S p0 = l.combine(op_left_vacuum, S(0));
+                S p0 = l.combine(op_left_vacuum, (l - l)[0]);
                 if (p0 != S(S::invalid))
                     subsl[idx].push_back(make_pair((uint8_t)0, p0));
             }

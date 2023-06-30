@@ -1549,4 +1549,455 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
     }
 };
 
+// General Hamiltonian (any symmetry)
+template <typename S, typename FL>
+struct GeneralHamiltonian<S, FL, typename S::is_sany_t> : Hamiltonian<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using Hamiltonian<S, FL>::vacuum;
+    using Hamiltonian<S, FL>::n_sites;
+    using Hamiltonian<S, FL>::basis;
+    using Hamiltonian<S, FL>::site_op_infos;
+    using Hamiltonian<S, FL>::orb_sym;
+    using Hamiltonian<S, FL>::find_site_op_info;
+    using Hamiltonian<S, FL>::opf;
+    using Hamiltonian<S, FL>::delayed;
+    // Sparse matrix representation for normal site operators
+    vector<unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        site_norm_ops;
+    // Primitives for sparse matrix representation for normal site operators
+    unordered_map<typename S::pg_t,
+                  unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>>
+        op_prims;
+    const static int max_n = 10, max_s = 10;
+    GeneralHamiltonian()
+        : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()) {}
+    GeneralHamiltonian(
+        S vacuum, int n_sites,
+        const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
+        int twos = -1)
+        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym) {
+        // SZ does not need CG factors
+        opf = make_shared<OperatorFunctions<S, FL>>(make_shared<CG<S>>());
+        basis.resize(n_sites);
+        site_op_infos.resize(n_sites);
+        site_norm_ops.resize(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++)
+            basis[m] = get_site_basis(m);
+        init_site_ops();
+    }
+    virtual ~GeneralHamiltonian() = default;
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        shared_ptr<StateInfo<S>> b = make_shared<StateInfo<S>>();
+        if (vacuum == S::init_su2()) {
+            b->allocate(3);
+            b->quanta[0] = S::init_su2(0, 0, 0);
+            b->quanta[1] = S::init_su2(1, 1, orb_sym[m]);
+            b->quanta[2] = S::init_su2(2, 0, 0);
+            b->n_states[0] = b->n_states[1] = b->n_states[2] = 1;
+        } else if (vacuum == S::init_sz()) {
+            b->allocate(4);
+            b->quanta[0] = S::init_sz(0, 0, 0);
+            b->quanta[1] = S::init_sz(1, 1, orb_sym[m]);
+            b->quanta[2] = S::init_sz(1, -1, orb_sym[m]);
+            b->quanta[3] = S::init_sz(2, 0, 0);
+            b->n_states[0] = b->n_states[1] = b->n_states[2] = b->n_states[3] =
+                1;
+        } else if (vacuum == S::init_sgf()) {
+            b->allocate(2);
+            b->quanta[0] = S::init_sgf(0, 0);
+            b->quanta[1] = S::init_sgf(1, orb_sym[m]);
+            b->n_states[0] = b->n_states[1] = 1;
+        } else {
+            stringstream ss;
+            ss << vacuum;
+            throw runtime_error("Symmetry not implemented: " + ss.str());
+        }
+        b->sort_states();
+        return b;
+    }
+    virtual void init_site_ops() {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        const int max_n_odd = max_n | 1, max_s_odd = max_s | 1;
+        const int max_n_even = max_n_odd ^ 1, max_s_even = max_s_odd ^ 1;
+        // site operator infos
+        for (uint16_t m = 0; m < n_sites; m++) {
+            map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+            info[vacuum] = nullptr;
+            if (vacuum == S::init_su2()) {
+                for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                    for (int s = 1; s <= max_s_odd; s += 2)
+                        info[S::init_su2(n, s, orb_sym[m])] = nullptr;
+                for (int n = -max_n_even; n <= max_n_even; n += 2)
+                    for (int s = 0; s <= max_s_even; s += 2)
+                        info[S::init_su2(n, s, 0)] = nullptr;
+            } else if (vacuum == S::init_sz()) {
+                for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                    for (int s = -max_s_odd; s <= max_s_odd; s += 2)
+                        info[S::init_sz(n, s, orb_sym[m])] = nullptr;
+                for (int n = -max_n_even; n <= max_n_even; n += 2)
+                    for (int s = -max_s_even; s <= max_s_even; s += 2)
+                        info[S::init_sz(n, s, 0)] = nullptr;
+            } else if (vacuum == S::init_sgf()) {
+                for (int n = -max_n_odd; n <= max_n_odd; n += 2)
+                    info[S::init_sgf(n, orb_sym[m])] = nullptr;
+                for (int n = -max_n_even; n <= max_n_even; n += 2)
+                    info[S::init_sgf(n, 0)] = nullptr;
+            }
+            for (auto &p : info) {
+                p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                p.second->initialize(*basis[m], *basis[m], p.first,
+                                     p.first.is_fermion());
+            }
+            site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                info.begin(), info.end());
+        }
+        vector<string> stx;
+        if (vacuum == S::init_su2())
+            stx = vector<string>{"", "C", "D"};
+        else if (vacuum == S::init_sz())
+            stx = vector<string>{"", "c", "C", "d", "D"};
+        else if (vacuum == S::init_sgf())
+            stx = vector<string>{"", "C", "D"};
+        for (uint16_t m = 0; m < n_sites; m++) {
+            typename S::pg_t ipg = orb_sym[m];
+            if (this->op_prims.count(ipg) == 0)
+                this->op_prims[ipg] =
+                    unordered_map<string, shared_ptr<SparseMatrix<S, FL>>>();
+            else
+                continue;
+            unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &op_prims =
+                this->op_prims.at(ipg);
+            if (vacuum == S::init_su2()) {
+                op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims[""]->allocate(
+                    find_site_op_info(m, S::init_su2(0, 0, 0)));
+                (*op_prims[""])[S::init_su2(0, 0, 0, 0)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_su2(1, 1, 1, ipg)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_su2(2, 0, 0, S::pg_mul(ipg, ipg))](
+                    0, 0) = 1.0;
+
+                op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["C"]->allocate(
+                    find_site_op_info(m, S::init_su2(1, 1, ipg)));
+                (*op_prims["C"])[S::init_su2(0, 1, 0, 0)](0, 0) = 1.0;
+                (*op_prims["C"])[S::init_su2(1, 0, 1, ipg)](0, 0) = -sqrt(2);
+
+                op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["D"]->allocate(
+                    find_site_op_info(m, S::init_su2(-1, 1, S::pg_inv(ipg))));
+                (*op_prims["D"])[S::init_su2(1, 0, 1, ipg)](0, 0) = sqrt(2);
+                (*op_prims["D"])[S::init_su2(2, 1, 0, S::pg_mul(ipg, ipg))](
+                    0, 0) = 1.0;
+            } else if (vacuum == S::init_sz()) {
+                op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims[""]->allocate(
+                    find_site_op_info(m, S::init_sz(0, 0, 0)));
+                (*op_prims[""])[S::init_sz(0, 0, 0)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_sz(1, 1, ipg)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_sz(1, -1, ipg)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_sz(2, 0, S::pg_mul(ipg, ipg))](0, 0) =
+                    1.0;
+
+                op_prims["c"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["c"]->allocate(
+                    find_site_op_info(m, S::init_sz(1, 1, ipg)));
+                (*op_prims["c"])[S::init_sz(0, 0, 0)](0, 0) = 1.0;
+                (*op_prims["c"])[S::init_sz(1, -1, ipg)](0, 0) = 1.0;
+
+                op_prims["d"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["d"]->allocate(
+                    find_site_op_info(m, S::init_sz(-1, -1, S::pg_inv(ipg))));
+                (*op_prims["d"])[S::init_sz(1, 1, ipg)](0, 0) = 1.0;
+                (*op_prims["d"])[S::init_sz(2, 0, S::pg_mul(ipg, ipg))](0, 0) =
+                    1.0;
+
+                op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["C"]->allocate(
+                    find_site_op_info(m, S::init_sz(1, -1, ipg)));
+                (*op_prims["C"])[S::init_sz(0, 0, 0)](0, 0) = 1.0;
+                (*op_prims["C"])[S::init_sz(1, 1, ipg)](0, 0) = -1.0;
+
+                op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["D"]->allocate(
+                    find_site_op_info(m, S::init_sz(-1, 1, S::pg_inv(ipg))));
+                (*op_prims["D"])[S::init_sz(1, -1, ipg)](0, 0) = 1.0;
+                (*op_prims["D"])[S::init_sz(2, 0, S::pg_mul(ipg, ipg))](0, 0) =
+                    -1.0;
+            } else if (vacuum == S::init_sgf()) {
+                op_prims[""] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims[""]->allocate(find_site_op_info(m, S::init_sgf(0, 0)));
+                (*op_prims[""])[S::init_sgf(0, 0)](0, 0) = 1.0;
+                (*op_prims[""])[S::init_sgf(1, ipg)](0, 0) = 1.0;
+
+                op_prims["C"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["C"]->allocate(
+                    find_site_op_info(m, S::init_sgf(1, ipg)));
+                (*op_prims["C"])[S::init_sgf(0, 0)](0, 0) = 1.0;
+
+                op_prims["D"] = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                op_prims["D"]->allocate(
+                    find_site_op_info(m, S::init_sgf(-1, S::pg_inv(ipg))));
+                (*op_prims["D"])[S::init_sgf(1, ipg)](0, 0) = 1.0;
+            }
+        }
+        // site norm operators
+        for (uint16_t m = 0; m < n_sites; m++) {
+            typename S::pg_t ipg = orb_sym[m];
+            for (auto t : stx) {
+                site_norm_ops[m][t] = make_shared<SparseMatrix<S, FL>>(nullptr);
+                site_norm_ops[m][t]->allocate(
+                    find_site_op_info(m,
+                                      op_prims.at(ipg)[t]->info->delta_quantum),
+                    op_prims.at(ipg)[t]->data);
+            }
+        }
+    }
+    shared_ptr<SparseMatrix<S, FL>> get_site_string_op(uint16_t m,
+                                                       const string &expr) {
+        if (site_norm_ops[m].count(expr))
+            return site_norm_ops[m].at(expr);
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> r =
+            make_shared<SparseMatrix<S, FL>>(d_alloc);
+        shared_ptr<SparseMatrix<S, FL>> a, b;
+        S dq;
+        if (vacuum == S::init_su2()) {
+            int ix = 0, depth = 0;
+            for (auto &c : expr) {
+                if (c == '(')
+                    depth++;
+                else if (c == ')')
+                    depth--;
+                else if (c == '+' && depth == 1)
+                    break;
+                ix++;
+            }
+            int iy = 0;
+            for (int i = (int)expr.length() - 1, k = 1; i >= 0; i--, k *= 10)
+                if (!(expr[i] >= '0' && expr[i] <= '9')) {
+                    iy = i;
+                    break;
+                }
+            a = get_site_string_op(m, expr.substr(1, ix - 1));
+            b = get_site_string_op(m, expr.substr(ix + 1, iy - ix - 1));
+            int qa =
+                SpinPermRecoupling::get_target_twos(expr.substr(1, ix - 1));
+            int qb = SpinPermRecoupling::get_target_twos(
+                expr.substr(ix + 1, iy - ix - 1));
+            int qc = SpinPermRecoupling::get_target_twos(expr);
+            dq = (a->info->delta_quantum +
+                  b->info->delta_quantum)[(qc - abs(qa - qb)) / 2];
+        } else {
+            a = get_site_string_op(m, expr.substr(0, expr.length() - 1));
+            b = get_site_string_op(m, expr.substr(expr.length() - 1, 1));
+            dq = a->info->delta_quantum + b->info->delta_quantum;
+        }
+        r->allocate(find_site_op_info(m, dq));
+        opf->product(0, a, b, r);
+        site_norm_ops[m][expr] = r;
+        return r;
+    }
+    virtual void get_site_string_ops(
+        uint16_t m,
+        unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
+        for (auto &p : ops)
+            p.second = get_site_string_op(m, p.first);
+    }
+    virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
+                                                 const vector<uint16_t> &term_l,
+                                                 S left_vacuum) {
+        vector<vector<S>> r(exprs.size());
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            r[ix].resize(term_l[ix] + 1, vacuum);
+            if (vacuum == S::init_su2()) {
+                vector<pair<int, char>> pex;
+                pex.reserve(exprs[ix].length());
+                for (char x : exprs[ix])
+                    if (x >= '0' && x <= '9') {
+                        if (pex.back().first != -1)
+                            pex.back().first =
+                                pex.back().first * 10 + (int)(x - '0');
+                        else
+                            pex.push_back(make_pair((int)(x - '0'), ' '));
+                    } else {
+                        if (x == '+' && pex.back().second == ' ')
+                            pex.back().second = '*';
+                        pex.push_back(make_pair(-1, x));
+                    }
+                const int site_dq = 1;
+                if (pex.size() == 0)
+                    continue;
+                else if (pex.size() == 1 && pex.back().first == -1) {
+                    // single C/D
+                    pex.insert(pex.begin(), make_pair(-1, '('));
+                    pex.push_back(make_pair(site_dq, ' '));
+                }
+                assert(pex.back().first != -1);
+                int cnt = 0;
+                vector<int> qn(r[ix].size());
+                // singlet embedding (twos will be set later)
+                assert(left_vacuum == S(S::invalid));
+                r[ix][0] = r[ix][0] + S::init_su2(pex.back().first, 0, 0);
+                qn[0] = pex.back().first;
+                vector<uint16_t> stk;
+                for (auto &p : pex) {
+                    if (p.second == '(')
+                        stk.push_back(cnt);
+                    // numbers in exprs like (()0+.) will not be used
+                    else if (p.second == '*')
+                        stk.pop_back();
+                    // use the right part to define the twos for the left part
+                    // because the right part is not affected by the singlet
+                    // embedding
+                    else if (p.second == ' ') {
+                        r[ix][stk.back()].set_twos(p.first);
+                        r[ix][stk.back()].set_twos_low(p.first);
+                        stk.pop_back();
+                    } else if (p.second == 'C')
+                        r[ix][cnt + 1] =
+                            r[ix][cnt + 1] + S::init_su2(qn[cnt] + 1, 0, 0),
+                                    qn[cnt + 1] = qn[cnt] + 1, cnt++;
+                    else if (p.second == 'D')
+                        r[ix][cnt + 1] =
+                            r[ix][cnt + 1] + S::init_su2(qn[cnt] - 1, 0, 0),
+                                    qn[cnt + 1] = qn[cnt] - 1, cnt++;
+                }
+                if (r[ix].size() >= 2) {
+                    r[ix][r[ix].size() - 2].set_twos(site_dq);
+                    r[ix][r[ix].size() - 2].set_twos_low(site_dq);
+                }
+            } else if (vacuum == S::init_sz()) {
+                for (int i = 0; i < term_l[ix]; i++)
+                    switch (exprs[ix][i]) {
+                    case 'c':
+                        r[ix][i + 1] = r[ix][i] + S::init_sz(1, 1, 0);
+                        break;
+                    case 'C':
+                        r[ix][i + 1] = r[ix][i] + S::init_sz(1, -1, 0);
+                        break;
+                    case 'd':
+                        r[ix][i + 1] = r[ix][i] + S::init_sz(-1, -1, 0);
+                        break;
+                    case 'D':
+                        r[ix][i + 1] = r[ix][i] + S::init_sz(-1, 1, 0);
+                        break;
+                    default:
+                        assert(false);
+                    }
+            } else if (vacuum == S::init_sgf()) {
+                for (int i = 0; i < term_l[ix]; i++)
+                    switch (exprs[ix][i]) {
+                    case 'C':
+                        r[ix][i + 1] = r[ix][i] + S::init_sgf(1, 0);
+                        break;
+                    case 'D':
+                        r[ix][i + 1] = r[ix][i] + S::init_sgf(-1, 0);
+                        break;
+                    default:
+                        assert(false);
+                    }
+            }
+        }
+        return r;
+    }
+    virtual pair<S, S> get_string_quanta(const vector<S> &ref,
+                                         const string &expr,
+                                         const uint16_t *idxs,
+                                         uint16_t k) const {
+        S l = ref[k], r = ref.back() - l;
+        for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
+            if (vacuum == S::init_su2()) {
+                if (expr[j] != 'C' && expr[j] != 'D')
+                    continue;
+                typename S::pg_t ipg = orb_sym[idxs[i]];
+                if (expr[j] == 'D')
+                    ipg = S::pg_inv(ipg);
+                if (i < k)
+                    l = l + S::init_su2(0, 0, ipg);
+                else
+                    r = r + S::init_su2(0, 0, ipg);
+                i++;
+            } else if (vacuum == S::init_sz()) {
+                typename S::pg_t ipg = orb_sym[idxs[j]];
+                if (expr[j] == 'd' || expr[j] == 'D')
+                    ipg = S::pg_inv(ipg);
+                if (j < k)
+                    l = l + S::init_sz(0, 0, ipg);
+                else
+                    r = r + S::init_sz(0, 0, ipg);
+            } else if (vacuum == S::init_sgf()) {
+                typename S::pg_t ipg = orb_sym[idxs[j]];
+                if (expr[j] == 'D')
+                    ipg = S::pg_inv(ipg);
+                if (j < k)
+                    l = l + S::init_sgf(0, ipg);
+                else
+                    r = r + S::init_sgf(0, ipg);
+            }
+        }
+        return make_pair(l, r);
+    }
+    S get_string_quantum(const string &expr,
+                         const uint16_t *idxs) const override {
+        S r = vacuum;
+        for (uint16_t j = 0, i = 0; j < (uint16_t)expr.length(); j++) {
+            if (vacuum == S::init_su2()) {
+                if (expr[j] != 'C' && expr[j] != 'D')
+                    continue;
+                typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[i]] : 0;
+                if (expr[j] == 'C')
+                    r = r + S::init_su2(1, 0, ipg);
+                else if (expr[j] == 'D')
+                    r = r + S::init_su2(-1, 0, S::pg_inv(ipg));
+                i++;
+            } else if (vacuum == S::init_sz()) {
+                typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[j]] : 0;
+                if (expr[j] == 'c')
+                    r = r + S::init_sz(1, 1, ipg);
+                else if (expr[j] == 'C')
+                    r = r + S::init_sz(1, -1, ipg);
+                else if (expr[j] == 'd')
+                    r = r + S::init_sz(-1, -1, S::pg_inv(ipg));
+                else if (expr[j] == 'D')
+                    r = r + S::init_sz(-1, 1, S::pg_inv(ipg));
+            } else if (vacuum == S::init_sgf()) {
+                typename S::pg_t ipg = idxs != nullptr ? orb_sym[idxs[j]] : 0;
+                if (expr[j] == 'C')
+                    r = r + S::init_sgf(1, ipg);
+                else if (expr[j] == 'D')
+                    r = r + S::init_sgf(-1, S::pg_inv(ipg));
+            }
+        }
+        if (vacuum == S::init_su2()) {
+            int rr = SpinPermRecoupling::get_target_twos(expr);
+            r = r + S::init_su2(0, rr, 0);
+        }
+        return r;
+    }
+    static string get_sub_expr(const string &expr, int i, int j) {
+        if (expr.find('+') == string::npos && expr.find('(') == string::npos)
+            return expr.substr(i, j - i);
+        else
+            return SpinPermRecoupling::get_sub_expr(expr, i, j);
+    }
+    void deallocate() override {
+        for (auto &op_prims : this->op_prims)
+            for (auto &p : op_prims.second)
+                p.second->deallocate();
+        for (auto &site_norm_ops : this->site_norm_ops)
+            for (auto &p : site_norm_ops)
+                p.second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            for (int j = (int)site_op_infos[m].size() - 1; j >= 0; j--)
+                site_op_infos[m][j].second->deallocate();
+        for (int16_t m = n_sites - 1; m >= 0; m--)
+            basis[m]->deallocate();
+        Hamiltonian<S, FL>::deallocate();
+    }
+};
+
 } // namespace block2

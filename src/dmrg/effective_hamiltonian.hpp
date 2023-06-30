@@ -305,7 +305,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         vector<vector<shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>>
             cinfos;
         cinfos.resize(psubsl.size());
-        S idq = S(0);
+        S idq = mps_info->vacuum;
         for (size_t j = 0; j < psubsl.size(); j++) {
             S pks = ket_label + psubsl[j].second;
             cinfos[j].resize(pks.count());
@@ -1347,7 +1347,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         int vidx = reduced ? -1 : 0;
         for (int i = 0; i < ket[0]->n; i++) {
             cinfos[i].resize(psubsl.size());
-            S idq = S(0);
+            S idq = mps_info->vacuum;
             S ket_label = ket[0]->infos[i]->delta_quantum;
             for (size_t j = 0; j < psubsl.size(); j++) {
                 S pks = ket_label + psubsl[j].second;

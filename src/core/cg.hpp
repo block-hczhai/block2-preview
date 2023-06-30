@@ -175,6 +175,44 @@ struct SU2CG {
     }
 };
 
+template <typename S> struct CG<S, typename S::is_sany_t> : SU2CG {
+    CG(int n_sqrt_fact = 200) : SU2CG() {}
+    long double wigner_6j(S a, S b, S c, S d, S e, S f) const {
+        long double r = 1.0L;
+        for (int k : a.su2_indices())
+            r *= SU2CG::wigner_6j(a.values[k], b.values[k], c.values[k],
+                                  d.values[k], e.values[k], f.values[k]);
+        return r;
+    }
+    long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
+        long double r = 1.0L;
+        for (int k : a.su2_indices())
+            r *= SU2CG::wigner_9j(a.values[k], b.values[k], c.values[k],
+                                  d.values[k], e.values[k], f.values[k],
+                                  g.values[k], h.values[k], i.values[k]);
+        return r;
+    }
+    long double racah(S a, S b, S c, S d, S e, S f) const {
+        long double r = 1.0L;
+        for (int k : a.su2_indices())
+            r *= SU2CG::racah(a.values[k], b.values[k], c.values[k],
+                              d.values[k], e.values[k], f.values[k]);
+        return r;
+    }
+    long double transpose_cg(S d, S l, S r) const {
+        long double x = 1.0L;
+        for (int k : d.su2_indices())
+            x *= SU2CG::transpose_cg(d.values[k], l.values[k], r.values[k]);
+        return x;
+    }
+    long double phase(S a, S b, S c) const {
+        long double r = 1.0L;
+        for (int k : a.su2_indices())
+            r *= SU2CG::phase(a.values[k], b.values[k], c.values[k]);
+        return r;
+    }
+};
+
 template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
     CG(int n_sqrt_fact = 200) : TrivialCG() {}
     long double wigner_6j(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
