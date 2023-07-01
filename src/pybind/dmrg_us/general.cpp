@@ -18,8 +18,7 @@
  *
  */
 
-#include "../block2_core.hpp"
+#include "../pybind_dmrg.hpp"
 
-template struct block2::FCIDUMP<complex<double>>;
-template struct block2::SpinOrbitalFCIDUMP<complex<double>>;
-template struct block2::MRCISFCIDUMP<complex<double>>;
+template void bind_fl_general<SZ, float>(py::module &m);
+template void bind_fl_general<SU2, float>(py::module &m);

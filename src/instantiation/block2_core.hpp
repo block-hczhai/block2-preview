@@ -36,6 +36,7 @@
 #include "../core/fp_codec.hpp"
 #include "../core/hamiltonian.hpp"
 #include "../core/integral.hpp"
+#include "../core/integral_general.hpp"
 #include "../core/iterative_matrix_functions.hpp"
 #include "../core/matrix.hpp"
 #include "../core/matrix_functions.hpp"
@@ -63,14 +64,6 @@ extern template struct block2::VectorAllocator<double>;
 extern template struct block2::TemporaryAllocator<double>;
 extern template struct block2::DataFrame<double>;
 
-// archived_sparse_matrix.hpp
-extern template struct block2::ArchivedSparseMatrix<block2::SZ, double>;
-extern template struct block2::ArchivedSparseMatrix<block2::SU2, double>;
-
-// archived_tensor_functions.hpp
-extern template struct block2::ArchivedTensorFunctions<block2::SZ, double>;
-extern template struct block2::ArchivedTensorFunctions<block2::SU2, double>;
-
 // batch_gemm.hpp
 extern template struct block2::BatchGEMM<double>;
 extern template struct block2::BatchGEMMRef<double>;
@@ -82,10 +75,6 @@ extern template struct block2::BatchGEMMRef<complex<double>>;
 extern template struct block2::AdvancedGEMM<complex<double>>;
 extern template struct block2::BatchGEMMSeq<complex<double>>;
 
-// cg.hpp
-extern template struct block2::CG<block2::SZ>;
-extern template struct block2::CG<block2::SU2>;
-
 // csr_matrix.hpp
 extern template struct block2::GCSRMatrix<double>;
 extern template struct block2::GCSRMatrix<complex<double>>;
@@ -93,6 +82,62 @@ extern template struct block2::GCSRMatrix<complex<double>>;
 // csr_matrix_functions.hpp
 extern template struct block2::GCSRMatrixFunctions<double>;
 extern template struct block2::GCSRMatrixFunctions<complex<double>>;
+
+// fft.hpp
+extern template struct block2::FactorizedFFT<block2::RaderFFT<>, 2, 3, 5, 7,
+                                             11>;
+extern template struct block2::FactorizedFFT<block2::BluesteinFFT<>, 2, 3, 5, 7,
+                                             11>;
+
+// fp_codec.hpp
+extern template struct block2::FPCodec<double>;
+extern template struct block2::CompressedVector<double>;
+extern template struct block2::CompressedVectorMT<double>;
+
+// integral.hpp
+extern template struct block2::FCIDUMP<double>;
+extern template struct block2::SpinOrbitalFCIDUMP<double>;
+extern template struct block2::MRCISFCIDUMP<double>;
+
+extern template struct block2::FCIDUMP<complex<double>>;
+extern template struct block2::SpinOrbitalFCIDUMP<complex<double>>;
+extern template struct block2::MRCISFCIDUMP<complex<double>>;
+
+// integral_general.hpp
+extern template struct block2::GeneralFCIDUMP<double>;
+extern template struct block2::GeneralFCIDUMP<complex<double>>;
+
+// iterative_matrix_functions.hpp
+extern template struct block2::IterativeMatrixFunctions<double>;
+extern template struct block2::IterativeMatrixFunctions<complex<double>>;
+
+// matrix.hpp
+extern template struct block2::GMatrix<double>;
+extern template struct block2::GDiagonalMatrix<double>;
+extern template struct block2::GIdentityMatrix<double>;
+extern template struct block2::GTensor<double>;
+
+extern template struct block2::GMatrix<complex<double>>;
+extern template struct block2::GDiagonalMatrix<complex<double>>;
+extern template struct block2::GTensor<complex<double>>;
+
+// matrix_functions.hpp
+extern template struct block2::GMatrixFunctions<double>;
+extern template struct block2::GMatrixFunctions<complex<double>>;
+
+#ifdef _USE_SU2SZ
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SZ, double>;
+extern template struct block2::ArchivedSparseMatrix<block2::SU2, double>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SZ, double>;
+extern template struct block2::ArchivedTensorFunctions<block2::SU2, double>;
+
+// cg.hpp
+extern template struct block2::CG<block2::SZ>;
+extern template struct block2::CG<block2::SU2>;
 
 // csr_operator_functions.hpp
 extern template struct block2::CSROperatorFunctions<block2::SZ, double>;
@@ -137,17 +182,6 @@ extern template struct block2::OpProduct<block2::SU2, double>;
 extern template struct block2::OpSumProd<block2::SU2, double>;
 extern template struct block2::OpSum<block2::SU2, double>;
 
-// fft.hpp
-extern template struct block2::FactorizedFFT<block2::RaderFFT<>, 2, 3, 5, 7,
-                                             11>;
-extern template struct block2::FactorizedFFT<block2::BluesteinFFT<>, 2, 3, 5, 7,
-                                             11>;
-
-// fp_codec.hpp
-extern template struct block2::FPCodec<double>;
-extern template struct block2::CompressedVector<double>;
-extern template struct block2::CompressedVectorMT<double>;
-
 // hamiltonian.hpp
 extern template struct block2::SiteBasis<block2::SZ>;
 extern template struct block2::SiteBasis<block2::SU2>;
@@ -157,29 +191,6 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SZ, double, block2::Hamiltonian<block2::SZ, double>>;
 extern template struct block2::DelayedSparseMatrix<
     block2::SU2, double, block2::Hamiltonian<block2::SU2, double>>;
-
-// integral.hpp
-extern template struct block2::FCIDUMP<double>;
-extern template struct block2::SpinOrbitalFCIDUMP<double>;
-extern template struct block2::MRCISFCIDUMP<double>;
-
-// iterative_matrix_functions.hpp
-extern template struct block2::IterativeMatrixFunctions<double>;
-extern template struct block2::IterativeMatrixFunctions<complex<double>>;
-
-// matrix.hpp
-extern template struct block2::GMatrix<double>;
-extern template struct block2::GDiagonalMatrix<double>;
-extern template struct block2::GIdentityMatrix<double>;
-extern template struct block2::GTensor<double>;
-
-extern template struct block2::GMatrix<complex<double>>;
-extern template struct block2::GDiagonalMatrix<complex<double>>;
-extern template struct block2::GTensor<complex<double>>;
-
-// matrix_functions.hpp
-extern template struct block2::GMatrixFunctions<double>;
-extern template struct block2::GMatrixFunctions<complex<double>>;
 
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, double>;
@@ -251,6 +262,8 @@ extern template struct block2::SymbolicMatrix<block2::SU2>;
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, double>;
 extern template struct block2::TensorFunctions<block2::SU2, double>;
+
+#endif
 
 #ifdef _USE_KSYMM
 
@@ -531,6 +544,8 @@ extern template struct block2::TensorFunctions<block2::SGB, double>;
 
 #ifdef _USE_COMPLEX
 
+#ifdef _USE_SU2SZ
+
 // archived_sparse_matrix.hpp
 extern template struct block2::ArchivedSparseMatrix<block2::SZ,
                                                     complex<double>>;
@@ -599,11 +614,6 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SU2, complex<double>,
     block2::Hamiltonian<block2::SU2, complex<double>>>;
 
-// integral.hpp
-extern template struct block2::FCIDUMP<complex<double>>;
-extern template struct block2::SpinOrbitalFCIDUMP<complex<double>>;
-extern template struct block2::MRCISFCIDUMP<complex<double>>;
-
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, complex<double>>;
 extern template struct block2::OperatorFunctions<block2::SU2, complex<double>>;
@@ -644,6 +654,8 @@ extern template struct block2::SparseMatrixGroup<block2::SU2, complex<double>>;
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, complex<double>>;
 extern template struct block2::TensorFunctions<block2::SU2, complex<double>>;
+
+#endif
 
 #ifdef _USE_KSYMM
 
@@ -884,14 +896,6 @@ extern template struct block2::VectorAllocator<float>;
 extern template struct block2::TemporaryAllocator<float>;
 extern template struct block2::DataFrame<float>;
 
-// archived_sparse_matrix.hpp
-extern template struct block2::ArchivedSparseMatrix<block2::SZ, float>;
-extern template struct block2::ArchivedSparseMatrix<block2::SU2, float>;
-
-// archived_tensor_functions.hpp
-extern template struct block2::ArchivedTensorFunctions<block2::SZ, float>;
-extern template struct block2::ArchivedTensorFunctions<block2::SU2, float>;
-
 // batch_gemm.hpp
 extern template struct block2::BatchGEMM<float>;
 extern template struct block2::BatchGEMMRef<float>;
@@ -910,6 +914,52 @@ extern template struct block2::GCSRMatrix<complex<float>>;
 // csr_matrix_functions.hpp
 extern template struct block2::GCSRMatrixFunctions<float>;
 extern template struct block2::GCSRMatrixFunctions<complex<float>>;
+
+// fp_codec.hpp
+extern template struct block2::FPCodec<float>;
+extern template struct block2::CompressedVector<float>;
+extern template struct block2::CompressedVectorMT<float>;
+
+// integral.hpp
+extern template struct block2::FCIDUMP<float>;
+extern template struct block2::SpinOrbitalFCIDUMP<float>;
+extern template struct block2::MRCISFCIDUMP<float>;
+
+extern template struct block2::FCIDUMP<complex<float>>;
+extern template struct block2::SpinOrbitalFCIDUMP<complex<float>>;
+extern template struct block2::MRCISFCIDUMP<complex<float>>;
+
+// integral_general.hpp
+extern template struct block2::GeneralFCIDUMP<float>;
+extern template struct block2::GeneralFCIDUMP<complex<float>>;
+
+// iterative_matrix_functions.hpp
+extern template struct block2::IterativeMatrixFunctions<float>;
+extern template struct block2::IterativeMatrixFunctions<complex<float>>;
+
+// matrix.hpp
+extern template struct block2::GMatrix<float>;
+extern template struct block2::GDiagonalMatrix<float>;
+extern template struct block2::GIdentityMatrix<float>;
+extern template struct block2::GTensor<float>;
+
+extern template struct block2::GMatrix<complex<float>>;
+extern template struct block2::GDiagonalMatrix<complex<float>>;
+extern template struct block2::GTensor<complex<float>>;
+
+// matrix_functions.hpp
+extern template struct block2::GMatrixFunctions<float>;
+extern template struct block2::GMatrixFunctions<complex<float>>;
+
+#ifdef _USE_SU2SZ
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SZ, float>;
+extern template struct block2::ArchivedSparseMatrix<block2::SU2, float>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SZ, float>;
+extern template struct block2::ArchivedTensorFunctions<block2::SU2, float>;
 
 // csr_operator_functions.hpp
 extern template struct block2::CSROperatorFunctions<block2::SZ, float>;
@@ -948,11 +998,6 @@ extern template struct block2::OpProduct<block2::SU2, float>;
 extern template struct block2::OpSumProd<block2::SU2, float>;
 extern template struct block2::OpSum<block2::SU2, float>;
 
-// fp_codec.hpp
-extern template struct block2::FPCodec<float>;
-extern template struct block2::CompressedVector<float>;
-extern template struct block2::CompressedVectorMT<float>;
-
 // hamiltonian.hpp
 extern template struct block2::Hamiltonian<block2::SZ, float>;
 extern template struct block2::Hamiltonian<block2::SU2, float>;
@@ -960,29 +1005,6 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SZ, float, block2::Hamiltonian<block2::SZ, float>>;
 extern template struct block2::DelayedSparseMatrix<
     block2::SU2, float, block2::Hamiltonian<block2::SU2, float>>;
-
-// integral.hpp
-extern template struct block2::FCIDUMP<float>;
-extern template struct block2::SpinOrbitalFCIDUMP<float>;
-extern template struct block2::MRCISFCIDUMP<float>;
-
-// iterative_matrix_functions.hpp
-extern template struct block2::IterativeMatrixFunctions<float>;
-extern template struct block2::IterativeMatrixFunctions<complex<float>>;
-
-// matrix.hpp
-extern template struct block2::GMatrix<float>;
-extern template struct block2::GDiagonalMatrix<float>;
-extern template struct block2::GIdentityMatrix<float>;
-extern template struct block2::GTensor<float>;
-
-extern template struct block2::GMatrix<complex<float>>;
-extern template struct block2::GDiagonalMatrix<complex<float>>;
-extern template struct block2::GTensor<complex<float>>;
-
-// matrix_functions.hpp
-extern template struct block2::GMatrixFunctions<float>;
-extern template struct block2::GMatrixFunctions<complex<float>>;
 
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, float>;
@@ -1024,6 +1046,8 @@ extern template struct block2::TransSparseMatrix<block2::SU2, double, float>;
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, float>;
 extern template struct block2::TensorFunctions<block2::SU2, float>;
+
+#endif
 
 #ifdef _USE_SG
 
@@ -1125,6 +1149,8 @@ extern template struct block2::TensorFunctions<block2::SGB, float>;
 
 #ifdef _USE_COMPLEX
 
+#ifdef _USE_SU2SZ
+
 // archived_sparse_matrix.hpp
 extern template struct block2::ArchivedSparseMatrix<block2::SZ, complex<float>>;
 extern template struct block2::ArchivedSparseMatrix<block2::SU2,
@@ -1190,11 +1216,6 @@ extern template struct block2::DelayedSparseMatrix<
     block2::SU2, complex<float>,
     block2::Hamiltonian<block2::SU2, complex<float>>>;
 
-// integral.hpp
-extern template struct block2::FCIDUMP<complex<float>>;
-extern template struct block2::SpinOrbitalFCIDUMP<complex<float>>;
-extern template struct block2::MRCISFCIDUMP<complex<float>>;
-
 // operator_functions.hpp
 extern template struct block2::OperatorFunctions<block2::SZ, complex<float>>;
 extern template struct block2::OperatorFunctions<block2::SU2, complex<float>>;
@@ -1244,6 +1265,8 @@ extern template struct block2::TransSparseMatrix<block2::SU2, complex<double>,
 // tensor_functions.hpp
 extern template struct block2::TensorFunctions<block2::SZ, complex<float>>;
 extern template struct block2::TensorFunctions<block2::SU2, complex<float>>;
+
+#endif
 
 #ifdef _USE_SG
 

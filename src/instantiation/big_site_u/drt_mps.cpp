@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020-2023 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,10 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_big_site.hpp"
 
-template void bind_general_fcidump<complex<double>>(py::module &m);
-template void bind_fl_general<SZ, complex<double>>(py::module &m);
-template void bind_fl_general<SU2, complex<double>>(py::module &m);
+template struct block2::DRTMPS<block2::SZ, double, block2::ElemOpTypes::SZ>;
+template struct block2::HDRTMPO<block2::SZ, double, block2::ElemOpTypes::SZ>;
+
+template struct block2::DRTMPS<block2::SU2, double, block2::ElemOpTypes::SU2>;
+template struct block2::HDRTMPO<block2::SU2, double, block2::ElemOpTypes::SU2>;

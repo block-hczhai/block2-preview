@@ -21,3 +21,4 @@
 #include "../pybind_core.hpp"
 
 template void bind_fl_matrix<complex<float>>(py::module &m);
+template void bind_general_fcidump<complex<float>>(py::module &m);

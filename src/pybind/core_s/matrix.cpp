@@ -22,3 +22,4 @@
 
 template void bind_matrix<float>(py::module &m);
 template void bind_fl_matrix<float>(py::module &m);
+template void bind_general_fcidump<float>(py::module &m);

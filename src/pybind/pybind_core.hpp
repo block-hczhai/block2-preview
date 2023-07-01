@@ -83,9 +83,34 @@ PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<long long int, long long int>, double>>);
+PYBIND11_MAKE_OPAQUE(map<string, string>);
+PYBIND11_MAKE_OPAQUE(vector<map<string, string>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
+
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<SZ>);
 PYBIND11_MAKE_OPAQUE(vector<vector<SZ>>);
+// SU2
+PYBIND11_MAKE_OPAQUE(vector<SU2>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SU2>>);
+// SZK
+PYBIND11_MAKE_OPAQUE(vector<SZK>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SZK>>);
+// SU2K
+PYBIND11_MAKE_OPAQUE(vector<SU2K>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SU2K>>);
+// SGF
+PYBIND11_MAKE_OPAQUE(vector<SGF>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SGF>>);
+// SGB
+PYBIND11_MAKE_OPAQUE(vector<SGB>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SGB>>);
+// SAny
+PYBIND11_MAKE_OPAQUE(vector<SAny>);
+PYBIND11_MAKE_OPAQUE(vector<vector<SAny>>);
+
+#ifdef _USE_SU2SZ
+// SZ
 PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SZ>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, double>>>>);
@@ -119,8 +144,6 @@ PYBIND11_MAKE_OPAQUE(vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SZ, SZ>, shared_ptr<GTensor<double>>>>>);
 // SU2
-PYBIND11_MAKE_OPAQUE(vector<SU2>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<uint8_t, SU2>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<uint8_t, SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SU2, double>>>>);
@@ -153,24 +176,7 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<double>>>>>);
-PYBIND11_MAKE_OPAQUE(map<string, string>);
-PYBIND11_MAKE_OPAQUE(vector<map<string, string>>);
-PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
-// SZK
-PYBIND11_MAKE_OPAQUE(vector<SZK>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SZK>>);
-// SU2K
-PYBIND11_MAKE_OPAQUE(vector<SU2K>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SU2K>>);
-// SGF
-PYBIND11_MAKE_OPAQUE(vector<SGF>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SGF>>);
-// SGB
-PYBIND11_MAKE_OPAQUE(vector<SGB>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SGB>>);
-// SAny
-PYBIND11_MAKE_OPAQUE(vector<SAny>);
-PYBIND11_MAKE_OPAQUE(vector<vector<SAny>>);
+#endif
 
 #ifdef _USE_COMPLEX
 // complex
@@ -180,6 +186,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<pair<pair<long long int, long long int>, complex<double>>>);
+#ifdef _USE_SU2SZ
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<double>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<double>>>>);
@@ -231,6 +238,7 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<double>>>>>>);
 #endif
+#endif
 
 #ifdef _USE_SINGLE_PREC
 
@@ -246,6 +254,7 @@ PYBIND11_MAKE_OPAQUE(vector<vector<shared_ptr<GTensor<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<float>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, float>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<long long int, long long int>, float>>);
+#ifdef _USE_SU2SZ
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, float>>>);
@@ -287,6 +296,7 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<float>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<float>>>>>);
+#endif
 
 #ifdef _USE_COMPLEX
 // complex
@@ -296,6 +306,7 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, complex<float>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<pair<pair<long long int, long long int>, complex<float>>>);
+#ifdef _USE_SU2SZ
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<vector<vector<pair<SZ, complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, complex<float>>>>);
@@ -346,6 +357,7 @@ PYBIND11_MAKE_OPAQUE(
     vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<float>>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<pair<SU2, SU2>, shared_ptr<GTensor<complex<float>>>>>>);
+#endif
 #endif
 
 #endif
@@ -3297,6 +3309,73 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         });
 }
 
+template <typename FL> void bind_general_fcidump(py::module &m) {
+
+    py::class_<GeneralFCIDUMP<FL>, shared_ptr<GeneralFCIDUMP<FL>>>(
+        m, "GeneralFCIDUMP")
+        .def(py::init<>())
+        .def_readwrite("params", &GeneralFCIDUMP<FL>::params)
+        .def_readwrite("const_e", &GeneralFCIDUMP<FL>::const_e)
+        .def_readwrite("exprs", &GeneralFCIDUMP<FL>::exprs)
+        .def_readwrite("indices", &GeneralFCIDUMP<FL>::indices)
+        .def_readwrite("data", &GeneralFCIDUMP<FL>::data)
+        .def_readwrite("elem_type", &GeneralFCIDUMP<FL>::elem_type)
+        .def_readwrite("order_adjusted", &GeneralFCIDUMP<FL>::order_adjusted)
+        .def(
+            "add_eight_fold_term",
+            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
+               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor) {
+                self->add_eight_fold_term(v.data(), (size_t)v.size(), cutoff,
+                                          factor);
+            },
+            py::arg("v"), py::arg("cutoff"), py::arg("factor"))
+        .def(
+            "add_sum_term",
+            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
+               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor,
+               const vector<uint16_t> &perm) {
+                vector<int> shape(v.ndim());
+                vector<size_t> strides(v.ndim());
+                for (int i = 0; i < v.ndim(); i++)
+                    shape[i] = v.shape()[i],
+                    strides[i] = v.strides()[i] / sizeof(FL);
+                vector<uint16_t> rperm(v.ndim());
+                if (perm.size() == 0)
+                    for (int i = 0; i < v.ndim(); i++)
+                        rperm[i] = i;
+                else
+                    for (int i = 0; i < v.ndim(); i++)
+                        rperm[perm[i]] = i;
+                self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
+                                   cutoff, factor, vector<int>(), rperm);
+            },
+            py::arg("v"), py::arg("cutoff"), py::arg("factor") = (FL)1.0,
+            py::arg("perm") = vector<uint16_t>())
+        .def_static("initialize_from_qc",
+                    &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
+                    py::arg("elem_type"),
+                    py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("adjust_order", &GeneralFCIDUMP<FL>::adjust_order,
+             py::arg("schemes") = vector<shared_ptr<SpinPermScheme>>(),
+             py::arg("merge") = true, py::arg("is_drt") = false,
+             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("merge_terms", &GeneralFCIDUMP<FL>::merge_terms,
+             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("twos", &GeneralFCIDUMP<FL>::twos)
+        .def("n_sites", &GeneralFCIDUMP<FL>::n_sites)
+        .def("n_elec", &GeneralFCIDUMP<FL>::n_elec)
+        .def("e", &GeneralFCIDUMP<FL>::e)
+        .def_property_readonly("orb_sym",
+                               &GeneralFCIDUMP<FL>::template orb_sym<uint8_t>)
+        .def_property_readonly("orb_sym_lz",
+                               &GeneralFCIDUMP<FL>::template orb_sym<int16_t>)
+        .def("__repr__", [](GeneralFCIDUMP<FL> *self) {
+            stringstream ss;
+            ss << *self;
+            return ss.str();
+        });
+}
+
 template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<OpNamesSet>(m, "OpNamesSet")
@@ -3622,9 +3701,11 @@ extern template void bind_symmetry<>(py::module &m);
 extern template void bind_fl_io<double>(py::module &m, const string &name);
 extern template void bind_matrix<double>(py::module &m);
 extern template void bind_fl_matrix<double>(py::module &m);
+extern template void bind_general_fcidump<double>(py::module &m);
 
 extern template void bind_post_matrix<>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_cg<SZ>(py::module &m);
 extern template void bind_expr<SZ>(py::module &m);
 extern template void bind_state_info<SZ>(py::module &m, const string &name);
@@ -3663,11 +3744,14 @@ extern template auto
 bind_trans_state_info_spin_specific<SU2, SZ>(py::module &m,
                                              const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+#endif
 
 #ifdef _USE_COMPLEX
 
 extern template void bind_fl_matrix<complex<double>>(py::module &m);
+extern template void bind_general_fcidump<complex<double>>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_fl_expr<SZ, complex<double>>(py::module &m);
 extern template void
 bind_fl_state_info<SZ, complex<double>>(py::module &m, const string &name);
@@ -3685,6 +3769,7 @@ extern template void bind_fl_parallel<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_operator<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_hamiltonian<SU2, complex<double>>(py::module &m);
 extern template void bind_fl_rule<SU2, complex<double>>(py::module &m);
+#endif
 
 #endif
 
@@ -3782,6 +3867,7 @@ extern template void bind_fl_operator<SGB, double>(py::module &m);
 extern template void bind_fl_hamiltonian<SGB, double>(py::module &m);
 extern template void bind_fl_rule<SGB, double>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_trans_state_info<SZ, SGF>(py::module &m,
                                                     const string &aux_name);
 extern template void bind_trans_state_info<SGF, SZ>(py::module &m,
@@ -3790,6 +3876,7 @@ extern template auto
 bind_trans_state_info_spin_specific<SZ, SGF>(py::module &m,
                                              const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif
 
 #ifdef _USE_COMPLEX
 extern template void bind_fl_expr<SGF, complex<double>>(py::module &m);
@@ -3819,7 +3906,9 @@ extern template void bind_fl_rule<SGB, complex<double>>(py::module &m);
 extern template void bind_fl_io<float>(py::module &m, const string &name);
 extern template void bind_matrix<float>(py::module &m);
 extern template void bind_fl_matrix<float>(py::module &m);
+extern template void bind_general_fcidump<float>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_fl_expr<SZ, float>(py::module &m);
 extern template void bind_fl_state_info<SZ, float>(py::module &m,
                                                    const string &name);
@@ -3850,11 +3939,14 @@ bind_trans_sparse_matrix<SZ, float, double>(py::module &m,
 extern template void
 bind_trans_sparse_matrix<SZ, double, float>(py::module &m,
                                             const string &aux_name);
+#endif
 
 #ifdef _USE_COMPLEX
 
 extern template void bind_fl_matrix<complex<float>>(py::module &m);
+extern template void bind_general_fcidump<complex<float>>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_fl_expr<SZ, complex<float>>(py::module &m);
 extern template void bind_fl_state_info<SZ, complex<float>>(py::module &m,
                                                             const string &name);
@@ -3885,6 +3977,7 @@ bind_trans_sparse_matrix<SZ, complex<float>, complex<double>>(
 extern template void
 bind_trans_sparse_matrix<SZ, complex<double>, complex<float>>(
     py::module &m, const string &aux_name);
+#endif
 
 #endif
 

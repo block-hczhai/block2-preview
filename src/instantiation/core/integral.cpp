@@ -23,3 +23,7 @@
 template struct block2::FCIDUMP<double>;
 template struct block2::SpinOrbitalFCIDUMP<double>;
 template struct block2::MRCISFCIDUMP<double>;
+
+template struct block2::FCIDUMP<complex<double>>;
+template struct block2::SpinOrbitalFCIDUMP<complex<double>>;
+template struct block2::MRCISFCIDUMP<complex<double>>;

@@ -52,6 +52,8 @@
 #include "../dmrg/sweep_algorithm_td.hpp"
 #include "block2_core.hpp"
 
+#ifdef _USE_SU2SZ
+
 // archived_mpo.hpp
 extern template struct block2::ArchivedMPO<block2::SZ, double>;
 extern template struct block2::ArchivedMPO<block2::SU2, double>;
@@ -87,8 +89,6 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SU2, double, block2::MultiMPS<block2::SU2, double>>;
 
 // general_hamiltonian.hpp
-extern template struct block2::GeneralFCIDUMP<double>;
-
 extern template struct block2::GeneralHamiltonian<block2::SZ, double>;
 extern template struct block2::GeneralHamiltonian<block2::SU2, double>;
 
@@ -257,6 +257,8 @@ extern template struct block2::TimeEvolution<block2::SZ, double, double>;
 
 extern template struct block2::TDDMRG<block2::SU2, double, double>;
 extern template struct block2::TimeEvolution<block2::SU2, double, double>;
+
+#endif
 
 #ifdef _USE_KSYMM
 
@@ -665,6 +667,8 @@ extern template struct block2::TimeEvolution<block2::SGB, double, double>;
 
 #ifdef _USE_COMPLEX
 
+#ifdef _USE_SU2SZ
+
 // archived_mpo.hpp
 extern template struct block2::ArchivedMPO<block2::SZ, complex<double>>;
 extern template struct block2::ArchivedMPO<block2::SU2, complex<double>>;
@@ -703,8 +707,6 @@ extern template struct block2::EffectiveHamiltonian<
     block2::MultiMPS<block2::SU2, complex<double>>>;
 
 // general_hamiltonian.hpp
-extern template struct block2::GeneralFCIDUMP<complex<double>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SZ, complex<double>>;
 extern template struct block2::GeneralHamiltonian<block2::SU2, complex<double>>;
 
@@ -869,6 +871,8 @@ extern template struct block2::TDDMRG<block2::SU2, complex<double>,
                                       complex<double>>;
 extern template struct block2::TimeEvolution<block2::SU2, complex<double>,
                                              complex<double>>;
+
+#endif
 
 #ifdef _USE_KSYMM
 
@@ -1293,6 +1297,8 @@ extern template struct block2::TimeEvolution<block2::SGB, complex<double>,
 
 #ifdef _USE_SINGLE_PREC
 
+#ifdef _USE_SU2SZ
+
 // archived_mpo.hpp
 extern template struct block2::ArchivedMPO<block2::SZ, float>;
 extern template struct block2::ArchivedMPO<block2::SU2, float>;
@@ -1328,8 +1334,6 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SU2, float, block2::MultiMPS<block2::SU2, float>>;
 
 // general_hamiltonian.hpp
-extern template struct block2::GeneralFCIDUMP<float>;
-
 extern template struct block2::GeneralHamiltonian<block2::SZ, float>;
 extern template struct block2::GeneralHamiltonian<block2::SU2, float>;
 
@@ -1481,6 +1485,8 @@ extern template struct block2::TimeEvolution<block2::SZ, float, float>;
 
 extern template struct block2::TDDMRG<block2::SU2, float, float>;
 extern template struct block2::TimeEvolution<block2::SU2, float, float>;
+
+#endif
 
 #ifdef _USE_SG
 
@@ -1668,6 +1674,8 @@ extern template struct block2::TimeEvolution<block2::SGB, float, float>;
 
 #ifdef _USE_COMPLEX
 
+#ifdef _USE_SU2SZ
+
 // archived_mpo.hpp
 extern template struct block2::ArchivedMPO<block2::SZ, complex<float>>;
 extern template struct block2::ArchivedMPO<block2::SU2, complex<float>>;
@@ -1705,8 +1713,6 @@ extern template struct block2::EffectiveHamiltonian<
     block2::SU2, complex<float>, block2::MultiMPS<block2::SU2, complex<float>>>;
 
 // general_hamiltonian.hpp
-extern template struct block2::GeneralFCIDUMP<complex<float>>;
-
 extern template struct block2::GeneralHamiltonian<block2::SZ, complex<float>>;
 extern template struct block2::GeneralHamiltonian<block2::SU2, complex<float>>;
 
@@ -1877,6 +1883,8 @@ extern template struct block2::TDDMRG<block2::SU2, complex<float>,
                                       complex<float>>;
 extern template struct block2::TimeEvolution<block2::SU2, complex<float>,
                                              complex<float>>;
+
+#endif
 
 #ifdef _USE_SG
 

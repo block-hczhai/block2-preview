@@ -49,6 +49,7 @@ struct TrivialCG {
     long double transpose_cg(int td, int tl, int tr) const noexcept {
         return 1.0L;
     }
+    long double phase(int ta, int tb, int tc) const { return 1.0L; }
 };
 
 // CG factors for SU(2) symmetry

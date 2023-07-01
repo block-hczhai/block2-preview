@@ -18,12 +18,7 @@
  *
  */
 
-#include "../block2_dmrg.hpp"
+#include "../block2_core.hpp"
 
-template struct block2::GeneralFCIDUMP<complex<float>>;
-
-template struct block2::GeneralHamiltonian<block2::SZ, complex<float>>;
-template struct block2::GeneralMPO<block2::SZ, complex<float>>;
-
-template struct block2::GeneralHamiltonian<block2::SU2, complex<float>>;
-template struct block2::GeneralMPO<block2::SU2, complex<float>>;
+template struct block2::GeneralFCIDUMP<double>;
+template struct block2::GeneralFCIDUMP<complex<double>>;

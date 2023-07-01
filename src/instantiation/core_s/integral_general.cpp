@@ -18,8 +18,7 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_core.hpp"
 
-template void bind_general_fcidump<float>(py::module &m);
-template void bind_fl_general<SZ, float>(py::module &m);
-template void bind_fl_general<SU2, float>(py::module &m);
+template struct block2::GeneralFCIDUMP<float>;
+template struct block2::GeneralFCIDUMP<complex<float>>;

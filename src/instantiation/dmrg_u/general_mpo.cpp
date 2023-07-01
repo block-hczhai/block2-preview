@@ -18,7 +18,7 @@
  *
  */
 
-#include "../pybind_core.hpp"
+#include "../block2_dmrg.hpp"
 
-template void bind_fl_matrix<complex<double>>(py::module &m);
-template void bind_general_fcidump<complex<double>>(py::module &m);
+template struct block2::GeneralMPO<block2::SZ, double>;
+template struct block2::GeneralMPO<block2::SU2, double>;

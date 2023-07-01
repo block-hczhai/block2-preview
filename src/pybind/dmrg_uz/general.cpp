@@ -18,7 +18,7 @@
  *
  */
 
-#include "../pybind_core.hpp"
+#include "../pybind_dmrg.hpp"
 
-template void bind_fl_matrix<complex<double>>(py::module &m);
-template void bind_general_fcidump<complex<double>>(py::module &m);
+template void bind_fl_general<SZ, complex<double>>(py::module &m);
+template void bind_fl_general<SU2, complex<double>>(py::module &m);

@@ -18,8 +18,7 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_dmrg.hpp"
 
-template void bind_general_fcidump<complex<float>>(py::module &m);
-template void bind_fl_general<SZ, complex<float>>(py::module &m);
-template void bind_fl_general<SU2, complex<float>>(py::module &m);
+template struct block2::GeneralHamiltonian<block2::SZ, complex<double>>;
+template struct block2::GeneralHamiltonian<block2::SU2, complex<double>>;

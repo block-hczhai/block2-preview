@@ -20,10 +20,5 @@
 
 #include "../block2_dmrg.hpp"
 
-template struct block2::GeneralFCIDUMP<complex<double>>;
-
-template struct block2::GeneralHamiltonian<block2::SZ, complex<double>>;
-template struct block2::GeneralMPO<block2::SZ, complex<double>>;
-
-template struct block2::GeneralHamiltonian<block2::SU2, complex<double>>;
-template struct block2::GeneralMPO<block2::SU2, complex<double>>;
+template struct block2::GeneralMPO<block2::SZ, complex<float>>;
+template struct block2::GeneralMPO<block2::SU2, complex<float>>;

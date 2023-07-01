@@ -32,6 +32,8 @@ namespace py = pybind11;
 using namespace block2;
 
 PYBIND11_MAKE_OPAQUE(vector<ActiveTypes>);
+
+#ifdef _USE_SU2SZ
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SZ, double>>>);
@@ -47,8 +49,10 @@ PYBIND11_MAKE_OPAQUE(
 PYBIND11_MAKE_OPAQUE(
     vector<shared_ptr<EffectiveHamiltonian<SU2, double, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, double>>>);
+#endif
 
 #ifdef _USE_COMPLEX
+#ifdef _USE_SU2SZ
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -68,9 +72,11 @@ PYBIND11_MAKE_OPAQUE(
         EffectiveHamiltonian<SU2, complex<double>, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, complex<double>>>>);
 #endif
+#endif
 
 #ifdef _USE_SINGLE_PREC
 
+#ifdef _USE_SU2SZ
 // SZ
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<Partition<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<MPS<SZ, float>>>);
@@ -104,6 +110,7 @@ PYBIND11_MAKE_OPAQUE(
     vector<
         shared_ptr<EffectiveHamiltonian<SU2, complex<float>, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseTensor<SU2, complex<float>>>>);
+#endif
 #endif
 
 #endif
@@ -1866,73 +1873,6 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S, FL>> &, const string &>());
 }
 
-template <typename FL> void bind_general_fcidump(py::module &m) {
-
-    py::class_<GeneralFCIDUMP<FL>, shared_ptr<GeneralFCIDUMP<FL>>>(
-        m, "GeneralFCIDUMP")
-        .def(py::init<>())
-        .def_readwrite("params", &GeneralFCIDUMP<FL>::params)
-        .def_readwrite("const_e", &GeneralFCIDUMP<FL>::const_e)
-        .def_readwrite("exprs", &GeneralFCIDUMP<FL>::exprs)
-        .def_readwrite("indices", &GeneralFCIDUMP<FL>::indices)
-        .def_readwrite("data", &GeneralFCIDUMP<FL>::data)
-        .def_readwrite("elem_type", &GeneralFCIDUMP<FL>::elem_type)
-        .def_readwrite("order_adjusted", &GeneralFCIDUMP<FL>::order_adjusted)
-        .def(
-            "add_eight_fold_term",
-            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
-               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor) {
-                self->add_eight_fold_term(v.data(), (size_t)v.size(), cutoff,
-                                          factor);
-            },
-            py::arg("v"), py::arg("cutoff"), py::arg("factor"))
-        .def(
-            "add_sum_term",
-            [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,
-               typename GeneralFCIDUMP<FL>::FP cutoff, FL factor,
-               const vector<uint16_t> &perm) {
-                vector<int> shape(v.ndim());
-                vector<size_t> strides(v.ndim());
-                for (int i = 0; i < v.ndim(); i++)
-                    shape[i] = v.shape()[i],
-                    strides[i] = v.strides()[i] / sizeof(FL);
-                vector<uint16_t> rperm(v.ndim());
-                if (perm.size() == 0)
-                    for (int i = 0; i < v.ndim(); i++)
-                        rperm[i] = i;
-                else
-                    for (int i = 0; i < v.ndim(); i++)
-                        rperm[perm[i]] = i;
-                self->add_sum_term(v.data(), (size_t)v.size(), shape, strides,
-                                   cutoff, factor, vector<int>(), rperm);
-            },
-            py::arg("v"), py::arg("cutoff"), py::arg("factor") = (FL)1.0,
-            py::arg("perm") = vector<uint16_t>())
-        .def_static("initialize_from_qc",
-                    &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
-                    py::arg("elem_type"),
-                    py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
-        .def("adjust_order", &GeneralFCIDUMP<FL>::adjust_order,
-             py::arg("schemes") = vector<shared_ptr<SpinPermScheme>>(),
-             py::arg("merge") = true, py::arg("is_drt") = false,
-             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
-        .def("merge_terms", &GeneralFCIDUMP<FL>::merge_terms,
-             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
-        .def("twos", &GeneralFCIDUMP<FL>::twos)
-        .def("n_sites", &GeneralFCIDUMP<FL>::n_sites)
-        .def("n_elec", &GeneralFCIDUMP<FL>::n_elec)
-        .def("e", &GeneralFCIDUMP<FL>::e)
-        .def_property_readonly("orb_sym",
-                               &GeneralFCIDUMP<FL>::template orb_sym<uint8_t>)
-        .def_property_readonly("orb_sym_lz",
-                               &GeneralFCIDUMP<FL>::template orb_sym<int16_t>)
-        .def("__repr__", [](GeneralFCIDUMP<FL> *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
-        });
-}
-
 template <typename S, typename FL> void bind_fl_general(py::module &m) {
 
     struct PyGeneralHamiltonian : GeneralHamiltonian<S, FL> {
@@ -2388,10 +2328,10 @@ template <typename S = void> void bind_dmrg_io(py::module &m) {
 extern template void bind_dmrg_types<>(py::module &m);
 extern template void bind_dmrg_io<>(py::module &m);
 
+#ifdef _USE_SU2SZ
 extern template void bind_mps<SZ>(py::module &m);
 extern template void bind_mpo<SZ>(py::module &m);
 
-extern template void bind_general_fcidump<double>(py::module &m);
 extern template void bind_fl_general<SZ, double>(py::module &m);
 
 extern template void bind_fl_mps<SZ, double>(py::module &m);
@@ -2450,7 +2390,6 @@ bind_fl_trans_mps_spin_specific<SU2, SZ, double>(py::module &m,
 
 #ifdef _USE_COMPLEX
 
-extern template void bind_general_fcidump<complex<double>>(py::module &m);
 extern template void bind_fl_general<SZ, complex<double>>(py::module &m);
 
 extern template void bind_fl_mps<SZ, complex<double>>(py::module &m);
@@ -2507,6 +2446,7 @@ extern template auto bind_fl_spin_specific<SU2, complex<double>>(py::module &m)
 extern template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+#endif
 
 #endif
 
@@ -2686,6 +2626,8 @@ bind_fl_expect<SGB, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SGB, double, double, complex<double>>(py::module &m,
                                                      const string &name);
+
+#ifdef _USE_SU2SZ
 extern template void bind_trans_mps<SZ, SGF>(py::module &m,
                                              const string &aux_name);
 extern template void bind_trans_mps<SGF, SZ>(py::module &m,
@@ -2694,6 +2636,8 @@ extern template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, double>(py::module &m,
                                                  const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif
+
 extern template auto bind_fl_spin_specific<SGB, double>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
 
@@ -2749,9 +2693,11 @@ extern template void
 bind_fl_expect<SGB, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
 
+#ifdef _USE_SU2SZ
 extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif
 
 #endif
 
@@ -2759,7 +2705,7 @@ extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
 
 #ifdef _USE_SINGLE_PREC
 
-extern template void bind_general_fcidump<float>(py::module &m);
+#ifdef _USE_SU2SZ
 extern template void bind_fl_general<SZ, float>(py::module &m);
 
 extern template void bind_fl_mps<SZ, float>(py::module &m);
@@ -2819,7 +2765,6 @@ bind_fl_trans_mps<SZ, double, float>(py::module &m, const string &aux_name);
 
 #ifdef _USE_COMPLEX
 
-extern template void bind_general_fcidump<complex<float>>(py::module &m);
 extern template void bind_fl_general<SZ, complex<float>>(py::module &m);
 
 extern template void bind_fl_mps<SZ, complex<float>>(py::module &m);
@@ -2892,6 +2837,8 @@ bind_fl_trans_mps<SZ, complex<double>, complex<float>>(py::module &m,
 
 #endif
 
+#endif
+
 #ifdef _USE_SG
 
 extern template void bind_fl_general<SGF, float>(py::module &m);
@@ -2938,10 +2885,12 @@ bind_fl_expect<SGB, float, float, complex<float>>(py::module &m,
 extern template auto bind_fl_spin_specific<SGB, float>(py::module &m)
     -> decltype(typename SGB::is_sg_t());
 
+#ifdef _USE_SU2SZ
 extern template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, float>(py::module &m,
                                                 const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif
 
 extern template void
 bind_fl_trans_mps<SGF, float, double>(py::module &m, const string &aux_name);
@@ -3002,10 +2951,12 @@ extern template void
 bind_fl_expect<SGB, complex<float>, complex<float>, complex<float>>(
     py::module &m, const string &name);
 
+#ifdef _USE_SU2SZ
 extern template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, complex<float>>(py::module &m,
                                                          const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif
 
 extern template void
 bind_fl_trans_mps<SGF, complex<float>, complex<double>>(py::module &m,

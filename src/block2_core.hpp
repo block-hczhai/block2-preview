@@ -43,6 +43,7 @@
 #include "core/integral_compressed.hpp"
 #include "core/integral_dyall.hpp"
 #include "core/integral_fink.hpp"
+#include "core/integral_general.hpp"
 #include "core/iterative_matrix_functions.hpp"
 #include "core/matching.hpp"
 #include "core/matrix.hpp"

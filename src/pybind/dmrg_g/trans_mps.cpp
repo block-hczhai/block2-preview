@@ -20,9 +20,11 @@
 
 #include "../pybind_dmrg.hpp"
 
+#ifdef _USE_SU2SZ
 template void bind_trans_mps<SZ, SGF>(py::module &m, const string &aux_name);
 template void bind_trans_mps<SGF, SZ>(py::module &m, const string &aux_name);
 template auto
 bind_fl_trans_mps_spin_specific<SZ, SGF, double>(py::module &m,
                                                  const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif

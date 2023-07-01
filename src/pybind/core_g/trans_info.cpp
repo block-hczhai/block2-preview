@@ -20,6 +20,7 @@
 
 #include "../pybind_core.hpp"
 
+#ifdef _USE_SU2SZ
 template void bind_trans_state_info<SZ, SGF>(py::module &m,
                                              const string &aux_name);
 template void bind_trans_state_info<SGF, SZ>(py::module &m,
@@ -28,3 +29,4 @@ template auto
 bind_trans_state_info_spin_specific<SZ, SGF>(py::module &m,
                                              const string &aux_name)
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
+#endif

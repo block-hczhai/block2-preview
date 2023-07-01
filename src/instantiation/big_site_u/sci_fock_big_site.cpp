@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2020 Henrik R. Larsson <larsson@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
  *
  */
 
-#include "../pybind_core.hpp"
+#include "../block2_big_site.hpp"
 
-template void bind_fl_matrix<complex<double>>(py::module &m);
-template void bind_general_fcidump<complex<double>>(py::module &m);
+template struct block2::SCIFockBigSite<block2::SZ, double>;

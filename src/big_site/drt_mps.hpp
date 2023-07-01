@@ -441,7 +441,7 @@ struct DRTMPS {
                           plus<FL>());
     }
     FL expect(const shared_ptr<DRTMPS> &other, const shared_ptr<HDRT<S>> &hdrt,
-              const vector<vector<typename ElemMatT<S, FL>::MT>> &site_matrices,
+              const vector<vector<ElemMat<S, FL>>> &site_matrices,
               const shared_ptr<vector<FL>> &ints) const {
         assert(drt->n_sites == other->drt->n_sites);
         vector<vector<int>> jx(drt->n_sites + 1);
@@ -468,7 +468,7 @@ struct DRTMPS {
                                   ih) -
                               1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
                 const int jhv = hdrt->jds[jh * hdrt->nd + dh];
-                const typename ElemMatT<S, FL>::MT &smat = site_matrices[k][dh];
+                const ElemMat<S, FL> &smat = site_matrices[k][dh];
                 for (size_t md = 0; md < smat.data.size(); md++) {
                     const int16_t dbra = smat.indices[md].first;
                     const int16_t dket = smat.indices[md].second;

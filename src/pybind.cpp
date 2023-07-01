@@ -53,33 +53,41 @@ PYBIND11_MODULE(block2, m) {
             throw py::error_already_set();
     };
 
+    bind_data<>(m);
+
+#ifdef _USE_SU2SZ
     py::module m_su2 = m.def_submodule("su2", "Spin-adapted.");
     py::module m_sz = m.def_submodule("sz", "Non-spin-adapted.");
-    bind_data<>(m);
+#endif
 
 #ifdef _USE_COMPLEX
     py::module m_cpx = m.def_submodule("cpx", "Complex numbers.");
+#ifdef _USE_SU2SZ
     py::module m_su2_cpx =
         m_cpx.def_submodule("su2", "Spin-adapted (complex).");
     py::module m_sz_cpx =
         m_cpx.def_submodule("sz", "Non-spin-adapted (complex).");
 #endif
+#endif
 
 #ifdef _USE_SINGLE_PREC
-
     py::module m_sp = m.def_submodule("sp", "Single precision.");
+#ifdef _USE_SU2SZ
     py::module m_su2_sp =
         m_sp.def_submodule("su2", "Spin-adapted (single precision).");
     py::module m_sz_sp =
         m_sp.def_submodule("sz", "Non-spin-adapted (single precision).");
+#endif
 
 #ifdef _USE_COMPLEX
     py::module m_cpx_sp =
         m_sp.def_submodule("cpx", "Complex single precision.");
+#ifdef _USE_SU2SZ
     py::module m_su2_cpx_sp = m_cpx_sp.def_submodule(
         "su2", "Spin-adapted (complex single precision).");
     py::module m_sz_cpx_sp = m_cpx_sp.def_submodule(
         "sz", "Non-spin-adapted (complex single precision).");
+#endif
 #endif
 
 #endif
@@ -92,16 +100,22 @@ PYBIND11_MODULE(block2, m) {
     bind_symmetry<>(m);
     bind_fl_matrix<double>(m);
     bind_post_matrix<>(m);
+    bind_general_fcidump<double>(m);
 
+#ifdef _USE_SU2SZ
     bind_core<SU2, double>(m_su2, "SU2", "Double");
     bind_core<SZ, double>(m_sz, "SZ", "Double");
     bind_trans_state_info<SU2, SZ>(m_su2, "sz");
     bind_trans_state_info<SZ, SU2>(m_sz, "su2");
     bind_trans_state_info_spin_specific<SU2, SZ>(m_su2, "sz");
+#endif
 #ifdef _USE_COMPLEX
     bind_fl_matrix<complex<double>>(m_cpx);
+    bind_general_fcidump<complex<double>>(m_cpx);
+#ifdef _USE_SU2SZ
     bind_core<SU2, complex<double>>(m_su2_cpx, "SU2", "Double");
     bind_core<SZ, complex<double>>(m_sz_cpx, "SZ", "Double");
+#endif
 #endif
 
 #ifdef _USE_KSYMM
@@ -129,9 +143,12 @@ PYBIND11_MODULE(block2, m) {
     py::module m_sgb = m.def_submodule("sgb", "General spin (bosonic).");
     bind_core<SGF, double>(m_sgf, "SGF", "Double");
     bind_core<SGB, double>(m_sgb, "SGB", "Double");
+
+#ifdef _USE_SU2SZ
     bind_trans_state_info<SZ, SGF>(m_sz, "sgf");
     bind_trans_state_info<SGF, SZ>(m_sgf, "sz");
     bind_trans_state_info_spin_specific<SZ, SGF>(m_sz, "sgf");
+#endif
 #ifdef _USE_COMPLEX
     py::module m_sgf_cpx =
         m_cpx.def_submodule("sgf", "General spin (fermionic, complex).");
@@ -147,7 +164,9 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_io<float>(m, "Float");
     bind_matrix<float>(m_sp);
     bind_fl_matrix<float>(m_sp);
+    bind_general_fcidump<float>(m_sp);
 
+#ifdef _USE_SU2SZ
     bind_core<SU2, float>(m_su2_sp, "SU2", "Float");
     bind_core<SZ, float>(m_sz_sp, "SZ", "Float");
 
@@ -155,8 +174,11 @@ PYBIND11_MODULE(block2, m) {
     bind_trans_sparse_matrix<SU2, double, float>(m_su2, "float");
     bind_trans_sparse_matrix<SZ, float, double>(m_sz_sp, "double");
     bind_trans_sparse_matrix<SZ, double, float>(m_sz, "float");
+#endif
 #ifdef _USE_COMPLEX
     bind_fl_matrix<complex<float>>(m_cpx_sp);
+    bind_general_fcidump<complex<float>>(m_cpx_sp);
+#ifdef _USE_SU2SZ
     bind_core<SU2, complex<float>>(m_su2_cpx_sp, "SU2", "Float");
     bind_core<SZ, complex<float>>(m_sz_cpx_sp, "SZ", "Float");
 
@@ -168,6 +190,7 @@ PYBIND11_MODULE(block2, m) {
                                                                   "double");
     bind_trans_sparse_matrix<SZ, complex<double>, complex<float>>(m_sz_cpx,
                                                                   "float");
+#endif
 #endif
 
 #ifdef _USE_SG
@@ -208,18 +231,20 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_DMRG
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
-    bind_general_fcidump<double>(m);
     bind_partition_weights<double>(m);
+#ifdef _USE_SU2SZ
     bind_dmrg<SU2, double>(m_su2, "SU2");
     bind_dmrg<SZ, double>(m_sz, "SZ");
     bind_trans_mps<SU2, SZ>(m_su2, "sz");
     bind_trans_mps<SZ, SU2>(m_sz, "su2");
     bind_fl_trans_mps_spin_specific<SU2, SZ, double>(m_su2, "sz");
+#endif
 #ifdef _USE_COMPLEX
-    bind_general_fcidump<complex<double>>(m_cpx);
+#ifdef _USE_SU2SZ
     bind_dmrg<SU2, complex<double>>(m_su2_cpx, "SU2");
     bind_dmrg<SZ, complex<double>>(m_sz_cpx, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(m_su2_cpx, "sz");
+#endif
 #endif
 
 #ifdef _USE_KSYMM
@@ -239,19 +264,23 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_SG
     bind_dmrg<SGF, double>(m_sgf, "SGF");
     bind_dmrg<SGB, double>(m_sgb, "SGB");
+#ifdef _USE_SU2SZ
     bind_trans_mps<SZ, SGF>(m_sz, "sgf");
     bind_trans_mps<SGF, SZ>(m_sgf, "sz");
     bind_fl_trans_mps_spin_specific<SZ, SGF, double>(m_sz, "sgf");
+#endif
 #ifdef _USE_COMPLEX
     bind_dmrg<SGF, complex<double>>(m_sgf_cpx, "SGF");
     bind_dmrg<SGB, complex<double>>(m_sgb_cpx, "SGB");
+#ifdef _USE_SU2SZ
     bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(m_sz_cpx, "sgf");
+#endif
 #endif
 #endif
 
 #ifdef _USE_SINGLE_PREC
     bind_partition_weights<float>(m_sp);
-    bind_general_fcidump<float>(m_sp);
+#ifdef _USE_SU2SZ
     bind_dmrg<SU2, float>(m_su2_sp, "SU2");
     bind_dmrg<SZ, float>(m_sz_sp, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, float>(m_su2_sp, "sz");
@@ -261,7 +290,6 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_trans_mps<SZ, float, double>(m_sz_sp, "double");
     bind_fl_trans_mps<SZ, double, float>(m_sz, "float");
 #ifdef _USE_COMPLEX
-    bind_general_fcidump<complex<float>>(m_cpx_sp);
     bind_dmrg<SU2, complex<float>>(m_su2_cpx_sp, "SU2");
     bind_dmrg<SZ, complex<float>>(m_sz_cpx_sp, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, complex<float>>(m_su2_cpx_sp,
@@ -274,11 +302,15 @@ PYBIND11_MODULE(block2, m) {
                                                            "double");
     bind_fl_trans_mps<SZ, complex<double>, complex<float>>(m_sz_cpx, "float");
 #endif
+#endif
 
 #ifdef _USE_SG
     bind_dmrg<SGF, float>(m_sgf_sp, "SGF");
     bind_dmrg<SGB, float>(m_sgb_sp, "SGB");
+
+#ifdef _USE_SU2SZ
     bind_fl_trans_mps_spin_specific<SZ, SGF, float>(m_sz_sp, "sgf");
+#endif
 
     bind_fl_trans_mps<SGF, float, double>(m_sgf_sp, "double");
     bind_fl_trans_mps<SGF, double, float>(m_sgf, "float");
@@ -287,8 +319,10 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_COMPLEX
     bind_dmrg<SGF, complex<float>>(m_sgf_cpx_sp, "SGF");
     bind_dmrg<SGB, complex<float>>(m_sgb_cpx_sp, "SGB");
+#ifdef _USE_SU2SZ
     bind_fl_trans_mps_spin_specific<SZ, SGF, complex<float>>(m_sz_cpx_sp,
                                                              "sgf");
+#endif
 
     bind_fl_trans_mps<SGF, complex<float>, complex<double>>(m_sgf_cpx_sp,
                                                             "double");
@@ -304,6 +338,7 @@ PYBIND11_MODULE(block2, m) {
 #endif
 
 #ifdef _USE_BIG_SITE
+#ifdef _USE_SU2SZ
     bind_fl_big_site<SU2, double>(m_su2);
     bind_fl_hamiltonian_big_site<SU2, double>(m_su2);
     bind_fl_dmrg_big_site<SU2, double, double>(m_su2);
@@ -312,7 +347,6 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_dmrg_big_site<SZ, double, double>(m_sz);
 
     bind_fl_sci_big_site_fock<SZ, double>(m_sz);
-
     bind_fl_csf_big_site<SU2, double>(m_su2);
 
     bind_drt_big_site<SZ>(m_sz);
@@ -321,8 +355,10 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_drt_big_site<SZ, double>(m_sz);
     bind_fl_drt_big_site<SU2, double>(m_su2);
 #endif
+#endif
 
 #ifdef _USE_SP_DMRG
+#ifdef _USE_SU2SZ
     bind_fl_sp_dmrg<SU2, double>(m_su2);
     bind_fl_sp_dmrg<SZ, double>(m_sz);
 #ifdef _USE_KSYMM
@@ -330,21 +366,26 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_sp_dmrg<SZK, double>(m_szk);
 #endif
 #endif
+#endif
 
 #ifdef _USE_IC
     bind_wick<>(m);
     bind_nd_array<>(m);
     bind_guga<>(m);
+#ifdef _USE_SU2SZ
     bind_guga<SU2>(m_su2);
+#endif
 #endif
 
 #ifdef _USE_SCI
+    bind_types_sci<>(m);
+#ifdef _USE_SU2SZ
     bind_sci_wrapper<SZ>(m_sz);
 #ifdef _SCI_WRAPPER2
     bind_sci_wrapper2<SZ>(m_sz);
 #endif
     bind_hamiltonian_sci<SZ>(m_sz);
     bind_mpo_sci<SZ>(m_sz);
-    bind_types_sci<>(m);
+#endif
 #endif
 }

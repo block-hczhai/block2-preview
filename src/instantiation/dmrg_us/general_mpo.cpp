@@ -18,8 +18,7 @@
  *
  */
 
-#include "../pybind_dmrg.hpp"
+#include "../block2_dmrg.hpp"
 
-template void bind_general_fcidump<double>(py::module &m);
-template void bind_fl_general<SZ, double>(py::module &m);
-template void bind_fl_general<SU2, double>(py::module &m);
+template struct block2::GeneralMPO<block2::SZ, float>;
+template struct block2::GeneralMPO<block2::SU2, float>;

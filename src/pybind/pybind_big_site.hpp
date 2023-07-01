@@ -303,22 +303,19 @@ template <typename S> void bind_drt_big_site(py::module &m) {
 
 template <typename S, typename FL> void bind_fl_drt_big_site(py::module &m) {
 
-    py::class_<typename ElemMatT<S, FL>::MT,
-               shared_ptr<typename ElemMatT<S, FL>::MT>>(m, "SiteMatrix")
+    py::class_<ElemMat<S, FL>, shared_ptr<ElemMat<S, FL>>>(m, "ElemMat")
         .def(py::init<int16_t, const vector<FL> &,
                       const vector<pair<int16_t, int16_t>> &>())
-        .def_readwrite("data", &ElemMatT<S, FL>::MT::data)
-        .def_readwrite("indices", &ElemMatT<S, FL>::MT::indices)
-        .def_readwrite("dq", &ElemMatT<S, FL>::MT::dq)
-        .def_static("op_matrices", &ElemMatT<S, FL>::MT::op_matrices)
-        .def_static("multiply", &ElemMatT<S, FL>::MT::multiply)
-        .def_static("build_matrix", &ElemMatT<S, FL>::MT::build_matrix)
-        .def("expand", &ElemMatT<S, FL>::MT::expand);
+        .def_readwrite("data", &ElemMat<S, FL>::data)
+        .def_readwrite("indices", &ElemMat<S, FL>::indices)
+        .def_readwrite("dq", &ElemMat<S, FL>::dq)
+        .def_static("op_matrices", &ElemMat<S, FL>::op_matrices)
+        .def_static("multiply", &ElemMat<S, FL>::multiply)
+        .def_static("build_matrix", &ElemMat<S, FL>::build_matrix)
+        .def("expand", &ElemMat<S, FL>::expand);
 
-    py::bind_vector<vector<typename ElemMatT<S, FL>::MT>>(m,
-                                                          "VectorSiteMatrix");
-    py::bind_vector<vector<vector<typename ElemMatT<S, FL>::MT>>>(
-        m, "VectorVectorSiteMatrix");
+    py::bind_vector<vector<ElemMat<S, FL>>>(m, "VectorElemMat");
+    py::bind_vector<vector<vector<ElemMat<S, FL>>>>(m, "VectorVectorElemMat");
 
     py::class_<DRTMPS<S, FL>, shared_ptr<DRTMPS<S, FL>>>(m, "DRTMPS")
         .def(py::init<const shared_ptr<DRT<S>> &,
@@ -543,6 +540,7 @@ void bind_fl_dmrg_big_site(py::module &m) {
 
 #ifdef _EXPLICIT_TEMPLATE
 
+#ifdef _USE_SU2SZ
 extern template void bind_fl_big_site<SZ, double>(py::module &m);
 extern template void bind_fl_hamiltonian_big_site<SZ, double>(py::module &m);
 extern template void bind_fl_dmrg_big_site<SZ, double, double>(py::module &m);
@@ -552,7 +550,6 @@ extern template void bind_fl_hamiltonian_big_site<SU2, double>(py::module &m);
 extern template void bind_fl_dmrg_big_site<SU2, double, double>(py::module &m);
 
 extern template void bind_fl_sci_big_site_fock<SZ, double>(py::module &m);
-
 extern template void bind_fl_csf_big_site<SU2, double>(py::module &m);
 
 extern template void bind_drt_big_site<SZ>(py::module &m);
@@ -560,5 +557,6 @@ extern template void bind_drt_big_site<SU2>(py::module &m);
 
 extern template void bind_fl_drt_big_site<SZ, double>(py::module &m);
 extern template void bind_fl_drt_big_site<SU2, double>(py::module &m);
+#endif
 
 #endif

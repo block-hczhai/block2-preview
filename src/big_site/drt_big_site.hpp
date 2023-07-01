@@ -741,96 +741,35 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct HDRT {
     }
 };
 
-template <typename FL> struct SZMatrix {
-    vector<FL> data;
-    vector<pair<int16_t, int16_t>> indices;
-    int16_t dq;
-    SZMatrix(int16_t dq, const vector<FL> &data,
-             const vector<pair<int16_t, int16_t>> &indices)
-        : dq(dq), indices(indices), data(data) {}
-    static const vector<SZMatrix<FL>> &op_matrices() {
-        static vector<SZMatrix<FL>> _mats = vector<SZMatrix<FL>>{
-            SZMatrix<FL>(0, vector<FL>{(FL)1.0, (FL)1.0, (FL)1.0, (FL)1.0},
-                         vector<pair<int16_t, int16_t>>{
-                             make_pair(0, 0), make_pair(1, 1), make_pair(2, 2),
-                             make_pair(3, 3)}),
-            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
-                         vector<pair<int16_t, int16_t>>{make_pair(1, 0),
-                                                        make_pair(3, 2)}),
-            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
-                         vector<pair<int16_t, int16_t>>{make_pair(0, 1),
-                                                        make_pair(2, 3)}),
-            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
-                         vector<pair<int16_t, int16_t>>{make_pair(2, 0),
-                                                        make_pair(3, 1)}),
-            SZMatrix<FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
-                         vector<pair<int16_t, int16_t>>{make_pair(0, 2),
-                                                        make_pair(1, 3)})};
-        return _mats;
-    }
-    static SZMatrix<FL> multiply(const SZMatrix<FL> &a, const SZMatrix<FL> &b,
-                                 int16_t dq) {
-        map<pair<int16_t, int16_t>, FL> r;
-        for (int i = 0; i < (int)a.data.size(); i++)
-            for (int j = 0; j < (int)b.data.size(); j++)
-                if (a.indices[i].second == b.indices[j].first)
-                    r[make_pair(a.indices[i].first, b.indices[j].second)] +=
-                        a.data[i] * b.data[j];
-        vector<FL> data;
-        vector<pair<int16_t, int16_t>> indices;
-        for (auto &x : r)
-            if (x.second != (FL)0.0)
-                indices.push_back(x.first), data.push_back(x.second);
-        return SZMatrix<FL>(dq, data, indices);
-    }
-    static SZMatrix<FL> build_matrix(const string &expr) {
-        if (expr == "")
-            return op_matrices()[0];
-        else if (expr == "c")
-            return op_matrices()[1];
-        else if (expr == "d")
-            return op_matrices()[2];
-        else if (expr == "C")
-            return op_matrices()[3];
-        else if (expr == "D")
-            return op_matrices()[4];
-        SZMatrix<FL> a = build_matrix(expr.substr(0, 1));
-        SZMatrix<FL> b = build_matrix(expr.substr(1, expr.length() - 1));
-        int dq = 0;
-        for (char x : expr)
-            dq += (x == 'c' || x == 'D') - (x == 'C' || x == 'd');
-        return multiply(a, b, dq);
-    }
-    SZMatrix<FL> expand() const { return *this; }
-};
+template <typename S, typename FL, typename = void> struct ElemMat;
 
-template <typename FL> struct SU2Matrix {
+template <typename S, typename FL> struct ElemMat<S, FL, typename S::is_su2_t> {
     vector<FL> data;
     vector<pair<int16_t, int16_t>> indices;
     int16_t dq;
-    SU2Matrix(int16_t dq, const vector<FL> &data,
-              const vector<pair<int16_t, int16_t>> &indices)
+    ElemMat(int16_t dq, const vector<FL> &data,
+            const vector<pair<int16_t, int16_t>> &indices)
         : dq(dq), indices(indices), data(data) {}
     static SU2CG &cg() {
         static SU2CG _cg;
         return _cg;
     }
-    static const vector<SU2Matrix<FL>> &op_matrices() {
-        static vector<SU2Matrix<FL>> _mats = vector<SU2Matrix<FL>>{
-            SU2Matrix<FL>(0, vector<FL>{(FL)1.0, (FL)1.0, (FL)1.0},
-                          vector<pair<int16_t, int16_t>>{make_pair(0, 0),
-                                                         make_pair(1, 1),
-                                                         make_pair(2, 2)}),
-            SU2Matrix<FL>(1, vector<FL>{(FL)1.0, (FL)(-sqrtl(2))},
-                          vector<pair<int16_t, int16_t>>{make_pair(1, 0),
-                                                         make_pair(2, 1)}),
-            SU2Matrix<FL>(1, vector<FL>{(FL)sqrtl(2), (FL)1.0},
-                          vector<pair<int16_t, int16_t>>{make_pair(0, 1),
-                                                         make_pair(1, 2)})};
+    static const vector<ElemMat<S, FL>> &op_matrices() {
+        static vector<ElemMat<S, FL>> _mats = vector<ElemMat<S, FL>>{
+            ElemMat<S, FL>(0, vector<FL>{(FL)1.0, (FL)1.0, (FL)1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(0, 0),
+                                                          make_pair(1, 1),
+                                                          make_pair(2, 2)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)1.0, (FL)(-sqrtl(2))},
+                           vector<pair<int16_t, int16_t>>{make_pair(1, 0),
+                                                          make_pair(2, 1)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)sqrtl(2), (FL)1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(0, 1),
+                                                          make_pair(1, 2)})};
         return _mats;
     }
-    static SU2Matrix<FL> multiply(const SU2Matrix<FL> &a,
-                                  const SU2Matrix<FL> &b, int16_t dq) {
+    static ElemMat<S, FL> multiply(const ElemMat<S, FL> &a,
+                                   const ElemMat<S, FL> &b, int16_t dq) {
         map<pair<int16_t, int16_t>, FL> r;
         for (int i = 0; i < (int)a.data.size(); i++)
             for (int j = 0; j < (int)b.data.size(); j++)
@@ -847,9 +786,9 @@ template <typename FL> struct SU2Matrix {
         for (auto &x : r)
             if (x.second != (FL)0.0)
                 indices.push_back(x.first), data.push_back(x.second);
-        return SU2Matrix<FL>(dq, data, indices);
+        return ElemMat<S, FL>(dq, data, indices);
     }
-    static SU2Matrix<FL> build_matrix(const string &expr) {
+    static ElemMat<S, FL> build_matrix(const string &expr) {
         if (expr == "")
             return op_matrices()[0];
         else if (expr == "C")
@@ -874,11 +813,11 @@ template <typename FL> struct SU2Matrix {
                 iy = i;
                 break;
             }
-        SU2Matrix<FL> a = build_matrix(expr.substr(1, ix - 1));
-        SU2Matrix<FL> b = build_matrix(expr.substr(ix + 1, iy - ix - 1));
+        ElemMat<S, FL> a = build_matrix(expr.substr(1, ix - 1));
+        ElemMat<S, FL> b = build_matrix(expr.substr(ix + 1, iy - ix - 1));
         return multiply(a, b, dq);
     }
-    SU2Matrix<FL> expand() const {
+    ElemMat<S, FL> expand() const {
         vector<FL> rd;
         vector<pair<int16_t, int16_t>> ri;
         for (int i = 0; i < (int)data.size(); i++) {
@@ -897,19 +836,75 @@ template <typename FL> struct SU2Matrix {
             } else
                 ri.push_back(make_pair(p, q)), rd.push_back(data[i]);
         }
-        return SU2Matrix<FL>(dq, rd, ri);
+        return ElemMat<S, FL>(dq, rd, ri);
     }
 };
 
-template <typename S, typename FL, typename = void> struct ElemMatT;
-
-template <typename S, typename FL>
-struct ElemMatT<S, FL, typename S::is_su2_t> {
-    typedef SU2Matrix<FL> MT;
-};
-
-template <typename S, typename FL> struct ElemMatT<S, FL, typename S::is_sz_t> {
-    typedef SZMatrix<FL> MT;
+template <typename S, typename FL> struct ElemMat<S, FL, typename S::is_sz_t> {
+    vector<FL> data;
+    vector<pair<int16_t, int16_t>> indices;
+    int16_t dq;
+    ElemMat(int16_t dq, const vector<FL> &data,
+            const vector<pair<int16_t, int16_t>> &indices)
+        : dq(dq), indices(indices), data(data) {}
+    static TrivialCG &cg() {
+        static TrivialCG _cg;
+        return _cg;
+    }
+    static const vector<ElemMat<S, FL>> &op_matrices() {
+        static vector<ElemMat<S, FL>> _mats = vector<ElemMat<S, FL>>{
+            ElemMat<S, FL>(0, vector<FL>{(FL)1.0, (FL)1.0, (FL)1.0, (FL)1.0},
+                           vector<pair<int16_t, int16_t>>{
+                               make_pair(0, 0), make_pair(1, 1),
+                               make_pair(2, 2), make_pair(3, 3)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(1, 0),
+                                                          make_pair(3, 2)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)1.0, (FL)1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(0, 1),
+                                                          make_pair(2, 3)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(2, 0),
+                                                          make_pair(3, 1)}),
+            ElemMat<S, FL>(1, vector<FL>{(FL)1.0, (FL)-1.0},
+                           vector<pair<int16_t, int16_t>>{make_pair(0, 2),
+                                                          make_pair(1, 3)})};
+        return _mats;
+    }
+    static ElemMat<S, FL> multiply(const ElemMat<S, FL> &a,
+                                   const ElemMat<S, FL> &b, int16_t dq) {
+        map<pair<int16_t, int16_t>, FL> r;
+        for (int i = 0; i < (int)a.data.size(); i++)
+            for (int j = 0; j < (int)b.data.size(); j++)
+                if (a.indices[i].second == b.indices[j].first)
+                    r[make_pair(a.indices[i].first, b.indices[j].second)] +=
+                        a.data[i] * b.data[j];
+        vector<FL> data;
+        vector<pair<int16_t, int16_t>> indices;
+        for (auto &x : r)
+            if (x.second != (FL)0.0)
+                indices.push_back(x.first), data.push_back(x.second);
+        return ElemMat<S, FL>(dq, data, indices);
+    }
+    static ElemMat<S, FL> build_matrix(const string &expr) {
+        if (expr == "")
+            return op_matrices()[0];
+        else if (expr == "c")
+            return op_matrices()[1];
+        else if (expr == "d")
+            return op_matrices()[2];
+        else if (expr == "C")
+            return op_matrices()[3];
+        else if (expr == "D")
+            return op_matrices()[4];
+        ElemMat<S, FL> a = build_matrix(expr.substr(0, 1));
+        ElemMat<S, FL> b = build_matrix(expr.substr(1, expr.length() - 1));
+        int dq = 0;
+        for (char x : expr)
+            dq += (x == 'c' || x == 'D') - (x == 'C' || x == 'd');
+        return multiply(a, b, dq);
+    }
+    ElemMat<S, FL> expand() const { return *this; }
 };
 
 template <typename S, typename FL, ElemOpTypes T = ElemT<S>::value>
@@ -1269,14 +1264,13 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
         }
         return r;
     }
-    vector<vector<typename ElemMatT<S, FL>::MT>>
+    vector<vector<ElemMat<S, FL>>>
     get_site_matrices(const shared_ptr<HDRT<S>> &hdrt) const {
-        vector<vector<typename ElemMatT<S, FL>::MT>> site_matrices(
-            drt->n_sites);
+        vector<vector<ElemMat<S, FL>>> site_matrices(drt->n_sites);
         for (int i = 0; i < drt->n_sites; i++) {
             for (int d = 0; d < hdrt->nd; d++)
                 site_matrices[i].push_back(
-                    ElemMatT<S, FL>::MT::build_matrix(hdrt->d_expr[d].first)
+                    ElemMat<S, FL>::build_matrix(hdrt->d_expr[d].first)
                         .expand());
         }
         return site_matrices;
@@ -1309,7 +1303,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                                                fq * factor_strides[4] +
                                                iq * factor_strides[5] +
                                                dq * factor_strides[6]] =
-                                        (FL)SU2Matrix<FL>::cg().wigner_9j(
+                                        (FL)ElemMat<S, FL>::cg().wigner_9j(
                                             bk + dk - 1, 1 - (dk & 1), bk, iq,
                                             dq, fq, bb + db - 1, 1 - (db & 1),
                                             bb) *
@@ -1321,7 +1315,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
     }
     void build_npdm_operator_matrices(
         const shared_ptr<HDRT<S>> &hdrt,
-        const vector<vector<typename ElemMatT<S, FL>::MT>> &site_matrices,
+        const vector<vector<ElemMat<S, FL>>> &site_matrices,
         const vector<pair<LL, FL>> &mat_idxs,
         const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
         if (mats.size() == 0)
@@ -1345,7 +1339,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                 FL xf = (FL)1.0;
                 if (T::value == ElemOpTypes::SU2 && is_right)
                     xf *= (FL)(1 - ((opdq.twos() & qket.twos() & 1) << 1)) *
-                          (FL)SU2Matrix<FL>::cg().phase(
+                          (FL)ElemMat<S, FL>::cg().phase(
                               opdq.twos(), qket.twos(), qbra.twos());
                 int imb = drt->q_index(qbra), imk = drt->q_index(qket);
                 assert(mats[it]->info->n_states_bra[im] == drt->xs[imb].back());
@@ -1372,8 +1366,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                                               ih) -
                                   1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
                     const int jhv = hdrt->jds[jh * hdrt->nd + dh];
-                    const typename ElemMatT<S, FL>::MT &smat =
-                        site_matrices[k][dh];
+                    const ElemMat<S, FL> &smat = site_matrices[k][dh];
                     const size_t hsz = xhv[pi].size() * smat.data.size();
                     xpbk[pj].reserve(hsz), xpbk[pj].clear();
                     xjb[pj].reserve(hsz), xjb[pj].clear();
@@ -1427,7 +1420,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
     }
     void build_operator_matrices(
         const shared_ptr<HDRT<S>> &hdrt,
-        const vector<vector<typename ElemMatT<S, FL>::MT>> &site_matrices,
+        const vector<vector<ElemMat<S, FL>>> &site_matrices,
         const vector<shared_ptr<vector<FL>>> &ints,
         const vector<shared_ptr<CSRSparseMatrix<S, FL>>> &mats) const {
         if (mats.size() == 0)
@@ -1453,8 +1446,8 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                 FL xf = (FL)1.0;
                 if (T::value == ElemOpTypes::SU2 && is_right)
                     xf = (FL)(1 - ((opdq.twos() & qket.twos() & 1) << 1)) *
-                         (FL)SU2Matrix<FL>::cg().phase(opdq.twos(), qket.twos(),
-                                                       qbra.twos());
+                         (FL)ElemMat<S, FL>::cg().phase(
+                             opdq.twos(), qket.twos(), qbra.twos());
                 int imb = drt->q_index(qbra), imk = drt->q_index(qket);
                 assert(rep_mat->info->n_states_bra[im] == drt->xs[imb].back());
                 assert(rep_mat->info->n_states_ket[im] == drt->xs[imk].back());
@@ -1660,8 +1653,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
         vector<vector<vector<pair<MKL_INT, MKL_INT>>>> pbk(
             ntg, vector<vector<pair<MKL_INT, MKL_INT>>>(2));
         vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
-        vector<vector<typename ElemMatT<S, FL>::MT>> site_matrices =
-            get_site_matrices(hdrt);
+        vector<vector<ElemMat<S, FL>>> site_matrices = get_site_matrices(hdrt);
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (size_t i = 0; i < r->size(); i++) {
             const size_t jx =
@@ -1693,7 +1685,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                                   ih) -
                               1 - (hdrt->xs.begin() + jh * (hdrt->nd + 1)));
                 const int jhv = hdrt->jds[jh * hdrt->nd + dh];
-                const typename ElemMatT<S, FL>::MT &smat = site_matrices[k][dh];
+                const ElemMat<S, FL> &smat = site_matrices[k][dh];
                 const size_t hsz = xhv[pi].size() * smat.data.size();
                 xpbk[pj].reserve(hsz), xpbk[pj].clear();
                 xjb[pj].reserve(hsz), xjb[pj].clear();
