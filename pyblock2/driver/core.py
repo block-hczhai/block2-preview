@@ -29,6 +29,11 @@ class SymmetryTypes(IntFlag):
     SP = 32
     SGFCPX = 16 | 4
     SPCPX = 32 | 16
+    SAny = 64
+    SAnySU2 = 64 | 1
+    SAnySZ = 64 | 2
+    SAnySGF = 64 | 4
+    SAnySGFCPX = 64 | 16 | 4
 
 
 class ParallelTypes(IntFlag):
@@ -157,16 +162,41 @@ class Block2Wrapper:
         has_spcpx = has_sp and hasattr(b.sp, "cpx")
         has_sgf = hasattr(b, "sgf")
         has_sgb = hasattr(b, "sgb")
+        has_su2 = hasattr(b, "su2")
+        has_sz = hasattr(b, "sz")
+        has_sany = hasattr(b, "sany")
         if SymmetryTypes.CPX in symm_type and not has_cpx:
             raise RuntimeError("block2 needs to be compiled with '-DUSE_COMPLEX=ON'!")
         elif SymmetryTypes.SP in symm_type and not has_sp:
             raise RuntimeError(
                 "block2 needs to be compiled with '-DUSE_SINGLE_PREC=ON'!"
             )
-        elif SymmetryTypes.SGF in symm_type and not has_sgf:
+        elif SymmetryTypes.SAny in symm_type and not has_sany:
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SANY=ON'!")
+        elif (
+            SymmetryTypes.SGF in symm_type
+            and not has_sgf
+            and (SymmetryTypes.SAny not in symm_type)
+        ):
             raise RuntimeError("block2 needs to be compiled with '-DUSE_SG=ON'!")
-        elif SymmetryTypes.SGB in symm_type and not has_sgb:
+        elif (
+            SymmetryTypes.SGB in symm_type
+            and not has_sgb
+            and (SymmetryTypes.SAny not in symm_type)
+        ):
             raise RuntimeError("block2 needs to be compiled with '-DUSE_SG=ON'!")
+        elif (
+            SymmetryTypes.SU2 in symm_type
+            and not has_su2
+            and (SymmetryTypes.SAny not in symm_type)
+        ):
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SU2SZ=ON'!")
+        elif (
+            SymmetryTypes.SZ in symm_type
+            and not has_sz
+            and (SymmetryTypes.SAny not in symm_type)
+        ):
+            raise RuntimeError("block2 needs to be compiled with '-DUSE_SU2SZ=ON'!")
         if SymmetryTypes.SPCPX in symm_type:
             self.VectorFL = b.VectorComplexFloat
             self.VectorFP = b.VectorFloat
@@ -187,32 +217,47 @@ class Block2Wrapper:
             self.VectorFP = b.VectorDouble
             self.bx = b
             self.bc = b.cpx if has_cpx else None
-        if SymmetryTypes.SU2 in symm_type:
+        self.VectorPG = b.VectorUInt8
+        if SymmetryTypes.SAny in symm_type:
+            self.bs = self.bx.sany
+            self.bcs = self.bc.sany if self.bc is not None else None
+            self.brs = b.sany
+            self.SX = self.SXT = b.SAny
+            if SymmetryTypes.SU2 in symm_type:
+                self.SX = b.SAny.init_su2
+            elif SymmetryTypes.SZ in symm_type:
+                self.SX = b.SAny.init_sz
+            elif SymmetryTypes.SGF in symm_type:
+                self.SX = b.SAny.init_sgf
+            self.VectorSX = b.VectorSAny
+            self.VectorVectorSX = b.VectorVectorSAny
+            self.VectorPG = b.VectorUInt32
+        elif SymmetryTypes.SU2 in symm_type:
             self.bs = self.bx.su2
             self.bcs = self.bc.su2 if self.bc is not None else None
             self.brs = b.su2
-            self.SX = b.SU2
+            self.SX = self.SXT = b.SU2
             self.VectorSX = b.VectorSU2
             self.VectorVectorSX = b.VectorVectorSU2
         elif SymmetryTypes.SZ in symm_type:
             self.bs = self.bx.sz
             self.bcs = self.bc.sz if self.bc is not None else None
             self.brs = b.sz
-            self.SX = b.SZ
+            self.SX = self.SXT = b.SZ
             self.VectorSX = b.VectorSZ
             self.VectorVectorSX = b.VectorVectorSZ
         elif SymmetryTypes.SGF in symm_type:
             self.bs = self.bx.sgf
             self.bcs = self.bc.sgf if self.bc is not None else None
             self.brs = b.sgf
-            self.SX = b.SGF
+            self.SX = self.SXT = b.SGF
             self.VectorSX = b.VectorSGF
             self.VectorVectorSX = b.VectorVectorSGF
         elif SymmetryTypes.SGB in symm_type:
             self.bs = self.bx.sgb
             self.bcs = self.bc.sgb if self.bc is not None else None
             self.brs = b.sgb
-            self.SX = b.SGB
+            self.SX = self.SXT = b.SGB
             self.VectorSX = b.VectorSGB
             self.VectorVectorSX = b.VectorVectorSGB
 
@@ -457,7 +502,9 @@ class DMRGDriver:
             h1e[~mask1.reshape(h1e.shape)] = 0.0
         if g2e is not None:
             g2e[~mask2.reshape(g2e.shape)] = 0.0
-        if (self.mpi is not None and self.mpi.rank != self.mpi.root) or (self.mpi is None and mrank != 0):
+        if (self.mpi is not None and self.mpi.rank != self.mpi.root) or (
+            self.mpi is None and mrank != 0
+        ):
             const = 0
         return h1e, g2e, const
 
@@ -553,12 +600,12 @@ class DMRGDriver:
         self.n_sites = n_sites
         self.heis_twos = heis_twos
         if orb_sym is None:
-            self.orb_sym = bw.b.VectorUInt8([0] * self.n_sites)
+            self.orb_sym = bw.VectorPG([0] * self.n_sites)
         else:
             if np.array(orb_sym).ndim == 2:
-                self.orb_sym = bw.b.VectorUInt8(list(orb_sym[0]) + list(orb_sym[1]))
+                self.orb_sym = bw.VectorPG(list(orb_sym[0]) + list(orb_sym[1]))
             else:
-                self.orb_sym = bw.b.VectorUInt8(orb_sym)
+                self.orb_sym = bw.VectorPG(orb_sym)
         if pauli_mode:
             self.ghamil = self.get_pauli_hamiltonian()
         else:
@@ -731,7 +778,7 @@ class DMRGDriver:
         fcidump.read(filename)
         self.pg = pg
         swap_pg = getattr(bw.b.PointGroup, "swap_" + pg)
-        self.orb_sym = bw.b.VectorUInt8(map(swap_pg, fcidump.orb_sym))
+        self.orb_sym = bw.VectorPG(map(swap_pg, fcidump.orb_sym))
         for x in self.orb_sym:
             if x == 8:
                 raise RuntimeError("Wrong point group symmetry : ", pg)
@@ -810,7 +857,7 @@ class DMRGDriver:
         self.g2e = gg2e
         self.n_sites = self.n_sites * 2
         if hasattr(self, "orb_sym"):
-            self.orb_sym = bw.b.VectorUInt8(
+            self.orb_sym = bw.VectorPG(
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
@@ -1046,7 +1093,7 @@ class DMRGDriver:
                 g2e = gg2e
 
         if symmetrize and self.orb_sym is not None:
-            x_orb_sym = self.orb_sym
+            x_orb_sym = bw.b.VectorUInt8(self.orb_sym)
             if self.reorder_idx is not None:
                 rev_idx = np.argsort(self.reorder_idx)
                 x_orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[rev_idx])
@@ -1085,7 +1132,7 @@ class DMRGDriver:
                 assert self.orb_sym is not None
                 if self.reorder_idx is not None:
                     rev_idx = np.argsort(self.reorder_idx)
-                    x_orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[rev_idx])
+                    x_orb_sym = bw.VectorPG(np.array(self.orb_sym)[rev_idx])
                 else:
                     x_orb_sym = self.orb_sym
                 if self.pg == "d2h":
@@ -1124,7 +1171,7 @@ class DMRGDriver:
                 if g2e is not None:
                     g2e = g2e[idx][:, idx][:, :, idx][:, :, :, idx]
             if self.orb_sym is not None and not prev_reord:
-                self.orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[idx])
+                self.orb_sym = bw.VectorPG(np.array(self.orb_sym)[idx])
                 if self.ghamil is not None:
                     self.ghamil = bw.bs.GeneralHamiltonian(
                         self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
@@ -1338,7 +1385,7 @@ class DMRGDriver:
 
         tt = time.perf_counter()
         if left_vacuum is None:
-            left_vacuum = bw.SX.invalid
+            left_vacuum = bw.SXT.invalid
         if algo_type is None:
             algo_type = MPOAlgorithmTypes.FastBipartite
         algo_type = getattr(bw.b.MPOAlgorithmTypes, algo_type.name)
@@ -1692,7 +1739,7 @@ class DMRGDriver:
         hermitian=False,
         iprint=0,
         cutoff=1e-20,
-        krylov_conv_thrd=5E-6,
+        krylov_conv_thrd=5e-6,
         krylov_subspace_size=20,
     ):
         bw = self.bw
@@ -2916,7 +2963,7 @@ class DMRGDriver:
             cp_mps.move_left(self.ghamil.opf.cg, self.prule)
         if forward:
             if left_vacuum is None:
-                left_vacuum = self.bw.SX.invalid
+                left_vacuum = self.bw.SXT.invalid
             cp_mps.to_singlet_embedding_wfn(self.ghamil.opf.cg, left_vacuum, self.prule)
         else:
             cp_mps.from_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
@@ -2995,7 +3042,7 @@ class DMRGDriver:
                 )
             mps = bw.bs.MPS(self.n_sites, center, dot if orig_dot else 1)
         else:
-            targets = bw.VectorSX([target]) if isinstance(target, bw.SX) else target
+            targets = bw.VectorSX([target]) if isinstance(target, bw.SXT) else target
             mps_info = bw.brs.MultiMPSInfo(
                 self.n_sites, self.vacuum, targets, self.ghamil.basis
             )

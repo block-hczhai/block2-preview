@@ -3464,8 +3464,10 @@ template <typename S = void> void bind_symmetry(py::module &m) {
                     py::arg("pg"))
         .def_static("init_sz", &SAny::init_sz, py::arg("n") = 0,
                     py::arg("twos") = 0, py::arg("pg") = 0)
-        .def_static("init_sgf", &SAny::init_sgf, py::arg("n") = 0,
-                    py::arg("pg") = 0)
+        .def_static("init_sgf", (SAny(*)(int, int)) & SAny::init_sgf,
+                    py::arg("n") = 0, py::arg("pg") = 0)
+        .def_static("init_sgf", (SAny(*)(int, int, int)) & SAny::init_sgf,
+                    py::arg("n"), py::arg("twos"), py::arg("pg"))
         .def_static("init_sgb", &SAny::init_sgb, py::arg("n") = 0,
                     py::arg("pg") = 0)
         .def_property("n", &SAny::n, &SAny::set_n)
@@ -3934,7 +3936,7 @@ extern template void bind_parallel<SAny>(py::module &m);
 
 extern template void bind_fl_expr<SAny, double>(py::module &m);
 extern template void bind_fl_state_info<SAny, double>(py::module &m,
-                                                    const string &name);
+                                                      const string &name);
 extern template void bind_fl_sparse<SAny, double>(py::module &m);
 extern template void bind_fl_parallel<SAny, double>(py::module &m);
 extern template void bind_fl_operator<SAny, double>(py::module &m);

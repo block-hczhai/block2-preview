@@ -121,6 +121,10 @@ template <int8_t L = 6> struct SAnyT {
         r.values[0] = n, r.values[1] = pg;
         return r;
     }
+    static SAnyT init_sgf(int n, int twos, int pg) {
+        assert(twos == 0);
+        return init_sgf(n, pg);
+    }
     static SAnyT init_sgb(int n = 0, int pg = 0) {
         SAnyT r;
         r.types[0] = SAnySymmTypes::U1;
