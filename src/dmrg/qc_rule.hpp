@@ -361,6 +361,20 @@ struct RuleQC<S, FL, typename S::is_sg_t> : Rule<S, FL> {
     }
 };
 
+// Symmetry rules for simplifying quantum chemistry MPO (any symmetry)
+template <typename S, typename FL>
+struct RuleQC<S, FL, typename S::is_sany_t> : Rule<S, FL> {
+    RuleQC(bool d = true, bool r = true, bool a = true, bool p = true,
+           bool b = true, bool q = true) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    shared_ptr<OpElementRef<S, FL>>
+    operator()(const shared_ptr<OpElement<S, FL>> &op) const override {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        return nullptr;
+    }
+};
+
 // For anti-Hermitian Hamiltonian with only one-body terms
 template <typename S, typename FL> struct AntiHermitianRuleQC : Rule<S, FL> {
     shared_ptr<Rule<S, FL>> prim_rule;

@@ -201,6 +201,18 @@ auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_sg_t()) {
                     &PDM2MPOQC<S, FL>::get_matrix_spatial);
 }
 
+template <typename S, typename FL>
+auto bind_fl_spin_specific(py::module &m) -> decltype(typename S::is_sany_t()) {
+
+    py::class_<PDM2MPOQC<S, FL>, shared_ptr<PDM2MPOQC<S, FL>>, MPO<S, FL>>(
+        m, "PDM2MPOQC")
+        .def(py::init<const shared_ptr<Hamiltonian<S, FL>> &>(),
+             py::arg("hamil"))
+        .def_static("get_matrix", &PDM2MPOQC<S, FL>::get_matrix)
+        .def_static("get_matrix_spatial",
+                    &PDM2MPOQC<S, FL>::get_matrix_spatial);
+}
+
 template <typename S> void bind_mps(py::module &m) {
 
     py::class_<MPSInfo<S>, shared_ptr<MPSInfo<S>>>(m, "MPSInfo")
@@ -2700,6 +2712,35 @@ extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
 #endif
 
 #endif
+
+#endif
+
+#ifdef _USE_SANY
+
+extern template void bind_mps<SAny>(py::module &m);
+extern template void bind_mpo<SAny>(py::module &m);
+
+extern template void bind_fl_general<SAny, double>(py::module &m);
+
+extern template void bind_fl_mps<SAny, double>(py::module &m);
+extern template void bind_fl_mpo<SAny, double>(py::module &m);
+extern template void bind_fl_partition<SAny, double>(py::module &m);
+extern template void bind_fl_qc_hamiltonian<SAny, double>(py::module &m);
+extern template void bind_fl_parallel_dmrg<SAny, double>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SAny, double, double>(py::module &m,
+                                                const string &name);
+extern template void bind_fl_dmrg<SAny, double, double>(py::module &m);
+extern template void bind_fl_td_dmrg<SAny, double, double>(py::module &m);
+extern template void bind_fl_linear<SAny, double, double>(py::module &m);
+extern template void
+bind_fl_expect<SAny, double, double, double>(py::module &m, const string &name);
+extern template void
+bind_fl_expect<SAny, double, double, complex<double>>(py::module &m,
+                                                     const string &name);
+extern template auto bind_fl_spin_specific<SAny, double>(py::module &m)
+    -> decltype(typename SAny::is_sany_t());
 
 #endif
 

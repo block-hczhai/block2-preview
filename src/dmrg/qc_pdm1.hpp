@@ -594,8 +594,8 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
                         (*pmexpr)[p] = (FL)sqrt(2.0) * (c_op[m] * d_op[j]);
                         p++;
                         (*pmop)[p] = pdm1_op[j][m];
-                        (*pmexpr)[p] =
-                            (FL)(ds ? -sqrt(2.0) : sqrt(2.0)) * (d_op[m] * c_op[j]);
+                        (*pmexpr)[p] = (FL)(ds ? -sqrt(2.0) : sqrt(2.0)) *
+                                       (d_op[m] * c_op[j]);
                         p++;
                     }
                 }
@@ -746,7 +746,7 @@ struct PDM1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
     }
 };
 
-// "MPO" for one particle density matrix (non-spin-adapted)
+// "MPO" for one particle density matrix (general spin)
 template <typename S, typename FL>
 struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0,
@@ -1069,6 +1069,31 @@ struct PDM1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
             for (uint16_t j = 0; j < n_orbs; j++)
                 r(i / 2, j / 2) += t(i, j);
         t.deallocate();
+        return r;
+    }
+};
+
+// "MPO" for one particle density matrix (arbitrary symmetry)
+template <typename S, typename FL>
+struct PDM1MPOQC<S, FL, typename S::is_sany_t> : MPO<S, FL> {
+    PDM1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil, uint8_t ds = 0,
+              const string &tag = "1PDM")
+        : MPO<S, FL>(hamil->n_sites, tag) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void deallocate() override {}
+    static GMatrix<FL> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        return r;
+    }
+    static GMatrix<FL> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        GMatrix<FL> r(nullptr, n_orbs / 2, n_orbs / 2);
         return r;
     }
 };

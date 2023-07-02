@@ -3780,4 +3780,22 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     }
 };
 
+// Quantum chemistry MPO (arbitrary symmetry)
+template <typename S, typename FL>
+struct MPOQC<S, FL, typename S::is_sany_t> : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    QCTypes mode;
+    const bool symmetrized_p = true;
+    MPOQC(const shared_ptr<HamiltonianQC<S, FL>> &hamil,
+          QCTypes mode = QCTypes::NC, const string &tag = "HQC",
+          int trans_center = -1, int trans_delta = 1, bool symmetrized_p = true)
+        : MPO<S, FL>(hamil->n_sites, tag), mode(mode),
+          symmetrized_p(symmetrized_p) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void deallocate() override {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+};
+
 } // namespace block2

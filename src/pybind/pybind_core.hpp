@@ -413,6 +413,30 @@ py::class_<Array<T>, shared_ptr<Array<T>>> bind_array(py::module &m,
 }
 
 template <typename S>
+auto bind_cg(py::module &m) -> decltype(typename S::is_sany_t()) {
+    py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def_static("triangle", &CG<S>::triangle, py::arg("tja"),
+                    py::arg("tjb"), py::arg("tjc"))
+        .def("sqrt_delta", &CG<S>::sqrt_delta, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"))
+        .def("cg", &CG<S>::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
+             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_3j", &CG<S>::wigner_3j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &CG<S>::wigner_6j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("wigner_9j", &CG<S>::wigner_9j, py::arg("a"), py::arg("b"),
+             py::arg("c"), py::arg("d"), py::arg("e"), py::arg("f"),
+             py::arg("g"), py::arg("h"), py::arg("i"))
+        .def("racah", &CG<S>::racah, py::arg("a"), py::arg("b"), py::arg("c"),
+             py::arg("d"), py::arg("e"), py::arg("f"))
+        .def("transpose_cg", &CG<S>::transpose_cg, py::arg("d"), py::arg("l"),
+             py::arg("r"));
+}
+
+template <typename S>
 auto bind_cg(py::module &m) -> decltype(typename S::is_sz_t()) {
     py::class_<CG<S>, shared_ptr<CG<S>>>(m, "CG")
         .def(py::init<>())
@@ -3899,6 +3923,23 @@ extern template void bind_fl_rule<SGB, complex<double>>(py::module &m);
 
 #endif
 
+#endif
+
+#ifdef _USE_SANY
+extern template void bind_cg<SAny>(py::module &m);
+extern template void bind_expr<SAny>(py::module &m);
+extern template void bind_state_info<SAny>(py::module &m, const string &name);
+extern template void bind_sparse<SAny>(py::module &m);
+extern template void bind_parallel<SAny>(py::module &m);
+
+extern template void bind_fl_expr<SAny, double>(py::module &m);
+extern template void bind_fl_state_info<SAny, double>(py::module &m,
+                                                    const string &name);
+extern template void bind_fl_sparse<SAny, double>(py::module &m);
+extern template void bind_fl_parallel<SAny, double>(py::module &m);
+extern template void bind_fl_operator<SAny, double>(py::module &m);
+extern template void bind_fl_hamiltonian<SAny, double>(py::module &m);
+extern template void bind_fl_rule<SAny, double>(py::module &m);
 #endif
 
 #ifdef _USE_SINGLE_PREC

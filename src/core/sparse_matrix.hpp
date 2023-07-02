@@ -461,8 +461,10 @@ struct SparseMatrixInfo<
                    << " ; ";
             os << endl;
             for (int i = 0; i < ci.n[4]; i++)
-                os << "(BRA) " << ci.quanta[i].get_bra(S(0)) << " KET "
-                   << -ci.quanta[i].get_ket() << " [ " << (int)ci.idx[i] << "~"
+                os << "(BRA) "
+                   << ci.quanta[i].get_bra((ci.quanta[i] - ci.quanta[i])[0])
+                   << " KET " << -ci.quanta[i].get_ket() << " [ "
+                   << (int)ci.idx[i] << "~"
                    << (int)(i != ci.n[4] - 1 ? ci.idx[i + 1] : ci.nc) << " ]"
                    << endl;
             for (int i = 0; i < ci.nc; i++)

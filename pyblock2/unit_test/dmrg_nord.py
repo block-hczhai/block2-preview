@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from pyblock2._pyscf.ao2mo import integrals as itg
-from pyblock2.driver.core import DMRGDriver, SymmetryTypes, MPOAlgorithmTypes
+from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 

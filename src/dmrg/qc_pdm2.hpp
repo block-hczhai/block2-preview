@@ -2355,13 +2355,13 @@ template <typename S, typename FL>
 struct PDM2MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
         : MPO<S, FL>(hamil->n_sites) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
     }
     void deallocate() override {}
     static shared_ptr<GTensor<FL>> get_matrix(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
         shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(vector<MKL_INT>{
             n_sites * 2, n_sites * 2, n_sites * 2, n_sites * 2});
         r->clear();
@@ -2370,7 +2370,35 @@ struct PDM2MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     static shared_ptr<GTensor<FL>> get_matrix_spatial(
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_sites) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
+            vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites});
+        r->clear();
+        return r;
+    }
+};
+
+// "MPO" for two particle density matrix (arbitrary symmetry)
+template <typename S, typename FL>
+struct PDM2MPOQC<S, FL, typename S::is_sany_t> : MPO<S, FL> {
+    PDM2MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil)
+        : MPO<S, FL>(hamil->n_sites) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void deallocate() override {}
+    static shared_ptr<GTensor<FL>> get_matrix(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_sites) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(vector<MKL_INT>{
+            n_sites * 2, n_sites * 2, n_sites * 2, n_sites * 2});
+        r->clear();
+        return r;
+    }
+    static shared_ptr<GTensor<FL>> get_matrix_spatial(
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_sites) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
         shared_ptr<GTensor<FL>> r = make_shared<GTensor<FL>>(
             vector<MKL_INT>{n_sites, n_sites, n_sites, n_sites});
         r->clear();

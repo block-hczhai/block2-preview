@@ -665,6 +665,130 @@ extern template struct block2::TimeEvolution<block2::SGB, double, double>;
 
 #endif
 
+#ifdef _USE_SANY
+
+// archived_mpo.hpp
+extern template struct block2::ArchivedMPO<block2::SAny, double>;
+
+// determinant.hpp
+extern template struct block2::DeterminantTRIE<block2::SAny, double>;
+extern template struct block2::DeterminantQC<block2::SAny, double>;
+extern template struct block2::DeterminantMPSInfo<block2::SAny, double>;
+
+// dmrg_driver.hpp
+// extern template struct block2::DMRGDriver<block2::SAny, double>;
+
+// effective_functions.hpp
+extern template struct block2::EffectiveFunctions<block2::SAny, double>;
+
+// effective_hamiltonian.hpp
+extern template struct block2::EffectiveHamiltonian<
+    block2::SAny, double, block2::MPS<block2::SAny, double>>;
+extern template struct block2::LinearEffectiveHamiltonian<block2::SAny, double>;
+extern template struct block2::EffectiveHamiltonian<
+    block2::SAny, double, block2::MultiMPS<block2::SAny, double>>;
+
+// general_hamiltonian.hpp
+extern template struct block2::GeneralHamiltonian<block2::SAny, double>;
+
+// general_mpo.hpp
+extern template struct block2::GeneralMPO<block2::SAny, double>;
+
+// general_npdm.hpp
+extern template struct block2::GeneralNPDMMPO<block2::SAny, double>;
+
+// moving_environment.hpp
+extern template struct block2::MovingEnvironment<block2::SAny, double, double>;
+
+// mpo.hpp
+extern template struct block2::MPOSchemer<block2::SAny>;
+extern template struct block2::MPO<block2::SAny, double>;
+extern template struct block2::DiagonalMPO<block2::SAny, double>;
+extern template struct block2::AncillaMPO<block2::SAny, double>;
+extern template struct block2::IdentityAddedMPO<block2::SAny, double>;
+
+// mpo_fusing.hpp
+extern template struct block2::CondensedMPO<block2::SAny, double>;
+extern template struct block2::FusedMPO<block2::SAny, double>;
+
+// mpo_simplification.hpp
+extern template struct block2::SimplifiedMPO<block2::SAny, double>;
+
+// mps.hpp
+extern template struct block2::MPSInfo<block2::SAny>;
+extern template struct block2::DynamicMPSInfo<block2::SAny>;
+extern template struct block2::CASCIMPSInfo<block2::SAny>;
+extern template struct block2::MRCIMPSInfo<block2::SAny>;
+extern template struct block2::NEVPTMPSInfo<block2::SAny>;
+extern template struct block2::AncillaMPSInfo<block2::SAny>;
+extern template struct block2::MPS<block2::SAny, double>;
+
+// mps_unfused.hpp
+extern template struct block2::SparseTensor<block2::SAny, double>;
+extern template struct block2::UnfusedMPS<block2::SAny, double>;
+
+// parallel_mpo.hpp
+extern template struct block2::ClassicParallelMPO<block2::SAny, double>;
+extern template struct block2::ParallelMPO<block2::SAny, double>;
+
+// parallel_mps.hpp
+extern template struct block2::ParallelMPS<block2::SAny, double>;
+
+// parallel_simple.hpp
+extern template struct block2::ParallelRuleSimple<block2::SAny, double>;
+extern template struct block2::SumMPORule<block2::SAny, double>;
+extern template struct block2::ParallelFCIDUMP<block2::SAny, double>;
+
+// partition.hpp
+extern template struct block2::Partition<block2::SAny, double>;
+
+// qc_hamiltonian.hpp
+extern template struct block2::HamiltonianQC<block2::SAny, double>;
+
+// qc_mpo.hpp
+extern template struct block2::IdentityMPO<block2::SAny, double>;
+extern template struct block2::SiteMPO<block2::SAny, double>;
+extern template struct block2::MPOQC<block2::SAny, double>;
+
+// qc_ncorr.hpp
+extern template struct block2::NPC1MPOQC<block2::SAny, double>;
+
+// qc_parallel_rule.hpp
+extern template struct block2::ParallelRuleQC<block2::SAny, double>;
+extern template struct block2::ParallelRuleOneBodyQC<block2::SAny, double>;
+extern template struct block2::ParallelRulePDM1QC<block2::SAny, double>;
+extern template struct block2::ParallelRulePDM2QC<block2::SAny, double>;
+extern template struct block2::ParallelRuleNPDMQC<block2::SAny, double>;
+extern template struct block2::ParallelRuleSiteQC<block2::SAny, double>;
+extern template struct block2::ParallelRuleIdentity<block2::SAny, double>;
+
+// qc_pdm1.hpp
+extern template struct block2::PDM1MPOQC<block2::SAny, double>;
+
+// qc_pdm2.hpp
+extern template struct block2::PDM2MPOQC<block2::SAny, double>;
+
+// qc_rule.hpp
+extern template struct block2::RuleQC<block2::SAny, double>;
+extern template struct block2::AntiHermitianRuleQC<block2::SAny, double>;
+
+// state_averaged.hpp
+extern template struct block2::MultiMPSInfo<block2::SAny>;
+extern template struct block2::MultiMPS<block2::SAny, double>;
+
+// sweep_algorithm.hpp
+extern template struct block2::DMRG<block2::SAny, double, double>;
+extern template struct block2::Linear<block2::SAny, double, double>;
+extern template struct block2::Expect<block2::SAny, double, double, double>;
+extern template struct block2::Expect<block2::SAny, double, double,
+                                      complex<double>>;
+
+// sweep_algorithm_td.hpp
+extern template struct block2::TDDMRG<block2::SAny, double, double>;
+extern template struct block2::TimeEvolution<block2::SAny, double, double>;
+
+#endif
+
 #ifdef _USE_COMPLEX
 
 #ifdef _USE_SU2SZ

@@ -649,7 +649,8 @@ template <typename S, typename FL> struct FusedMPO : MPO<S, FL> {
         vector<vector<pair<uint8_t, S>>> subsl =
             Partition<S, FL>::get_uniq_sub_labels(
                 fused_mat, mats[0], sl,
-                fused_mat->m == 1 ? mpo->left_vacuum : S(0));
+                fused_mat->m == 1 ? mpo->left_vacuum
+                                  : (mpo->left_vacuum - mpo->left_vacuum)[0]);
         // site info
         for (size_t i = 0; i < sl.size(); i++) {
             shared_ptr<SparseMatrixInfo<S>> op_notrunc =

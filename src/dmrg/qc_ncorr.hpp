@@ -514,20 +514,19 @@ struct NPC1MPOQC<S, FL, typename S::is_su2_t> : MPO<S, FL> {
 };
 
 // "MPO" for charge/spin correlation (general spin)
-// not implemented
 template <typename S, typename FL>
 struct NPC1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
     NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
               const string &tag = "1NPC")
         : MPO<S, FL>(hamil->n_sites, tag) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
     }
     void deallocate() override {}
     static GMatrix<FL> get_matrix(
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
         GMatrix<FL> r(nullptr, n_orbs, n_orbs);
         return r;
     }
@@ -535,7 +534,34 @@ struct NPC1MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         uint8_t s,
         const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
         uint16_t n_orbs) {
-        assert(false);
+        throw runtime_error("Not implemented for general spin!");
+        GMatrix<FL> r(nullptr, n_orbs / 2, n_orbs / 2);
+        return r;
+    }
+};
+
+// "MPO" for charge/spin correlation (arbitrary symmetry)
+template <typename S, typename FL>
+struct NPC1MPOQC<S, FL, typename S::is_sany_t> : MPO<S, FL> {
+    NPC1MPOQC(const shared_ptr<Hamiltonian<S, FL>> &hamil,
+              const string &tag = "1NPC")
+        : MPO<S, FL>(hamil->n_sites, tag) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void deallocate() override {}
+    static GMatrix<FL> get_matrix(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        GMatrix<FL> r(nullptr, n_orbs, n_orbs);
+        return r;
+    }
+    static GMatrix<FL> get_matrix_spatial(
+        uint8_t s,
+        const vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>> &expectations,
+        uint16_t n_orbs) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
         GMatrix<FL> r(nullptr, n_orbs / 2, n_orbs / 2);
         return r;
     }

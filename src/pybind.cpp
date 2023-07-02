@@ -159,6 +159,11 @@ PYBIND11_MODULE(block2, m) {
 #endif
 #endif
 
+#ifdef _USE_SANY
+    py::module m_sany = m.def_submodule("sany", "Any symmetry.");
+    bind_core<SAny, double>(m_sany, "SAny", "Double");
+#endif
+
 #ifdef _USE_SINGLE_PREC
 
     bind_fl_io<float>(m, "Float");
@@ -276,6 +281,10 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(m_sz_cpx, "sgf");
 #endif
 #endif
+#endif
+
+#ifdef _USE_SANY
+    bind_dmrg<SAny, double>(m_sany, "SAny");
 #endif
 
 #ifdef _USE_SINGLE_PREC

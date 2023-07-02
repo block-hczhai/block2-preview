@@ -542,6 +542,92 @@ extern template struct block2::TensorFunctions<block2::SGB, double>;
 
 #endif
 
+#ifdef _USE_SANY
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SAny, double>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SAny, double>;
+
+// cg.hpp
+extern template struct block2::CG<block2::SAny>;
+
+// csr_operator_functions.hpp
+extern template struct block2::CSROperatorFunctions<block2::SAny, double>;
+
+// csr_sparse_matrix.hpp
+extern template struct block2::CSRSparseMatrix<block2::SAny, double>;
+
+// delayed_sparse_matrix.hpp
+extern template struct block2::DelayedSparseMatrix<block2::SAny, double>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, double, block2::SparseMatrix<block2::SAny, double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, double, block2::CSRSparseMatrix<block2::SAny, double>>;
+
+// delayed_tensor_functions.hpp
+extern template struct block2::DelayedTensorFunctions<block2::SAny, double>;
+
+// expr.hpp
+extern template struct block2::OpExpr<block2::SAny>;
+extern template struct block2::OpExprRef<block2::SAny>;
+extern template struct block2::OpCounter<block2::SAny>;
+extern template struct block2::OpElement<block2::SAny, double>;
+extern template struct block2::OpElementRef<block2::SAny, double>;
+extern template struct block2::OpProduct<block2::SAny, double>;
+extern template struct block2::OpSumProd<block2::SAny, double>;
+extern template struct block2::OpSum<block2::SAny, double>;
+
+// hamiltonian.hpp
+extern template struct block2::Hamiltonian<block2::SAny, double>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, double, block2::Hamiltonian<block2::SAny, double>>;
+
+// operator_functions.hpp
+extern template struct block2::OperatorFunctions<block2::SAny, double>;
+
+// operator_tensor.hpp
+extern template struct block2::OperatorTensor<block2::SAny, double>;
+extern template struct block2::DelayedOperatorTensor<block2::SAny, double>;
+
+// parallel_mpi.hpp
+#ifdef _HAS_MPI
+extern template struct block2::MPICommunicator<block2::SAny>;
+#endif
+
+// parallel_rule.hpp
+extern template struct block2::ParallelCommunicator<block2::SAny>;
+extern template struct block2::ParallelRule<block2::SAny>;
+extern template struct block2::ParallelRule<block2::SAny, double>;
+
+// parallel_tensor_functions.hpp
+extern template struct block2::ParallelTensorFunctions<block2::SAny, double>;
+
+// rule.hpp
+extern template struct block2::Rule<block2::SAny, double>;
+extern template struct block2::NoTransposeRule<block2::SAny, double>;
+
+// sparse_matrix.hpp
+extern template struct block2::SparseMatrixInfo<block2::SAny>;
+extern template struct block2::SparseMatrix<block2::SAny, double>;
+extern template struct block2::SparseMatrixGroup<block2::SAny, double>;
+
+// state_info.hpp
+extern template struct block2::StateInfo<block2::SAny>;
+extern template struct block2::StateProbability<block2::SAny>;
+
+// symbolic.hpp
+extern template struct block2::Symbolic<block2::SAny>;
+extern template struct block2::SymbolicRowVector<block2::SAny>;
+extern template struct block2::SymbolicColumnVector<block2::SAny>;
+extern template struct block2::SymbolicMatrix<block2::SAny>;
+
+// tensor_functions.hpp
+extern template struct block2::TensorFunctions<block2::SAny, double>;
+
+#endif
+
 #ifdef _USE_COMPLEX
 
 #ifdef _USE_SU2SZ

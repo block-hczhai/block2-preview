@@ -1424,4 +1424,58 @@ struct HamiltonianQC<S, FL, typename S::is_sg_t> : Hamiltonian<S, FL> {
     typename const_fl_type<FL>::FL e() const { return fcidump->e(); }
 };
 
+// Quantum chemistry Hamiltonian (arbitrary symmetry)
+template <typename S, typename FL>
+struct HamiltonianQC<S, FL, typename S::is_sany_t> : Hamiltonian<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    // Sparse matrix representation for normal site operators
+    vector<
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>>
+        site_norm_ops;
+    // Primitives for sparse matrix representation for normal site operators
+    unordered_map<
+        typename S::pg_t,
+        vector<unordered_map<OpNames, shared_ptr<SparseMatrix<S, FL>>>>>
+        op_prims;
+    // For storage of one-electron and two-electron integrals
+    shared_ptr<FCIDUMP<FL>> fcidump;
+    // Chemical potenital parameter in Hamiltonian
+    FL mu = 0;
+    HamiltonianQC()
+        : Hamiltonian<S, FL>(S(), 0, vector<typename S::pg_t>()),
+          fcidump(nullptr) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    HamiltonianQC(S vacuum, int n_sites,
+                  const vector<typename S::pg_t> &orb_sym,
+                  const shared_ptr<FCIDUMP<FL>> &fcidump)
+        : Hamiltonian<S, FL>(vacuum, n_sites, orb_sym), fcidump(fcidump) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    virtual void set_mu(FL mu) { this->mu = mu; }
+    virtual shared_ptr<StateInfo<S>> get_site_basis(uint16_t m) const {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        return nullptr;
+    }
+    void init_site_ops() {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void get_site_ops(
+        uint16_t m,
+        unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
+            &ops) const override {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    void deallocate() override {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    FL v(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
+        return fcidump->v(i, j, k, l);
+    }
+    FL t(uint16_t i, uint16_t j) const {
+        return i == j ? fcidump->t(i, i) - mu : fcidump->t(i, j);
+    }
+    typename const_fl_type<FL>::FL e() const { return fcidump->e(); }
+};
+
 } // namespace block2

@@ -790,6 +790,32 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     }
 };
 
+// Prefix trie structure of determinants (arbitrary symmetry)
+template <typename S, typename FL>
+struct DeterminantTRIE<S, FL, typename S::is_sany_t>
+    : TRIE<DeterminantTRIE<S, FL>, FL, 2> {
+    typedef typename GMatrix<FL>::FP FP;
+    DeterminantTRIE(int n_sites, bool enable_look_up = false)
+        : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
+    // set the value for each CSF to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+    uint8_t permutation_parity(const vector<int> &perm) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        return 0;
+    }
+    int phase_change_orb_order(const vector<uint8_t> &det,
+                               const vector<int> &reorder) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+        return 0;
+    }
+    void convert_phase(const vector<int> &reorder) {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
+};
+
 template <typename S, typename FL, typename = void> struct DeterminantQC {
     vector<uint8_t> hf_occ;
     vector<typename S::pg_t> orb_sym;
