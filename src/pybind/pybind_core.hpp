@@ -3942,6 +3942,18 @@ extern template void bind_fl_parallel<SAny, double>(py::module &m);
 extern template void bind_fl_operator<SAny, double>(py::module &m);
 extern template void bind_fl_hamiltonian<SAny, double>(py::module &m);
 extern template void bind_fl_rule<SAny, double>(py::module &m);
+
+#ifdef _USE_COMPLEX
+extern template void bind_fl_expr<SAny, complex<double>>(py::module &m);
+extern template void
+bind_fl_state_info<SAny, complex<double>>(py::module &m, const string &name);
+extern template void bind_fl_sparse<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_parallel<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_operator<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_hamiltonian<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_rule<SAny, complex<double>>(py::module &m);
+#endif
+
 #endif
 
 #ifdef _USE_SINGLE_PREC

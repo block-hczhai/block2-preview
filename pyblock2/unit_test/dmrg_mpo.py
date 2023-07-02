@@ -6,6 +6,11 @@ from pyblock2.driver.core import DMRGDriver, SymmetryTypes, MPOAlgorithmTypes
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+@pytest.fixture(scope="module")
+def symm_type(pytestconfig):
+    return pytestconfig.getoption("symm")
+
+
 @pytest.fixture(scope="module", params=["N2"])
 def system_def(request):
     from pyscf import gto
@@ -66,16 +71,21 @@ mpo_algo_names = [
 def mpo_algo_type(request):
     return request.param
 
+
 @pytest.fixture(scope="module", params=[True, False])
 def block_max_length(request):
     return request.param
+
 
 @pytest.fixture(scope="module", params=[True, False])
 def disjoint_all_blocks(request):
     return request.param
 
+
 class TestDMRGMPO:
-    def test_rhf(self, tmp_path, system_def, mpo_algo_type, block_max_length, disjoint_all_blocks):
+    def test_rhf(
+        self, tmp_path, system_def, mpo_algo_type, block_max_length, disjoint_all_blocks, symm_type
+    ):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -93,9 +103,8 @@ class TestDMRGMPO:
         assert np.linalg.norm(g2e - g2e.transpose(1, 0, 3, 2).conj()) < 1e-7
         assert np.linalg.norm(g2e - g2e.transpose(3, 2, 1, 0).conj()) < 1e-7
 
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SU2, n_threads=4
-        )
+        symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
 
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
@@ -108,11 +117,14 @@ class TestDMRGMPO:
         if MPOAlgorithmTypes.Conventional in mpo_algo_type and block_max_length:
             pytest.skip()
 
+        if MPOAlgorithmTypes.Conventional in mpo_algo_type and symm_type == "sany":
+            pytest.skip()
+
         mpo = driver.get_qc_mpo(
             h1e=h1e,
             g2e=g2e,
             ecore=ecore,
-            reorder='irrep',
+            reorder="irrep",
             cutoff=1e-12,
             algo_type=mpo_algo_type,
             block_max_length=block_max_length,

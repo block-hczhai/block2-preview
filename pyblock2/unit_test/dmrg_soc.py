@@ -6,6 +6,11 @@ from pyblock2.driver.core import SOCDMRGDriver, SymmetryTypes
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+@pytest.fixture(scope="module")
+def symm_type(pytestconfig):
+    return pytestconfig.getoption("symm")
+
+
 @pytest.fixture(scope="module", params=["Cl"])
 def system_def(request):
     from pyscf import gto
@@ -24,7 +29,7 @@ def soc_type(request):
 
 
 class TestDMRG:
-    def test_rhf(self, tmp_path, system_def, soc_type):
+    def test_rhf(self, tmp_path, system_def, soc_type, symm_type):
         from pyscf import scf, mcscf
 
         mol, ncore, ncas, _ = system_def
@@ -47,9 +52,8 @@ class TestDMRG:
             mf, ncore, ncas, pg_symm=False, amfi=amfi, x2c1e=x2c, x2c2e=x2c
         )
 
-        driver = SOCDMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
-        )
+        symm = SymmetryTypes.SAnySGFCPX if symm_type == "sany" else SymmetryTypes.SGFCPX
+        driver = SOCDMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
@@ -68,8 +72,11 @@ class TestDMRG:
             mpo_cpx = driver.get_qc_mpo(h1e=h1e - h1e.real, g2e=None, ecore=0, iprint=1)
             # fd = driver.write_fcidump(h1e=np.ascontiguousarray(h1e - h1e.real), g2e=None, ecore=0)
             # mpo_cpx = driver.get_conventional_qc_mpo(fd)
-            driver.set_symm_type(symm_type=SymmetryTypes.SGF, reset_frame=False)
-            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
+            symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
+            driver.set_symm_type(symm_type=symm, reset_frame=False)
+            driver.initialize_system(
+                n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym
+            )
             mpo = driver.get_qc_mpo(h1e=h1e.real, g2e=g2e.real, ecore=ecore, iprint=1)
             # fd = driver.write_fcidump(h1e=np.ascontiguousarray(h1e.real), g2e=np.ascontiguousarray(g2e.real), ecore=ecore)
             # mpo = driver.get_conventional_qc_mpo(fd)
@@ -113,7 +120,7 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_uhf(self, tmp_path, system_def, soc_type):
+    def test_uhf(self, tmp_path, system_def, soc_type, symm_type):
         from pyscf import scf, mcscf
 
         mol, ncore, ncas, _ = system_def
@@ -139,9 +146,8 @@ class TestDMRG:
             mf, ncore, ncas, pg_symm=False, amfi=amfi, x2c1e=x2c, x2c2e=x2c
         )
 
-        driver = SOCDMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
-        )
+        symm = SymmetryTypes.SAnySGFCPX if symm_type == "sany" else SymmetryTypes.SGFCPX
+        driver = SOCDMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
@@ -158,8 +164,11 @@ class TestDMRG:
         if "hybrid" in soc_type:
             assert np.linalg.norm(g2e.imag) < 1e-7
             mpo_cpx = driver.get_qc_mpo(h1e=h1e - h1e.real, g2e=None, ecore=0, iprint=1)
-            driver.set_symm_type(symm_type=SymmetryTypes.SGF, reset_frame=False)
-            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym)
+            symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
+            driver.set_symm_type(symm_type=symm, reset_frame=False)
+            driver.initialize_system(
+                n_sites=ncas, n_elec=n_elec, spin=0, orb_sym=orb_sym
+            )
             mpo = driver.get_qc_mpo(h1e=h1e.real, g2e=g2e.real, ecore=ecore, iprint=1)
             ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=6 * 2)
             energies = driver.hybrid_mpo_dmrg(

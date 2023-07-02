@@ -971,6 +971,78 @@ extern template struct block2::TensorFunctions<block2::SGB, complex<double>>;
 
 #endif
 
+#ifdef _USE_SANY
+
+// archived_sparse_matrix.hpp
+extern template struct block2::ArchivedSparseMatrix<block2::SAny,
+                                                    complex<double>>;
+
+// archived_tensor_functions.hpp
+extern template struct block2::ArchivedTensorFunctions<block2::SAny,
+                                                       complex<double>>;
+
+// csr_operator_functions.hpp
+extern template struct block2::CSROperatorFunctions<block2::SAny,
+                                                    complex<double>>;
+
+// csr_sparse_matrix.hpp
+extern template struct block2::CSRSparseMatrix<block2::SAny, complex<double>>;
+
+// delayed_sparse_matrix.hpp
+extern template struct block2::DelayedSparseMatrix<block2::SAny,
+                                                   complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, complex<double>,
+    block2::SparseMatrix<block2::SAny, complex<double>>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, complex<double>,
+    block2::CSRSparseMatrix<block2::SAny, complex<double>>>;
+
+// delayed_tensor_functions.hpp
+extern template struct block2::DelayedTensorFunctions<block2::SAny,
+                                                      complex<double>>;
+
+// expr.hpp
+extern template struct block2::OpElement<block2::SAny, complex<double>>;
+extern template struct block2::OpElementRef<block2::SAny, complex<double>>;
+extern template struct block2::OpProduct<block2::SAny, complex<double>>;
+extern template struct block2::OpSumProd<block2::SAny, complex<double>>;
+extern template struct block2::OpSum<block2::SAny, complex<double>>;
+
+// hamiltonian.hpp
+extern template struct block2::Hamiltonian<block2::SAny, complex<double>>;
+extern template struct block2::DelayedSparseMatrix<
+    block2::SAny, complex<double>,
+    block2::Hamiltonian<block2::SAny, complex<double>>>;
+
+// operator_functions.hpp
+extern template struct block2::OperatorFunctions<block2::SAny, complex<double>>;
+
+// operator_tensor.hpp
+extern template struct block2::OperatorTensor<block2::SAny, complex<double>>;
+extern template struct block2::DelayedOperatorTensor<block2::SAny,
+                                                     complex<double>>;
+
+// parallel_rule.hpp
+extern template struct block2::ParallelRule<block2::SAny, complex<double>>;
+
+// parallel_tensor_functions.hpp
+extern template struct block2::ParallelTensorFunctions<block2::SAny,
+                                                       complex<double>>;
+
+// rule.hpp
+extern template struct block2::Rule<block2::SAny, complex<double>>;
+extern template struct block2::NoTransposeRule<block2::SAny, complex<double>>;
+
+// sparse_matrix.hpp
+extern template struct block2::SparseMatrix<block2::SAny, complex<double>>;
+extern template struct block2::SparseMatrixGroup<block2::SAny, complex<double>>;
+
+// tensor_functions.hpp
+extern template struct block2::TensorFunctions<block2::SAny, complex<double>>;
+
+#endif
+
 #endif
 
 #ifdef _USE_SINGLE_PREC

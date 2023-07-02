@@ -162,6 +162,11 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_SANY
     py::module m_sany = m.def_submodule("sany", "Any symmetry.");
     bind_core<SAny, double>(m_sany, "SAny", "Double");
+#ifdef _USE_COMPLEX
+    py::module m_sany_cpx =
+        m_cpx.def_submodule("sany", "Any symmetry (complex).");
+    bind_core<SAny, complex<double>>(m_sany_cpx, "SAny", "Double");
+#endif
 #endif
 
 #ifdef _USE_SINGLE_PREC
@@ -285,6 +290,9 @@ PYBIND11_MODULE(block2, m) {
 
 #ifdef _USE_SANY
     bind_dmrg<SAny, double>(m_sany, "SAny");
+#ifdef _USE_COMPLEX
+    bind_dmrg<SAny, complex<double>>(m_sany_cpx, "SAny");
+#endif
 #endif
 
 #ifdef _USE_SINGLE_PREC

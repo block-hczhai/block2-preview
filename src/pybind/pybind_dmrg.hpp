@@ -2730,7 +2730,7 @@ extern template void bind_fl_parallel_dmrg<SAny, double>(py::module &m);
 
 extern template void
 bind_fl_moving_environment<SAny, double, double>(py::module &m,
-                                                const string &name);
+                                                 const string &name);
 extern template void bind_fl_dmrg<SAny, double, double>(py::module &m);
 extern template void bind_fl_td_dmrg<SAny, double, double>(py::module &m);
 extern template void bind_fl_linear<SAny, double, double>(py::module &m);
@@ -2738,9 +2738,39 @@ extern template void
 bind_fl_expect<SAny, double, double, double>(py::module &m, const string &name);
 extern template void
 bind_fl_expect<SAny, double, double, complex<double>>(py::module &m,
-                                                     const string &name);
+                                                      const string &name);
 extern template auto bind_fl_spin_specific<SAny, double>(py::module &m)
     -> decltype(typename SAny::is_sany_t());
+
+#ifdef _USE_COMPLEX
+extern template void bind_fl_general<SAny, complex<double>>(py::module &m);
+
+extern template void bind_fl_mps<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_mpo<SAny, complex<double>>(py::module &m);
+extern template void bind_fl_partition<SAny, complex<double>>(py::module &m);
+extern template void
+bind_fl_qc_hamiltonian<SAny, complex<double>>(py::module &m);
+extern template void
+bind_fl_parallel_dmrg<SAny, complex<double>>(py::module &m);
+
+extern template void
+bind_fl_moving_environment<SAny, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+extern template void
+bind_fl_moving_environment<SAny, complex<double>, double>(py::module &m,
+                                                          const string &name);
+extern template void
+bind_fl_dmrg<SAny, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_td_dmrg<SAny, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_linear<SAny, complex<double>, complex<double>>(py::module &m);
+extern template void
+bind_fl_expect<SAny, complex<double>, complex<double>, complex<double>>(
+    py::module &m, const string &name);
+extern template auto bind_fl_spin_specific<SAny, complex<double>>(py::module &m)
+    -> decltype(typename SAny::is_sany_t());
+#endif
 
 #endif
 

@@ -6,6 +6,11 @@ from pyblock2.driver.core import DMRGDriver, SymmetryTypes
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+@pytest.fixture(scope="module")
+def symm_type(pytestconfig):
+    return pytestconfig.getoption("symm")
+
+
 @pytest.fixture(scope="module", params=["N2"])
 def system_def(request):
     from pyscf import gto
@@ -26,7 +31,7 @@ def dhf_type(request):
 
 
 class TestDMRG:
-    def test_rhf(self, tmp_path, system_def):
+    def test_rhf(self, tmp_path, system_def, symm_type):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -38,8 +43,9 @@ class TestDMRG:
         ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(
             mf, ncore, ncas
         )
+        symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
         driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SU2, n_threads=4
+            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
@@ -70,7 +76,7 @@ class TestDMRG:
             assert abs(energies[0] - -107.654122447523) < 1e-6
             assert abs(energies[1] - -106.959626154679) < 1e-6
             assert abs(energies[2] - -106.943756938989) < 1e-6
-        elif name == "C2": # may stuck in local minima
+        elif name == "C2":  # may stuck in local minima
             assert abs(energies[0] - -75.552895292451) < 1e-6
             assert abs(energies[1] - -75.536490900344) < 1e-6
             assert abs(energies[2] - -75.536490900079) < 1e-6
@@ -109,7 +115,7 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_uhf(self, tmp_path, system_def):
+    def test_uhf(self, tmp_path, system_def, symm_type):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -121,8 +127,9 @@ class TestDMRG:
         ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(
             mf, ncore, ncas
         )
+        symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
         driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SZ, n_threads=4
+            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
@@ -174,10 +181,10 @@ class TestDMRG:
             assert abs(energy - -107.654122447523) < 1e-6
         elif name == "C2":
             assert abs(energy - -75.552895292345) < 1e-6
-            
+
         driver.finalize()
 
-    def test_ghf(self, tmp_path, system_def):
+    def test_ghf(self, tmp_path, system_def, symm_type):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -189,8 +196,9 @@ class TestDMRG:
         ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(
             mf, ncore, ncas
         )
+        symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
         driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGF, n_threads=4
+            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
@@ -220,14 +228,14 @@ class TestDMRG:
             assert abs(energies[0] - -107.654122447523) < 1e-6
             assert abs(energies[1] - -107.031449471625) < 1e-6
             assert abs(energies[2] - -107.031449471625) < 1e-6
-        elif name == "C2": # may stuck in local minima
+        elif name == "C2":  # may stuck in local minima
             assert abs(energies[0] - -75.552895292344) < 1e-6
             assert abs(energies[1] - -75.536490899999) < 1e-6
             assert abs(energies[2] - -75.536490899999) < 1e-6
 
         driver.finalize()
 
-    def test_dhf(self, tmp_path, system_def, dhf_type):
+    def test_dhf(self, tmp_path, system_def, dhf_type, symm_type):
         from pyscf import scf
 
         mol, ncore, ncas, name = system_def
@@ -254,8 +262,9 @@ class TestDMRG:
         ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_dhf_integrals(
             mf, ncore, ncas, pg_symm=False
         )
+        symm = SymmetryTypes.SAnySGFCPX if symm_type == "sany" else SymmetryTypes.SGFCPX
         driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGFCPX, n_threads=4
+            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym

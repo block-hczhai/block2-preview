@@ -6,6 +6,11 @@ from pyblock2.driver.core import DMRGDriver, SymmetryTypes, NPDMAlgorithmTypes
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
+@pytest.fixture(scope="module")
+def symm_type(pytestconfig):
+    return pytestconfig.getoption("symm")
+
+
 @pytest.fixture(scope="module", params=["N2"])
 def system_def(request):
     from pyscf import gto
@@ -36,7 +41,7 @@ def fuse_ctrrot_type(request):
 
 
 class TestNPDM:
-    def test_rhf(self, tmp_path, system_def, site_type, algo_type, fuse_ctrrot_type):
+    def test_rhf(self, tmp_path, system_def, site_type, algo_type, fuse_ctrrot_type, symm_type):
         from pyscf import scf, fci
 
         mol, ncore, ncas, name = system_def
@@ -48,9 +53,9 @@ class TestNPDM:
         ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(
             mf, ncore, ncas, g2e_symm=8
         )
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SU2, n_threads=4
-        )
+
+        symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
         )
@@ -64,7 +69,7 @@ class TestNPDM:
             mpo,
             ket,
             n_sweeps=10 + np.random.randint(0, 2),
-            tol=1E-12,
+            tol=1e-12,
             bond_dims=bond_dims,
             noises=noises,
             thrds=thrds,
@@ -72,7 +77,7 @@ class TestNPDM:
         )
         if name == "N2":
             assert abs(energies - -107.654122447523) < 1e-6
-        elif name == "C2": # may stuck in local minima
+        elif name == "C2":  # may stuck in local minima
             assert abs(energies - -75.552895292451) < 1e-6
 
         if algo_type == "Normal":
@@ -82,7 +87,11 @@ class TestNPDM:
         elif algo_type == "SF":
             n_algo_type = NPDMAlgorithmTypes.SymbolFree | NPDMAlgorithmTypes.Compressed
         elif algo_type == "SFLM":
-            n_algo_type = NPDMAlgorithmTypes.SymbolFree | NPDMAlgorithmTypes.Compressed | NPDMAlgorithmTypes.LowMem
+            n_algo_type = (
+                NPDMAlgorithmTypes.SymbolFree
+                | NPDMAlgorithmTypes.Compressed
+                | NPDMAlgorithmTypes.LowMem
+            )
 
         porder = 4 if algo_type == "SFLM" else 3
         if site_type != 0:
@@ -90,48 +99,71 @@ class TestNPDM:
 
         pdms = []
         for ip in range(1, porder + 1):
-            pdms.append(driver.get_npdm(ket, pdm_type=ip, algo_type=n_algo_type,
-                site_type=site_type, iprint=2,
-                fused_contraction_rotation=fuse_ctrrot_type))
+            pdms.append(
+                driver.get_npdm(
+                    ket,
+                    pdm_type=ip,
+                    algo_type=n_algo_type,
+                    site_type=site_type,
+                    iprint=2,
+                    fused_contraction_rotation=fuse_ctrrot_type,
+                )
+            )
 
         driver.finalize()
 
         mx = fci.FCI(mf)
-        mx.kernel(h1e, g2e, ncas, n_elec, tol=1E-12)
+        mx.kernel(h1e, g2e, ncas, n_elec, tol=1e-12)
 
         if porder <= 3:
-            fdms = fci.rdm.make_dm123('FCI3pdm_kern_sf', mx.ci, mx.ci, ncas, n_elec)
+            fdms = fci.rdm.make_dm123("FCI3pdm_kern_sf", mx.ci, mx.ci, ncas, n_elec)
             E1, E2, E3 = [np.zeros_like(dm) for dm in fdms]
         else:
-            fdms = fci.rdm.make_dm1234('FCI4pdm_kern_sf', mx.ci, mx.ci, ncas, n_elec)
+            fdms = fci.rdm.make_dm1234("FCI4pdm_kern_sf", mx.ci, mx.ci, ncas, n_elec)
             E1, E2, E3, E4 = [np.zeros_like(dm) for dm in fdms]
 
         deltaAA = np.eye(ncas)
-        E1 += np.einsum('pa->pa', fdms[0], optimize=True)
-        E2 += np.einsum('paqb->pqab', fdms[1], optimize=True)
-        E2 += -1 * np.einsum('aq,pb->pqab', deltaAA, E1, optimize=True)
-        E3 += np.einsum('paqbgc->pqgabc', fdms[2], optimize=True)
-        E3 += -1 * np.einsum('ag,pqcb->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('aq,pgbc->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('bg,pqac->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('aq,bg,pc->pqgabc', deltaAA, deltaAA, E1, optimize=True)
+        E1 += np.einsum("pa->pa", fdms[0], optimize=True)
+        E2 += np.einsum("paqb->pqab", fdms[1], optimize=True)
+        E2 += -1 * np.einsum("aq,pb->pqab", deltaAA, E1, optimize=True)
+        E3 += np.einsum("paqbgc->pqgabc", fdms[2], optimize=True)
+        E3 += -1 * np.einsum("ag,pqcb->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("aq,pgbc->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("bg,pqac->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("aq,bg,pc->pqgabc", deltaAA, deltaAA, E1, optimize=True)
 
         if porder == 4:
-            E4 += np.einsum('aebfcgdh->abcdefgh', fdms[3], optimize=True)
-            E4 += -1 * np.einsum('eb,acdfgh->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('ec,abdgfh->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('ed,abchfg->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('fc,abdegh->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('fd,abcehg->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('gd,abcefh->abcdefgh', deltaAA, E3, optimize=True)
-            E4 += -1 * np.einsum('eb,fc,adgh->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('eb,fd,achg->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('eb,gd,acfh->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('ec,fd,abgh->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('ec,gd,abhf->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('ed,fc,abhg->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('fc,gd,abeh->abcdefgh', deltaAA, deltaAA, E2, optimize=True)
-            E4 += -1 * np.einsum('eb,fc,gd,ah->abcdefgh', deltaAA, deltaAA, deltaAA, E1, optimize=True)
+            E4 += np.einsum("aebfcgdh->abcdefgh", fdms[3], optimize=True)
+            E4 += -1 * np.einsum("eb,acdfgh->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum("ec,abdgfh->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum("ed,abchfg->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum("fc,abdegh->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum("fd,abcehg->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum("gd,abcefh->abcdefgh", deltaAA, E3, optimize=True)
+            E4 += -1 * np.einsum(
+                "eb,fc,adgh->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "eb,fd,achg->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "eb,gd,acfh->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "ec,fd,abgh->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "ec,gd,abhf->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "ed,fc,abhg->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "fc,gd,abeh->abcdefgh", deltaAA, deltaAA, E2, optimize=True
+            )
+            E4 += -1 * np.einsum(
+                "eb,fc,gd,ah->abcdefgh", deltaAA, deltaAA, deltaAA, E1, optimize=True
+            )
 
         E2 = E2.transpose(0, 1, 3, 2)
         E3 = E3.transpose(0, 1, 2, 5, 4, 3)
@@ -141,23 +173,23 @@ class TestNPDM:
 
         ddm1 = np.max(np.abs(pdms[0] - E1))
         ddm2 = np.max(np.abs(pdms[1] - E2))
-        print('pdm1 diff = %9.2g' % ddm1)
-        print('pdm2 diff = %9.2g' % ddm2)
+        print("pdm1 diff = %9.2g" % ddm1)
+        print("pdm2 diff = %9.2g" % ddm2)
 
-        assert ddm1 < 1E-5
-        assert ddm2 < 1E-5
+        assert ddm1 < 1e-5
+        assert ddm2 < 1e-5
 
         if porder >= 3:
             ddm3 = np.max(np.abs(pdms[2] - E3))
-            print('pdm3 diff = %9.2g' % ddm3)
-            assert ddm3 < 1E-5
+            print("pdm3 diff = %9.2g" % ddm3)
+            assert ddm3 < 1e-5
 
         if porder >= 4:
             ddm4 = np.max(np.abs(pdms[3] - E4))
-            print('pdm4 diff = %9.2g' % ddm4)
-            assert ddm4 < 1E-5
+            print("pdm4 diff = %9.2g" % ddm4)
+            assert ddm4 < 1e-5
 
-    def test_uhf(self, tmp_path, system_def, site_type, algo_type):
+    def test_uhf(self, tmp_path, system_def, site_type, algo_type, symm_type):
         from pyscf import scf, fci
 
         mol, ncore, ncas, name = system_def
@@ -171,9 +203,8 @@ class TestNPDM:
         ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(
             umf, ncore, ncas, g2e_symm=8
         )
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SZ, n_threads=4
-        )
+        symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
         )
@@ -187,7 +218,7 @@ class TestNPDM:
             mpo,
             ket,
             n_sweeps=10 + np.random.randint(0, 2),
-            tol=1E-12,
+            tol=1e-12,
             bond_dims=bond_dims,
             noises=noises,
             thrds=thrds,
@@ -205,32 +236,44 @@ class TestNPDM:
         elif algo_type == "SF":
             n_algo_type = NPDMAlgorithmTypes.SymbolFree | NPDMAlgorithmTypes.Compressed
         elif algo_type == "SFLM":
-            n_algo_type = NPDMAlgorithmTypes.SymbolFree | NPDMAlgorithmTypes.Compressed | NPDMAlgorithmTypes.LowMem
+            n_algo_type = (
+                NPDMAlgorithmTypes.SymbolFree
+                | NPDMAlgorithmTypes.Compressed
+                | NPDMAlgorithmTypes.LowMem
+            )
 
         porder = 3 if site_type == 0 else 2
 
         pdms = []
         for ip in range(1, porder + 1):
-            pdms.append(driver.get_npdm(ket, pdm_type=ip, algo_type=n_algo_type, site_type=site_type, iprint=2))
+            pdms.append(
+                driver.get_npdm(
+                    ket,
+                    pdm_type=ip,
+                    algo_type=n_algo_type,
+                    site_type=site_type,
+                    iprint=2,
+                )
+            )
 
         driver.finalize()
 
         mx = fci.FCI(mf)
         h1e, g2e = itg.get_rhf_integrals(mf, ncore, ncas, g2e_symm=8)[-3:-1]
-        mx.kernel(h1e, g2e, ncas, n_elec, tol=1E-12)
+        mx.kernel(h1e, g2e, ncas, n_elec, tol=1e-12)
 
-        fdms = fci.rdm.make_dm123('FCI3pdm_kern_sf', mx.ci, mx.ci, ncas, n_elec)
+        fdms = fci.rdm.make_dm123("FCI3pdm_kern_sf", mx.ci, mx.ci, ncas, n_elec)
         E1, E2, E3 = [np.zeros_like(dm) for dm in fdms]
 
         deltaAA = np.eye(ncas)
-        E1 += np.einsum('pa->pa', fdms[0], optimize=True)
-        E2 += np.einsum('paqb->pqab', fdms[1], optimize=True)
-        E2 += -1 * np.einsum('aq,pb->pqab', deltaAA, E1, optimize=True)
-        E3 += np.einsum('paqbgc->pqgabc', fdms[2], optimize=True)
-        E3 += -1 * np.einsum('ag,pqcb->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('aq,pgbc->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('bg,pqac->pqgabc', deltaAA, E2, optimize=True)
-        E3 += -1 * np.einsum('aq,bg,pc->pqgabc', deltaAA, deltaAA, E1, optimize=True)
+        E1 += np.einsum("pa->pa", fdms[0], optimize=True)
+        E2 += np.einsum("paqb->pqab", fdms[1], optimize=True)
+        E2 += -1 * np.einsum("aq,pb->pqab", deltaAA, E1, optimize=True)
+        E3 += np.einsum("paqbgc->pqgabc", fdms[2], optimize=True)
+        E3 += -1 * np.einsum("ag,pqcb->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("aq,pgbc->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("bg,pqac->pqgabc", deltaAA, E2, optimize=True)
+        E3 += -1 * np.einsum("aq,bg,pc->pqgabc", deltaAA, deltaAA, E1, optimize=True)
         E2 = E2.transpose(0, 1, 3, 2)
         E3 = E3.transpose(0, 1, 2, 5, 4, 3)
 
@@ -241,23 +284,29 @@ class TestNPDM:
 
         ddm1 = np.max(np.abs(pdms[0] - E1))
         ddm2 = np.max(np.abs(pdms[1] - E2))
-        print('pdm1 diff = %9.2g' % ddm1)
-        print('pdm2 diff = %9.2g' % ddm2)
+        print("pdm1 diff = %9.2g" % ddm1)
+        print("pdm2 diff = %9.2g" % ddm2)
 
-        assert ddm1 < 1E-5
-        assert ddm2 < 1E-5
+        assert ddm1 < 1e-5
+        assert ddm2 < 1e-5
 
         if porder >= 3:
             _3pdm = pdms[2]
-            _3pdm = _3pdm[0] \
-                + _3pdm[1] + _3pdm[1].transpose(0, 2, 1, 4, 3, 5) + _3pdm[1].transpose(2, 0, 1, 4, 5, 3) \
-                + _3pdm[2] + _3pdm[2].transpose(1, 0, 2, 3, 5, 4) + _3pdm[2].transpose(1, 2, 0, 5, 3, 4) \
+            _3pdm = (
+                _3pdm[0]
+                + _3pdm[1]
+                + _3pdm[1].transpose(0, 2, 1, 4, 3, 5)
+                + _3pdm[1].transpose(2, 0, 1, 4, 5, 3)
+                + _3pdm[2]
+                + _3pdm[2].transpose(1, 0, 2, 3, 5, 4)
+                + _3pdm[2].transpose(1, 2, 0, 5, 3, 4)
                 + _3pdm[3]
+            )
             ddm3 = np.max(np.abs(_3pdm - E3))
-            print('pdm3 diff = %9.2g' % ddm3)
-            assert ddm3 < 1E-5
+            print("pdm3 diff = %9.2g" % ddm3)
+            assert ddm3 < 1e-5
 
-    def test_ghf(self, tmp_path, system_def, site_type, algo_type):
+    def test_ghf(self, tmp_path, system_def, site_type, algo_type, symm_type):
         from pyscf import scf, fci
 
         mol, xncore, xncas, name = system_def
@@ -270,9 +319,8 @@ class TestNPDM:
         ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(
             gmf, xncore, xncas, g2e_symm=8
         )
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=SymmetryTypes.SGF, n_threads=4
-        )
+        symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         driver.initialize_system(
             n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
         )
