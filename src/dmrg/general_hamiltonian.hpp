@@ -225,33 +225,34 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
             }
         }
     }
+    virtual shared_ptr<SparseMatrix<S, FL>>
+    get_site_string_op(uint16_t m, const string &expr) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> tx,
+            tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+        if (site_norm_ops[m].count(expr))
+            return site_norm_ops[m].at(expr);
+        else {
+            tx = site_norm_ops[m].at(string(1, expr[0]));
+            for (size_t i = 1; i < expr.length(); i++) {
+                S q = tx->info->delta_quantum + site_norm_ops[m]
+                                                    .at(string(1, expr[i]))
+                                                    ->info->delta_quantum;
+                tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                tmp->allocate(find_site_op_info(m, q));
+                opf->product(0, tx, site_norm_ops[m].at(string(1, expr[i])),
+                             tmp);
+                tx = tmp;
+            }
+            return (site_norm_ops[m][expr] = tx);
+        }
+    }
     virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        shared_ptr<SparseMatrix<S, FL>> tmp =
-            make_shared<SparseMatrix<S, FL>>(d_alloc);
-        for (auto &p : ops) {
-            if (site_norm_ops[m].count(p.first))
-                p.second = site_norm_ops[m].at(p.first);
-            else {
-                p.second = site_norm_ops[m].at(string(1, p.first[0]));
-                for (size_t i = 1; i < p.first.length(); i++) {
-                    S q = p.second->info->delta_quantum +
-                          site_norm_ops[m]
-                              .at(string(1, p.first[i]))
-                              ->info->delta_quantum;
-                    tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
-                    tmp->allocate(find_site_op_info(m, q));
-                    opf->product(0, p.second,
-                                 site_norm_ops[m].at(string(1, p.first[i])),
-                                 tmp);
-                    p.second = tmp;
-                }
-                site_norm_ops[m][p.first] = p.second;
-            }
-        }
+        for (auto &p : ops)
+            p.second = get_site_string_op(m, p.first);
     }
     virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
                                                  const vector<uint16_t> &term_l,
@@ -479,8 +480,8 @@ struct GeneralHamiltonian<S, FL, typename S::is_su2_t> : Hamiltonian<S, FL> {
             }
         }
     }
-    shared_ptr<SparseMatrix<S, FL>> get_site_string_op(uint16_t m,
-                                                       const string &expr) {
+    virtual shared_ptr<SparseMatrix<S, FL>>
+    get_site_string_op(uint16_t m, const string &expr) {
         if (site_norm_ops[m].count(expr))
             return site_norm_ops[m].at(expr);
         else {
@@ -757,33 +758,34 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
                     op_prims.at(orb_sym[m])[t]->data);
             }
     }
+    virtual shared_ptr<SparseMatrix<S, FL>>
+    get_site_string_op(uint16_t m, const string &expr) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> tx,
+            tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+        if (site_norm_ops[m].count(expr))
+            return site_norm_ops[m].at(expr);
+        else {
+            tx = site_norm_ops[m].at(string(1, expr[0]));
+            for (size_t i = 1; i < expr.length(); i++) {
+                S q = tx->info->delta_quantum + site_norm_ops[m]
+                                                    .at(string(1, expr[i]))
+                                                    ->info->delta_quantum;
+                tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                tmp->allocate(find_site_op_info(m, q));
+                opf->product(0, tx, site_norm_ops[m].at(string(1, expr[i])),
+                             tmp);
+                tx = tmp;
+            }
+            return (site_norm_ops[m][expr] = tx);
+        }
+    }
     virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        shared_ptr<SparseMatrix<S, FL>> tmp =
-            make_shared<SparseMatrix<S, FL>>(d_alloc);
-        for (auto &p : ops) {
-            if (site_norm_ops[m].count(p.first))
-                p.second = site_norm_ops[m].at(p.first);
-            else {
-                p.second = site_norm_ops[m].at(string(1, p.first[0]));
-                for (size_t i = 1; i < p.first.length(); i++) {
-                    S q = p.second->info->delta_quantum +
-                          site_norm_ops[m]
-                              .at(string(1, p.first[i]))
-                              ->info->delta_quantum;
-                    tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
-                    tmp->allocate(find_site_op_info(m, q));
-                    opf->product(0, p.second,
-                                 site_norm_ops[m].at(string(1, p.first[i])),
-                                 tmp);
-                    p.second = tmp;
-                }
-                site_norm_ops[m][p.first] = p.second;
-            }
-        }
+        for (auto &p : ops)
+            p.second = get_site_string_op(m, p.first);
     }
     virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
                                                  const vector<uint16_t> &term_l,
@@ -969,33 +971,34 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
                     op_prims.at(orb_sym[m])[t]->data);
             }
     }
+    virtual shared_ptr<SparseMatrix<S, FL>>
+    get_site_string_op(uint16_t m, const string &expr) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<SparseMatrix<S, FL>> tx,
+            tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+        if (site_norm_ops[m].count(expr))
+            return site_norm_ops[m].at(expr);
+        else {
+            tx = site_norm_ops[m].at(string(1, expr[0]));
+            for (size_t i = 1; i < expr.length(); i++) {
+                S q = tx->info->delta_quantum + site_norm_ops[m]
+                                                    .at(string(1, expr[i]))
+                                                    ->info->delta_quantum;
+                tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
+                tmp->allocate(find_site_op_info(m, q));
+                opf->product(0, tx, site_norm_ops[m].at(string(1, expr[i])),
+                             tmp);
+                tx = tmp;
+            }
+            return (site_norm_ops[m][expr] = tx);
+        }
+    }
     virtual void get_site_string_ops(
         uint16_t m,
         unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> &ops) {
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        shared_ptr<SparseMatrix<S, FL>> tmp =
-            make_shared<SparseMatrix<S, FL>>(d_alloc);
-        for (auto &p : ops) {
-            if (site_norm_ops[m].count(p.first))
-                p.second = site_norm_ops[m].at(p.first);
-            else {
-                p.second = site_norm_ops[m].at(string(1, p.first[0]));
-                for (size_t i = 1; i < p.first.length(); i++) {
-                    S q = p.second->info->delta_quantum +
-                          site_norm_ops[m]
-                              .at(string(1, p.first[i]))
-                              ->info->delta_quantum;
-                    tmp = make_shared<SparseMatrix<S, FL>>(d_alloc);
-                    tmp->allocate(find_site_op_info(m, q));
-                    opf->product(0, p.second,
-                                 site_norm_ops[m].at(string(1, p.first[i])),
-                                 tmp);
-                    p.second = tmp;
-                }
-                site_norm_ops[m][p.first] = p.second;
-            }
-        }
+        for (auto &p : ops)
+            p.second = get_site_string_op(m, p.first);
     }
     virtual vector<vector<S>> init_string_quanta(const vector<string> &exprs,
                                                  const vector<uint16_t> &term_l,
@@ -1278,8 +1281,8 @@ struct GeneralHamiltonian<S, FL, typename S::is_sany_t> : Hamiltonian<S, FL> {
             }
         }
     }
-    shared_ptr<SparseMatrix<S, FL>> get_site_string_op(uint16_t m,
-                                                       const string &expr) {
+    virtual shared_ptr<SparseMatrix<S, FL>>
+    get_site_string_op(uint16_t m, const string &expr) {
         if (site_norm_ops[m].count(expr))
             return site_norm_ops[m].at(expr);
         shared_ptr<VectorAllocator<FP>> d_alloc =

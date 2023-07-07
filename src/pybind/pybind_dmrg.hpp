@@ -1898,6 +1898,11 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         void init_site_ops() override {
             PYBIND11_OVERRIDE(void, super_t, init_site_ops, );
         }
+        shared_ptr<SparseMatrix<S, FL>>
+        get_site_string_op(uint16_t m, const string &expr) override {
+            typedef shared_ptr<SparseMatrix<S, FL>> SpMat;
+            PYBIND11_OVERRIDE(SpMat, super_t, get_site_string_op, m, expr);
+        }
         void get_site_string_ops(uint16_t m, mp_str_t &ops) override {
             py::gil_scoped_acquire gil;
             py::function py_method =
@@ -1955,6 +1960,8 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
                        &GeneralHamiltonian<S, FL>::site_norm_ops)
         .def("get_site_basis", &GeneralHamiltonian<S, FL>::get_site_basis)
         .def("init_site_ops", &GeneralHamiltonian<S, FL>::init_site_ops)
+        .def("get_site_string_op",
+             &GeneralHamiltonian<S, FL>::get_site_string_op)
         .def("get_site_string_ops",
              &GeneralHamiltonian<S, FL>::get_site_string_ops)
         .def("init_string_quanta",

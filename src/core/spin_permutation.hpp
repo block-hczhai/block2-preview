@@ -463,7 +463,7 @@ struct SpinPermRecoupling {
         int cnt = 0, depth = 0, start = -1, extra = 0;
         stringstream ss;
         for (auto &c : expr) {
-            if (c == 'C' || c == 'D' || c == 'c' || c == 'd' || c == 'T') {
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
                 if (cnt >= i && cnt < j)
                     ss << c;
                 cnt++;
@@ -593,7 +593,8 @@ struct SpinRecoupling {
                 }
             } else if (c == '+' && depth == 1)
                 r.mid_idx = i + 1, r.left_cnt = dot_cnt;
-            else if (c == '.' || c == 'C' || c == 'D' || c == 'T')
+            else if (c == '.' || (c >= 'A' && c <= 'Z') ||
+                     (c >= 'a' && c <= 'z'))
                 dot_cnt++;
         }
         r.right_cnt = dot_cnt - r.left_cnt;

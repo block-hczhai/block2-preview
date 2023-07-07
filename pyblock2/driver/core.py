@@ -572,31 +572,39 @@ class DMRGDriver:
         heis_twosz=0,
         singlet_embedding=True,
         pauli_mode=False,
+        vacuum=None,
+        left_vacuum=None,
+        target=None,
+        hamil_init=True,
     ):
         bw = self.bw
         import numpy as np
 
-        self.vacuum = bw.SX(0, 0, 0)
-        if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
-            n_elec = n_sites * heis_twos
-        elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
-            n_elec = 2 * n_elec - n_sites
-        if pg_irrep is None:
-            if hasattr(self, "pg_irrep"):
-                pg_irrep = self.pg_irrep
+        self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
+        if target is None:
+            if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
+                n_elec = n_sites * heis_twos
+            elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
+                n_elec = 2 * n_elec - n_sites
+            if pg_irrep is None:
+                if hasattr(self, "pg_irrep"):
+                    pg_irrep = self.pg_irrep
+                else:
+                    pg_irrep = 0
+            if not SymmetryTypes.SU2 in bw.symm_type or heis_twos != -1:
+                singlet_embedding = False
+            if singlet_embedding:
+                assert heis_twosz == 0
+                self.target = bw.SX(n_elec + spin % 2, 0, pg_irrep)
+                self.left_vacuum = bw.SX(spin % 2, spin, 0)
             else:
-                pg_irrep = 0
-        if not SymmetryTypes.SU2 in bw.symm_type or heis_twos != -1:
-            singlet_embedding = False
-        if singlet_embedding:
-            assert heis_twosz == 0
-            self.target = bw.SX(n_elec + spin % 2, 0, pg_irrep)
-            self.left_vacuum = bw.SX(spin % 2, spin, 0)
+                self.target = bw.SX(
+                    n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
+                )
+                self.left_vacuum = self.vacuum
         else:
-            self.target = bw.SX(
-                n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
-            )
-            self.left_vacuum = self.vacuum
+            self.target = target
+            self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
         self.n_sites = n_sites
         self.heis_twos = heis_twos
         if orb_sym is None:
@@ -606,12 +614,13 @@ class DMRGDriver:
                 self.orb_sym = bw.VectorPG(list(orb_sym[0]) + list(orb_sym[1]))
             else:
                 self.orb_sym = bw.VectorPG(orb_sym)
-        if pauli_mode:
-            self.ghamil = self.get_pauli_hamiltonian()
-        else:
-            self.ghamil = bw.bs.GeneralHamiltonian(
-                self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
-            )
+        if hamil_init:
+            if pauli_mode:
+                self.ghamil = self.get_pauli_hamiltonian()
+            else:
+                self.ghamil = bw.bs.GeneralHamiltonian(
+                    self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
+                )
 
     def get_pauli_hamiltonian(self):
         assert SymmetryTypes.SGB in self.symm_type
