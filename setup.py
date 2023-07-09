@@ -93,6 +93,7 @@ class CMakeBuild(build_ext):
                 "-DUSE_COMPLEX=ON",
                 "-DUSE_SINGLE_PREC=ON",
                 "-DUSE_SG=ON",
+                "-DUSE_SANY=ON",
             ]
 
             # We can handle some platform-specific settings at our discretion
