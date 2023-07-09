@@ -1576,6 +1576,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("U1Fermi", SAnySymmTypes::U1Fermi)
         .value("U1", SAnySymmTypes::U1)
         .value("SU2Fermi", SAnySymmTypes::SU2Fermi)
+        .value("SU2", SAnySymmTypes::SU2)
         .value("LZ", SAnySymmTypes::LZ)
         .value("AbelianPG", SAnySymmTypes::AbelianPG)
         .value("ZNFermi", SAnySymmTypes::ZNFermi)
@@ -2115,17 +2116,28 @@ template <typename S = void> void bind_io(py::module &m) {
     py::class_<SpinPermTensor, shared_ptr<SpinPermTensor>>(m, "SpinPermTensor")
         .def(py::init<>())
         .def(py::init<const vector<vector<SpinPermTerm>> &>())
+        .def(py::init<const vector<vector<SpinPermTerm>> &,
+                      const vector<int16_t> &>())
         .def_readwrite("data", &SpinPermTensor::data)
+        .def_readwrite("tjs", &SpinPermTensor::tjs)
         .def_static("C", &SpinPermTensor::C)
         .def_static("D", &SpinPermTensor::D)
         .def_static("T", &SpinPermTensor::T)
         .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
         .def_static("find_pattern_perm", &SpinPermTensor::find_pattern_perm)
         .def_static("auto_sort_string", &SpinPermTensor::auto_sort_string)
-        .def_static("mul", &SpinPermTensor::mul)
+        .def_static("mul", (SpinPermTensor(*)(const SpinPermTensor &,
+                                              const SpinPermTensor &, int16_t,
+                                              const SU2CG &)) &
+                               SpinPermTensor::mul)
+        .def_static("mul", (SpinPermTensor(*)(
+                               const SpinPermTensor &, const SpinPermTensor &,
+                               const vector<int16_t> &, const SU2CG &)) &
+                               SpinPermTensor::mul)
         .def_static("dot_product", &SpinPermTensor::dot_product)
         .def("simplify", &SpinPermTensor::simplify)
         .def("auto_sort", &SpinPermTensor::auto_sort)
+        .def("normal_sort", &SpinPermTensor::normal_sort)
         .def("get_cds", &SpinPermTensor::get_cds)
         .def("equal_to_scaled", &SpinPermTensor::equal_to_scaled)
         .def("to_str", &SpinPermTensor::to_str)
@@ -2158,6 +2170,7 @@ template <typename S = void> void bind_io(py::module &m) {
 
     py::class_<SpinRecoupling, shared_ptr<SpinRecoupling>>(m, "SpinRecoupling")
         .def_static("get_level", &SpinRecoupling::get_level)
+        .def_static("get_quanta", &SpinRecoupling::get_quanta)
         .def_static("get_twos", &SpinRecoupling::get_twos)
         .def_static("recouple", &SpinRecoupling::recouple)
         .def_static("exchange", &SpinRecoupling::exchange)

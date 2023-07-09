@@ -36,6 +36,7 @@ enum struct SAnySymmTypes : uint16_t {
     U1Fermi = 1,
     U1 = 2,
     SU2Fermi = 3,
+    SU2 = 4,
     LZ = 5,
     AbelianPG = 6,
     ZNFermi = 8,
@@ -141,13 +142,15 @@ template <int8_t L = 6> struct SAnyT {
     }
     int twos() const {
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 return (int)values[k + 1];
         return 0;
     }
     int twos_low() const {
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 return (int)values[k];
         return 0;
     }
@@ -159,23 +162,25 @@ template <int8_t L = 6> struct SAnyT {
     }
     void set_n(int n) {
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::U1 ||
-                types[k] == SAnySymmTypes::U1Fermi) {
+            if (types[k] == SAnySymmTypes::U1Fermi ||
+                types[k] == SAnySymmTypes::U1) {
                 values[k] = n;
                 break;
             }
     }
     void set_twos(int twos) {
-        for (int8_t i = 0, k = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi) {
-                values[++i] = twos;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2) {
+                values[++k] = twos;
                 break;
             }
     }
     void set_twos_low(int twos) {
-        for (int8_t i = 0, k = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi) {
-                values[i++] = twos;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2) {
+                values[k++] = twos;
                 break;
             }
     }
@@ -189,15 +194,17 @@ template <int8_t L = 6> struct SAnyT {
     vector<int> su2_indices() const {
         vector<int> r;
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 r.push_back(++k);
         return r;
     }
     int multiplicity() const {
         int r = 1;
-        for (int8_t i = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi)
-                r *= values[++i] + 1; // skip su2 low
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
+                r *= values[++k] + 1; // skip su2 low
         return r;
     }
     bool is_fermion() const {
@@ -236,7 +243,8 @@ template <int8_t L = 6> struct SAnyT {
     SAnyT operator-() const {
         SAnyT r(types);
         for (int8_t i = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi)
+            if (types[i] == SAnySymmTypes::SU2Fermi ||
+                types[i] == SAnySymmTypes::SU2)
                 r.values[i] = values[i];
             else if (types[i] == SAnySymmTypes::U1 ||
                      types[i] == SAnySymmTypes::LZ ||
@@ -259,7 +267,8 @@ template <int8_t L = 6> struct SAnyT {
         // other.types is ignored
         SAnyT r(types);
         for (int8_t i = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi) {
+            if (types[i] == SAnySymmTypes::SU2Fermi ||
+                types[i] == SAnySymmTypes::SU2) {
                 r.values[i] = abs(values[i + 1] - other.values[i + 1]);
                 r.values[i + 1] = values[i + 1] + other.values[i + 1];
                 i++;
@@ -284,7 +293,8 @@ template <int8_t L = 6> struct SAnyT {
     SAnyT operator[](int i) const noexcept {
         SAnyT r = *this;
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi) {
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2) {
                 const int cnt = ((values[k + 1] - values[k]) >> 1) + 1;
                 r.values[k] = r.values[k + 1] = values[k] + ((i % cnt) << 1);
                 k++, i /= cnt;
@@ -294,14 +304,16 @@ template <int8_t L = 6> struct SAnyT {
     SAnyT get_ket() const noexcept {
         SAnyT r = *this;
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 r.values[k] = r.values[k + 1] = values[k + 1], k++;
         return r;
     }
     SAnyT get_bra(SAnyT dq) const noexcept {
         SAnyT r = *this + dq;
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 r.values[k] = r.values[k + 1] = values[k], k++;
         return r;
     }
@@ -313,7 +325,8 @@ template <int8_t L = 6> struct SAnyT {
         // ket.types is ignored
         SAnyT pbra = *this + ket, r(types, ket.values);
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi) {
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2) {
                 if (!triangle(ket.values[k + 1], values[k + 1],
                               bra.values[k + 1]))
                     return SAnyT(invalid);
@@ -341,7 +354,8 @@ template <int8_t L = 6> struct SAnyT {
     int count() const noexcept {
         int r = 1;
         for (int8_t k = 0; k < L; k++)
-            if (types[k] == SAnySymmTypes::SU2Fermi)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
                 r *= ((values[k + 1] - values[k]) >> 1) + 1, k++;
         return r;
     }
@@ -354,6 +368,12 @@ template <int8_t L = 6> struct SAnyT {
                     ss << "SU2F=" << values[i] << " ";
                 else
                     ss << "SU2F=" << values[i] << "~" << values[i + 1] << " ";
+                i++;
+            } else if (types[i] == SAnySymmTypes::SU2) {
+                if (values[i] == values[i + 1])
+                    ss << "SU2=" << values[i] << " ";
+                else
+                    ss << "SU2=" << values[i] << "~" << values[i + 1] << " ";
                 i++;
             } else if (types[i] == SAnySymmTypes::U1Fermi)
                 ss << "U1F=" << values[i] << " ";

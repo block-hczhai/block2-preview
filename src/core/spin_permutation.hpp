@@ -125,8 +125,13 @@ struct SpinPermTensor {
     // outer vector is projected spin components
     // inner vector is sum of terms
     vector<vector<SpinPermTerm>> data;
+    vector<int16_t> tjs;
     SpinPermTensor() : data{vector<SpinPermTerm>()} {}
-    SpinPermTensor(const vector<vector<SpinPermTerm>> &data) : data(data) {}
+    SpinPermTensor(const vector<vector<SpinPermTerm>> &data)
+        : data(data), tjs{(int16_t)(data.size() - 1)} {}
+    SpinPermTensor(const vector<vector<SpinPermTerm>> &data,
+                   const vector<int16_t> &tjs)
+        : data(data), tjs(tjs) {}
     static SpinPermTensor I() {
         return SpinPermTensor(vector<vector<SpinPermTerm>>{vector<SpinPermTerm>{
             SpinPermTerm(vector<pair<SpinOperator, uint16_t>>())}});
@@ -163,7 +168,7 @@ struct SpinPermTensor {
                 j--;
             jz.resize(j);
         }
-        return SpinPermTensor(zd);
+        return SpinPermTensor(zd, tjs);
     }
     // return 1 if number of even cycles is odd
     static uint8_t permutation_parity(const vector<uint16_t> &perm) {
@@ -246,6 +251,48 @@ struct SpinPermTensor {
             }
         return r;
     }
+    SpinPermTensor normal_sort() const {
+        SpinPermTensor r = this->auto_sort();
+        bool found = true;
+        while (found) {
+            found = false;
+            for (auto &jx : r.data) {
+                for (auto &tx : jx) {
+                    for (size_t i = 1; i < tx.ops.size(); i++)
+                        if (tx.ops[i].second == tx.ops[i - 1].second &&
+                            (tx.ops[i].first == SpinOperator::CA ||
+                             tx.ops[i].first == SpinOperator::CB) &&
+                            (tx.ops[i - 1].first == SpinOperator::DA ||
+                             tx.ops[i - 1].first == SpinOperator::DB)) {
+                            vector<pair<SpinOperator, uint16_t>> ex_ops;
+                            bool has_ex = false;
+                            if ((tx.ops[i].first == SpinOperator::CA &&
+                                 tx.ops[i - 1].first == SpinOperator::DA) ||
+                                (tx.ops[i].first == SpinOperator::CB &&
+                                 tx.ops[i - 1].first == SpinOperator::DB)) {
+                                has_ex = true;
+                                for (size_t j = 0; j < tx.ops.size(); j++)
+                                    if (j != i && j != i - 1)
+                                        ex_ops.push_back(tx.ops[j]);
+                            }
+                            auto tmp = tx.ops[i - 1];
+                            tx.ops[i - 1] = tx.ops[i];
+                            tx.ops[i] = tmp;
+                            tx.factor = -tx.factor;
+                            found = true;
+                            if (has_ex)
+                                jx.push_back(SpinPermTerm(ex_ops, -tx.factor));
+                            break;
+                        }
+                    if (found)
+                        break;
+                }
+                if (found)
+                    break;
+            }
+        }
+        return r.simplify();
+    }
     vector<uint8_t> get_cds() const {
         if (data.size() == 0 || data[0].size() == 0)
             return vector<uint8_t>();
@@ -268,16 +315,16 @@ struct SpinPermTensor {
             return other;
         else if (other.data.size() == 1 && other.data[0].size() == 0)
             return *this;
-        assert(data.size() == other.data.size());
+        assert(tjs == other.tjs);
         vector<vector<SpinPermTerm>> zd = data;
         for (size_t i = 0; i < zd.size(); i++)
             zd[i].insert(zd[i].end(), other.data[i].begin(),
                          other.data[i].end());
-        return SpinPermTensor(zd).simplify();
+        return SpinPermTensor(zd, tjs).simplify();
     }
     bool operator==(const SpinPermTensor &other) const {
         SpinPermTensor a = simplify(), b = other.simplify();
-        if (a.data.size() != b.data.size())
+        if (a.tjs != b.tjs || a.data.size() != b.data.size())
             return false;
         for (int i = 0; i < (int)a.data.size(); i++) {
             if (a.data[i].size() != b.data[i].size())
@@ -291,7 +338,7 @@ struct SpinPermTensor {
     double equal_to_scaled(const SpinPermTensor &other) const {
         SpinPermTensor a = simplify(), b = other.simplify();
         double fac = 0;
-        if (a.data.size() != b.data.size())
+        if (a.tjs != b.tjs || a.data.size() != b.data.size())
             return 0;
         for (int i = 0; i < (int)a.data.size(); i++) {
             if (a.data[i].size() != b.data[i].size())
@@ -331,8 +378,64 @@ struct SpinPermTensor {
                     }
         return SpinPermTensor(z).simplify();
     }
+    static SpinPermTensor mul(const SpinPermTensor &x, const SpinPermTensor &y,
+                              const vector<int16_t> &tjzs, const SU2CG &cg) {
+        int16_t mt = 1;
+        for (int16_t tjz : tjzs)
+            mt = mt * (tjz + 1);
+        vector<vector<SpinPermTerm>> z(mt);
+        // ix iy iz mx my mz
+        vector<vector<int16_t>> mxyzs{vector<int16_t>{0, 0, 0}};
+        for (int16_t ik = 0; ik < (int16_t)tjzs.size(); ik++) {
+            vector<vector<int16_t>> nxyzs;
+            for (int16_t im = 0; im < (int16_t)mxyzs.size(); im++) {
+                int16_t tjx = x.tjs[ik], tjy = y.tjs[ik], tjz = tjzs[ik];
+                for (int16_t iz = 0, mz = -tjz; mz <= tjz; mz += 2, iz++)
+                    for (int16_t ix = 0, mx = -tjx; mx <= tjx; mx += 2, ix++)
+                        for (int16_t iy = 0, my = -tjy; my <= tjy;
+                             my += 2, iy++)
+                            if (mx + my == mz) {
+                                vector<int16_t> g = mxyzs[im];
+                                g[0] = mxyzs[im][0] * (tjx + 1) + ix;
+                                g[1] = mxyzs[im][1] * (tjy + 1) + iy;
+                                g[2] = mxyzs[im][2] * (tjz + 1) + iz;
+                                g.push_back(mx);
+                                g.push_back(my);
+                                g.push_back(mz);
+                                nxyzs.push_back(g);
+                            }
+            }
+            mxyzs = nxyzs;
+        }
+        for (const auto &mxyz : mxyzs) {
+            int16_t ix = mxyz[0], iy = mxyz[1], iz = mxyz[2];
+            for (auto &tx : x.data[ix])
+                for (auto &ty : y.data[iy]) {
+                    double factor = tx.factor * ty.factor;
+                    for (int16_t ik = 0; ik < (int16_t)tjzs.size(); ik++) {
+                        int16_t tjx = x.tjs[ik], tjy = y.tjs[ik],
+                                tjz = tjzs[ik];
+                        int16_t mx = mxyz[(ik + 1) * 3 + 0],
+                                my = mxyz[(ik + 1) * 3 + 1],
+                                mz = mxyz[(ik + 1) * 3 + 2];
+                        factor *= cg.cg(tjx, tjy, tjz, mx, my, mz);
+                    }
+                    vector<pair<SpinOperator, uint16_t>> ops = tx.ops;
+                    ops.reserve(tx.ops.size() + ty.ops.size());
+                    ops.insert(ops.end(), ty.ops.begin(), ty.ops.end());
+                    z[iz].push_back(SpinPermTerm(ops, factor));
+                }
+        }
+        return SpinPermTensor(z, tjzs).simplify();
+    }
     string to_str() const {
         stringstream ss;
+        ss << "[";
+        for (auto tj : tjs)
+            ss << " " << tj;
+        ss << " ] ";
+        if (data.size() > 1)
+            ss << endl;
         for (auto &dxx : data) {
             bool first = true;
             for (auto &dx : dxx) {
@@ -411,7 +514,7 @@ struct SpinPermRecoupling {
         int ncd = 0;
         for (auto &c : x)
             if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
-                  (c >= '0' && c <= '9')))
+                  (c >= '0' && c <= '9') || c == '[' || c == ']' || c == ','))
                 ncd++;
         return ncd;
     }
@@ -460,13 +563,13 @@ struct SpinPermRecoupling {
         }
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        int cnt = 0, depth = 0, start = -1, extra = 0;
+        int cnt = 0, depth = 0, start = -1, extra = 0, ldep = -1;
         stringstream ss;
         for (auto &c : expr) {
             if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
                 if (cnt >= i && cnt < j)
                     ss << c;
-                cnt++;
+                cnt++, ldep = depth;
             } else if (c == '(') {
                 depth++;
                 if (cnt == i && start == -1 && j > i + 1)
@@ -477,8 +580,11 @@ struct SpinPermRecoupling {
                 depth--;
                 if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
                     ss << c, extra--;
-            } else if (c >= '0' && c <= '9') {
-                if (cnt >= i && cnt <= j && start != -1 && depth + 1 >= start)
+            } else if ((c >= '0' && c <= '9') || c == '[' || c == ']' ||
+                       c == ',') {
+                if ((cnt >= i && cnt <= j && start != -1 &&
+                     depth + 1 >= start) ||
+                    (cnt == i + 1 && j == i + 1 && ldep == depth))
                     ss << c;
             } else if (c == '+') {
                 if (cnt >= i && cnt < j && start != -1 && depth >= start)
@@ -598,6 +704,21 @@ struct SpinRecoupling {
                 dot_cnt++;
         }
         r.right_cnt = dot_cnt - r.left_cnt;
+        return r;
+    }
+    static vector<int> get_quanta(const string &x, Level h, bool heis) {
+        if (x.back() != ']')
+            return vector<int>(1, get_twos(x, h, heis));
+        int p = h.right_idx == -1 ? 1 : h.right_idx;
+        assert(x[p] == '[');
+        vector<int> r;
+        for (int i = p; i < (int)x.length(); i++)
+            if (x[i] == '[' || x[i] == ',')
+                r.push_back(0);
+            else if (x[i] >= '0' && x[i] <= '9')
+                r.back() = r.back() * 10 + (int)(x[i] - '0');
+            else
+                break;
         return r;
     }
     static int8_t get_twos(const string &x, Level h, bool heis) {

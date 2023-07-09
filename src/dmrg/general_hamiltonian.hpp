@@ -1505,7 +1505,8 @@ struct GeneralHamiltonian<S, FL, typename S::is_sany_t> : Hamiltonian<S, FL> {
         return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        if (expr.find('+') == string::npos && expr.find('(') == string::npos)
+        if (expr.find('+') == string::npos && expr.find('(') == string::npos &&
+            expr.find('[') == string::npos)
             return expr.substr(i, j - i);
         else
             return SpinPermRecoupling::get_sub_expr(expr, i, j);
