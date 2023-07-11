@@ -16,7 +16,7 @@ def system_def(request):
     from pyscf import gto
 
     if request.param == "Cl":
-        mol = gto.M(atom="Cl 0 0 0", basis="cc-pvdz-dk", verbose=0, spin=1)
+        mol = gto.M(atom="Cl 0 0 0", basis="cc-pvdz-dk", verbose=0, spin=1, max_memory=8000)
         return mol, 5, 4, "Cl"
 
 
