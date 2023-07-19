@@ -717,7 +717,8 @@ class DMRGDriver:
                     "I": np.array([1.0, 0.0, 0.0, 1.0]),
                     "X": np.array([0.0, 1.0, 1.0, 0.0]),
                     "Y": np.array([0.0, -1.0, 1.0, 0.0]),
-                    "Z": np.array([1.0, 0.0, 0.0, -1.0]),
+                    "Z": np.array([-1.0, 0.0, 0.0, 1.0]),
+                    "N": np.array([0.0, 0.0, 0.0, 1.0]),
                 }
                 i_alloc = super_self.bw.b.IntVectorAllocator()
                 d_alloc = super_self.bw.b.DoubleVectorAllocator()
