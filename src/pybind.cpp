@@ -54,6 +54,7 @@ PYBIND11_MODULE(block2, m) {
     };
 
     bind_data<>(m);
+    bind_fl_data<double>(m, "");
 
 #ifdef _USE_SU2SZ
     py::module m_su2 = m.def_submodule("su2", "Spin-adapted.");

@@ -21,7 +21,7 @@
 #pragma once
 
 #include "batch_gemm.hpp"
-#include "cg.hpp"
+#include "clebsch_gordan.hpp"
 #include "matrix_functions.hpp"
 #include "sparse_matrix.hpp"
 #include <array>

@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "cg.hpp"
+#include "clebsch_gordan.hpp"
 #include "complex_matrix_functions.hpp"
 #include "matrix.hpp"
 #include "matrix_functions.hpp"

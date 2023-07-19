@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "../core/cg.hpp"
+#include "../core/clebsch_gordan.hpp"
 #include "../core/csr_sparse_matrix.hpp"
 #include "../core/operator_tensor.hpp"
 #include "../core/sparse_matrix.hpp"

@@ -21,3 +21,5 @@
 #include "../pybind_core.hpp"
 
 template void bind_data<>(py::module &m);
+
+template void bind_fl_data<double>(py::module &m, const string &name);

@@ -24,7 +24,7 @@
 #include "../core/archived_sparse_matrix.hpp"
 #include "../core/archived_tensor_functions.hpp"
 #include "../core/batch_gemm.hpp"
-#include "../core/cg.hpp"
+#include "../core/clebsch_gordan.hpp"
 #include "../core/csr_matrix.hpp"
 #include "../core/csr_matrix_functions.hpp"
 #include "../core/csr_operator_functions.hpp"
@@ -135,7 +135,7 @@ extern template struct block2::ArchivedSparseMatrix<block2::SU2, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SZ, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SU2, double>;
 
-// cg.hpp
+// clebsch_gordan.hpp
 extern template struct block2::CG<block2::SZ>;
 extern template struct block2::CG<block2::SU2>;
 
@@ -275,7 +275,7 @@ extern template struct block2::ArchivedSparseMatrix<block2::SU2K, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SZK, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SU2K, double>;
 
-// cg.hpp
+// clebsch_gordan.hpp
 extern template struct block2::CG<block2::SZK>;
 extern template struct block2::CG<block2::SU2K>;
 
@@ -415,7 +415,7 @@ extern template struct block2::ArchivedSparseMatrix<block2::SGB, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SGF, double>;
 extern template struct block2::ArchivedTensorFunctions<block2::SGB, double>;
 
-// cg.hpp
+// clebsch_gordan.hpp
 extern template struct block2::CG<block2::SGF>;
 extern template struct block2::CG<block2::SGB>;
 
@@ -550,7 +550,7 @@ extern template struct block2::ArchivedSparseMatrix<block2::SAny, double>;
 // archived_tensor_functions.hpp
 extern template struct block2::ArchivedTensorFunctions<block2::SAny, double>;
 
-// cg.hpp
+// clebsch_gordan.hpp
 extern template struct block2::CG<block2::SAny>;
 
 // csr_operator_functions.hpp

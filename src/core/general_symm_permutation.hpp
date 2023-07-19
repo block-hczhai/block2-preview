@@ -1,0 +1,647 @@
+
+/*
+ * block2: Efficient MPO implementation of quantum chemistry DMRG
+ * Copyright (C) 2022 Huanchen Zhai <hczhai@caltech.edu>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ */
+
+/** General symmetry permutation for operators. */
+
+#pragma once
+
+#include "clebsch_gordan.hpp"
+#include "threading.hpp"
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <set>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+using namespace std;
+
+namespace block2 {
+
+enum struct GeneralSymmOperator : uint16_t {
+    C = 1,
+    D = 2,
+    E = 4,
+    F = 8,
+    G = 16,
+    S = 32
+};
+
+inline bool operator&(GeneralSymmOperator a, GeneralSymmOperator b) {
+    return ((uint16_t)a & (uint16_t)b) != 0;
+}
+
+inline GeneralSymmOperator operator^(GeneralSymmOperator a,
+                                     GeneralSymmOperator b) {
+    return (GeneralSymmOperator)((uint16_t)a ^ (uint16_t)b);
+}
+
+inline ostream &operator<<(ostream &os, const GeneralSymmOperator c) {
+    const static string repr[] = {"C", "D", "E", "F", "G", "S"};
+    for (uint16_t p = 1, r = 0; p <= 256; p <<= 1, r++)
+        if ((uint16_t)c == p) {
+            os << repr[r];
+            break;
+        }
+    return os;
+}
+
+struct GeneralSymmElement {
+    GeneralSymmOperator op;
+    uint16_t index;
+    vector<int16_t> tms;
+    GeneralSymmElement(GeneralSymmOperator op, uint16_t index, int16_t tm)
+        : op(op), index(index), tms{tm} {}
+    GeneralSymmElement(GeneralSymmOperator op, uint16_t index,
+                       const vector<int16_t> &tms)
+        : op(op), index(index), tms(tms) {}
+    bool operator<(const GeneralSymmElement &other) const {
+        if (op != other.op)
+            return op < other.op;
+        if (tms.size() != other.tms.size())
+            return tms.size() < other.tms.size();
+        for (size_t i = 0; i < tms.size(); i++)
+            if (tms[i] != other.tms[i])
+                return tms[i] < other.tms[i];
+        if (index != other.index)
+            return index < other.index;
+        return false;
+    }
+    bool operator==(const GeneralSymmElement &other) const {
+        if (op != other.op)
+            return false;
+        if (tms.size() != other.tms.size())
+            return false;
+        for (size_t i = 0; i < tms.size(); i++)
+            if (tms[i] != other.tms[i])
+                return false;
+        if (index != other.index)
+            return false;
+        return true;
+    }
+    bool operator!=(const GeneralSymmElement &other) const {
+        return !(*this == other);
+    }
+    size_t hash() const {
+        size_t h = (size_t)tms.size();
+        h ^= (uint16_t)op + 0x9E3779B9 + (h << 6) + (h >> 2);
+        h ^= (uint16_t)index + 0x9E3779B9 + (h << 6) + (h >> 2);
+        for (int8_t i = 0; i < tms.size(); i++)
+            h ^= (int16_t)tms[i] + 0x9E3779B9 + (h << 6) + (h >> 2);
+        return h;
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << op << index << "<";
+        for (size_t i = 0; i < tms.size(); i++)
+            ss << tms[i] << (i == tms.size() - 1 ? ">" : ",");
+        return ss.str();
+    }
+};
+
+template <typename FL> struct GeneralSymmTerm {
+    typedef decltype(abs((FL)0.0)) FP;
+    FL factor;
+    vector<GeneralSymmElement> ops;
+    GeneralSymmTerm() : factor((FL)0.0) {}
+    GeneralSymmTerm(GeneralSymmElement elem, FL factor = (FL)1.0)
+        : factor(factor), ops{elem} {}
+    GeneralSymmTerm(const vector<GeneralSymmElement> &ops, FL factor = (FL)1.0)
+        : factor(factor), ops(ops) {}
+    GeneralSymmTerm operator-() const { return GeneralSymmTerm(ops, -factor); }
+    GeneralSymmTerm operator*(FL d) const {
+        return GeneralSymmTerm(ops, d * factor);
+    }
+    bool operator<(const GeneralSymmTerm &other) const {
+        if (ops.size() != other.ops.size())
+            return ops.size() < other.ops.size();
+        for (size_t i = 0; i < ops.size(); i++)
+            if (ops[i] != other.ops[i])
+                return ops[i] < other.ops[i];
+        if (abs(factor - other.factor) >= (FP)1E-12)
+            return abs(factor) < abs(other.factor);
+        return false;
+    }
+    bool ops_equal_to(const GeneralSymmTerm &other) const {
+        if (ops.size() != other.ops.size())
+            return false;
+        for (size_t i = 0; i < ops.size(); i++)
+            if (ops[i] != other.ops[i])
+                return false;
+        return true;
+    }
+    bool operator==(const GeneralSymmTerm &other) const {
+        return ops_equal_to(other) && abs(factor - other.factor) < (FP)1E-12;
+    }
+    bool operator!=(const GeneralSymmTerm &other) const {
+        return !ops_equal_to(other) || abs(factor - other.factor) >= (FP)1E-12;
+    }
+    string to_str() const {
+        stringstream ss;
+        if (factor != (FL)1.0)
+            ss << factor << " ";
+        for (auto &op : ops)
+            ss << op.to_str() << " ";
+        return ss.str();
+    }
+};
+
+template <typename FL> struct GeneralSymmTensor {
+    typedef decltype(abs((FL)0.0)) FP;
+    // outer vector is projected symm components
+    // inner vector is sum of terms
+    vector<vector<GeneralSymmTerm<FL>>> data;
+    vector<int16_t> tjs;
+    GeneralSymmTensor() : data{vector<GeneralSymmTerm<FL>>()} {}
+    GeneralSymmTensor(const vector<vector<GeneralSymmTerm<FL>>> &data)
+        : data(data), tjs{(int16_t)(data.size() - 1)} {}
+    GeneralSymmTensor(const vector<vector<GeneralSymmTerm<FL>>> &data,
+                      const vector<int16_t> &tjs)
+        : data(data), tjs(tjs) {}
+    static GeneralSymmTensor i() {
+        return GeneralSymmTensor(
+            vector<vector<GeneralSymmTerm<FL>>>{vector<GeneralSymmTerm<FL>>{
+                GeneralSymmTerm<FL>(vector<GeneralSymmElement>())}});
+    }
+    static GeneralSymmTensor c(uint16_t index) {
+        vector<GeneralSymmTerm<FL>> a = {GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::C, index, -1))};
+        vector<GeneralSymmTerm<FL>> b = {GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::C, index, 1))};
+        return GeneralSymmTensor(vector<vector<GeneralSymmTerm<FL>>>{a, b});
+    }
+    static GeneralSymmTensor d(uint16_t index) {
+        vector<GeneralSymmTerm<FL>> a = {GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::D, index, 1))};
+        vector<GeneralSymmTerm<FL>> b = {-GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::D, index, -1))};
+        return GeneralSymmTensor(vector<vector<GeneralSymmTerm<FL>>>{a, b});
+    }
+    static GeneralSymmTensor t(uint16_t index) {
+        vector<GeneralSymmTerm<FL>> sp = {-GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::S, index, 2))};
+        vector<GeneralSymmTerm<FL>> sz = {GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::S, index, 0),
+            (FL)sqrt(2.0))};
+        vector<GeneralSymmTerm<FL>> sm = {GeneralSymmTerm<FL>(
+            GeneralSymmElement(GeneralSymmOperator::S, index, -2))};
+        return GeneralSymmTensor(
+            vector<vector<GeneralSymmTerm<FL>>>{sp, sz, sm});
+    }
+    static GeneralSymmTensor c_angular(int16_t l, uint16_t index) {
+        vector<vector<GeneralSymmTerm<FL>>> r;
+        r.reserve(2 * l + 1);
+        for (int16_t m = -l; m <= l; m++)
+            r.push_back(vector<GeneralSymmTerm<FL>>{GeneralSymmTerm<FL>(
+                GeneralSymmElement(GeneralSymmOperator::C, index, m + m))});
+        return GeneralSymmTensor(r);
+    }
+    static GeneralSymmTensor d_angular(int16_t l, uint16_t index) {
+        vector<vector<GeneralSymmTerm<FL>>> r;
+        r.reserve(2 * l + 1);
+        for (int16_t m = -l; m <= l; m++)
+            r.push_back(vector<GeneralSymmTerm<FL>>{GeneralSymmTerm<FL>(
+                GeneralSymmElement(GeneralSymmOperator::D, index, m + m))});
+        return GeneralSymmTensor(r);
+    }
+    GeneralSymmTensor simplify() const {
+        vector<vector<GeneralSymmTerm<FL>>> zd = data;
+        for (auto &jz : zd) {
+            sort(jz.begin(), jz.end());
+            int j = 0;
+            for (int i = 0; i < (int)jz.size(); i++)
+                if (j == 0 || !jz[j - 1].ops_equal_to(jz[i]))
+                    jz[j == 0 || abs(jz[j - 1].factor) >= (FP)1E-12 ? j++
+                                                                    : j - 1] =
+                        jz[i];
+                else
+                    jz[j - 1].factor += jz[i].factor;
+            if (j != 0 && abs(jz[j - 1].factor) < (FP)1E-12)
+                j--;
+            jz.resize(j);
+        }
+        return GeneralSymmTensor(zd, tjs);
+    }
+    // return 1 if number of even cycles is odd
+    static uint8_t permutation_parity(const vector<uint16_t> &perm) {
+        uint8_t n = 0;
+        vector<uint8_t> tag(perm.size(), 0);
+        for (uint16_t i = 0, j; i < (uint16_t)perm.size(); i++) {
+            j = i, n ^= !tag[j];
+            while (!tag[j])
+                n ^= 1, tag[j] = 1, j = perm[j];
+        }
+        return n;
+    }
+    // old -> new
+    static vector<uint16_t> find_pattern_perm(const vector<uint16_t> &x) {
+        vector<uint16_t> perm(x.size()), pcnt(x.size() + 1, 0);
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[x[i] + 1]++;
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[i + 1] += pcnt[i];
+        for (uint16_t i = 0; i < x.size(); i++)
+            perm[i] = pcnt[x[i]]++;
+        return perm;
+    }
+    static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
+                                              const string &xops) {
+        vector<uint16_t> perm, pcnt;
+        string z(xops.length(), '.');
+        perm.resize(x.size());
+        pcnt.resize(x.size() + 1, 0);
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[x[i] + 1]++;
+        for (uint16_t i = 0; i < x.size(); i++)
+            pcnt[i + 1] += pcnt[i];
+        for (uint16_t i = 0; i < x.size(); i++)
+            z[pcnt[x[i]]] = xops[i], perm[i] = pcnt[x[i]]++;
+        return make_pair(z, permutation_parity(perm) ? -1 : 1);
+    }
+    GeneralSymmTensor auto_sort() const {
+        GeneralSymmTensor r = *this;
+        vector<uint16_t> perm, pcnt;
+        for (auto &jx : r.data)
+            for (auto &tx : jx) {
+                vector<GeneralSymmElement> new_ops = tx.ops;
+                perm.resize(tx.ops.size());
+                pcnt.resize(tx.ops.size() + 1);
+                for (uint16_t i = 0; i < tx.ops.size() + 1; i++)
+                    pcnt[i] = 0;
+                for (uint16_t i = 0; i < tx.ops.size(); i++)
+                    pcnt[tx.ops[i].index + 1]++;
+                for (uint16_t i = 0; i < tx.ops.size(); i++)
+                    pcnt[i + 1] += pcnt[i];
+                for (uint16_t i = 0; i < tx.ops.size(); i++)
+                    new_ops[pcnt[tx.ops[i].index]] = tx.ops[i],
+                    perm[i] = pcnt[tx.ops[i].index]++;
+                if (tx.ops.size() != 0 &&
+                    !(tx.ops[0].op & GeneralSymmOperator::S))
+                    tx.factor *= permutation_parity(perm) ? -1 : 1;
+                tx.ops = new_ops;
+            }
+        return r;
+    }
+    GeneralSymmTensor normal_sort() const {
+        GeneralSymmTensor r = this->auto_sort();
+        bool found = true;
+        while (found) {
+            found = false;
+            for (auto &jx : r.data) {
+                for (auto &tx : jx) {
+                    for (size_t i = 1; i < tx.ops.size(); i++)
+                        if (tx.ops[i].index == tx.ops[i - 1].index &&
+                            tx.ops[i].op == GeneralSymmOperator::C &&
+                            tx.ops[i - 1].op == GeneralSymmOperator::D) {
+                            vector<GeneralSymmElement> ex_ops;
+                            bool has_ex = true;
+                            if (tx.ops[i].tms.size() !=
+                                tx.ops[i - 1].tms.size())
+                                has_ex = false;
+                            for (size_t j = 0;
+                                 has_ex && j < tx.ops[i].tms.size(); j++)
+                                has_ex = has_ex && (tx.ops[i].tms[j] ==
+                                                    tx.ops[i - 1].tms[j]);
+                            if (has_ex) {
+                                for (size_t j = 0; j < tx.ops.size(); j++)
+                                    if (j != i && j != i - 1)
+                                        ex_ops.push_back(tx.ops[j]);
+                            }
+                            auto tmp = tx.ops[i - 1];
+                            tx.ops[i - 1] = tx.ops[i];
+                            tx.ops[i] = tmp;
+                            tx.factor = -tx.factor;
+                            found = true;
+                            if (has_ex)
+                                jx.push_back(
+                                    GeneralSymmTerm<FL>(ex_ops, -tx.factor));
+                            break;
+                        }
+                    if (found)
+                        break;
+                }
+                if (found)
+                    break;
+            }
+        }
+        return r.simplify();
+    }
+    vector<uint8_t> get_cds() const {
+        if (data.size() == 0 || data[0].size() == 0)
+            return vector<uint8_t>();
+        vector<uint8_t> r(data[0][0].ops.size(), 0);
+        for (int j = 0; j < (int)r.size(); j++)
+            r[j] = ((uint8_t)data[0][0].ops[j].op &
+                    (uint8_t)GeneralSymmOperator::S) |
+                   (data[0][0].ops[j].op & GeneralSymmOperator::C);
+        return r;
+    }
+    GeneralSymmTensor operator*(FL d) const {
+        GeneralSymmTensor r = *this;
+        for (auto &jx : r.data)
+            for (auto &tx : jx)
+                tx.factor *= d;
+        return r;
+    }
+    GeneralSymmTensor operator+(const GeneralSymmTensor &other) const {
+        if (data.size() == 1 && data[0].size() == 0)
+            return other;
+        else if (other.data.size() == 1 && other.data[0].size() == 0)
+            return *this;
+        assert(tjs == other.tjs);
+        vector<vector<GeneralSymmTerm<FL>>> zd = data;
+        for (size_t i = 0; i < zd.size(); i++)
+            zd[i].insert(zd[i].end(), other.data[i].begin(),
+                         other.data[i].end());
+        return GeneralSymmTensor(zd, tjs).simplify();
+    }
+    bool operator==(const GeneralSymmTensor &other) const {
+        GeneralSymmTensor a = simplify(), b = other.simplify();
+        if (a.tjs != b.tjs || a.data.size() != b.data.size())
+            return false;
+        for (int i = 0; i < (int)a.data.size(); i++) {
+            if (a.data[i].size() != b.data[i].size())
+                return false;
+            for (int j = 0; j < a.data[i].size(); j++)
+                if (a.data[i][j] != b.data[i][j])
+                    return false;
+        }
+        return true;
+    }
+    FL equal_to_scaled(const GeneralSymmTensor &other) const {
+        GeneralSymmTensor a = simplify(), b = other.simplify();
+        FL fac = (FL)0.0;
+        if (a.tjs != b.tjs || a.data.size() != b.data.size())
+            return (FL)0.0;
+        for (int i = 0; i < (int)a.data.size(); i++) {
+            if (a.data[i].size() != b.data[i].size())
+                return (FL)0.0;
+            for (int j = 0; j < a.data[i].size(); j++)
+                if (!a.data[i][j].ops_equal_to(b.data[i][j]))
+                    return (FL)0.0;
+                else if (fac == (FL)0.0)
+                    fac = a.data[i][j].factor / b.data[i][j].factor;
+                else if (abs(a.data[i][j].factor / b.data[i][j].factor - fac) >=
+                         (FP)1E-12)
+                    return (FL)0.0;
+        }
+        return fac;
+    }
+    static GeneralSymmTensor mul(const GeneralSymmTensor &x,
+                                 const GeneralSymmTensor &y,
+                                 const vector<int16_t> &tjzs,
+                                 const vector<shared_ptr<AnyCG<FL>>> &cgs) {
+        int16_t mt = 1;
+        for (int16_t tjz : tjzs)
+            mt = mt * (tjz + 1);
+        vector<vector<GeneralSymmTerm<FL>>> z(mt);
+        // ix iy iz mx my mz
+        vector<pair<array<int16_t, 3>, FL>> mxyzs{
+            make_pair(array<int16_t, 3>{0, 0, 0}, (FL)1.0)};
+        for (int16_t ik = 0; ik < (int16_t)tjzs.size(); ik++) {
+            vector<pair<array<int16_t, 3>, FL>> nxyzs;
+            for (int im = 0; im < (int)mxyzs.size(); im++) {
+                int16_t tjx = x.tjs[ik], tjy = y.tjs[ik], tjz = tjzs[ik];
+                for (int16_t iz = 0, mz = -tjz; mz <= tjz; mz += 2, iz++)
+                    for (int16_t ix = 0, mx = -tjx; mx <= tjx; mx += 2, ix++)
+                        for (int16_t iy = 0, my = -tjy; my <= tjy;
+                             my += 2, iy++) {
+                            FL factor = cgs[ik]->cg(tjx, tjy, tjz, mx, my, mz);
+                            if (abs(factor) >= (FP)1E-12)
+                                nxyzs.push_back(make_pair(
+                                    array<int16_t, 3>{
+                                        (int16_t)(mxyzs[im].first[0] *
+                                                      (tjx + 1) +
+                                                  ix),
+                                        (int16_t)(mxyzs[im].first[1] *
+                                                      (tjy + 1) +
+                                                  iy),
+                                        (int16_t)(mxyzs[im].first[2] *
+                                                      (tjz + 1) +
+                                                  iz)},
+                                    mxyzs[im].second * factor));
+                        }
+            }
+            mxyzs = nxyzs;
+        }
+        for (const auto &mxyz : mxyzs) {
+            int16_t ix = mxyz.first[0], iy = mxyz.first[1], iz = mxyz.first[2];
+            for (auto &tx : x.data[ix])
+                for (auto &ty : y.data[iy]) {
+                    FL factor = tx.factor * ty.factor * mxyz.second;
+                    if (abs(factor) < (FP)1E-12)
+                        continue;
+                    vector<GeneralSymmElement> ops = tx.ops;
+                    ops.reserve(tx.ops.size() + ty.ops.size());
+                    ops.insert(ops.end(), ty.ops.begin(), ty.ops.end());
+                    z[iz].push_back(GeneralSymmTerm<FL>(ops, factor));
+                }
+        }
+        return GeneralSymmTensor(z, tjzs).simplify();
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "[";
+        for (auto tj : tjs)
+            ss << " " << tj;
+        ss << " ] ";
+        if (data.size() > 1)
+            ss << endl;
+        for (auto &dxx : data) {
+            bool first = true;
+            for (auto &dx : dxx) {
+                string x = dx.to_str();
+                if (x[0] != '-' && !first)
+                    ss << "+ " << x;
+                else
+                    ss << x;
+                first = false;
+            }
+            ss << endl;
+        }
+        return ss.str();
+    }
+};
+
+// template <typename FL> struct GeneralSymmExpr {
+//     typedef decltype(abs((FL)0.0)) FP;
+//     int n_sites;
+//     int n_ops;
+//     string expr;
+//     int n_reduced_sites;
+//     int max_l;
+//     vector<string> orb_sym;
+//     vector<int> site_sym;
+//     vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>> data;
+//     static const string &orb_names() {
+//         const static string _orb_names = "spdfghiklmnoqrtuvwxyz";
+//         return _orb_names;
+//     }
+//     struct vector_elem_hasher {
+//         size_t operator()(const vector<GeneralSymmElement> &x) const {
+//             size_t r = x.size();
+//             for (auto &i : x)
+//                 r ^= i.hash() + 0x9e3779b9 + (r << 6) + (r >> 2);
+//             return r;
+//         }
+//     };
+//     // expr includes ?. when construct, generate multiple dynamicly
+//     GeneralSymmExpr(const vector<string> &orb_sym, const string &expr)
+//         : expr(expr), orb_sym(orb_sym) {
+//         using T = GeneralSymmTensor<FL>;
+//         n_sites = (int)orb_sym.size();
+//         set<int> dist_site;
+//         max_l = 0;
+//         for (auto &ir : orb_sym) {
+//             size_t l = orb_names().find_first_of(ir[0]);
+//             assert(l != string::npos);
+//             dist_site.insert((int)l);
+//             max_l = max((int)l, max_l);
+//             if (ir.substr(1) == "+0")
+//                 site_sym.push_back((int)l);
+//         }
+//         n_reduced_sites = (int)site_sym.size();
+//         assert(dist_site.size() != 0);
+//         vector<shared_ptr<AnyCG<FL>>> cgs(1, make_shared<AnySO3RSHCG<FL>>());
+//         unordered_map<vector<GeneralSymmElement>, vector<pair<int, FL>>,
+//                       vector_elem_hasher>
+//             mp;
+//         n_ops = 0;
+//         size_t ng = 1;
+//         for (auto &c : expr)
+//             if (c >= 'A' && c <= 'Z')
+//                 n_ops++, ng *= dist_site.size();
+//         vector<int> vdist(dist_site.begin(), dist_site.end());
+//         for (size_t ig = 0, igv; ig < ng; ig++) {
+//             vector<int16_t> ls;
+//             igv = ig;
+//             for (int il = 0; il < n_ops; il++)
+//                 ls.push_back((int16_t)vdist[igv %vdist.size()]), igv /= vdist.size();
+//         for (const int &la : dist_site)
+//             for (const int &lb : dist_site)
+//                 for (const int &lc : dist_site)
+//                     for (const int &ld : dist_site)
+//                         for (int ml = 0; ml <= lb + lc; ml++) {
+//                             vector<int16_t> xml(1, (int16_t)(ml + ml));
+//                             T ex = T::mul(T::c_angular(lb, lb),
+//                                           T::d_angular(lc, lc), xml, cgs);
+//                             ex = T::mul(T::c_angular(la, la), ex,
+//                                         vector<int16_t>(1, (int16_t)(ld + ld)),
+//                                         cgs);
+//                             ex = T::mul(ex, T::d_angular(ld, ld),
+//                                         vector<int16_t>(1, (int16_t)0), cgs);
+//                             if (ex.data[0].size() == 0)
+//                                 continue;
+//                             for (auto &k : ex.data[0])
+//                                 mp[k.ops].push_back(make_pair(ml, k.factor));
+//                         }
+//         }
+//         data = vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>>(
+//             mp.begin(), mp.end());
+//         sort(
+//             data.begin(), data.end(),
+//             [](const pair<vector<GeneralSymmElement>, vector<pair<int, FL>>> &i,
+//                const pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>
+//                    &j) {
+//                 if (i.second.size() != j.second.size())
+//                     return i.second.size() < j.second.size();
+//                 else {
+//                     for (int im = (int)i.second.size() - 1; im >= 0; im--)
+//                         if (i.second[im].first != j.second[im].first)
+//                             return i.second[im].first > j.second[im].first;
+//                     return i.first < j.first;
+//                 }
+//             });
+//     }
+//     void reduce(const FL *int_data, FL *reduced_data, FP cutoff = (FP)1E-12) {
+//         map<string, vector<int>> orb_idx_mp;
+//         map<char, vector<int>> site_idx_mp;
+//         for (size_t ix = 0; ix < orb_sym.size(); ix++)
+//             orb_idx_mp[orb_sym[ix]].push_back(ix);
+//         for (size_t ix = 0; ix < site_sym.size(); ix++)
+//             site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
+//         array<int8_t, 4> perm = {0, 3, 1, 2};
+//         size_t ml_stride = (size_t)n_reduced_sites * n_reduced_sites *
+//                            n_reduced_sites * n_reduced_sites;
+//         vector<uint8_t> solved(ml_stride * (max_l + max_l + 1), 0);
+//         memset(reduced_data, 0, solved.size() * sizeof(FL));
+//         for (auto &mx : data) {
+//             vector<string> kg;
+//             vector<int> n_orbs;
+//             size_t np = 1;
+//             for (auto &p : perm) {
+//                 stringstream ss;
+//                 ss << orb_names()[mx.first[p].index];
+//                 ss << (mx.first[p].tms[0] >= 0 ? "+" : "");
+//                 ss << mx.first[p].tms[0] / 2;
+//                 kg.push_back(ss.str());
+//                 n_orbs.push_back((int)orb_idx_mp.at(kg.back()).size());
+//                 np *= n_orbs.back();
+//             }
+//             for (size_t ip = 0; ip < np; ip++) {
+//                 size_t ipv = ip, ipx = 0, ipz = 0;
+//                 for (auto &g : kg) {
+//                     ipx = ipx * n_sites +
+//                           orb_idx_mp.at(g)[ipv % orb_idx_mp.at(g).size()];
+//                     ipz = ipz * n_reduced_sites +
+//                           site_idx_mp.at(g[0])[ipv % orb_idx_mp.at(g).size()];
+//                     ipv = ipv / orb_idx_mp.at(g).size();
+//                 }
+//                 FL f = int_data[ipx];
+//                 for (int iv = (int)mx.second.size() - 1; iv >= 0; iv--) {
+//                     if (!solved[mx.second[iv].first * ml_stride + ipz]) {
+//                         reduced_data[mx.second[iv].first * ml_stride + ipz] =
+//                             f / mx.second[iv].second;
+//                         solved[mx.second[iv].first * ml_stride + ipz] = 1;
+//                     }
+//                     f -= reduced_data[mx.second[iv].first * ml_stride + ipz] *
+//                          mx.second[iv].second;
+//                 }
+//                 assert(abs(f) < cutoff);
+//             }
+//         }
+//     }
+//     string to_str() const {
+//         stringstream ss;
+//         ss << "N-SITES = " << n_sites << " -> " << n_reduced_sites
+//            << " MAX-L = " << max_l << " PATTERN = " << expr
+//            << " N-OPS = " << n_ops << endl;
+//         ss << "ORB-SYM = [";
+//         for (auto ir : orb_sym)
+//             ss << " " << ir;
+//         ss << " ]" << endl;
+//         ss << "RED-SYM = [";
+//         for (auto ir : site_sym)
+//             ss << " " << orb_names()[ir];
+//         ss << " ]" << endl;
+//         ss << "DATA = " << data.size() << endl;
+//         return ss.str();
+//     }
+// };
+
+} // namespace block2

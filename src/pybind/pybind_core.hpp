@@ -44,6 +44,8 @@ PYBIND11_MAKE_OPAQUE(vector<double>);
 PYBIND11_MAKE_OPAQUE(vector<long double>);
 PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<complex<long double>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<int, double>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<int, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<string>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
@@ -1444,6 +1446,9 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<complex<long double>>,
                     shared_ptr<vector<complex<long double>>>>(
         m, "VectorComplexLDouble");
+    py::bind_vector<vector<pair<int, double>>>(m, "VectorPIntDouble");
+    py::bind_vector<vector<pair<int, complex<double>>>>(
+        m, "VectorPIntComplexDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<string>>(m, "VectorString");
     py::bind_vector<vector<vector<uint8_t>>>(m, "VectorVectorUInt8");
@@ -1776,6 +1781,16 @@ template <typename S = void> void bind_types(py::module &m) {
         .def(py::self & py::self)
         .def(py::self ^ py::self);
 
+    py::enum_<GeneralSymmOperator>(m, "GeneralSymmOperator", py::arithmetic())
+        .value("C", GeneralSymmOperator::C)
+        .value("D", GeneralSymmOperator::D)
+        .value("E", GeneralSymmOperator::E)
+        .value("F", GeneralSymmOperator::F)
+        .value("G", GeneralSymmOperator::G)
+        .value("S", GeneralSymmOperator::S)
+        .def(py::self & py::self)
+        .def(py::self ^ py::self);
+
     py::bind_vector<vector<pair<SpinOperator, uint16_t>>>(
         m, "VectorPSpinOpUInt16");
 }
@@ -2093,6 +2108,55 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("phase", &SU2CG::phase, py::arg("ta"), py::arg("tb"),
              py::arg("tc"));
 
+    py::class_<SO3CG, shared_ptr<SO3CG>, SU2CG>(m, "SO3CG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def("cg", &SO3CG::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
+             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &SO3CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &SO3CG::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &SO3CG::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"));
+
+    py::class_<SO3RSHCG, shared_ptr<SO3RSHCG>, SU2CG>(m, "SO3RSHCG")
+        .def(py::init<>())
+        .def(py::init<int>())
+        .def_static("u_star", &SO3RSHCG::u_star, py::arg("tm1"), py::arg("tm1"))
+        .def("cg", &SO3RSHCG::cg, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_3j", &SO3RSHCG::wigner_3j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &SO3RSHCG::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &SO3RSHCG::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &SO3RSHCG::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"))
+        .def("transpose_cg", &SO3RSHCG::transpose_cg, py::arg("td"),
+             py::arg("tl"), py::arg("tr"))
+        .def("phase", &SO3RSHCG::phase, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"));
+
+    py::class_<GeneralSymmElement, shared_ptr<GeneralSymmElement>>(
+        m, "GeneralSymmElement")
+        .def(py::init<GeneralSymmOperator, uint16_t, int16_t>())
+        .def(py::init<GeneralSymmOperator, uint16_t, const vector<int16_t> &>())
+        .def_readwrite("op", &GeneralSymmElement::op)
+        .def_readwrite("index", &GeneralSymmElement::index)
+        .def_readwrite("tms", &GeneralSymmElement::tms)
+        .def(py::self < py::self)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def("to_str", &GeneralSymmElement::to_str)
+        .def("__repr__", &GeneralSymmElement::to_str)
+        .def("__hash__", &GeneralSymmElement::hash);
+
+    py::bind_vector<vector<GeneralSymmElement>>(m, "VectorGeneralSymmElement");
+
     py::class_<SpinPermTerm, shared_ptr<SpinPermTerm>>(m, "SpinPermTerm")
         .def(py::init<>())
         .def(py::init<SpinOperator, uint16_t>())
@@ -2120,6 +2184,7 @@ template <typename S = void> void bind_io(py::module &m) {
                       const vector<int16_t> &>())
         .def_readwrite("data", &SpinPermTensor::data)
         .def_readwrite("tjs", &SpinPermTensor::tjs)
+        .def_static("I", &SpinPermTensor::I)
         .def_static("C", &SpinPermTensor::C)
         .def_static("D", &SpinPermTensor::D)
         .def_static("T", &SpinPermTensor::T)
@@ -2271,6 +2336,113 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("n_max_ops", &NPDMScheme::n_max_ops)
         .def("initialize", &NPDMScheme::initialize)
         .def("to_str", &NPDMScheme::to_str);
+}
+
+template <typename FL> void bind_fl_data(py::module &m, const string &name) {
+
+    py::class_<AnyCG<FL>, shared_ptr<AnyCG<FL>>>(m, ("AnyCG" + name).c_str())
+        .def(py::init<>())
+        .def("cg", &AnyCG<FL>::cg, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"));
+
+    py::bind_vector<vector<shared_ptr<AnyCG<FL>>>>(
+        m, ("VectorAnyCG" + name).c_str());
+
+    py::class_<AnySU2CG<FL>, shared_ptr<AnySU2CG<FL>>, AnyCG<FL>>(
+        m, ("AnySU2CG" + name).c_str())
+        .def(py::init<>());
+
+    py::class_<AnySO3RSHCG<FL>, shared_ptr<AnySO3RSHCG<FL>>, AnyCG<FL>>(
+        m, ("AnySO3RSHCG" + name).c_str())
+        .def(py::init<>());
+
+    py::class_<GeneralSymmTerm<FL>, shared_ptr<GeneralSymmTerm<FL>>>(
+        m, ("GeneralSymmTerm" + name).c_str())
+        .def(py::init<>())
+        .def(py::init<GeneralSymmElement>())
+        .def(py::init<GeneralSymmElement, FL>())
+        .def(py::init<const vector<GeneralSymmElement> &>())
+        .def(py::init<const vector<GeneralSymmElement> &, FL>())
+        .def_readwrite("factor", &GeneralSymmTerm<FL>::factor)
+        .def_readwrite("ops", &GeneralSymmTerm<FL>::ops)
+        .def(-py::self)
+        .def(py::self * FL())
+        .def(py::self < py::self)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        .def("ops_equal_to", &GeneralSymmTerm<FL>::ops_equal_to)
+        .def("to_str", &GeneralSymmTerm<FL>::to_str)
+        .def("__repr__", &GeneralSymmTerm<FL>::to_str);
+
+    py::bind_vector<vector<GeneralSymmTerm<FL>>>(
+        m, ("VectorGeneralSymmTerm" + name).c_str());
+    py::bind_vector<vector<vector<GeneralSymmTerm<FL>>>>(
+        m, ("VectorVectorGeneralSymmTerm" + name).c_str());
+
+    py::class_<GeneralSymmTensor<FL>, shared_ptr<GeneralSymmTensor<FL>>>(
+        m, ("GeneralSymmTensor" + name).c_str())
+        .def(py::init<>())
+        .def(py::init<const vector<vector<GeneralSymmTerm<FL>>> &>())
+        .def(py::init<const vector<vector<GeneralSymmTerm<FL>>> &,
+                      const vector<int16_t> &>())
+        .def_readwrite("data", &GeneralSymmTensor<FL>::data)
+        .def_readwrite("tjs", &GeneralSymmTensor<FL>::tjs)
+        .def_static("i", &GeneralSymmTensor<FL>::i)
+        .def_static("c", &GeneralSymmTensor<FL>::c)
+        .def_static("d", &GeneralSymmTensor<FL>::d)
+        .def_static("t", &GeneralSymmTensor<FL>::t)
+        .def_static("c_angular", &GeneralSymmTensor<FL>::c_angular)
+        .def_static("d_angular", &GeneralSymmTensor<FL>::d_angular)
+        .def_static("permutation_parity",
+                    &GeneralSymmTensor<FL>::permutation_parity)
+        .def_static("find_pattern_perm",
+                    &GeneralSymmTensor<FL>::find_pattern_perm)
+        .def_static("auto_sort_string",
+                    &GeneralSymmTensor<FL>::auto_sort_string)
+        .def_static("mul", &GeneralSymmTensor<FL>::mul)
+        .def("simplify", &GeneralSymmTensor<FL>::simplify)
+        .def("auto_sort", &GeneralSymmTensor<FL>::auto_sort)
+        .def("normal_sort", &GeneralSymmTensor<FL>::normal_sort)
+        .def("get_cds", &GeneralSymmTensor<FL>::get_cds)
+        .def("equal_to_scaled", &GeneralSymmTensor<FL>::equal_to_scaled)
+        .def("to_str", &GeneralSymmTensor<FL>::to_str)
+        .def("__repr__", &GeneralSymmTensor<FL>::to_str)
+        .def(py::self * FL())
+        .def(py::self + py::self)
+        .def(py::self == py::self);
+
+    py::bind_vector<vector<GeneralSymmTensor<FL>>>(
+        m, ("VectorGeneralSymmTensor" + name).c_str());
+    py::bind_vector<
+        vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>>>(
+        m, ("VectorPVectorGeneralSymmElementVectorPInt" + name + "Double")
+               .c_str());
+
+    // py::class_<GeneralSymmExpr<FL>, shared_ptr<GeneralSymmExpr<FL>>>(
+    //     m, ("GeneralSymmExpr" + name).c_str())
+    //     .def(py::init<const vector<string> &>())
+    //     .def_readwrite("n_sites", &GeneralSymmExpr<FL>::n_sites)
+    //     .def_readwrite("n_reduced_sites", &GeneralSymmExpr<FL>::n_reduced_sites)
+    //     .def_readwrite("max_l", &GeneralSymmExpr<FL>::max_l)
+    //     .def_readwrite("orb_sym", &GeneralSymmExpr<FL>::orb_sym)
+    //     .def_readwrite("site_sym", &GeneralSymmExpr<FL>::site_sym)
+    //     .def_readwrite("data", &GeneralSymmExpr<FL>::data)
+    //     .def_static("orb_names", &GeneralSymmExpr<FL>::orb_names)
+    //     .def(
+    //         "reduce",
+    //         [](GeneralSymmExpr<FL> *self, py::array_t<FL> data,
+    //            typename GeneralSymmExpr<FL>::FP cutoff) -> py::array_t<FL> {
+    //             py::array_t<FL> reduced_data(vector<ssize_t>{
+    //                 (ssize_t)(self->max_l + self->max_l + 1),
+    //                 self->n_reduced_sites, self->n_reduced_sites,
+    //                 self->n_reduced_sites, self->n_reduced_sites});
+    //             self->reduce(data.data(), reduced_data.mutable_data(), cutoff);
+    //             return reduced_data;
+    //         },
+    //         py::arg("data"),
+    //         py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
+    //     .def("to_str", &GeneralSymmExpr<FL>::to_str)
+    //     .def("__repr__", &GeneralSymmExpr<FL>::to_str);
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {
@@ -3741,6 +3913,8 @@ extern template void bind_fl_io<double>(py::module &m, const string &name);
 extern template void bind_matrix<double>(py::module &m);
 extern template void bind_fl_matrix<double>(py::module &m);
 extern template void bind_general_fcidump<double>(py::module &m);
+
+extern template void bind_fl_data<double>(py::module &m, const string &name);
 
 extern template void bind_post_matrix<>(py::module &m);
 

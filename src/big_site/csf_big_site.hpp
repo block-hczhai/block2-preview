@@ -21,7 +21,7 @@
 #pragma once
 
 #include "../core/allocator.hpp"
-#include "../core/cg.hpp"
+#include "../core/clebsch_gordan.hpp"
 #include "../core/integral.hpp"
 #include "../core/prime.hpp"
 #include "../core/state_info.hpp"

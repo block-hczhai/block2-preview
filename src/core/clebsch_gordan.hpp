@@ -22,6 +22,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <complex>
 #include <memory>
 #include <vector>
 
@@ -34,6 +35,7 @@ template <typename, typename = void> struct CG;
 // Trivial CG factors for Abelian symmetry
 struct TrivialCG {
     TrivialCG() {}
+    virtual ~TrivialCG() = default;
     long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
                           int tjf) const noexcept {
         return 1.0L;
@@ -64,6 +66,7 @@ struct SU2CG {
         for (int i = 1; i < n_sf; i++)
             sqrt_fact[i] = sqrt_fact[i - 1] * sqrtl(i);
     }
+    virtual ~SU2CG() = default;
     static bool triangle(int tja, int tjb, int tjc) {
         return !((tja + tjb + tjc) & 1) && tjc <= tja + tjb &&
                tjc >= abs(tja - tjb);
@@ -75,7 +78,7 @@ struct SU2CG {
                sqrt_fact[(tja + tjb + tjc + 2) >> 1];
     }
     long double cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const {
-        return (1 - ((tmc + tja - tjb) & 2)) * sqrt(tjc + 1) *
+        return (1 - ((tmc + tja - tjb) & 2)) * sqrtl(tjc + 1) *
                wigner_3j(tja, tjb, tjc, tma, tmb, -tmc);
     }
     // Albert Messiah, Quantum Mechanics. Vol 2. Eq. (C.21)
@@ -176,8 +179,158 @@ struct SU2CG {
     }
 };
 
+// CG factors for SO(3) symmetry
+struct SO3CG : SU2CG {
+    SO3CG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
+    virtual ~SO3CG() = default;
+    long double cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const {
+        return (1 - (tmc & 2)) * sqrtl((tja + 1) * (tjb + 1) / (tjc + 1)) *
+               wigner_3j(tja, tjb, tjc, 0, 0, 0) *
+               wigner_3j(tja, tjb, tjc, tma, tmb, -tmc);
+    }
+    long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
+                          int tjf) const {
+        return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
+    }
+    long double wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf,
+                          int tjg, int tjh, int tji) const {
+        int tmi = tji % 2;
+        long double r = 0.0;
+        for (int tma = -tja; tma <= tja; tma += 2)
+            for (int tmb = -tjb; tmb <= tjb; tmb += 2)
+                for (int tmd = -tjd; tmd <= tjd; tmd += 2)
+                    for (int tme = -tje; tme <= tje; tme += 2) {
+                        long double ra = 0.0, rb = 0.0;
+                        for (int tmc = -tjc; tmc <= tjc; tmc += 2)
+                            for (int tmf = -tjf; tmf <= tjf; tmf += 2)
+                                ra += cg(tja, tjb, tjc, tma, tmb, tmc) *
+                                      cg(tjd, tje, tjf, tmd, tme, tmf) *
+                                      cg(tjc, tjf, tji, tmc, tmf, tmi);
+                        for (int tmg = -tjg; tmg <= tjg; tmg += 2)
+                            for (int tmh = -tjh; tmh <= tjh; tmh += 2)
+                                rb += cg(tja, tjd, tjg, tma, tmd, tmg) *
+                                      cg(tjb, tje, tjh, tmb, tme, tmh) *
+                                      cg(tjg, tjh, tji, tmg, tmh, tmi);
+                        r += ra * rb;
+                    }
+        return r;
+    }
+    long double racah(int ta, int tb, int tc, int td, int te, int tf) const {
+        return (1 - ((ta + tb + tc + td) & 2)) *
+               wigner_6j(ta, tb, te, td, tc, tf);
+    }
+};
+
+// CG factors for SO(3) symmetry in real spherical harmonics
+struct SO3RSHCG : SU2CG {
+    SO3RSHCG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
+    virtual ~SO3RSHCG() = default;
+    // RSH to SH : m1 cpx; m2 xzy
+    static complex<long double> u_star(int tm1, int tm2) {
+        if (tm1 != tm2 && tm1 != -tm2)
+            return 0.0;
+        else if (tm1 == tm2)
+            return tm1 == 0 ? sqrtl(2.0)
+                            : (tm1 > 0 ? (long double)(1 - (tm1 & 2))
+                                       : complex<long double>(0.0, -1.0));
+        else
+            return tm1 > 0
+                       ? complex<long double>(0.0, (long double)(1 - (tm1 & 2)))
+                       : (long double)1.0;
+    }
+    complex<long double> cg(int tja, int tjb, int tjc, int tma, int tmb,
+                            int tmc) const {
+        return (1 - (abs(tmc) & 2)) *
+               sqrtl(1.0 * (tja + 1) * (tjb + 1) / (tjc + 1)) *
+               SU2CG::wigner_3j(tja, tjb, tjc, 0, 0, 0) *
+               wigner_3j(tja, tjb, tjc, tma, tmb, -tmc);
+    }
+    complex<long double> wigner_3j(int tja, int tjb, int tjc, int tma, int tmb,
+                                   int tmc) const {
+        complex<long double> r = 0.0;
+        for (int8_t i = 0; i < 8; i++)
+            if (((i & 1) | tma) && ((i & 2) | tmb) && ((i & 4) | tmc))
+                r += SU2CG::wigner_3j(tja, tjb, tjc, i & 1 ? tma : -tma,
+                                      i & 2 ? tmb : -tmb, i & 4 ? tmc : -tmc) *
+                     u_star(i & 1 ? tma : -tma, tma) *
+                     u_star(i & 2 ? tmb : -tmb, tmb) *
+                     conj(u_star(i & 4 ? -tmc : tmc, -tmc));
+        return r;
+    }
+    complex<long double> wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
+                                   int tjf) const {
+        return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
+    }
+    complex<long double> wigner_9j(int tja, int tjb, int tjc, int tjd, int tje,
+                                   int tjf, int tjg, int tjh, int tji) const {
+        int tmi = tji % 2;
+        complex<long double> r = 0.0;
+        for (int tma = -tja; tma <= tja; tma += 2)
+            for (int tmb = -tjb; tmb <= tjb; tmb += 2)
+                for (int tmd = -tjd; tmd <= tjd; tmd += 2)
+                    for (int tme = -tje; tme <= tje; tme += 2) {
+                        complex<long double> ra = 0.0, rb = 0.0;
+                        for (int tmc = -tjc; tmc <= tjc; tmc += 2)
+                            for (int tmf = -tjf; tmf <= tjf; tmf += 2)
+                                ra += cg(tja, tjb, tjc, tma, tmb, tmc) *
+                                      cg(tjd, tje, tjf, tmd, tme, tmf) *
+                                      cg(tjc, tjf, tji, tmc, tmf, tmi);
+                        for (int tmg = -tjg; tmg <= tjg; tmg += 2)
+                            for (int tmh = -tjh; tmh <= tjh; tmh += 2)
+                                rb += cg(tja, tjd, tjg, tma, tmd, tmg) *
+                                      cg(tjb, tje, tjh, tmb, tme, tmh) *
+                                      cg(tjg, tjh, tji, tmg, tmh, tmi);
+                        r += ra * rb;
+                    }
+        return r;
+    }
+    complex<long double> racah(int ta, int tb, int tc, int td, int te,
+                               int tf) const {
+        return (long double)(1 - ((ta + tb + tc + td) & 2)) *
+               wigner_6j(ta, tb, te, td, tc, tf);
+    }
+    complex<long double> transpose_cg(int td, int tl, int tr) const {
+        return (1 - ((td + tl - tr) & 2)) * sqrtl(tr + 1) / sqrtl(tl + 1);
+    }
+    complex<long double> phase(int ta, int tb, int tc) const {
+        return (1 - ((ta + tb - tc) & 2));
+    }
+};
+
+template <typename FL> struct AnyCG {
+    AnyCG() {}
+    virtual ~AnyCG() = default;
+    virtual FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) {
+        assert(false);
+        return (FL)0.0;
+    }
+};
+
+template <typename FL> struct AnySU2CG : AnyCG<FL> {
+    typedef decltype(abs((FL)0.0)) FP;
+    shared_ptr<SU2CG> su2cg = make_shared<SU2CG>(200);
+    AnySU2CG() : AnyCG<FL>() {}
+    virtual ~AnySU2CG() = default;
+    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) override {
+        return (FL)(FP)su2cg->cg(tja, tjb, tjc, tma, tmb, tmc);
+    }
+};
+
+template <typename FL> struct AnySO3RSHCG : AnyCG<FL> {
+    typedef decltype(abs((FL)0.0)) FP;
+    shared_ptr<SO3RSHCG> so3cg = make_shared<SO3RSHCG>(200);
+    AnySO3RSHCG() : AnyCG<FL>() {}
+    virtual ~AnySO3RSHCG() = default;
+    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) override {
+        complex<FP> r = (complex<FP>)so3cg->cg(tja, tjb, tjc, tma, tmb, tmc);
+        assert(abs(imag(r)) < (FP)1E-10);
+        return (FL)real(r);
+    }
+};
+
 template <typename S> struct CG<S, typename S::is_sany_t> : SU2CG {
     CG(int n_sqrt_fact = 200) : SU2CG() {}
+    virtual ~CG() = default;
     long double wigner_6j(S a, S b, S c, S d, S e, S f) const {
         long double r = 1.0L;
         for (int k : a.su2_indices())
@@ -216,6 +369,7 @@ template <typename S> struct CG<S, typename S::is_sany_t> : SU2CG {
 
 template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
     CG(int n_sqrt_fact = 200) : TrivialCG() {}
+    virtual ~CG() = default;
     long double wigner_6j(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
     long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
         return 1.0L;
@@ -227,6 +381,7 @@ template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {
 
 template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
     CG(int n_sqrt_fact = 200) : TrivialCG() {}
+    virtual ~CG() = default;
     long double wigner_6j(S a, S b, S c, S d, S e, S f) const { return 1.0L; }
     long double wigner_9j(S a, S b, S c, S d, S e, S f, S g, S h, S i) const {
         return 1.0L;
@@ -238,6 +393,7 @@ template <typename S> struct CG<S, typename S::is_sg_t> : TrivialCG {
 
 template <typename S> struct CG<S, typename S::is_su2_t> : SU2CG {
     CG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
+    virtual ~CG() = default;
     long double wigner_6j(S a, S b, S c, S d, S e, S f) const {
         return SU2CG::wigner_6j(a.twos(), b.twos(), c.twos(), d.twos(),
                                 e.twos(), f.twos());

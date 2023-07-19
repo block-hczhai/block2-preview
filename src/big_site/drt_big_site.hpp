@@ -21,7 +21,7 @@
 #pragma once
 
 #include "../core/allocator.hpp"
-#include "../core/cg.hpp"
+#include "../core/clebsch_gordan.hpp"
 #include "../core/state_info.hpp"
 #include "../core/threading.hpp"
 #include "../dmrg/general_hamiltonian.hpp"
