@@ -464,6 +464,152 @@ template <typename FL> struct GeneralSymmTensor {
         }
         return GeneralSymmTensor(z, tjzs).simplify();
     }
+    // ((.+.)[0]+.)[0]
+    //  ^        ^ ^
+    struct Level {
+        int8_t left_idx, mid_idx, right_idx, left_cnt, right_cnt;
+    };
+    static Level get_level(const string &x, int8_t i_start) {
+        Level r;
+        if (x[i_start] != '(') {
+            r.right_idx = -1;
+            return r;
+        }
+        r.left_idx = i_start + 1;
+        int8_t dot_cnt = 0, depth = 0;
+        for (int8_t i = i_start; i < (int8_t)x.length(); i++) {
+            auto &c = x[i];
+            if (c == '(')
+                depth++;
+            else if (c == ')') {
+                depth--;
+                if (depth == 0) {
+                    r.right_idx = i + 1;
+                    break;
+                }
+            } else if (c == '+' && depth == 1)
+                r.mid_idx = i + 1, r.left_cnt = dot_cnt;
+            else if (c == '.' || (c >= 'A' && c <= 'Z') ||
+                     (c >= 'a' && c <= 'z'))
+                dot_cnt++;
+        }
+        r.right_cnt = dot_cnt - r.left_cnt;
+        return r;
+    }
+    static vector<int16_t> get_quanta(const string &expr, const Level &l) {
+        vector<int16_t> tjs;
+        if (l.right_idx == -1)
+            return tjs;
+        if (expr[l.right_idx] != '[')
+            tjs.push_back(0);
+        for (int i = l.right_idx; i < (int)expr.length(); i++)
+            if (expr[i] == '[' || expr[i] == ',')
+                tjs.push_back(0);
+            else if (expr[i] >= '0' && expr[i] <= '9')
+                tjs.back() = tjs.back() * 10 + (int)(expr[i] - '0');
+            else if (expr[i] == '?')
+                tjs.back() = -1;
+            else
+                break;
+        return tjs;
+    }
+    static map<vector<int>, GeneralSymmTensor>
+    parse_expr_angular(const string &expr, const vector<int16_t> &idxs,
+                       const vector<shared_ptr<AnyCG<FL>>> &cgs, int ii = 0) {
+        Level l = get_level(expr, 0);
+        if (l.right_idx == -1) {
+            if (expr[0] == 'C')
+                return map<vector<int>, GeneralSymmTensor>{
+                    make_pair(vector<int>(), c_angular(idxs[ii], idxs[ii]))};
+            else if (expr[0] == 'D')
+                return map<vector<int>, GeneralSymmTensor>{
+                    make_pair(vector<int>(), d_angular(idxs[ii], idxs[ii]))};
+            else
+                assert(false);
+        } else {
+            string lexpr = expr.substr(l.left_idx, l.mid_idx - 1 - l.left_idx);
+            string rexpr = expr.substr(l.mid_idx, l.right_idx - 1 - l.mid_idx);
+            map<vector<int>, GeneralSymmTensor> lm =
+                parse_expr_angular(lexpr, idxs, cgs, ii);
+            map<vector<int>, GeneralSymmTensor> rm =
+                parse_expr_angular(rexpr, idxs, cgs, ii + l.left_cnt);
+            Level gl = get_level(lexpr, 0);
+            Level gr = get_level(rexpr, 0);
+            vector<int16_t> tjs = get_quanta(expr, l);
+            vector<int16_t> ltjs = get_quanta(lexpr, gl);
+            vector<int16_t> rtjs = get_quanta(rexpr, gr);
+            vector<int> mml(ltjs.size() + 1, 0), mmr(rtjs.size() + 1, 0);
+            int ixx, ix;
+            for (ix = 0, ixx = 0; ix < (int)ltjs.size(); ix++)
+                if (ltjs[ix] == -1)
+                    mml[ix] = ixx++;
+            mml[ltjs.size()] = ixx;
+            for (ix = 0, ixx = 0; ix < (int)rtjs.size(); ix++)
+                if (rtjs[ix] == -1)
+                    mmr[ix] = ixx++;
+            mmr[rtjs.size()] = ixx;
+            map<vector<int>, GeneralSymmTensor> r;
+            for (const auto &xl : lm)
+                for (const auto &xr : rm) {
+                    vector<pair<int16_t, int16_t>> mjs_sz;
+                    size_t tot_sz = 1;
+                    for (size_t it = 0; it < tjs.size(); it++)
+                        if (tjs[it] == -1) {
+                            int16_t ixl = xl.second.tjs[it],
+                                    ixr = xr.second.tjs[it];
+                            mjs_sz.push_back(
+                                make_pair(abs(ixl - ixr), ixl + ixr));
+                            tot_sz *= (ixl + ixr - abs(ixl - ixr)) / 2 + 1;
+                        }
+                    for (size_t ix = 0, im, ixx; ix < tot_sz; ix++) {
+                        ixx = ix;
+                        vector<int16_t> xtjs = tjs;
+                        vector<int> rkl = xl.first, rkr = xr.first, rk;
+                        bool okay = true;
+                        im = 0;
+                        for (size_t it = 0; it < xtjs.size(); it++)
+                            if (xtjs[it] != -1) {
+                                int16_t ixl = xl.second.tjs[it],
+                                        ixr = xr.second.tjs[it];
+                                if (!(xtjs[it] >= abs(ixl - ixr) &&
+                                      xtjs[it] <= ixl + ixr &&
+                                      ((xtjs[it] + ixl + ixr) & 2) == 0)) {
+                                    okay = false;
+                                    break;
+                                }
+                                if (xtjs[it] == 0) {
+                                    if (rtjs.size() != 0 && rtjs[it] == -1)
+                                        rkr[rkr.size() - mmr.back() + mmr[it]] =
+                                            -1;
+                                    else if (ltjs.size() != 0 && ltjs[it] == -1)
+                                        rkl[rkl.size() - mml.back() + mml[it]] =
+                                            -1;
+                                }
+                            } else if (xtjs[it] == -1) {
+                                int16_t dm =
+                                    (mjs_sz[im].second - mjs_sz[im].first) / 2 +
+                                    1;
+                                xtjs[it] = ixx % dm * 2 + mjs_sz[im].first;
+                                rk.push_back(xtjs[it]);
+                                ixx /= dm;
+                                im++;
+                            }
+                        if (okay) {
+                            vector<int> rkk;
+                            for (int x : rkl)
+                                if (x != -1)
+                                    rkk.push_back(x);
+                            for (int x : rkr)
+                                if (x != -1)
+                                    rkk.push_back(x);
+                            rkk.insert(rkk.end(), rk.begin(), rk.end());
+                            r[rkk] = mul(xl.second, xr.second, xtjs, cgs);
+                        }
+                    }
+                }
+            return r;
+        }
+    }
     string to_str() const {
         stringstream ss;
         ss << "[";
@@ -488,160 +634,167 @@ template <typename FL> struct GeneralSymmTensor {
     }
 };
 
-// template <typename FL> struct GeneralSymmExpr {
-//     typedef decltype(abs((FL)0.0)) FP;
-//     int n_sites;
-//     int n_ops;
-//     string expr;
-//     int n_reduced_sites;
-//     int max_l;
-//     vector<string> orb_sym;
-//     vector<int> site_sym;
-//     vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>> data;
-//     static const string &orb_names() {
-//         const static string _orb_names = "spdfghiklmnoqrtuvwxyz";
-//         return _orb_names;
-//     }
-//     struct vector_elem_hasher {
-//         size_t operator()(const vector<GeneralSymmElement> &x) const {
-//             size_t r = x.size();
-//             for (auto &i : x)
-//                 r ^= i.hash() + 0x9e3779b9 + (r << 6) + (r >> 2);
-//             return r;
-//         }
-//     };
-//     // expr includes ?. when construct, generate multiple dynamicly
-//     GeneralSymmExpr(const vector<string> &orb_sym, const string &expr)
-//         : expr(expr), orb_sym(orb_sym) {
-//         using T = GeneralSymmTensor<FL>;
-//         n_sites = (int)orb_sym.size();
-//         set<int> dist_site;
-//         max_l = 0;
-//         for (auto &ir : orb_sym) {
-//             size_t l = orb_names().find_first_of(ir[0]);
-//             assert(l != string::npos);
-//             dist_site.insert((int)l);
-//             max_l = max((int)l, max_l);
-//             if (ir.substr(1) == "+0")
-//                 site_sym.push_back((int)l);
-//         }
-//         n_reduced_sites = (int)site_sym.size();
-//         assert(dist_site.size() != 0);
-//         vector<shared_ptr<AnyCG<FL>>> cgs(1, make_shared<AnySO3RSHCG<FL>>());
-//         unordered_map<vector<GeneralSymmElement>, vector<pair<int, FL>>,
-//                       vector_elem_hasher>
-//             mp;
-//         n_ops = 0;
-//         size_t ng = 1;
-//         for (auto &c : expr)
-//             if (c >= 'A' && c <= 'Z')
-//                 n_ops++, ng *= dist_site.size();
-//         vector<int> vdist(dist_site.begin(), dist_site.end());
-//         for (size_t ig = 0, igv; ig < ng; ig++) {
-//             vector<int16_t> ls;
-//             igv = ig;
-//             for (int il = 0; il < n_ops; il++)
-//                 ls.push_back((int16_t)vdist[igv %vdist.size()]), igv /= vdist.size();
-//         for (const int &la : dist_site)
-//             for (const int &lb : dist_site)
-//                 for (const int &lc : dist_site)
-//                     for (const int &ld : dist_site)
-//                         for (int ml = 0; ml <= lb + lc; ml++) {
-//                             vector<int16_t> xml(1, (int16_t)(ml + ml));
-//                             T ex = T::mul(T::c_angular(lb, lb),
-//                                           T::d_angular(lc, lc), xml, cgs);
-//                             ex = T::mul(T::c_angular(la, la), ex,
-//                                         vector<int16_t>(1, (int16_t)(ld + ld)),
-//                                         cgs);
-//                             ex = T::mul(ex, T::d_angular(ld, ld),
-//                                         vector<int16_t>(1, (int16_t)0), cgs);
-//                             if (ex.data[0].size() == 0)
-//                                 continue;
-//                             for (auto &k : ex.data[0])
-//                                 mp[k.ops].push_back(make_pair(ml, k.factor));
-//                         }
-//         }
-//         data = vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>>(
-//             mp.begin(), mp.end());
-//         sort(
-//             data.begin(), data.end(),
-//             [](const pair<vector<GeneralSymmElement>, vector<pair<int, FL>>> &i,
-//                const pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>
-//                    &j) {
-//                 if (i.second.size() != j.second.size())
-//                     return i.second.size() < j.second.size();
-//                 else {
-//                     for (int im = (int)i.second.size() - 1; im >= 0; im--)
-//                         if (i.second[im].first != j.second[im].first)
-//                             return i.second[im].first > j.second[im].first;
-//                     return i.first < j.first;
-//                 }
-//             });
-//     }
-//     void reduce(const FL *int_data, FL *reduced_data, FP cutoff = (FP)1E-12) {
-//         map<string, vector<int>> orb_idx_mp;
-//         map<char, vector<int>> site_idx_mp;
-//         for (size_t ix = 0; ix < orb_sym.size(); ix++)
-//             orb_idx_mp[orb_sym[ix]].push_back(ix);
-//         for (size_t ix = 0; ix < site_sym.size(); ix++)
-//             site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
-//         array<int8_t, 4> perm = {0, 3, 1, 2};
-//         size_t ml_stride = (size_t)n_reduced_sites * n_reduced_sites *
-//                            n_reduced_sites * n_reduced_sites;
-//         vector<uint8_t> solved(ml_stride * (max_l + max_l + 1), 0);
-//         memset(reduced_data, 0, solved.size() * sizeof(FL));
-//         for (auto &mx : data) {
-//             vector<string> kg;
-//             vector<int> n_orbs;
-//             size_t np = 1;
-//             for (auto &p : perm) {
-//                 stringstream ss;
-//                 ss << orb_names()[mx.first[p].index];
-//                 ss << (mx.first[p].tms[0] >= 0 ? "+" : "");
-//                 ss << mx.first[p].tms[0] / 2;
-//                 kg.push_back(ss.str());
-//                 n_orbs.push_back((int)orb_idx_mp.at(kg.back()).size());
-//                 np *= n_orbs.back();
-//             }
-//             for (size_t ip = 0; ip < np; ip++) {
-//                 size_t ipv = ip, ipx = 0, ipz = 0;
-//                 for (auto &g : kg) {
-//                     ipx = ipx * n_sites +
-//                           orb_idx_mp.at(g)[ipv % orb_idx_mp.at(g).size()];
-//                     ipz = ipz * n_reduced_sites +
-//                           site_idx_mp.at(g[0])[ipv % orb_idx_mp.at(g).size()];
-//                     ipv = ipv / orb_idx_mp.at(g).size();
-//                 }
-//                 FL f = int_data[ipx];
-//                 for (int iv = (int)mx.second.size() - 1; iv >= 0; iv--) {
-//                     if (!solved[mx.second[iv].first * ml_stride + ipz]) {
-//                         reduced_data[mx.second[iv].first * ml_stride + ipz] =
-//                             f / mx.second[iv].second;
-//                         solved[mx.second[iv].first * ml_stride + ipz] = 1;
-//                     }
-//                     f -= reduced_data[mx.second[iv].first * ml_stride + ipz] *
-//                          mx.second[iv].second;
-//                 }
-//                 assert(abs(f) < cutoff);
-//             }
-//         }
-//     }
-//     string to_str() const {
-//         stringstream ss;
-//         ss << "N-SITES = " << n_sites << " -> " << n_reduced_sites
-//            << " MAX-L = " << max_l << " PATTERN = " << expr
-//            << " N-OPS = " << n_ops << endl;
-//         ss << "ORB-SYM = [";
-//         for (auto ir : orb_sym)
-//             ss << " " << ir;
-//         ss << " ]" << endl;
-//         ss << "RED-SYM = [";
-//         for (auto ir : site_sym)
-//             ss << " " << orb_names()[ir];
-//         ss << " ]" << endl;
-//         ss << "DATA = " << data.size() << endl;
-//         return ss.str();
-//     }
-// };
+template <typename FL> struct GeneralSymmExpr {
+    typedef decltype(abs((FL)0.0)) FP;
+    int n_sites;
+    int n_ops;
+    string expr;
+    int n_reduced_sites;
+    int max_l;
+    vector<string> orb_sym;
+    vector<int> site_sym;
+    vector<pair<vector<GeneralSymmElement>, vector<pair<vector<int>, FL>>>>
+        data;
+    static const string &orb_names() {
+        const static string _orb_names = "spdfghiklmnoqrtuvwxyz";
+        return _orb_names;
+    }
+    struct vector_elem_hasher {
+        size_t operator()(const vector<GeneralSymmElement> &x) const {
+            size_t r = x.size();
+            for (auto &i : x)
+                r ^= i.hash() + 0x9e3779b9 + (r << 6) + (r >> 2);
+            return r;
+        }
+    };
+    // expr includes ?. when construct, generate multiple dynamicly
+    GeneralSymmExpr(const vector<string> &orb_sym, const string &expr)
+        : expr(expr), orb_sym(orb_sym) {
+        using T = GeneralSymmTensor<FL>;
+        n_sites = (int)orb_sym.size();
+        set<int> dist_site;
+        max_l = 0;
+        for (auto &ir : orb_sym) {
+            size_t l = orb_names().find_first_of(ir[0]);
+            assert(l != string::npos);
+            dist_site.insert((int)l);
+            max_l = max((int)l, max_l);
+            if (ir.substr(1) == "+0")
+                site_sym.push_back((int)l);
+        }
+        n_reduced_sites = (int)site_sym.size();
+        assert(dist_site.size() != 0);
+        vector<shared_ptr<AnyCG<FL>>> cgs(1, make_shared<AnySO3RSHCG<FL>>());
+        unordered_map<vector<GeneralSymmElement>, vector<pair<vector<int>, FL>>,
+                      vector_elem_hasher>
+            mp;
+        n_ops = 0;
+        size_t ng = 1;
+        for (auto &c : expr)
+            if (c >= 'A' && c <= 'Z')
+                n_ops++, ng *= dist_site.size();
+        vector<int> vdist(dist_site.begin(), dist_site.end());
+        for (size_t ig = 0, igv; ig < ng; ig++) {
+            vector<int16_t> ls;
+            igv = ig;
+            for (int il = 0; il < n_ops; il++)
+                ls.push_back((int16_t)vdist[igv % vdist.size()]),
+                    igv /= vdist.size();
+            auto pex = T::parse_expr_angular(expr, ls, cgs);
+            for (const auto &mex : pex) {
+                const T &ex = mex.second;
+                if (ex.data[0].size() == 0)
+                    continue;
+                for (auto &k : ex.data[0])
+                    mp[k.ops].push_back(make_pair(mex.first, k.factor));
+            }
+        }
+        data = vector<
+            pair<vector<GeneralSymmElement>, vector<pair<vector<int>, FL>>>>(
+            mp.begin(), mp.end());
+        sort(data.begin(), data.end(),
+             [](const pair<vector<GeneralSymmElement>,
+                           vector<pair<vector<int>, FL>>> &i,
+                const pair<vector<GeneralSymmElement>,
+                           vector<pair<vector<int>, FL>>> &j) {
+                 if (i.second.size() != j.second.size())
+                     return i.second.size() < j.second.size();
+                 else {
+                     for (int im = (int)i.second.size() - 1; im >= 0; im--) {
+                         if (i.second[im].first.size() !=
+                             j.second[im].first.size())
+                             return i.second[im].first.size() <
+                                    j.second[im].first.size();
+                         for (int jm = 0; jm < (int)i.second[im].first.size();
+                              jm++)
+                             if (i.second[im].first[jm] !=
+                                 j.second[im].first[jm])
+                                 return i.second[im].first[jm] >
+                                        j.second[im].first[jm];
+                     }
+                     return i.first < j.first;
+                 }
+             });
+    }
+    void reduce(const FL *int_data, FL *reduced_data, FP cutoff = (FP)1E-12) {
+        map<string, vector<int>> orb_idx_mp;
+        map<char, vector<int>> site_idx_mp;
+        for (size_t ix = 0; ix < orb_sym.size(); ix++)
+            orb_idx_mp[orb_sym[ix]].push_back(ix);
+        for (size_t ix = 0; ix < site_sym.size(); ix++)
+            site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
+        size_t ml_stride = 1, ml_size = 1;
+        int ml_len = data.size() == 0 ? 0 : (int)data[0].second[0].first.size();
+        for (int i = 0; i < n_ops; i++)
+            ml_stride *= (size_t)n_reduced_sites;
+        for (int i = 0; i < ml_len; i++)
+            ml_size *= (size_t)(max_l + max_l + 1);
+        vector<uint8_t> solved(ml_stride * ml_size, 0);
+        memset(reduced_data, 0, solved.size() * sizeof(FL));
+        for (auto &mx : data) {
+            vector<string> kg;
+            vector<int> n_orbs;
+            size_t np = 1;
+            for (int p = 0; p < n_ops; p++) {
+                stringstream ss;
+                ss << orb_names()[mx.first[p].index];
+                ss << (mx.first[p].tms[0] >= 0 ? "+" : "");
+                ss << mx.first[p].tms[0] / 2;
+                kg.push_back(ss.str());
+                n_orbs.push_back((int)orb_idx_mp.at(kg.back()).size());
+                np *= n_orbs.back();
+            }
+            for (size_t ip = 0; ip < np; ip++) {
+                size_t ipv = ip, ipx = 0, ipz = 0;
+                for (auto &g : kg) {
+                    ipx = ipx * n_sites +
+                          orb_idx_mp.at(g)[ipv % orb_idx_mp.at(g).size()];
+                    ipz = ipz * n_reduced_sites +
+                          site_idx_mp.at(g[0])[ipv % orb_idx_mp.at(g).size()];
+                    ipv = ipv / orb_idx_mp.at(g).size();
+                }
+                FL f = int_data[ipx];
+                for (int iv = (int)mx.second.size() - 1; iv >= 0; iv--) {
+                    size_t ipg = 0;
+                    for (auto &mf : mx.second[iv].first)
+                        ipg = ipg * (max_l + max_l + 1) + mf / 2;
+                    ipg *= ml_stride;
+                    if (!solved[ipg + ipz]) {
+                        reduced_data[ipg + ipz] = f / mx.second[iv].second;
+                        solved[ipg + ipz] = 1;
+                    }
+                    f -= reduced_data[ipg + ipz] * mx.second[iv].second;
+                }
+                assert(abs(f) < cutoff);
+            }
+        }
+    }
+    string to_str() const {
+        stringstream ss;
+        ss << "N-SITES = " << n_sites << " -> " << n_reduced_sites
+           << " MAX-L = " << max_l << " PATTERN = " << expr
+           << " N-OPS = " << n_ops << endl;
+        ss << "ORB-SYM = [";
+        for (auto ir : orb_sym)
+            ss << " " << ir;
+        ss << " ]" << endl;
+        ss << "RED-SYM = [";
+        for (auto ir : site_sym)
+            ss << " " << orb_names()[ir];
+        ss << " ]" << endl;
+        ss << "DATA = " << data.size() << endl;
+        return ss.str();
+    }
+};
 
 } // namespace block2

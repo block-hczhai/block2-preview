@@ -46,6 +46,8 @@ PYBIND11_MAKE_OPAQUE(vector<complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<complex<long double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<int, complex<double>>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<vector<int>, double>>);
+PYBIND11_MAKE_OPAQUE(vector<pair<vector<int>, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<size_t>);
 PYBIND11_MAKE_OPAQUE(vector<string>);
 PYBIND11_MAKE_OPAQUE(vector<vector<uint8_t>>);
@@ -1449,6 +1451,10 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_vector<vector<pair<int, double>>>(m, "VectorPIntDouble");
     py::bind_vector<vector<pair<int, complex<double>>>>(
         m, "VectorPIntComplexDouble");
+    py::bind_vector<vector<pair<vector<int>, double>>>(
+        m, "VectorPVectorIntDouble");
+    py::bind_vector<vector<pair<vector<int>, complex<double>>>>(
+        m, "VectorPVectorIntComplexDouble");
     py::bind_vector<vector<size_t>>(m, "VectorULInt");
     py::bind_vector<vector<string>>(m, "VectorString");
     py::bind_vector<vector<vector<uint8_t>>>(m, "VectorVectorUInt8");
@@ -2413,36 +2419,42 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
 
     py::bind_vector<vector<GeneralSymmTensor<FL>>>(
         m, ("VectorGeneralSymmTensor" + name).c_str());
-    py::bind_vector<
-        vector<pair<vector<GeneralSymmElement>, vector<pair<int, FL>>>>>(
-        m, ("VectorPVectorGeneralSymmElementVectorPInt" + name + "Double")
+    py::bind_vector<vector<
+        pair<vector<GeneralSymmElement>, vector<pair<vector<int>, FL>>>>>(
+        m, ("VectorPVectorGeneralSymmElementVectorPVectorInt" + name + "Double")
                .c_str());
 
-    // py::class_<GeneralSymmExpr<FL>, shared_ptr<GeneralSymmExpr<FL>>>(
-    //     m, ("GeneralSymmExpr" + name).c_str())
-    //     .def(py::init<const vector<string> &>())
-    //     .def_readwrite("n_sites", &GeneralSymmExpr<FL>::n_sites)
-    //     .def_readwrite("n_reduced_sites", &GeneralSymmExpr<FL>::n_reduced_sites)
-    //     .def_readwrite("max_l", &GeneralSymmExpr<FL>::max_l)
-    //     .def_readwrite("orb_sym", &GeneralSymmExpr<FL>::orb_sym)
-    //     .def_readwrite("site_sym", &GeneralSymmExpr<FL>::site_sym)
-    //     .def_readwrite("data", &GeneralSymmExpr<FL>::data)
-    //     .def_static("orb_names", &GeneralSymmExpr<FL>::orb_names)
-    //     .def(
-    //         "reduce",
-    //         [](GeneralSymmExpr<FL> *self, py::array_t<FL> data,
-    //            typename GeneralSymmExpr<FL>::FP cutoff) -> py::array_t<FL> {
-    //             py::array_t<FL> reduced_data(vector<ssize_t>{
-    //                 (ssize_t)(self->max_l + self->max_l + 1),
-    //                 self->n_reduced_sites, self->n_reduced_sites,
-    //                 self->n_reduced_sites, self->n_reduced_sites});
-    //             self->reduce(data.data(), reduced_data.mutable_data(), cutoff);
-    //             return reduced_data;
-    //         },
-    //         py::arg("data"),
-    //         py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
-    //     .def("to_str", &GeneralSymmExpr<FL>::to_str)
-    //     .def("__repr__", &GeneralSymmExpr<FL>::to_str);
+    py::class_<GeneralSymmExpr<FL>, shared_ptr<GeneralSymmExpr<FL>>>(
+        m, ("GeneralSymmExpr" + name).c_str())
+        .def(py::init<const vector<string> &, const string &>())
+        .def_readwrite("n_sites", &GeneralSymmExpr<FL>::n_sites)
+        .def_readwrite("n_ops", &GeneralSymmExpr<FL>::n_ops)
+        .def_readwrite("expr", &GeneralSymmExpr<FL>::expr)
+        .def_readwrite("n_reduced_sites", &GeneralSymmExpr<FL>::n_reduced_sites)
+        .def_readwrite("max_l", &GeneralSymmExpr<FL>::max_l)
+        .def_readwrite("orb_sym", &GeneralSymmExpr<FL>::orb_sym)
+        .def_readwrite("site_sym", &GeneralSymmExpr<FL>::site_sym)
+        .def_readwrite("data", &GeneralSymmExpr<FL>::data)
+        .def_static("orb_names", &GeneralSymmExpr<FL>::orb_names)
+        .def(
+            "reduce",
+            [](GeneralSymmExpr<FL> *self, py::array_t<FL> data,
+               typename GeneralSymmExpr<FL>::FP cutoff) -> py::array_t<FL> {
+                vector<ssize_t> p(self->data.size() == 0
+                                      ? 0
+                                      : self->data[0].second[0].first.size(),
+                                  (ssize_t)(self->max_l + self->max_l + 1));
+                for (const auto &c : self->expr)
+                    if (c >= 'A' && c <= 'Z')
+                        p.push_back((ssize_t)self->n_reduced_sites);
+                py::array_t<FL> reduced_data(p);
+                self->reduce(data.data(), reduced_data.mutable_data(), cutoff);
+                return reduced_data;
+            },
+            py::arg("data"),
+            py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
+        .def("to_str", &GeneralSymmExpr<FL>::to_str)
+        .def("__repr__", &GeneralSymmExpr<FL>::to_str);
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {
