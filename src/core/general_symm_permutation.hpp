@@ -498,11 +498,10 @@ template <typename FL> struct GeneralSymmTensor {
     }
     static vector<int16_t> get_quanta(const string &expr, const Level &l) {
         vector<int16_t> tjs;
-        if (l.right_idx == -1)
-            return tjs;
-        if (expr[l.right_idx] != '[')
+        int p = l.right_idx == -1 ? 1 : l.right_idx;
+        if (expr[p] != '[')
             tjs.push_back(0);
-        for (int i = l.right_idx; i < (int)expr.length(); i++)
+        for (int i = p; i < (int)expr.length(); i++)
             if (expr[i] == '[' || expr[i] == ',')
                 tjs.push_back(0);
             else if (expr[i] >= '0' && expr[i] <= '9')
@@ -794,6 +793,143 @@ template <typename FL> struct GeneralSymmExpr {
         ss << " ]" << endl;
         ss << "DATA = " << data.size() << endl;
         return ss.str();
+    }
+};
+
+template <typename FL> struct GeneralSymmRecoupling {
+    typedef decltype(abs((FL)0.0)) FP;
+    using T = GeneralSymmTensor<FL>;
+    static map<string, FL> recouple(const map<string, FL> &x, int8_t i_start,
+                                    int8_t left_cnt,
+                                    const vector<shared_ptr<AnyCG<FL>>> &cgs) {
+        const string &x0 = x.cbegin()->first;
+        typename T::Level h = T::get_level(x0, i_start);
+        if (left_cnt == h.left_cnt)
+            return x;
+        typename T::Level hl = T::get_level(x0, h.left_idx);
+        typename T::Level hr = T::get_level(x0, h.mid_idx);
+        map<string, FL> v;
+        if (left_cnt > h.left_cnt) {
+            if (hr.left_cnt != left_cnt - h.left_cnt)
+                return recouple(
+                    recouple(x, h.mid_idx, left_cnt - h.left_cnt, cgs), i_start,
+                    left_cnt, cgs);
+            typename T::Level hrl = T::get_level(x0, hr.left_idx);
+            typename T::Level hrr = T::get_level(x0, hr.mid_idx);
+            for (auto &xm : x) {
+                const string &xx = xm.first;
+                // 1+(2+3) -> (1+2)+3
+                vector<int16_t> j1s = T::get_quanta(xx, hl),
+                                j23s = T::get_quanta(xx, hr),
+                                j2s = T::get_quanta(xx, hrl),
+                                j3s = T::get_quanta(xx, hrr),
+                                js = T::get_quanta(xx, h);
+                assert(j1s.size() == j23s.size() && j1s.size() == j2s.size() &&
+                       j1s.size() == j3s.size() && j1s.size() == js.size());
+                vector<pair<vector<int16_t>, FL>> mcgs{
+                    make_pair(vector<int16_t>(), xm.second)};
+                for (int16_t ik = 0; ik < (int16_t)j1s.size(); ik++) {
+                    vector<pair<vector<int16_t>, FL>> ncgs;
+                    for (int im = 0; im < (int)mcgs.size(); im++) {
+                        int16_t j1 = j1s[ik], j23 = j23s[ik], j2 = j2s[ik],
+                                j3 = j3s[ik], j = js[ik];
+                        for (int16_t j12 = abs(j1 - j2); j12 <= j1 + j2;
+                             j12 += 2) {
+                            FL f = (FL)cgs[ik]->racah(j1, j2, j, j3, j12, j23) *
+                                   sqrt((j12 + 1) * (j23 + 1));
+                            if (abs(f) < 1E-12)
+                                continue;
+                            vector<int16_t> k = mcgs[im].first;
+                            k.push_back(j12);
+                            ncgs.push_back(make_pair(k, mcgs[im].second * f));
+                        }
+                    }
+                    mcgs = ncgs;
+                }
+                for (int im = 0; im < (int)mcgs.size(); im++) {
+                    stringstream ss;
+                    ss << xx.substr(0, h.left_idx) << "("
+                       << xx.substr(h.left_idx, h.mid_idx - 1 - h.left_idx)
+                       << "+"
+                       << xx.substr(hr.left_idx, hr.mid_idx - 1 - hr.left_idx)
+                       << ")";
+                    if (mcgs[im].first.size() > 1)
+                        ss << "[";
+                    for (int ik = 0; ik < (int)mcgs[im].first.size(); ik++)
+                        ss << (int)mcgs[im].first[ik]
+                           << (ik == (int)mcgs[im].first.size() - 1 ? "" : ",");
+                    if (mcgs[im].first.size() > 1)
+                        ss << "]";
+                    ss << "+"
+                       << xx.substr(hr.mid_idx, hr.right_idx - 1 - hr.mid_idx)
+                       << xx.substr(h.right_idx - 1);
+                    v[ss.str()] += mcgs[im].second;
+                }
+            }
+        } else {
+            if (hl.right_cnt != h.left_cnt - left_cnt)
+                return recouple(recouple(x, h.left_idx, left_cnt, cgs), i_start,
+                                left_cnt, cgs);
+            typename T::Level hll = T::get_level(x0, hl.left_idx);
+            typename T::Level hlr = T::get_level(x0, hl.mid_idx);
+            for (auto &xm : x) {
+                const string &xx = xm.first;
+                // (1+2)+3 -> 1+(2+3)
+                vector<int16_t> j1s = T::get_quanta(xx, hll),
+                                j2s = T::get_quanta(xx, hlr),
+                                j12s = T::get_quanta(xx, hl),
+                                j3s = T::get_quanta(xx, hr),
+                                js = T::get_quanta(xx, h);
+                assert(j1s.size() == j2s.size() && j1s.size() == j12s.size() &&
+                       j1s.size() == j3s.size() && j1s.size() == js.size());
+                vector<pair<vector<int16_t>, FL>> mcgs{
+                    make_pair(vector<int16_t>(), xm.second)};
+                for (int16_t ik = 0; ik < (int16_t)j1s.size(); ik++) {
+                    vector<pair<vector<int16_t>, FL>> ncgs;
+                    for (int im = 0; im < (int)mcgs.size(); im++) {
+                        int16_t j1 = j1s[ik], j2 = j2s[ik], j12 = j12s[ik],
+                                j3 = j3s[ik], j = js[ik];
+                        for (int16_t j23 = abs(j2 - j3); j23 <= j2 + j3;
+                             j23 += 2) {
+                            FL f = (FL)cgs[ik]->racah(j3, j2, j, j1, j23, j12) *
+                                   sqrt((j23 + 1) * (j12 + 1));
+                            if (abs(f) < 1E-12)
+                                continue;
+                            vector<int16_t> k = mcgs[im].first;
+                            k.push_back(j23);
+                            ncgs.push_back(make_pair(k, mcgs[im].second * f));
+                        }
+                    }
+                    mcgs = ncgs;
+                }
+                for (int im = 0; im < (int)mcgs.size(); im++) {
+                    stringstream ss;
+                    ss << xx.substr(0, h.left_idx)
+                       << xx.substr(hl.left_idx, hl.mid_idx - 1 - hl.left_idx)
+                       << "+("
+                       << xx.substr(hl.mid_idx, hl.right_idx - 1 - hl.mid_idx)
+                       << "+"
+                       << xx.substr(h.mid_idx, h.right_idx - 1 - h.mid_idx)
+                       << ")";
+                    if (mcgs[im].first.size() > 1)
+                        ss << "[";
+                    for (int ik = 0; ik < (int)mcgs[im].first.size(); ik++)
+                        ss << (int)mcgs[im].first[ik]
+                           << (ik == (int)mcgs[im].first.size() - 1 ? "" : ",");
+                    if (mcgs[im].first.size() > 1)
+                        ss << "]";
+                    ss << xx.substr(h.right_idx - 1);
+                    v[ss.str()] += mcgs[im].second;
+                }
+            }
+        }
+        for (auto it = v.cbegin(); it != v.cend();) {
+            if (abs(it->second) < 1E-12)
+                it = v.erase(it);
+            else
+                it++;
+        }
+        return v;
     }
 };
 

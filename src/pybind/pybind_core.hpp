@@ -88,6 +88,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<GCSRMatrix<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<int, int>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<pair<long long int, long long int>, double>>);
 PYBIND11_MAKE_OPAQUE(map<string, string>);
+PYBIND11_MAKE_OPAQUE(map<string, double>);
+PYBIND11_MAKE_OPAQUE(map<string, complex<double>>);
 PYBIND11_MAKE_OPAQUE(vector<map<string, string>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<string, string>>);
 
@@ -1563,6 +1565,8 @@ template <typename S = void> void bind_data(py::module &m) {
                 (*mp)[item.first.cast<string>()] = item.second.cast<string>();
             return mp.release();
         }));
+    py::bind_map<map<string, double>>(m, "MapStrDouble");
+    py::bind_map<map<string, complex<double>>>(m, "MapStrComplexDouble");
     py::bind_vector<vector<map<string, string>>>(m, "VectorMapStrStr");
     py::bind_vector<vector<pair<string, string>>>(m, "VectorPStrStr");
     py::bind_vector<vector<pair<string, int8_t>>>(m, "VectorPStrInt8");
@@ -2349,7 +2353,14 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
     py::class_<AnyCG<FL>, shared_ptr<AnyCG<FL>>>(m, ("AnyCG" + name).c_str())
         .def(py::init<>())
         .def("cg", &AnyCG<FL>::cg, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"));
+             py::arg("tjc"), py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
+        .def("wigner_6j", &AnyCG<FL>::wigner_6j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
+        .def("wigner_9j", &AnyCG<FL>::wigner_9j, py::arg("tja"), py::arg("tjb"),
+             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
+             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
+        .def("racah", &AnyCG<FL>::racah, py::arg("ta"), py::arg("tb"),
+             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"));
 
     py::bind_vector<vector<shared_ptr<AnyCG<FL>>>>(
         m, ("VectorAnyCG" + name).c_str());
@@ -2455,6 +2466,11 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
             py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
         .def("to_str", &GeneralSymmExpr<FL>::to_str)
         .def("__repr__", &GeneralSymmExpr<FL>::to_str);
+
+    py::class_<GeneralSymmRecoupling<FL>,
+               shared_ptr<GeneralSymmRecoupling<FL>>>(
+        m, ("GeneralSymmRecoupling" + name).c_str())
+        .def_static("recouple", &GeneralSymmRecoupling<FL>::recouple);
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {

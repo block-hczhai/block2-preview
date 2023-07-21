@@ -298,11 +298,42 @@ struct SO3RSHCG : SU2CG {
 };
 
 template <typename FL> struct AnyCG {
+    typedef decltype(abs((FL)0.0)) FP;
     AnyCG() {}
     virtual ~AnyCG() = default;
-    virtual FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) {
+    virtual FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const {
         assert(false);
         return (FL)0.0;
+    }
+    FL wigner_6j(int tja, int tjb, int tjc, int tjd, int tje, int tjf) const {
+        return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
+    }
+    FL wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf, int tjg,
+                 int tjh, int tji) const {
+        int tmi = tji % 2;
+        FL r = 0.0;
+        for (int tma = -tja; tma <= tja; tma += 2)
+            for (int tmb = -tjb; tmb <= tjb; tmb += 2)
+                for (int tmd = -tjd; tmd <= tjd; tmd += 2)
+                    for (int tme = -tje; tme <= tje; tme += 2) {
+                        FL ra = 0.0, rb = 0.0;
+                        for (int tmc = -tjc; tmc <= tjc; tmc += 2)
+                            for (int tmf = -tjf; tmf <= tjf; tmf += 2)
+                                ra += cg(tja, tjb, tjc, tma, tmb, tmc) *
+                                      cg(tjd, tje, tjf, tmd, tme, tmf) *
+                                      cg(tjc, tjf, tji, tmc, tmf, tmi);
+                        for (int tmg = -tjg; tmg <= tjg; tmg += 2)
+                            for (int tmh = -tjh; tmh <= tjh; tmh += 2)
+                                rb += cg(tja, tjd, tjg, tma, tmd, tmg) *
+                                      cg(tjb, tje, tjh, tmb, tme, tmh) *
+                                      cg(tjg, tjh, tji, tmg, tmh, tmi);
+                        r += ra * rb;
+                    }
+        return r;
+    }
+    FL racah(int ta, int tb, int tc, int td, int te, int tf) const {
+        return (FP)(1 - ((ta + tb + tc + td) & 2)) *
+               wigner_6j(ta, tb, te, td, tc, tf);
     }
 };
 
@@ -311,7 +342,7 @@ template <typename FL> struct AnySU2CG : AnyCG<FL> {
     shared_ptr<SU2CG> su2cg = make_shared<SU2CG>(200);
     AnySU2CG() : AnyCG<FL>() {}
     virtual ~AnySU2CG() = default;
-    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) override {
+    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const override {
         return (FL)(FP)su2cg->cg(tja, tjb, tjc, tma, tmb, tmc);
     }
 };
@@ -321,7 +352,7 @@ template <typename FL> struct AnySO3RSHCG : AnyCG<FL> {
     shared_ptr<SO3RSHCG> so3cg = make_shared<SO3RSHCG>(200);
     AnySO3RSHCG() : AnyCG<FL>() {}
     virtual ~AnySO3RSHCG() = default;
-    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) override {
+    FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const override {
         complex<FP> r = (complex<FP>)so3cg->cg(tja, tjb, tjc, tma, tmb, tmc);
         assert(abs(imag(r)) < (FP)1E-10);
         return (FL)real(r);
