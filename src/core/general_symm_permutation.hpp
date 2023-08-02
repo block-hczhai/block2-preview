@@ -213,20 +213,20 @@ template <typename FL> struct GeneralSymmTensor {
         return GeneralSymmTensor(
             vector<vector<GeneralSymmTerm<FL>>>{sp, sz, sm});
     }
-    static GeneralSymmTensor c_angular(int16_t l, uint16_t index) {
+    static GeneralSymmTensor c_angular(int16_t twol, uint16_t index) {
         vector<vector<GeneralSymmTerm<FL>>> r;
-        r.reserve(2 * l + 1);
-        for (int16_t m = -l; m <= l; m++)
+        r.reserve(twol + 1);
+        for (int16_t twom = -twol; twom <= twol; twom += 2)
             r.push_back(vector<GeneralSymmTerm<FL>>{GeneralSymmTerm<FL>(
-                GeneralSymmElement(GeneralSymmOperator::C, index, m + m))});
+                GeneralSymmElement(GeneralSymmOperator::C, index, twom))});
         return GeneralSymmTensor(r);
     }
-    static GeneralSymmTensor d_angular(int16_t l, uint16_t index) {
+    static GeneralSymmTensor d_angular(int16_t twol, uint16_t index) {
         vector<vector<GeneralSymmTerm<FL>>> r;
-        r.reserve(2 * l + 1);
-        for (int16_t m = -l; m <= l; m++)
+        r.reserve(twol + 1);
+        for (int16_t twom = -twol; twom <= twol; twom += 2)
             r.push_back(vector<GeneralSymmTerm<FL>>{GeneralSymmTerm<FL>(
-                GeneralSymmElement(GeneralSymmOperator::D, index, m + m))});
+                GeneralSymmElement(GeneralSymmOperator::D, index, twom))});
         return GeneralSymmTensor(r);
     }
     GeneralSymmTensor simplify() const {
@@ -368,6 +368,9 @@ template <typename FL> struct GeneralSymmTensor {
                 tx.factor *= d;
         return r;
     }
+    GeneralSymmTensor operator-(const GeneralSymmTensor &other) const {
+        return *this + other * (FL)-1.0;
+    }
     GeneralSymmTensor operator+(const GeneralSymmTensor &other) const {
         if (data.size() == 1 && data[0].size() == 0)
             return other;
@@ -472,6 +475,7 @@ template <typename FL> struct GeneralSymmTensor {
     static Level get_level(const string &x, int8_t i_start) {
         Level r;
         if (x[i_start] != '(') {
+            r.left_idx = i_start;
             r.right_idx = -1;
             return r;
         }
@@ -498,7 +502,9 @@ template <typename FL> struct GeneralSymmTensor {
     }
     static vector<int16_t> get_quanta(const string &expr, const Level &l) {
         vector<int16_t> tjs;
-        int p = l.right_idx == -1 ? 1 : l.right_idx;
+        int p = l.right_idx == -1 ? l.left_idx + 1 : l.right_idx;
+        if (p >= (int)expr.length())
+            return vector<int16_t>();
         if (expr[p] != '[')
             tjs.push_back(0);
         for (int i = p; i < (int)expr.length(); i++)
@@ -517,12 +523,17 @@ template <typename FL> struct GeneralSymmTensor {
                        const vector<shared_ptr<AnyCG<FL>>> &cgs, int ii = 0) {
         Level l = get_level(expr, 0);
         if (l.right_idx == -1) {
+            vector<int16_t> xjs = get_quanta(expr, l);
             if (expr[0] == 'C')
                 return map<vector<int>, GeneralSymmTensor>{
-                    make_pair(vector<int>(), c_angular(idxs[ii], idxs[ii]))};
+                    make_pair(vector<int>(),
+                              c_angular(xjs.size() == 0 ? idxs[ii] * 2 : xjs[0],
+                                        idxs[ii]))};
             else if (expr[0] == 'D')
                 return map<vector<int>, GeneralSymmTensor>{
-                    make_pair(vector<int>(), d_angular(idxs[ii], idxs[ii]))};
+                    make_pair(vector<int>(),
+                              d_angular(xjs.size() == 0 ? idxs[ii] * 2 : xjs[0],
+                                        idxs[ii]))};
             else
                 assert(false);
         } else {
@@ -572,7 +583,7 @@ template <typename FL> struct GeneralSymmTensor {
                                         ixr = xr.second.tjs[it];
                                 if (!(xtjs[it] >= abs(ixl - ixr) &&
                                       xtjs[it] <= ixl + ixr &&
-                                      ((xtjs[it] + ixl + ixr) & 2) == 0)) {
+                                      ((xtjs[it] + ixl + ixr) & 1) == 0)) {
                                     okay = false;
                                     break;
                                 }
@@ -584,7 +595,7 @@ template <typename FL> struct GeneralSymmTensor {
                                         rkl[rkl.size() - mml.back() + mml[it]] =
                                             -1;
                                 }
-                            } else if (xtjs[it] == -1) {
+                            } else {
                                 int16_t dm =
                                     (mjs_sz[im].second - mjs_sz[im].first) / 2 +
                                     1;

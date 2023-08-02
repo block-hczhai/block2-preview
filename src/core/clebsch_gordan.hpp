@@ -179,48 +179,6 @@ struct SU2CG {
     }
 };
 
-// CG factors for SO(3) symmetry
-struct SO3CG : SU2CG {
-    SO3CG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
-    virtual ~SO3CG() = default;
-    long double cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const {
-        return (1 - (tmc & 2)) * sqrtl((tja + 1) * (tjb + 1) / (tjc + 1)) *
-               wigner_3j(tja, tjb, tjc, 0, 0, 0) *
-               wigner_3j(tja, tjb, tjc, tma, tmb, -tmc);
-    }
-    long double wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
-                          int tjf) const {
-        return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
-    }
-    long double wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf,
-                          int tjg, int tjh, int tji) const {
-        int tmi = tji % 2;
-        long double r = 0.0;
-        for (int tma = -tja; tma <= tja; tma += 2)
-            for (int tmb = -tjb; tmb <= tjb; tmb += 2)
-                for (int tmd = -tjd; tmd <= tjd; tmd += 2)
-                    for (int tme = -tje; tme <= tje; tme += 2) {
-                        long double ra = 0.0, rb = 0.0;
-                        for (int tmc = -tjc; tmc <= tjc; tmc += 2)
-                            for (int tmf = -tjf; tmf <= tjf; tmf += 2)
-                                ra += cg(tja, tjb, tjc, tma, tmb, tmc) *
-                                      cg(tjd, tje, tjf, tmd, tme, tmf) *
-                                      cg(tjc, tjf, tji, tmc, tmf, tmi);
-                        for (int tmg = -tjg; tmg <= tjg; tmg += 2)
-                            for (int tmh = -tjh; tmh <= tjh; tmh += 2)
-                                rb += cg(tja, tjd, tjg, tma, tmd, tmg) *
-                                      cg(tjb, tje, tjh, tmb, tme, tmh) *
-                                      cg(tjg, tjh, tji, tmg, tmh, tmi);
-                        r += ra * rb;
-                    }
-        return r;
-    }
-    long double racah(int ta, int tb, int tc, int td, int te, int tf) const {
-        return (1 - ((ta + tb + tc + td) & 2)) *
-               wigner_6j(ta, tb, te, td, tc, tf);
-    }
-};
-
 // CG factors for SO(3) symmetry in real spherical harmonics
 struct SO3RSHCG : SU2CG {
     SO3RSHCG(int n_sqrt_fact = 200) : SU2CG(n_sqrt_fact) {}
@@ -240,9 +198,7 @@ struct SO3RSHCG : SU2CG {
     }
     complex<long double> cg(int tja, int tjb, int tjc, int tma, int tmb,
                             int tmc) const {
-        return (1 - (abs(tmc) & 2)) *
-               sqrtl(1.0 * (tja + 1) * (tjb + 1) / (tjc + 1)) *
-               SU2CG::wigner_3j(tja, tjb, tjc, 0, 0, 0) *
+        return (1 - ((tmc + tja - tjb) & 2)) * sqrtl(tjc + 1) *
                wigner_3j(tja, tjb, tjc, tma, tmb, -tmc);
     }
     complex<long double> wigner_3j(int tja, int tjb, int tjc, int tma, int tmb,
@@ -257,44 +213,6 @@ struct SO3RSHCG : SU2CG {
                      conj(u_star(i & 4 ? -tmc : tmc, -tmc));
         return r;
     }
-    complex<long double> wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
-                                   int tjf) const {
-        return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
-    }
-    complex<long double> wigner_9j(int tja, int tjb, int tjc, int tjd, int tje,
-                                   int tjf, int tjg, int tjh, int tji) const {
-        int tmi = tji % 2;
-        complex<long double> r = 0.0;
-        for (int tma = -tja; tma <= tja; tma += 2)
-            for (int tmb = -tjb; tmb <= tjb; tmb += 2)
-                for (int tmd = -tjd; tmd <= tjd; tmd += 2)
-                    for (int tme = -tje; tme <= tje; tme += 2) {
-                        complex<long double> ra = 0.0, rb = 0.0;
-                        for (int tmc = -tjc; tmc <= tjc; tmc += 2)
-                            for (int tmf = -tjf; tmf <= tjf; tmf += 2)
-                                ra += cg(tja, tjb, tjc, tma, tmb, tmc) *
-                                      cg(tjd, tje, tjf, tmd, tme, tmf) *
-                                      cg(tjc, tjf, tji, tmc, tmf, tmi);
-                        for (int tmg = -tjg; tmg <= tjg; tmg += 2)
-                            for (int tmh = -tjh; tmh <= tjh; tmh += 2)
-                                rb += cg(tja, tjd, tjg, tma, tmd, tmg) *
-                                      cg(tjb, tje, tjh, tmb, tme, tmh) *
-                                      cg(tjg, tjh, tji, tmg, tmh, tmi);
-                        r += ra * rb;
-                    }
-        return r;
-    }
-    complex<long double> racah(int ta, int tb, int tc, int td, int te,
-                               int tf) const {
-        return (long double)(1 - ((ta + tb + tc + td) & 2)) *
-               wigner_6j(ta, tb, te, td, tc, tf);
-    }
-    complex<long double> transpose_cg(int td, int tl, int tr) const {
-        return (1 - ((td + tl - tr) & 2)) * sqrtl(tr + 1) / sqrtl(tl + 1);
-    }
-    complex<long double> phase(int ta, int tb, int tc) const {
-        return (1 - ((ta + tb - tc) & 2));
-    }
 };
 
 template <typename FL> struct AnyCG {
@@ -305,11 +223,12 @@ template <typename FL> struct AnyCG {
         assert(false);
         return (FL)0.0;
     }
-    FL wigner_6j(int tja, int tjb, int tjc, int tjd, int tje, int tjf) const {
+    virtual FL wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
+                         int tjf) const {
         return wigner_9j(tja, tjb, tjc, 0, tjd, tjd, tja, tjf, tje);
     }
-    FL wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf, int tjg,
-                 int tjh, int tji) const {
+    virtual FL wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf,
+                         int tjg, int tjh, int tji) const {
         int tmi = tji % 2;
         FL r = 0.0;
         for (int tma = -tja; tma <= tja; tma += 2)
@@ -331,9 +250,19 @@ template <typename FL> struct AnyCG {
                     }
         return r;
     }
-    FL racah(int ta, int tb, int tc, int td, int te, int tf) const {
-        return (FP)(1 - ((ta + tb + tc + td) & 2)) *
-               wigner_6j(ta, tb, te, td, tc, tf);
+    virtual FL racah(int ta, int tb, int tc, int td, int te, int tf) const {
+        int tmc = tc % 2;
+        FL r = 0.0;
+        for (int tma = -ta; tma <= ta; tma += 2)
+            for (int tmb = -tb; tmb <= tb; tmb += 2)
+                for (int tmd = -td; tmd <= td; tmd += 2)
+                    for (int tme = -te; tme <= te; tme += 2)
+                        for (int tmf = -tf; tmf <= tf; tmf += 2)
+                            r += cg(ta, tf, tc, tma, tmf, tmc) *
+                                 cg(tb, td, tf, tmb, tmd, tmf) *
+                                 cg(ta, tb, te, tma, tmb, tme) *
+                                 cg(te, td, tc, tme, tmd, tmc);
+        return r / sqrt((te + 1) * (tf + 1));
     }
 };
 
@@ -345,6 +274,18 @@ template <typename FL> struct AnySU2CG : AnyCG<FL> {
     FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const override {
         return (FL)(FP)su2cg->cg(tja, tjb, tjc, tma, tmb, tmc);
     }
+    FL wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
+                 int tjf) const override {
+        return (FL)(FP)su2cg->wigner_6j(tja, tjb, tjc, tjd, tje, tjf);
+    }
+    FL wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf, int tjg,
+                 int tjh, int tji) const override {
+        return (FL)(FP)su2cg->wigner_9j(tja, tjb, tjc, tjd, tje, tjf, tjg, tjh,
+                                        tji);
+    }
+    FL racah(int ta, int tb, int tc, int td, int te, int tf) const override {
+        return (FL)(FP)su2cg->racah(ta, tb, tc, td, te, tf);
+    }
 };
 
 template <typename FL> struct AnySO3RSHCG : AnyCG<FL> {
@@ -354,6 +295,27 @@ template <typename FL> struct AnySO3RSHCG : AnyCG<FL> {
     virtual ~AnySO3RSHCG() = default;
     FL cg(int tja, int tjb, int tjc, int tma, int tmb, int tmc) const override {
         complex<FP> r = (complex<FP>)so3cg->cg(tja, tjb, tjc, tma, tmb, tmc);
+        if ((tja + tjb + tjc) % 4 != 0)
+            r = (FL)0.0;
+        assert(abs(imag(r)) < (FP)1E-10);
+        return (FL)real(r);
+    }
+    FL wigner_6j(int tja, int tjb, int tjc, int tjd, int tje,
+                 int tjf) const override {
+        complex<FP> r =
+            (complex<FP>)so3cg->wigner_6j(tja, tjb, tjc, tjd, tje, tjf);
+        assert(abs(imag(r)) < (FP)1E-10);
+        return (FL)real(r);
+    }
+    FL wigner_9j(int tja, int tjb, int tjc, int tjd, int tje, int tjf, int tjg,
+                 int tjh, int tji) const override {
+        complex<FP> r = (complex<FP>)so3cg->wigner_9j(tja, tjb, tjc, tjd, tje,
+                                                      tjf, tjg, tjh, tji);
+        assert(abs(imag(r)) < (FP)1E-10);
+        return (FL)real(r);
+    }
+    FL racah(int ta, int tb, int tc, int td, int te, int tf) const override {
+        complex<FP> r = (complex<FP>)so3cg->racah(ta, tb, tc, td, te, tf);
         assert(abs(imag(r)) < (FP)1E-10);
         return (FL)real(r);
     }

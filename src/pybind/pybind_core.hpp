@@ -2118,19 +2118,6 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("phase", &SU2CG::phase, py::arg("ta"), py::arg("tb"),
              py::arg("tc"));
 
-    py::class_<SO3CG, shared_ptr<SO3CG>, SU2CG>(m, "SO3CG")
-        .def(py::init<>())
-        .def(py::init<int>())
-        .def("cg", &SO3CG::cg, py::arg("tja"), py::arg("tjb"), py::arg("tjc"),
-             py::arg("tma"), py::arg("tmb"), py::arg("tmc"))
-        .def("wigner_6j", &SO3CG::wigner_6j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"))
-        .def("wigner_9j", &SO3CG::wigner_9j, py::arg("tja"), py::arg("tjb"),
-             py::arg("tjc"), py::arg("tjd"), py::arg("tje"), py::arg("tjf"),
-             py::arg("tjg"), py::arg("tjh"), py::arg("tji"))
-        .def("racah", &SO3CG::racah, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"), py::arg("td"), py::arg("te"), py::arg("tf"));
-
     py::class_<SO3RSHCG, shared_ptr<SO3RSHCG>, SU2CG>(m, "SO3RSHCG")
         .def(py::init<>())
         .def(py::init<int>())
@@ -2396,6 +2383,16 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
     py::bind_vector<vector<vector<GeneralSymmTerm<FL>>>>(
         m, ("VectorVectorGeneralSymmTerm" + name).c_str());
 
+    py::class_<typename GeneralSymmTensor<FL>::Level,
+               shared_ptr<typename GeneralSymmTensor<FL>::Level>>(
+        m, ("GeneralSymmTensorLevel" + name).c_str())
+        .def(py::init<>())
+        .def_readwrite("left_idx", &GeneralSymmTensor<FL>::Level::left_idx)
+        .def_readwrite("mid_idx", &GeneralSymmTensor<FL>::Level::mid_idx)
+        .def_readwrite("right_idx", &GeneralSymmTensor<FL>::Level::right_idx)
+        .def_readwrite("left_cnt", &GeneralSymmTensor<FL>::Level::left_cnt)
+        .def_readwrite("right_cnt", &GeneralSymmTensor<FL>::Level::right_cnt);
+
     py::class_<GeneralSymmTensor<FL>, shared_ptr<GeneralSymmTensor<FL>>>(
         m, ("GeneralSymmTensor" + name).c_str())
         .def(py::init<>())
@@ -2424,8 +2421,14 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
         .def("equal_to_scaled", &GeneralSymmTensor<FL>::equal_to_scaled)
         .def("to_str", &GeneralSymmTensor<FL>::to_str)
         .def("__repr__", &GeneralSymmTensor<FL>::to_str)
+        .def_static("get_level", &GeneralSymmTensor<FL>::get_level)
+        .def_static("get_quanta", &GeneralSymmTensor<FL>::get_quanta)
+        .def_static("parse_expr_angular",
+                    &GeneralSymmTensor<FL>::parse_expr_angular, py::arg("expr"),
+                    py::arg("idxs"), py::arg("cgs"), py::arg("ii") = 0)
         .def(py::self * FL())
         .def(py::self + py::self)
+        .def(py::self - py::self)
         .def(py::self == py::self);
 
     py::bind_vector<vector<GeneralSymmTensor<FL>>>(
@@ -2434,6 +2437,8 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
         pair<vector<GeneralSymmElement>, vector<pair<vector<int>, FL>>>>>(
         m, ("VectorPVectorGeneralSymmElementVectorPVectorInt" + name + "Double")
                .c_str());
+    py::bind_map<map<vector<int>, GeneralSymmTensor<FL>>>(
+        m, ("MapVectorIntGeneralSymmTensor" + name).c_str());
 
     py::class_<GeneralSymmExpr<FL>, shared_ptr<GeneralSymmExpr<FL>>>(
         m, ("GeneralSymmExpr" + name).c_str())
