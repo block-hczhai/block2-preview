@@ -109,6 +109,7 @@ Features
    :caption: User Guide
 
    user/installation
+   user/interfaces
    user/basic
    user/advanced
    user/keywords
