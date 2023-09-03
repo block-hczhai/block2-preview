@@ -53,15 +53,16 @@ One can install ``block2`` using ``pip``:
 
   where ``<version>`` can be some development version number like ``0.5.2rc10``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
-For detailed instructions on manual installation, see https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation.
+The detailed instructions on manual installation can be found [here](https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation).
 
 To run a DMRG calculation using the command line interface, please use the following command:
 
     block2main dmrg.conf > dmrg.out
 
 where ``dmrg.conf`` is the ``StackBlock`` style input file and ``dmrg.out`` contains the outputs.
+Example input files can be found [here](https://block2.readthedocs.io/en/latest/user/basic.html).
 
-For DMRGSCF calculation, please have a look at the [documentation](https://block2.readthedocs.io/en/latest/user/dmrg-scf.html).
+For DMRGSCF calculation, please have a look at [here](https://block2.readthedocs.io/en/latest/user/dmrg-scf.html).
 
 For a list of DMRG references for methods implemented in ``block2``, see: https://block2.readthedocs.io/en/latest/user/references.html
 
@@ -71,7 +72,7 @@ Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hu
 
 Source code: https://github.com/block-hczhai/block2-preview
 
-For a simplified implementation of ab initio DMRG, see https://github.com/block-hczhai/pyblock3-preview. Data can be imported and exported between ``block2`` and ``pyblock3``, see https://github.com/block-hczhai/block2-preview/discussions/35.
+For a simplified implementation of ab initio DMRG, see [pyblock3](https://github.com/block-hczhai/pyblock3-preview). Data can be imported and exported between ``block2`` and ``pyblock3``, see https://github.com/block-hczhai/block2-preview/discussions/35.
 
 Features
 --------
@@ -147,10 +148,10 @@ Features
 StackBlock Compatibility
 ------------------------
 
-A `StackBlock 1.5 <https://github.com/sanshar/StackBlock>`_ compatible user interface can be found at `pyblock2/driver/block2main`.
+A [StackBlock 1.5](https://github.com/sanshar/StackBlock) compatible user interface can be found at `pyblock2/driver/block2main`.
 This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
 The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
 See `docs/driver.md` and `docs/source/user/basic.rst` for detailed documentations for this interface.
 Examples using this interface can be found at `tests/driver`.
 
-Instuctions for installing the StackBlock code can be found in https://block2.readthedocs.io/en/latest/user/mps-io.html#stackblock-installation. A list of precompiled binaries of StackBlock can be found in https://github.com/hczhai/StackBlock/releases/tag/v1.5.3.
+Instuctions for installing the StackBlock code can be found in [here](https://block2.readthedocs.io/en/latest/user/mps-io.html#stackblock-installation). A list of precompiled binaries of StackBlock can be found in [here](https://github.com/hczhai/StackBlock/releases/tag/v1.5.3).
