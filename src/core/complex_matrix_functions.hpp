@@ -72,22 +72,24 @@ extern void FNAME(cgemm)(const char *transa, const char *transb,
                          complex<float> *c, const MKL_INT *ldc) noexcept;
 
 // LU factorization
-extern void FNAME(cgetrf)(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
-                          const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+extern void LFNAME(cgetrf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<float> *a, const MKL_INT *lda, MKL_INT *ipiv,
+                           MKL_INT *info);
 
 // matrix inverse
-extern void FNAME(cgetri)(const MKL_INT *n, complex<float> *a,
-                          const MKL_INT *lda, MKL_INT *ipiv,
-                          complex<float> *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern void LFNAME(cgetri)(const MKL_INT *n, complex<float> *a,
+                           const MKL_INT *lda, MKL_INT *ipiv,
+                           complex<float> *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(cgeev)(const char *jobvl, const char *jobvr, const MKL_INT *n,
-                         complex<float> *a, const MKL_INT *lda,
-                         complex<float> *w, complex<float> *vl,
-                         const MKL_INT *ldvl, complex<float> *vr,
-                         const MKL_INT *ldvr, complex<float> *work,
-                         const MKL_INT *lwork, float *rwork, MKL_INT *info);
+extern void LFNAME(cgeev)(const char *jobvl, const char *jobvr,
+                          const MKL_INT *n, complex<float> *a,
+                          const MKL_INT *lda, complex<float> *w,
+                          complex<float> *vl, const MKL_INT *ldvl,
+                          complex<float> *vr, const MKL_INT *ldvr,
+                          complex<float> *work, const MKL_INT *lwork,
+                          float *rwork, MKL_INT *info);
 
 // matrix-vector multiplication
 // vec [y] = complex [alpha] * mat [a] * vec [x] + complex [beta] * vec [y]
@@ -98,57 +100,58 @@ extern void FNAME(cgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
                          complex<float> *y, const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void FNAME(cgesv)(const MKL_INT *n, const MKL_INT *nrhs,
-                         complex<float> *a, const MKL_INT *lda, MKL_INT *ipiv,
-                         complex<float> *b, const MKL_INT *ldb, MKL_INT *info);
+extern void LFNAME(cgesv)(const MKL_INT *n, const MKL_INT *nrhs,
+                          complex<float> *a, const MKL_INT *lda, MKL_INT *ipiv,
+                          complex<float> *b, const MKL_INT *ldb, MKL_INT *info);
 
 // least squares problem a * x = b
-extern void FNAME(cgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const MKL_INT *nrhs, complex<float> *a,
-                         const MKL_INT *lda, complex<float> *b,
-                         const MKL_INT *ldb, complex<float> *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(cgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const MKL_INT *nrhs, complex<float> *a,
+                          const MKL_INT *lda, complex<float> *b,
+                          const MKL_INT *ldb, complex<float> *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void FNAME(clacpy)(const char *uplo, const MKL_INT *m, const MKL_INT *n,
-                          const complex<float> *a, const MKL_INT *lda,
-                          complex<float> *b, const MKL_INT *ldb);
+extern void LFNAME(clacpy)(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                           const complex<float> *a, const MKL_INT *lda,
+                           complex<float> *b, const MKL_INT *ldb);
 
 // QR factorization
-extern void FNAME(cgeqrf)(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
-                          const MKL_INT *lda, complex<float> *tau,
-                          complex<float> *work, const MKL_INT *lwork,
-                          MKL_INT *info);
-extern void FNAME(cungqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          complex<float> *a, const MKL_INT *lda,
-                          const complex<float> *tau, complex<float> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(cgeqrf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<float> *a, const MKL_INT *lda,
+                           complex<float> *tau, complex<float> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(cungqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           complex<float> *a, const MKL_INT *lda,
+                           const complex<float> *tau, complex<float> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void FNAME(cgelqf)(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
-                          const MKL_INT *lda, complex<float> *tau,
-                          complex<float> *work, const MKL_INT *lwork,
-                          MKL_INT *info);
-extern void FNAME(cunglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          complex<float> *a, const MKL_INT *lda,
-                          const complex<float> *tau, complex<float> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(cgelqf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<float> *a, const MKL_INT *lda,
+                           complex<float> *tau, complex<float> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(cunglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           complex<float> *a, const MKL_INT *lda,
+                           const complex<float> *tau, complex<float> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(cheev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                         complex<float> *a, const MKL_INT *lda, float *w,
-                         complex<float> *work, const MKL_INT *lwork,
-                         float *rwork, MKL_INT *info);
+extern void LFNAME(cheev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                          complex<float> *a, const MKL_INT *lda, float *w,
+                          complex<float> *work, const MKL_INT *lwork,
+                          float *rwork, MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void FNAME(cgesvd)(const char *jobu, const char *jobvt, const MKL_INT *m,
-                          const MKL_INT *n, complex<float> *a,
-                          const MKL_INT *lda, float *s, complex<float> *u,
-                          const MKL_INT *ldu, complex<float> *vt,
-                          const MKL_INT *ldvt, complex<float> *work,
-                          const MKL_INT *lwork, float *rwork, MKL_INT *info);
+extern void LFNAME(cgesvd)(const char *jobu, const char *jobvt,
+                           const MKL_INT *m, const MKL_INT *n,
+                           complex<float> *a, const MKL_INT *lda, float *s,
+                           complex<float> *u, const MKL_INT *ldu,
+                           complex<float> *vt, const MKL_INT *ldvt,
+                           complex<float> *work, const MKL_INT *lwork,
+                           float *rwork, MKL_INT *info);
 
 // vector scale
 // vector [sx] = double [sa] * vector [sx]
@@ -190,23 +193,24 @@ extern void FNAME(zgemm)(const char *transa, const char *transb,
                          complex<double> *c, const MKL_INT *ldc) noexcept;
 
 // LU factorization
-extern void FNAME(zgetrf)(const MKL_INT *m, const MKL_INT *n,
-                          complex<double> *a, const MKL_INT *lda, MKL_INT *ipiv,
-                          MKL_INT *info);
+extern void LFNAME(zgetrf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<double> *a, const MKL_INT *lda,
+                           MKL_INT *ipiv, MKL_INT *info);
 
 // matrix inverse
-extern void FNAME(zgetri)(const MKL_INT *n, complex<double> *a,
-                          const MKL_INT *lda, MKL_INT *ipiv,
-                          complex<double> *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern void LFNAME(zgetri)(const MKL_INT *n, complex<double> *a,
+                           const MKL_INT *lda, MKL_INT *ipiv,
+                           complex<double> *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(zgeev)(const char *jobvl, const char *jobvr, const MKL_INT *n,
-                         complex<double> *a, const MKL_INT *lda,
-                         complex<double> *w, complex<double> *vl,
-                         const MKL_INT *ldvl, complex<double> *vr,
-                         const MKL_INT *ldvr, complex<double> *work,
-                         const MKL_INT *lwork, double *rwork, MKL_INT *info);
+extern void LFNAME(zgeev)(const char *jobvl, const char *jobvr,
+                          const MKL_INT *n, complex<double> *a,
+                          const MKL_INT *lda, complex<double> *w,
+                          complex<double> *vl, const MKL_INT *ldvl,
+                          complex<double> *vr, const MKL_INT *ldvr,
+                          complex<double> *work, const MKL_INT *lwork,
+                          double *rwork, MKL_INT *info);
 
 // matrix-vector multiplication
 // vec [y] = complex [alpha] * mat [a] * vec [x] + complex [beta] * vec [y]
@@ -217,57 +221,59 @@ extern void FNAME(zgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
                          complex<double> *y, const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void FNAME(zgesv)(const MKL_INT *n, const MKL_INT *nrhs,
-                         complex<double> *a, const MKL_INT *lda, MKL_INT *ipiv,
-                         complex<double> *b, const MKL_INT *ldb, MKL_INT *info);
+extern void LFNAME(zgesv)(const MKL_INT *n, const MKL_INT *nrhs,
+                          complex<double> *a, const MKL_INT *lda, MKL_INT *ipiv,
+                          complex<double> *b, const MKL_INT *ldb,
+                          MKL_INT *info);
 
 // least squares problem a * x = b
-extern void FNAME(zgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const MKL_INT *nrhs, complex<double> *a,
-                         const MKL_INT *lda, complex<double> *b,
-                         const MKL_INT *ldb, complex<double> *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(zgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const MKL_INT *nrhs, complex<double> *a,
+                          const MKL_INT *lda, complex<double> *b,
+                          const MKL_INT *ldb, complex<double> *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void FNAME(zlacpy)(const char *uplo, const MKL_INT *m, const MKL_INT *n,
-                          const complex<double> *a, const MKL_INT *lda,
-                          complex<double> *b, const MKL_INT *ldb);
+extern void LFNAME(zlacpy)(const char *uplo, const MKL_INT *m, const MKL_INT *n,
+                           const complex<double> *a, const MKL_INT *lda,
+                           complex<double> *b, const MKL_INT *ldb);
 
 // QR factorization
-extern void FNAME(zgeqrf)(const MKL_INT *m, const MKL_INT *n,
-                          complex<double> *a, const MKL_INT *lda,
-                          complex<double> *tau, complex<double> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(zungqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          complex<double> *a, const MKL_INT *lda,
-                          const complex<double> *tau, complex<double> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(zgeqrf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<double> *a, const MKL_INT *lda,
+                           complex<double> *tau, complex<double> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(zungqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           complex<double> *a, const MKL_INT *lda,
+                           const complex<double> *tau, complex<double> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void FNAME(zgelqf)(const MKL_INT *m, const MKL_INT *n,
-                          complex<double> *a, const MKL_INT *lda,
-                          complex<double> *tau, complex<double> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(zunglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          complex<double> *a, const MKL_INT *lda,
-                          const complex<double> *tau, complex<double> *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(zgelqf)(const MKL_INT *m, const MKL_INT *n,
+                           complex<double> *a, const MKL_INT *lda,
+                           complex<double> *tau, complex<double> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(zunglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           complex<double> *a, const MKL_INT *lda,
+                           const complex<double> *tau, complex<double> *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(zheev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                         complex<double> *a, const MKL_INT *lda, double *w,
-                         complex<double> *work, const MKL_INT *lwork,
-                         double *rwork, MKL_INT *info);
+extern void LFNAME(zheev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                          complex<double> *a, const MKL_INT *lda, double *w,
+                          complex<double> *work, const MKL_INT *lwork,
+                          double *rwork, MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void FNAME(zgesvd)(const char *jobu, const char *jobvt, const MKL_INT *m,
-                          const MKL_INT *n, complex<double> *a,
-                          const MKL_INT *lda, double *s, complex<double> *u,
-                          const MKL_INT *ldu, complex<double> *vt,
-                          const MKL_INT *ldvt, complex<double> *work,
-                          const MKL_INT *lwork, double *rwork, MKL_INT *info);
+extern void LFNAME(zgesvd)(const char *jobu, const char *jobvt,
+                           const MKL_INT *m, const MKL_INT *n,
+                           complex<double> *a, const MKL_INT *lda, double *s,
+                           complex<double> *u, const MKL_INT *ldu,
+                           complex<double> *vt, const MKL_INT *ldvt,
+                           complex<double> *work, const MKL_INT *lwork,
+                           double *rwork, MKL_INT *info);
 
 #endif
 }
@@ -280,8 +286,18 @@ inline void xgemm<complex<float>>(const char *transa, const char *transb,
                                   const complex<float> *b, const MKL_INT *ldb,
                                   const complex<float> *beta, complex<float> *c,
                                   const MKL_INT *ldc) noexcept {
+#ifdef _HAS_BLIS
+    trans_t blis_transa, blis_transb;
+    map_char_to_blis_trans(*transa, &blis_transa);
+    map_char_to_blis_trans(*transb, &blis_transb);
+    return bli_cgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
+                     (scomplex *)alpha, (scomplex *)a, 1, (inc_t)*lda,
+                     (scomplex *)b, 1, (inc_t)*ldb, (scomplex *)beta,
+                     (scomplex *)c, 1, (inc_t)*ldc);
+#else
     return FNAME(cgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
                         ldc);
+#endif
 }
 template <>
 inline void
@@ -291,8 +307,18 @@ xgemm<complex<double>>(const char *transa, const char *transb, const MKL_INT *m,
                        const MKL_INT *lda, const complex<double> *b,
                        const MKL_INT *ldb, const complex<double> *beta,
                        complex<double> *c, const MKL_INT *ldc) noexcept {
+#ifdef _HAS_BLIS
+    trans_t blis_transa, blis_transb;
+    map_char_to_blis_trans(*transa, &blis_transa);
+    map_char_to_blis_trans(*transb, &blis_transb);
+    return bli_zgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
+                     (dcomplex *)alpha, (dcomplex *)a, 1, (inc_t)*lda,
+                     (dcomplex *)b, 1, (inc_t)*ldb, (dcomplex *)beta,
+                     (dcomplex *)c, 1, (inc_t)*ldc);
+#else
     return FNAME(zgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
                         ldc);
+#endif
 }
 
 template <>
@@ -389,13 +415,13 @@ template <>
 inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
                    const complex<float> *a, const MKL_INT *lda,
                    complex<float> *b, const MKL_INT *ldb) {
-    FNAME(clacpy)(uplo, m, n, a, lda, b, ldb);
+    LFNAME(clacpy)(uplo, m, n, a, lda, b, ldb);
 }
 template <>
 inline void xlacpy(const char *uplo, const MKL_INT *m, const MKL_INT *n,
                    const complex<double> *a, const MKL_INT *lda,
                    complex<double> *b, const MKL_INT *ldb) {
-    FNAME(zlacpy)(uplo, m, n, a, lda, b, ldb);
+    LFNAME(zlacpy)(uplo, m, n, a, lda, b, ldb);
 }
 
 template <>
@@ -419,39 +445,39 @@ template <>
 inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
                    const MKL_INT *lda, complex<float> *tau,
                    complex<float> *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(cgeqrf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(cgeqrf)(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, complex<double> *tau,
                    complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(zgeqrf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(zgeqrf)(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <>
 inline void xgetrf(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info) {
-    FNAME(cgetrf)(m, n, a, lda, ipiv, info);
+    LFNAME(cgetrf)(m, n, a, lda, ipiv, info);
 }
 
 template <>
 inline void xgetrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info) {
-    FNAME(zgetrf)(m, n, a, lda, ipiv, info);
+    LFNAME(zgetrf)(m, n, a, lda, ipiv, info);
 }
 
 template <>
 inline void xgetri(const MKL_INT *m, complex<float> *a, const MKL_INT *lda,
                    MKL_INT *ipiv, complex<float> *work, const MKL_INT *lwork,
                    MKL_INT *info) {
-    FNAME(cgetri)(m, a, lda, ipiv, work, lwork, info);
+    LFNAME(cgetri)(m, a, lda, ipiv, work, lwork, info);
 }
 
 template <>
 inline void xgetri(const MKL_INT *m, complex<double> *a, const MKL_INT *lda,
                    MKL_INT *ipiv, complex<double> *work, const MKL_INT *lwork,
                    MKL_INT *info) {
-    FNAME(zgetri)(m, a, lda, ipiv, work, lwork, info);
+    LFNAME(zgetri)(m, a, lda, ipiv, work, lwork, info);
 }
 
 template <>
@@ -459,27 +485,27 @@ inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                    complex<float> *a, const MKL_INT *lda,
                    const complex<float> *tau, complex<float> *work,
                    const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(cungqr)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(cungqr)(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xungqr(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                    complex<double> *a, const MKL_INT *lda,
                    const complex<double> *tau, complex<double> *work,
                    const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(zungqr)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(zungqr)(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <>
 inline void xgelqf(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
                    const MKL_INT *lda, complex<float> *tau,
                    complex<float> *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(cgelqf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(cgelqf)(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xgelqf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, complex<double> *tau,
                    complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(zgelqf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(zgelqf)(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <>
@@ -487,7 +513,7 @@ inline void xgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   const MKL_INT *nrhs, complex<float> *a, const MKL_INT *lda,
                   complex<float> *b, const MKL_INT *ldb, complex<float> *work,
                   const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(cgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
+    LFNAME(cgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
 }
 
 template <>
@@ -495,7 +521,7 @@ inline void xgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   const MKL_INT *nrhs, complex<double> *a, const MKL_INT *lda,
                   complex<double> *b, const MKL_INT *ldb, complex<double> *work,
                   const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(zgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
+    LFNAME(zgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
 }
 
 template <>
@@ -503,14 +529,14 @@ inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                    complex<float> *a, const MKL_INT *lda,
                    const complex<float> *tau, complex<float> *work,
                    const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(cunglq)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(cunglq)(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xunglq(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                    complex<double> *a, const MKL_INT *lda,
                    const complex<double> *tau, complex<double> *work,
                    const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(zunglq)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(zunglq)(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <>
@@ -521,7 +547,7 @@ inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
                    complex<float> *work, const MKL_INT *lwork, MKL_INT *info) {
     vector<float> rwork;
     rwork.reserve(5 * min(*m, *n));
-    FNAME(cgesvd)
+    LFNAME(cgesvd)
     (jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork.data(),
      info);
 }
@@ -533,7 +559,7 @@ inline void xgesvd(const char *jobu, const char *jobvt, const MKL_INT *m,
                    complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
     vector<double> rwork;
     rwork.reserve(5 * min(*m, *n));
-    FNAME(zgesvd)
+    LFNAME(zgesvd)
     (jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, rwork.data(),
      info);
 }
@@ -542,14 +568,14 @@ template <>
 inline void xgesv(const MKL_INT *n, const MKL_INT *nrhs, complex<float> *a,
                   const MKL_INT *lda, MKL_INT *ipiv, complex<float> *b,
                   const MKL_INT *ldb, MKL_INT *info) {
-    FNAME(cgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
+    LFNAME(cgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
 }
 
 template <>
 inline void xgesv(const MKL_INT *n, const MKL_INT *nrhs, complex<double> *a,
                   const MKL_INT *lda, MKL_INT *ipiv, complex<double> *b,
                   const MKL_INT *ldb, MKL_INT *info) {
-    FNAME(zgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
+    LFNAME(zgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
 }
 
 template <>
@@ -557,14 +583,14 @@ inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   complex<float> *a, const MKL_INT *lda, float *w,
                   complex<float> *work, const MKL_INT *lwork, float *rwork,
                   MKL_INT *info) {
-    FNAME(cheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+    LFNAME(cheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
 }
 template <>
 inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   complex<double> *a, const MKL_INT *lda, double *w,
                   complex<double> *work, const MKL_INT *lwork, double *rwork,
                   MKL_INT *info) {
-    FNAME(zheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+    LFNAME(zheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
 }
 
 template <>
@@ -573,7 +599,7 @@ inline void xgeev(const char *jobvl, const char *jobvr, const MKL_INT *n,
                   complex<float> *vl, const MKL_INT *ldvl, complex<float> *vr,
                   const MKL_INT *ldvr, complex<float> *work,
                   const MKL_INT *lwork, float *rwork, MKL_INT *info) {
-    FNAME(cgeev)
+    LFNAME(cgeev)
     (jobvl, jobvr, n, a, lda, w, vl, ldvl, vr, ldvr, work, lwork, rwork, info);
 }
 template <>
@@ -582,7 +608,7 @@ inline void xgeev(const char *jobvl, const char *jobvr, const MKL_INT *n,
                   complex<double> *vl, const MKL_INT *ldvl, complex<double> *vr,
                   const MKL_INT *ldvr, complex<double> *work,
                   const MKL_INT *lwork, double *rwork, MKL_INT *info) {
-    FNAME(zgeev)
+    LFNAME(zgeev)
     (jobvl, jobvr, n, a, lda, w, vl, ldvl, vr, ldvr, work, lwork, rwork, info);
 }
 
@@ -839,18 +865,37 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
+#ifdef _HAS_BLIS
+        if (!(conja & 1) && !(conjb & 1)) {
+            assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if (!(conja & 1) && (conjb & 1)) {
+            assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if ((conja & 1) && !(conjb & 1)) {
+            assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        } else if ((conja & 1) && (conjb & 1)) {
+            assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+        }
+#else
         if (!conja && !conjb) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
-            xgemm<FL>("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
-                      &a.n, &cfactor, c.data, &c.n);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (!conja && conjb != 2) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
-            xgemm<FL>(ntxc + conjb, "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n,
-                      a.data, &a.n, &cfactor, c.data, &c.n);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && !conjb) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
-            xgemm<FL>("n", ntxc + conja, &b.n, &c.m, &b.m, &scale, b.data, &b.n,
-                      a.data, &a.n, &cfactor, c.data, &c.n);
+            xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
+                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && conjb != 2) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
@@ -869,6 +914,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                           &cfactor, &c(k, 0), &one);
         } else
             assert(false);
+#endif
     }
     // c = bra(.T) * a * ket(.T)
     // return nflop
@@ -920,9 +966,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     // c(.T) = bra.T * a(.T) * ket
     // return nflop. (.T) is always transpose conjugate
     static size_t left_partial_rotate(const GMatrix<FL> &a, bool conj_a,
-                         const GMatrix<FL> &c, bool conj_c,
-                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                         FL scale) {
+                                      const GMatrix<FL> &c, bool conj_c,
+                                      const GMatrix<FL> &bra,
+                                      const GMatrix<FL> &ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, conj_a ? a.n : a.m, ket.n);
@@ -938,9 +984,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     // c(.T) = bra.c * a(.T) * ket.t = (a(~.T) * bra.t).T * ket.t
     // return nflop. (.T) is always transpose conjugate
     static size_t right_partial_rotate(const GMatrix<FL> &a, bool conj_a,
-                         const GMatrix<FL> &c, bool conj_c,
-                         const GMatrix<FL> &bra, const GMatrix<FL> &ket,
-                         FL scale) {
+                                       const GMatrix<FL> &c, bool conj_c,
+                                       const GMatrix<FL> &bra,
+                                       const GMatrix<FL> &ket, FL scale) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> work(nullptr, conj_a ? a.m : a.n, bra.m);

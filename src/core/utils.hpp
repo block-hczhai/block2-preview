@@ -53,10 +53,12 @@ namespace block2 {
 #define CONCATX(a, b) a##b
 
 #ifdef _F77UNDERSCORE
-#define FNAME(X) CONCAT(X, _)
+#define LFNAME(X) CONCAT(X, _)
 #else
-#define FNAME(X) X
+#define LFNAME(X) X
 #endif
+
+#define FNAME(X) LFNAME(X)
 
 #ifdef _APPLE_ACC_SINGLE_PREC
 #define FRETT double
