@@ -49,11 +49,11 @@ For distributed parallel calculation, ``mpi`` library is required.
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DMPI=ON
     make -j 10
 
-Which will build the python extension library.
+Which will build the python extension library (using 10 CPU cores) (serial code).
 
-You may need to add the ``build`` directory to your environment ::
+You may need to add both the repo root directory and the ``build`` directory into ``PYTHONPATH`` so that ``import block2`` and ``import pyblock2`` will work ::
 
-    export PYTHONPATH=/path/to/block2/build:${PYTHONPATH}
+    export PYTHONPATH=/path/to/block2/build:/path/to/block2:${PYTHONPATH}
 
 Options
 -------
@@ -79,7 +79,7 @@ saved by avoiding unnecessary template instantiation, as follows ::
     cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DEXP_TMPL=NONE
     make -j 1
 
-This may take 5 minutes, need 7 to 10 GB memory.
+This may take 11 minutes, requiring 14 GB memory.
 
 MPI version
 ^^^^^^^^^^^
@@ -186,6 +186,23 @@ and if the installation is successful, we can ``ldd $(python -c 'from mpi4py imp
 to check the linkage of the ``libmpi.so``. Ideally it should points to the ``openmpi/4.0.4`` library or any other version 4.0 mpi
 library. Alternatively, if you do not want to uninstall the ``mpich`` in ``anaconda``, you may install ``block2`` from source using
 the same ``mpich`` library.
+
+BLIS
+^^^^
+
+Optionally, we can use `BLIS <https://github.com/flame/blis.git>`_ for dense matrix GEMM operations.
+One can install the BLIS as the following: ::
+
+    git clone https://github.com/flame/blis.git
+    cd blis/
+    mkdir install
+    ./configure --prefix=$PWD/install --enable-threading=openmp auto
+    make -j 10
+    make install
+    export BLIS_PREFIX=$PWD/install
+
+Then adding the option ``-DUSE_BLIS=ON`` (when compiling ``block2``) will use BLIS for GEMM.
+Other BLAS operations will still be performed using the standard BLAS or MKL.
 
 Supported operating systems and compilers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

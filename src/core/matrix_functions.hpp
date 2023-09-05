@@ -77,65 +77,65 @@ extern void FNAME(sgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
                          float *y, const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void FNAME(sgesv)(const MKL_INT *n, const MKL_INT *nrhs, float *a,
-                         const MKL_INT *lda, MKL_INT *ipiv, float *b,
-                         const MKL_INT *ldb, MKL_INT *info);
+extern void LFNAME(sgesv)(const MKL_INT *n, const MKL_INT *nrhs, float *a,
+                          const MKL_INT *lda, MKL_INT *ipiv, float *b,
+                          const MKL_INT *ldb, MKL_INT *info);
 
 // QR factorization
-extern void FNAME(sgeqrf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                          const MKL_INT *lda, float *tau, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(sorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          float *a, const MKL_INT *lda, const float *tau,
-                          float *work, const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sgeqrf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, float *tau, float *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           float *a, const MKL_INT *lda, const float *tau,
+                           float *work, const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void FNAME(sgelqf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                          const MKL_INT *lda, float *tau, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(sorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          float *a, const MKL_INT *lda, const float *tau,
-                          float *work, const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sgelqf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, float *tau, float *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           float *a, const MKL_INT *lda, const float *tau,
+                           float *work, const MKL_INT *lwork, MKL_INT *info);
 
 // LU factorization
-extern void FNAME(sgetrf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                          const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+extern void LFNAME(sgetrf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
 
 // matrix inverse
-extern void FNAME(sgetri)(const MKL_INT *m, float *a, const MKL_INT *lda,
-                          MKL_INT *ipiv, float *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern void LFNAME(sgetri)(const MKL_INT *m, float *a, const MKL_INT *lda,
+                           MKL_INT *ipiv, float *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(ssyev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                         float *a, const MKL_INT *lda, float *w, float *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(ssyev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                          float *a, const MKL_INT *lda, float *w, float *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
-extern void FNAME(sgeev)(const char *jobvl, const char *jobvr, const MKL_INT *n,
-                         float *a, const MKL_INT *lda, float *wr, float *wi,
-                         float *vl, const MKL_INT *ldvl, float *vr,
-                         const MKL_INT *ldvr, float *work, const MKL_INT *lwork,
-                         MKL_INT *info);
+extern void LFNAME(sgeev)(const char *jobvl, const char *jobvr,
+                          const MKL_INT *n, float *a, const MKL_INT *lda,
+                          float *wr, float *wi, float *vl, const MKL_INT *ldvl,
+                          float *vr, const MKL_INT *ldvr, float *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void FNAME(sgesvd)(const char *jobu, const char *jobvt, const MKL_INT *m,
-                          const MKL_INT *n, float *a, const MKL_INT *lda,
-                          float *s, float *u, const MKL_INT *ldu, float *vt,
-                          const MKL_INT *ldvt, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sgesvd)(const char *jobu, const char *jobvt,
+                           const MKL_INT *m, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, float *s, float *u,
+                           const MKL_INT *ldu, float *vt, const MKL_INT *ldvt,
+                           float *work, const MKL_INT *lwork, MKL_INT *info);
 
 // least squares problem a * x = b
-extern void FNAME(sgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const MKL_INT *nrhs, float *a, const MKL_INT *lda,
-                         float *b, const MKL_INT *ldb, float *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(sgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const MKL_INT *nrhs, float *a, const MKL_INT *lda,
+                          float *b, const MKL_INT *ldb, float *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void FNAME(slacpy)(const char *uplo, const int *m, const int *n,
-                          const float *a, const int *lda, float *b,
-                          const int *ldb);
+extern void LFNAME(slacpy)(const char *uplo, const int *m, const int *n,
+                           const float *a, const int *lda, float *b,
+                           const int *ldb);
 
 // vector scale
 // vector [sx] = float [sa] * vector [sx]
@@ -181,65 +181,65 @@ extern void FNAME(dgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
                          const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void FNAME(dgesv)(const MKL_INT *n, const MKL_INT *nrhs, double *a,
-                         const MKL_INT *lda, MKL_INT *ipiv, double *b,
-                         const MKL_INT *ldb, MKL_INT *info);
+extern void LFNAME(dgesv)(const MKL_INT *n, const MKL_INT *nrhs, double *a,
+                          const MKL_INT *lda, MKL_INT *ipiv, double *b,
+                          const MKL_INT *ldb, MKL_INT *info);
 
 // QR factorization
-extern void FNAME(dgeqrf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                          const MKL_INT *lda, double *tau, double *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(dorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          double *a, const MKL_INT *lda, const double *tau,
-                          double *work, const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dgeqrf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, double *tau, double *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           double *a, const MKL_INT *lda, const double *tau,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void FNAME(dgelqf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                          const MKL_INT *lda, double *tau, double *work,
-                          const MKL_INT *lwork, MKL_INT *info);
-extern void FNAME(dorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                          double *a, const MKL_INT *lda, const double *tau,
-                          double *work, const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dgelqf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, double *tau, double *work,
+                           const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                           double *a, const MKL_INT *lda, const double *tau,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // LU factorization
-extern void FNAME(dgetrf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                          const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+extern void LFNAME(dgetrf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
 
 // matrix inverse
-extern void FNAME(dgetri)(const MKL_INT *m, double *a, const MKL_INT *lda,
-                          MKL_INT *ipiv, double *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern void LFNAME(dgetri)(const MKL_INT *m, double *a, const MKL_INT *lda,
+                           MKL_INT *ipiv, double *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // eigenvalue problem
-extern void FNAME(dsyev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                         double *a, const MKL_INT *lda, double *w, double *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dsyev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                          double *a, const MKL_INT *lda, double *w,
+                          double *work, const MKL_INT *lwork, MKL_INT *info);
 
-extern void FNAME(dgeev)(const char *jobvl, const char *jobvr, const MKL_INT *n,
-                         double *a, const MKL_INT *lda, double *wr, double *wi,
-                         double *vl, const MKL_INT *ldvl, double *vr,
-                         const MKL_INT *ldvr, double *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dgeev)(const char *jobvl, const char *jobvr,
+                          const MKL_INT *n, double *a, const MKL_INT *lda,
+                          double *wr, double *wi, double *vl,
+                          const MKL_INT *ldvl, double *vr, const MKL_INT *ldvr,
+                          double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void FNAME(dgesvd)(const char *jobu, const char *jobvt, const MKL_INT *m,
-                          const MKL_INT *n, double *a, const MKL_INT *lda,
-                          double *s, double *u, const MKL_INT *ldu, double *vt,
-                          const MKL_INT *ldvt, double *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dgesvd)(const char *jobu, const char *jobvt,
+                           const MKL_INT *m, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, double *s, double *u,
+                           const MKL_INT *ldu, double *vt, const MKL_INT *ldvt,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // least squares problem a * x = b
-extern void FNAME(dgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const MKL_INT *nrhs, double *a, const MKL_INT *lda,
-                         double *b, const MKL_INT *ldb, double *work,
-                         const MKL_INT *lwork, MKL_INT *info);
+extern void LFNAME(dgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const MKL_INT *nrhs, double *a, const MKL_INT *lda,
+                          double *b, const MKL_INT *ldb, double *work,
+                          const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void FNAME(dlacpy)(const char *uplo, const int *m, const int *n,
-                          const double *a, const int *lda, double *b,
-                          const int *ldb);
+extern void LFNAME(dlacpy)(const char *uplo, const int *m, const int *n,
+                           const double *a, const int *lda, double *b,
+                           const int *ldb);
 
 #endif
 }
@@ -273,6 +273,22 @@ inline DavidsonTypes operator|(DavidsonTypes a, DavidsonTypes b) {
     return DavidsonTypes((uint16_t)a | (uint16_t)b);
 }
 
+#ifdef _HAS_BLIS
+inline void map_char_to_blis_trans(char trans, trans_t *blis_trans) {
+    if (trans == 'n' || trans == 'N')
+        *blis_trans = BLIS_NO_TRANSPOSE;
+    else if (trans == 't' || trans == 'T')
+        *blis_trans = BLIS_TRANSPOSE;
+    else if (trans == 'x' || trans == 'X')
+        *blis_trans = BLIS_CONJ_NO_TRANSPOSE;
+    else if (trans == 'c' || trans == 'C')
+        *blis_trans = BLIS_CONJ_TRANSPOSE;
+    else {
+        bli_check_error_code(BLIS_INVALID_TRANS);
+    }
+}
+#endif
+
 template <typename FL>
 inline void xgemm(const char *transa, const char *transb, const MKL_INT *m,
                   const MKL_INT *n, const MKL_INT *k, const FL *alpha,
@@ -287,8 +303,17 @@ inline void xgemm<double>(const char *transa, const char *transb,
                           const MKL_INT *lda, const double *b,
                           const MKL_INT *ldb, const double *beta, double *c,
                           const MKL_INT *ldc) noexcept {
+#ifdef _HAS_BLIS
+    trans_t blis_transa, blis_transb;
+    map_char_to_blis_trans(*transa, &blis_transa);
+    map_char_to_blis_trans(*transb, &blis_transb);
+    return bli_dgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
+                     alpha, a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1,
+                     (inc_t)*ldc);
+#else
     return FNAME(dgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
                         ldc);
+#endif
 }
 
 template <>
@@ -297,8 +322,17 @@ inline void xgemm<float>(const char *transa, const char *transb,
                          const float *alpha, const float *a, const MKL_INT *lda,
                          const float *b, const MKL_INT *ldb, const float *beta,
                          float *c, const MKL_INT *ldc) noexcept {
+#ifdef _HAS_BLIS
+    trans_t blis_transa, blis_transb;
+    map_char_to_blis_trans(*transa, &blis_transa);
+    map_char_to_blis_trans(*transb, &blis_transb);
+    return bli_sgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
+                     alpha, a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1,
+                     (inc_t)*ldc);
+#else
     return FNAME(sgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
                         ldc);
+#endif
 }
 
 template <typename FL>
@@ -409,13 +443,13 @@ template <>
 inline void xlacpy<double>(const char *uplo, const MKL_INT *m, const MKL_INT *n,
                            const double *a, const MKL_INT *lda, double *b,
                            const MKL_INT *ldb) {
-    FNAME(dlacpy)(uplo, m, n, a, lda, b, ldb);
+    LFNAME(dlacpy)(uplo, m, n, a, lda, b, ldb);
 }
 template <>
 inline void xlacpy<float>(const char *uplo, const MKL_INT *m, const MKL_INT *n,
                           const float *a, const MKL_INT *lda, float *b,
                           const MKL_INT *ldb) {
-    FNAME(slacpy)(uplo, m, n, a, lda, b, ldb);
+    LFNAME(slacpy)(uplo, m, n, a, lda, b, ldb);
 }
 
 template <typename FL>
@@ -450,14 +484,14 @@ template <>
 inline void xgesv<double>(const MKL_INT *n, const MKL_INT *nrhs, double *a,
                           const MKL_INT *lda, MKL_INT *ipiv, double *b,
                           const MKL_INT *ldb, MKL_INT *info) {
-    FNAME(dgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
+    LFNAME(dgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
 }
 
 template <>
 inline void xgesv<float>(const MKL_INT *n, const MKL_INT *nrhs, float *a,
                          const MKL_INT *lda, MKL_INT *ipiv, float *b,
                          const MKL_INT *ldb, MKL_INT *info) {
-    FNAME(sgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
+    LFNAME(sgesv)(n, nrhs, a, lda, ipiv, b, ldb, info);
 }
 
 template <typename FL>
@@ -468,13 +502,13 @@ template <>
 inline void xgeqrf<double>(const MKL_INT *m, const MKL_INT *n, double *a,
                            const MKL_INT *lda, double *tau, double *work,
                            const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dgeqrf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(dgeqrf)(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xgeqrf<float>(const MKL_INT *m, const MKL_INT *n, float *a,
                           const MKL_INT *lda, float *tau, float *work,
                           const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sgeqrf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(sgeqrf)(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
@@ -485,13 +519,13 @@ template <>
 inline void xungqr<double>(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                            double *a, const MKL_INT *lda, const double *tau,
                            double *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dorgqr)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(dorgqr)(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xungqr<float>(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                           float *a, const MKL_INT *lda, const float *tau,
                           float *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sorgqr)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(sorgqr)(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
@@ -502,13 +536,13 @@ template <>
 inline void xgelqf<double>(const MKL_INT *m, const MKL_INT *n, double *a,
                            const MKL_INT *lda, double *tau, double *work,
                            const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dgelqf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(dgelqf)(m, n, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xgelqf<float>(const MKL_INT *m, const MKL_INT *n, float *a,
                           const MKL_INT *lda, float *tau, float *work,
                           const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sgelqf)(m, n, a, lda, tau, work, lwork, info);
+    LFNAME(sgelqf)(m, n, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
@@ -519,13 +553,13 @@ template <>
 inline void xunglq<double>(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                            double *a, const MKL_INT *lda, const double *tau,
                            double *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dorglq)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(dorglq)(m, n, k, a, lda, tau, work, lwork, info);
 }
 template <>
 inline void xunglq<float>(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
                           float *a, const MKL_INT *lda, const float *tau,
                           float *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sorglq)(m, n, k, a, lda, tau, work, lwork, info);
+    LFNAME(sorglq)(m, n, k, a, lda, tau, work, lwork, info);
 }
 
 template <typename FL>
@@ -535,13 +569,13 @@ inline void xgetrf(const MKL_INT *m, const MKL_INT *n, FL *a,
 template <>
 inline void xgetrf<double>(const MKL_INT *m, const MKL_INT *n, double *a,
                            const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info) {
-    FNAME(dgetrf)(m, n, a, lda, ipiv, info);
+    LFNAME(dgetrf)(m, n, a, lda, ipiv, info);
 }
 
 template <>
 inline void xgetrf<float>(const MKL_INT *m, const MKL_INT *n, float *a,
                           const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info) {
-    FNAME(sgetrf)(m, n, a, lda, ipiv, info);
+    LFNAME(sgetrf)(m, n, a, lda, ipiv, info);
 }
 
 template <typename FL>
@@ -552,14 +586,14 @@ template <>
 inline void xgetri<double>(const MKL_INT *m, double *a, const MKL_INT *lda,
                            MKL_INT *ipiv, double *work, const MKL_INT *lwork,
                            MKL_INT *info) {
-    FNAME(dgetri)(m, a, lda, ipiv, work, lwork, info);
+    LFNAME(dgetri)(m, a, lda, ipiv, work, lwork, info);
 }
 
 template <>
 inline void xgetri<float>(const MKL_INT *m, float *a, const MKL_INT *lda,
                           MKL_INT *ipiv, float *work, const MKL_INT *lwork,
                           MKL_INT *info) {
-    FNAME(sgetri)(m, a, lda, ipiv, work, lwork, info);
+    LFNAME(sgetri)(m, a, lda, ipiv, work, lwork, info);
 }
 
 template <typename FL>
@@ -574,7 +608,7 @@ inline void xgesvd<double>(const char *jobu, const char *jobvt,
                            const MKL_INT *lda, double *s, double *u,
                            const MKL_INT *ldu, double *vt, const MKL_INT *ldvt,
                            double *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dgesvd)
+    LFNAME(dgesvd)
     (jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
 }
 template <>
@@ -583,7 +617,7 @@ inline void xgesvd<float>(const char *jobu, const char *jobvt, const MKL_INT *m,
                           float *s, float *u, const MKL_INT *ldu, float *vt,
                           const MKL_INT *ldvt, float *work,
                           const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sgesvd)
+    LFNAME(sgesvd)
     (jobu, jobvt, m, n, a, lda, s, u, ldu, vt, ldvt, work, lwork, info);
 }
 
@@ -596,14 +630,14 @@ template <>
 inline void xsyev<double>(const char *jobz, const char *uplo, const MKL_INT *n,
                           double *a, const MKL_INT *lda, double *w,
                           double *work, const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dsyev)(jobz, uplo, n, a, lda, w, work, lwork, info);
+    LFNAME(dsyev)(jobz, uplo, n, a, lda, w, work, lwork, info);
 }
 
 template <>
 inline void xsyev<float>(const char *jobz, const char *uplo, const MKL_INT *n,
                          float *a, const MKL_INT *lda, float *w, float *work,
                          const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(ssyev)(jobz, uplo, n, a, lda, w, work, lwork, info);
+    LFNAME(ssyev)(jobz, uplo, n, a, lda, w, work, lwork, info);
 }
 
 template <typename FL>
@@ -617,7 +651,7 @@ inline void xgels<double>(const char *trans, const MKL_INT *m, const MKL_INT *n,
                           const MKL_INT *nrhs, double *a, const MKL_INT *lda,
                           double *b, const MKL_INT *ldb, double *work,
                           const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(dgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
+    LFNAME(dgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
 }
 
 template <>
@@ -625,7 +659,7 @@ inline void xgels<float>(const char *trans, const MKL_INT *m, const MKL_INT *n,
                          const MKL_INT *nrhs, float *a, const MKL_INT *lda,
                          float *b, const MKL_INT *ldb, float *work,
                          const MKL_INT *lwork, MKL_INT *info) {
-    FNAME(sgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
+    LFNAME(sgels)(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info);
 }
 
 template <typename FL>
@@ -647,7 +681,7 @@ inline void xgeev<double>(const char *jobvl, const char *jobvr,
                           double *w, double *vl, const MKL_INT *ldvl,
                           double *vr, const MKL_INT *ldvr, double *work,
                           const MKL_INT *lwork, double *rwork, MKL_INT *info) {
-    FNAME(dgeev)
+    LFNAME(dgeev)
     (jobvl, jobvr, n, a, lda, w, rwork, vl, ldvl, vr, ldvr, work, lwork, info);
 }
 
@@ -658,7 +692,7 @@ inline void xgeev<float>(const char *jobvl, const char *jobvr, const MKL_INT *n,
                          const MKL_INT *ldvl, float *vr, const MKL_INT *ldvr,
                          float *work, const MKL_INT *lwork, float *rwork,
                          MKL_INT *info) {
-    FNAME(sgeev)
+    LFNAME(sgeev)
     (jobvl, jobvr, n, a, lda, w, rwork, vl, ldvl, vr, ldvr, work, lwork, info);
 }
 

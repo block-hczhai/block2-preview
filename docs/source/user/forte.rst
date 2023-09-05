@@ -1,7 +1,7 @@
 
 .. highlight:: bash
 
-.. _user_open_molcas:
+.. _user_forte:
 
 DMRGSCF (forte)
 ====================

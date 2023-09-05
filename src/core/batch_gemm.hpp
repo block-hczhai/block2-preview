@@ -185,11 +185,15 @@ inline void threaded_xgemm_batch(
         const char *tra =
             TransA_Array[ig] == CblasNoTrans
                 ? "n"
-                : (TransA_Array[ig] == CblasConjTrans ? "c" : "t");
+                : (TransA_Array[ig] == CblasConjTrans
+                       ? "c"
+                       : (TransA_Array[ig] == CblasTrans ? "t" : "x"));
         const char *trb =
             TransB_Array[ig] == CblasNoTrans
                 ? "n"
-                : (TransB_Array[ig] == CblasConjTrans ? "c" : "t");
+                : (TransB_Array[ig] == CblasConjTrans
+                       ? "c"
+                       : (TransB_Array[ig] == CblasTrans ? "t" : "x"));
         const MKL_INT m = M_Array[ig], n = N_Array[ig], k = K_Array[ig];
         const FL alpha = alpha_Array[ig], beta = beta_Array[ig];
         const MKL_INT lda = lda_Array[ig], ldb = ldb_Array[ig],
@@ -210,12 +214,18 @@ single_xgemm(const CBLAS_LAYOUT Layout, const CBLAS_TRANSPOSE *TransA_Array,
              const MKL_INT *ldc_Array, const MKL_INT *group_size,
              FL scale = 1.0) {
     const MKL_INT ig = 0, i = 0;
-    const char *tra = TransA_Array[ig] == CblasNoTrans
-                          ? "n"
-                          : (TransA_Array[ig] == CblasConjTrans ? "c" : "t");
-    const char *trb = TransB_Array[ig] == CblasNoTrans
-                          ? "n"
-                          : (TransB_Array[ig] == CblasConjTrans ? "c" : "t");
+    const char *tra =
+        TransA_Array[ig] == CblasNoTrans
+            ? "n"
+            : (TransA_Array[ig] == CblasConjTrans
+                   ? "c"
+                   : (TransA_Array[ig] == CblasTrans ? "t" : "x"));
+    const char *trb =
+        TransB_Array[ig] == CblasNoTrans
+            ? "n"
+            : (TransB_Array[ig] == CblasConjTrans
+                   ? "c"
+                   : (TransB_Array[ig] == CblasTrans ? "t" : "x"));
     const MKL_INT m = M_Array[ig], n = N_Array[ig], k = K_Array[ig];
     const FL alpha = alpha_Array[ig] * scale, beta = beta_Array[ig];
     const MKL_INT lda = lda_Array[ig], ldb = ldb_Array[ig], ldc = ldc_Array[ig];
@@ -279,11 +289,16 @@ template <typename FL> struct BatchGEMM {
     void xgemm_group(uint8_t conja, uint8_t conjb, MKL_INT m, MKL_INT n,
                      MKL_INT k, FL alpha, MKL_INT lda, MKL_INT ldb, FL beta,
                      MKL_INT ldc, MKL_INT gc) {
-        ta.push_back(conja == 3 ? CblasConjTrans
-                                : (conja ? CblasTrans : CblasNoTrans));
-        tb.push_back(conjb == 3 ? CblasConjTrans
-                                : (conjb ? CblasTrans : CblasNoTrans));
-        assert(lda >= (conja ? m : k) && ldb >= (conjb ? k : n) && ldc >= n);
+        ta.push_back(conja == 3
+                         ? CblasConjTrans
+                         : (conja == 2 ? (CBLAS_TRANSPOSE)(CblasConjTrans + 1)
+                                       : (conja ? CblasTrans : CblasNoTrans)));
+        tb.push_back(conjb == 3
+                         ? CblasConjTrans
+                         : (conjb == 2 ? (CBLAS_TRANSPOSE)(CblasConjTrans + 1)
+                                       : (conjb ? CblasTrans : CblasNoTrans)));
+        assert(lda >= ((conja & 1) ? m : k) && ldb >= ((conjb & 1) ? k : n) &&
+               ldc >= n);
         this->m.push_back(m), this->n.push_back(n), this->k.push_back(k);
         this->alpha.push_back(alpha), this->beta.push_back(beta);
         this->lda.push_back(lda), this->ldb.push_back(ldb),
@@ -313,25 +328,32 @@ template <typename FL> struct BatchGEMM {
     // [c] = [a] x [b]
     void multiply(const GMatrix<FL> &a, uint8_t conja, const GMatrix<FL> &b,
                   uint8_t conjb, const GMatrix<FL> &c, FL scale, FL cfactor) {
+#ifndef _HAS_BLIS
         assert(conja != 2 && conjb != 2);
-        this->xgemm(conja, conjb, c.m, conjb ? b.m : b.n, conjb ? b.n : b.m,
-                    scale, a.data, a.n, b.data, b.n, cfactor, c.data, c.n);
+#endif
+        this->xgemm(conja, conjb, c.m, (conjb & 1) ? b.m : b.n,
+                    (conjb & 1) ? b.n : b.m, scale, a.data, a.n, b.data, b.n,
+                    cfactor, c.data, c.n);
     }
     // Execute DGEMM operation groups from index ii to ii + nn
     void perform(MKL_INT ii = 0, MKL_INT kk = 0, MKL_INT nn = 0) {
         if (nn != 0 || gp.size() != 0) {
+#ifndef _HAS_BLIS
             if (threading->type & ThreadingTypes::Quanta)
+#endif
                 threaded_xgemm_batch<FL>(
                     layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
                     &alpha[ii], &a[kk], &lda[ii], &b[kk], &ldb[ii], &beta[ii],
                     &c[kk], &ldc[ii], nn == 0 ? (MKL_INT)gp.size() : nn,
                     &gp[ii]);
+#ifndef _HAS_BLIS
             else
                 cblas_xgemm_batch<FL>(
                     layout, &ta[ii], &tb[ii], &m[ii], &n[ii], &k[ii],
                     &alpha[ii], &a[kk], &lda[ii], &b[kk], &ldb[ii], &beta[ii],
                     &c[kk], &ldc[ii], nn == 0 ? (MKL_INT)gp.size() : nn,
                     &gp[ii]);
+#endif
         }
     }
     inline void perform_single(MKL_INT ii, const FL *a, const FL *b, FL *c,
@@ -563,8 +585,11 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
                          const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
                          const GMatrix<FL> &c, FL scale, FL cfactor) {
+#ifndef _HAS_BLIS
         if (conja != 2 && conjb != 2)
+#endif
             batch->multiply(a, conja, b, conjb, c, scale, cfactor);
+#ifndef _HAS_BLIS
         else if (conja == 2 && conjb != 2) {
             batch->xgemm_group(3, conjb, 1, (conjb & 1) ? b.m : b.n,
                                (conjb & 1) ? b.n : b.m, scale, 1, b.n, cfactor,
@@ -580,6 +605,7 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
         } else {
             assert(false);
         }
+#endif
     }
     // [c] = [a] * (scalar b) or [c] = (scalar a) * [b] or [c] = [a] \otimes [b]
     static void tensor_product(const shared_ptr<BatchGEMM<FL>> &batch,
@@ -807,7 +833,11 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
     }
     static void post_three_rotate(const shared_ptr<BatchGEMM<FL>> &batch,
                                   uint8_t x) {
+#ifndef _HAS_BLIS
         batch->acidxs.push_back(x);
+#else
+        batch->acidxs.push_back(0);
+#endif
     }
 };
 

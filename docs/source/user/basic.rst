@@ -1,8 +1,10 @@
 
 .. highlight:: bash
 
-Basic Usage
-===========
+.. _user_basic:
+
+Input File: Basic Usage
+=======================
 
 In this documentation, we explain how to use ``block2`` as an "executable".
 The input parameters are provided in a formatted input file.

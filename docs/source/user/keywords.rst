@@ -1,8 +1,10 @@
 
 .. highlight:: bash
 
-Keywords
-========
+.. _user_keywords:
+
+Input File: Keywords
+====================
 
 In this section we provide a complete list of allowed keywords for the input file used
 in ``block2main`` with a short description for each keyword.

@@ -36,6 +36,10 @@
 #endif
 #include "mkl.h"
 #endif
+#ifdef _HAS_BLIS
+#define BLIS_DISABLE_BLAS_DEFS
+#include "blis/blis.h"
+#endif
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -177,6 +181,14 @@ struct Threading {
         return false;
 #endif
     }
+    /** Whether BLIS math library is used. */
+    bool blis_available() const {
+#ifdef _HAS_BLIS
+        return true;
+#else
+        return false;
+#endif
+    }
     /** Whether complex number extension is used. */
     bool complex_available() const {
 #ifdef _USE_COMPLEX
@@ -266,6 +278,9 @@ struct Threading {
      * @return Number of threads for general tasks.
      *   Returns 1 if openMP should not be used for a general task. */
     int activate_global() const {
+#ifdef _HAS_BLIS
+        bli_thread_set_num_threads(1);
+#endif
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(1);
 #endif
@@ -284,6 +299,13 @@ struct Threading {
 #ifdef _OPENMP
         omp_set_num_threads(1);
 #endif
+#ifdef _HAS_BLIS
+        bli_thread_set_num_threads(n_threads_global != 0 ? n_threads_global
+                                                         : 1);
+        return n_threads_global != 0 ? n_threads_global : 1;
+#else
+        return 1;
+#endif
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n_threads_global != 0 ? n_threads_global : 1);
         return n_threads_global != 0 ? n_threads_global : 1;
@@ -300,6 +322,9 @@ struct Threading {
      * @return Number of threads for parallelism over renormalized operators.
      */
     int activate_operator() const {
+#ifdef _HAS_BLIS
+        bli_thread_set_num_threads(n_threads_mkl != 0 ? n_threads_mkl : 1);
+#endif
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n_threads_mkl != 0 ? n_threads_mkl : 1);
 #endif
@@ -314,9 +339,15 @@ struct Threading {
      * @return Number of threads for parallelism over symmetry sectors.
      */
     int activate_quanta() const {
+#ifdef _HAS_BLIS
+        bli_thread_set_num_threads(n_threads_mkl != 0 ? n_threads_mkl : 1);
+        const int nt = max(n_threads_quanta, n_threads_op);
+#else
+        const int nt = n_threads_quanta;
+#endif
 #ifdef _OPENMP
-        omp_set_num_threads(n_threads_quanta != 0 ? n_threads_quanta : 1);
-        return n_threads_quanta != 0 ? n_threads_quanta : 1;
+        omp_set_num_threads(nt != 0 ? nt : 1);
+        return nt != 0 ? nt : 1;
 #else
         return 1;
 #endif
@@ -343,6 +374,10 @@ struct Threading {
         type = type | ThreadingTypes::BatchedGEMM;
 #else
         n_threads_mkl = 0;
+#endif
+#ifdef _HAS_BLIS
+        if (n_threads_mkl != 0)
+            bli_thread_set_num_threads(n_threads_mkl);
 #endif
 #ifdef _OPENMP
 #ifndef _MSC_VER
@@ -428,6 +463,9 @@ struct Threading {
         assert(n_threads_global != -1 && n_threads_op != -1 &&
                n_threads_quanta != -1 && n_threads_mkl != -1);
         if (type & ThreadingTypes::BatchedGEMM) {
+#ifdef _HAS_BLIS
+            bli_thread_set_num_threads(n_threads_mkl);
+#endif
 #ifdef _HAS_INTEL_MKL
             mkl_set_num_threads(n_threads_mkl);
             mkl_set_dynamic(0);
@@ -467,6 +505,7 @@ struct Threading {
     friend ostream &operator<<(ostream &os, const Threading &th) {
         os << " OpenMP = " << th.openmp_available()
            << " TBB = " << th.tbb_available()
+           << " BLIS = " << th.blis_available()
            << " MKL = " << th.get_mkl_threading_type() << " "
            << th.get_mkl_version() << " SeqType = " << th.get_seq_type()
            << " MKLIntLen = " << sizeof(MKL_INT) << endl;
