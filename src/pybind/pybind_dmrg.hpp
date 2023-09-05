@@ -2237,12 +2237,6 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("IJ", ParallelSimpleTypes::IJ)
         .value("KL", ParallelSimpleTypes::KL);
 
-    py::enum_<ElemOpTypes>(m, "ElemOpTypes", py::arithmetic())
-        .value("SU2", ElemOpTypes::SU2)
-        .value("SZ", ElemOpTypes::SZ)
-        .value("SGF", ElemOpTypes::SGF)
-        .value("SGB", ElemOpTypes::SGB);
-
     py::enum_<MPOAlgorithmTypes>(m, "MPOAlgorithmTypes", py::arithmetic())
         .value("Nothing", MPOAlgorithmTypes::None)
         .value("Bipartite", MPOAlgorithmTypes::Bipartite)

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include "general_symm_permutation.hpp"
 #include "integral.hpp"
 #include "spin_permutation.hpp"
 #include <array>
@@ -38,7 +39,7 @@ using namespace std;
 
 namespace block2 {
 
-enum struct ElemOpTypes : uint8_t { SU2, SZ, SGF, SGB };
+enum struct ElemOpTypes : uint8_t { SU2, SZ, SGF, SGB, SAny };
 
 template <typename FL> struct GeneralFCIDUMP {
     typedef decltype(abs((FL)0.0)) FP;
@@ -312,24 +313,15 @@ template <typename FL> struct GeneralFCIDUMP {
             return r;
         }
     };
+    template <typename T, typename FLX>
     shared_ptr<GeneralFCIDUMP>
-    adjust_order(const vector<shared_ptr<SpinPermScheme>> &schemes =
-                     vector<shared_ptr<SpinPermScheme>>(),
-                 bool merge = true, bool is_drt = false,
-                 FP cutoff = (FP)0.0) const {
-        vector<shared_ptr<SpinPermScheme>> psch = schemes;
-        if (psch.size() < exprs.size()) {
-            psch.resize(exprs.size(), nullptr);
-            for (size_t ix = 0; ix < exprs.size(); ix++)
-                psch[ix] = make_shared<SpinPermScheme>(
-                    exprs[ix], elem_type == ElemOpTypes::SU2,
-                    elem_type != ElemOpTypes::SGB, false, is_drt);
-        }
+    adjust_order_impl(const vector<shared_ptr<T>> &schemes, bool merge = true,
+                      bool is_drt = false, FP cutoff = (FP)0.0) const {
         unordered_map<string, int> r_str_mp;
         vector<vector<uint16_t>> r_indices;
         vector<vector<FL>> r_data;
         for (size_t ix = 0; ix < exprs.size(); ix++) {
-            shared_ptr<SpinPermScheme> scheme = psch[ix];
+            shared_ptr<T> scheme = schemes[ix];
             unordered_map<vector<uint16_t>, int, vector_uint16_hasher>
                 idx_pattern_mp;
             vector<unordered_map<vector<uint16_t>, int, vector_uint16_hasher>>
@@ -381,7 +373,7 @@ template <typename FL> struct GeneralFCIDUMP {
             if (r_data.size() < r_str_mp.size())
                 r_data.resize(r_str_mp.size());
             for (size_t ip = 0; ip < idx_patidx.size(); ip++) {
-                vector<pair<double, string>> &strd =
+                const vector<pair<FLX, string>> &strd =
                     scheme->data[idx_pats[ip].first].at(idx_pats[ip].second);
                 for (auto i : idx_patidx[ip]) {
                     idx_pat = vector<uint16_t>(indices[ix].begin() + i,
@@ -395,7 +387,7 @@ template <typename FL> struct GeneralFCIDUMP {
                         iridx.insert(iridx.end(), idx_pat.begin(),
                                      idx_pat.end());
                         irdata.push_back((FL)(data[ix][nn == 0 ? i : i / nn] *
-                                              (FL)(FP)strd[j].first));
+                                              (FL)strd[j].first));
                     }
                 }
             }
@@ -423,6 +415,46 @@ template <typename FL> struct GeneralFCIDUMP {
         if (merge)
             r->merge_terms(cutoff);
         return r;
+    }
+    shared_ptr<GeneralFCIDUMP> adjust_order(bool merge = true,
+                                            bool is_drt = false,
+                                            FP cutoff = (FP)0.0) const {
+        if (elem_type == ElemOpTypes::SAny)
+            return adjust_order(vector<shared_ptr<GeneralSymmPermScheme<FL>>>(),
+                                merge, is_drt, cutoff);
+        else
+            return adjust_order(vector<shared_ptr<SpinPermScheme>>(), merge,
+                                is_drt, cutoff);
+    }
+    shared_ptr<GeneralFCIDUMP>
+    adjust_order(const vector<shared_ptr<SpinPermScheme>> &schemes,
+                 bool merge = true, bool is_drt = false,
+                 FP cutoff = (FP)0.0) const {
+        vector<shared_ptr<SpinPermScheme>> psch = schemes;
+        if (psch.size() < exprs.size()) {
+            psch.resize(exprs.size(), nullptr);
+            for (size_t ix = 0; ix < exprs.size(); ix++)
+                psch[ix] = make_shared<SpinPermScheme>(
+                    exprs[ix], elem_type == ElemOpTypes::SU2,
+                    elem_type != ElemOpTypes::SGB, false, is_drt);
+        }
+        return adjust_order_impl<SpinPermScheme, double>(psch, merge, is_drt,
+                                                         cutoff);
+    }
+    shared_ptr<GeneralFCIDUMP>
+    adjust_order(const vector<shared_ptr<GeneralSymmPermScheme<FL>>> &schemes,
+                 bool merge = true, bool is_drt = false,
+                 FP cutoff = (FP)0.0) const {
+        vector<shared_ptr<GeneralSymmPermScheme<FL>>> psch = schemes;
+        vector<shared_ptr<AnyCG<FL>>> cgs(1, make_shared<AnySO3RSHCG<FL>>());
+        if (psch.size() < exprs.size()) {
+            psch.resize(exprs.size(), nullptr);
+            for (size_t ix = 0; ix < exprs.size(); ix++)
+                psch[ix] = make_shared<GeneralSymmPermScheme<FL>>(
+                    exprs[ix], cgs, false, is_drt);
+        }
+        return adjust_order_impl<GeneralSymmPermScheme<FL>, FL>(psch, merge,
+                                                                is_drt, cutoff);
     }
     void merge_terms(FP cutoff = (FP)0.0) {
         vector<size_t> idx;
@@ -512,6 +544,23 @@ template <typename FL> struct GeneralFCIDUMP {
             }
         }
         return os;
+    }
+    static shared_ptr<GeneralFCIDUMP> add(const shared_ptr<GeneralFCIDUMP> &a,
+                                          const shared_ptr<GeneralFCIDUMP> &b) {
+        shared_ptr<GeneralFCIDUMP> r =
+            make_shared<GeneralFCIDUMP>(a->elem_type);
+        assert(a->elem_type == b->elem_type);
+        r->const_e = a->const_e + b->const_e;
+        r->params = a->params;
+        r->exprs = a->exprs;
+        r->indices = a->indices;
+        r->data = a->data;
+        r->exprs.insert(r->exprs.end(), b->exprs.begin(), b->exprs.end());
+        r->indices.insert(r->indices.end(), b->indices.begin(),
+                          b->indices.end());
+        r->data.insert(r->data.end(), b->data.begin(), b->data.end());
+        r->order_adjusted = a->order_adjusted && b->order_adjusted;
+        return r;
     }
 };
 

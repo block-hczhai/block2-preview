@@ -1801,6 +1801,13 @@ template <typename S = void> void bind_types(py::module &m) {
         .def(py::self & py::self)
         .def(py::self ^ py::self);
 
+    py::enum_<ElemOpTypes>(m, "ElemOpTypes", py::arithmetic())
+        .value("SU2", ElemOpTypes::SU2)
+        .value("SZ", ElemOpTypes::SZ)
+        .value("SGF", ElemOpTypes::SGF)
+        .value("SGB", ElemOpTypes::SGB)
+        .value("SAny", ElemOpTypes::SAny);
+
     py::bind_vector<vector<pair<SpinOperator, uint16_t>>>(
         m, "VectorPSpinOpUInt16");
 }
@@ -2267,6 +2274,22 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("get_split_index", &SpinPermPattern::get_split_index)
         .def("to_str", &SpinPermPattern::to_str);
 
+    py::class_<GeneralSymmPermPattern, shared_ptr<GeneralSymmPermPattern>>(
+        m, "GeneralSymmPermPattern")
+        .def_readwrite("n", &GeneralSymmPermPattern::n)
+        .def_readwrite("mask", &GeneralSymmPermPattern::mask)
+        .def_readwrite("data", &GeneralSymmPermPattern::data)
+        .def(py::init<uint16_t>())
+        .def(py::init<uint16_t, const vector<uint16_t> &>())
+        .def_static("all_reordering", &GeneralSymmPermPattern::all_reordering,
+                    py::arg("x"), py::arg("mask") = vector<uint16_t>())
+        .def_static("initialize", &GeneralSymmPermPattern::initialize,
+                    py::arg("n"), py::arg("mask") = vector<uint16_t>())
+        .def("count", &GeneralSymmPermPattern::count)
+        .def("__getitem__", &GeneralSymmPermPattern::operator[])
+        .def("get_split_index", &GeneralSymmPermPattern::get_split_index)
+        .def("to_str", &GeneralSymmPermPattern::to_str);
+
     py::class_<SpinPermScheme, shared_ptr<SpinPermScheme>>(m, "SpinPermScheme")
         .def(py::init<>())
         .def(py::init<string>())
@@ -2423,9 +2446,13 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
         .def("__repr__", &GeneralSymmTensor<FL>::to_str)
         .def_static("get_level", &GeneralSymmTensor<FL>::get_level)
         .def_static("get_quanta", &GeneralSymmTensor<FL>::get_quanta)
+        .def_static("count_cds", &GeneralSymmTensor<FL>::count_cds)
         .def_static("parse_expr_angular",
                     &GeneralSymmTensor<FL>::parse_expr_angular, py::arg("expr"),
                     py::arg("idxs"), py::arg("cgs"), py::arg("ii") = 0)
+        .def_static("parse_expr_angular_expr",
+                    &GeneralSymmTensor<FL>::parse_expr_angular_expr,
+                    py::arg("expr"), py::arg("idxs"), py::arg("ii") = 0)
         .def(py::self * FL())
         .def(py::self + py::self)
         .def(py::self - py::self)
@@ -2469,13 +2496,54 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
             },
             py::arg("data"),
             py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
+        .def(
+            "reduce_expr",
+            [](GeneralSymmExpr<FL> *self, py::array_t<FL> reduced_data,
+               typename GeneralSymmExpr<FL>::FP cutoff)
+                -> shared_ptr<GeneralFCIDUMP<FL>> {
+                shared_ptr<GeneralFCIDUMP<FL>> r =
+                    make_shared<GeneralFCIDUMP<FL>>();
+                r->elem_type = ElemOpTypes::SAny;
+                self->reduce_expr(reduced_data.data(), r->exprs, r->indices,
+                                  r->data, cutoff);
+                return r;
+            },
+            py::arg("reduced_data"),
+            py::arg("cutoff") = (typename GeneralSymmExpr<FL>::FP)1E-12)
         .def("to_str", &GeneralSymmExpr<FL>::to_str)
         .def("__repr__", &GeneralSymmExpr<FL>::to_str);
 
     py::class_<GeneralSymmRecoupling<FL>,
                shared_ptr<GeneralSymmRecoupling<FL>>>(
         m, ("GeneralSymmRecoupling" + name).c_str())
-        .def_static("recouple", &GeneralSymmRecoupling<FL>::recouple);
+        .def_static("recouple", &GeneralSymmRecoupling<FL>::recouple)
+        .def_static("exchange", &GeneralSymmRecoupling<FL>::exchange)
+        .def_static("sort_indices", &GeneralSymmRecoupling<FL>::sort_indices)
+        .def_static("recouple_split",
+                    &GeneralSymmRecoupling<FL>::recouple_split);
+
+    py::class_<GeneralSymmPermScheme<FL>,
+               shared_ptr<GeneralSymmPermScheme<FL>>>(m,
+                                                      "GeneralSymmPermScheme")
+        .def(py::init<>())
+        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &>())
+        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool>())
+        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool,
+                      bool>())
+        .def_readwrite("index_patterns",
+                       &GeneralSymmPermScheme<FL>::index_patterns)
+        .def_readwrite("data", &GeneralSymmPermScheme<FL>::data)
+        .def_readwrite("mask", &GeneralSymmPermScheme<FL>::mask)
+        .def_readwrite("targets", &GeneralSymmPermScheme<FL>::targets)
+        .def_readwrite("cgs", &GeneralSymmPermScheme<FL>::cgs)
+        .def_static("initialize", &GeneralSymmPermScheme<FL>::initialize,
+                    py::arg("nn"), py::arg("spin_str"), py::arg("cgs"),
+                    py::arg("is_npdm") = true, py::arg("is_drt") = false,
+                    py::arg("mask") = vector<uint16_t>())
+        .def("to_str", &GeneralSymmPermScheme<FL>::to_str);
+
+    py::bind_vector<vector<shared_ptr<GeneralSymmPermScheme<FL>>>>(
+        m, "VectorGeneralSymmPermScheme");
 }
 
 template <typename FL> void bind_fl_io(py::module &m, const string &name) {
@@ -3597,9 +3665,27 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                     &GeneralFCIDUMP<FL>::initialize_from_qc, py::arg("fcidump"),
                     py::arg("elem_type"),
                     py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
-        .def("adjust_order", &GeneralFCIDUMP<FL>::adjust_order,
-             py::arg("schemes") = vector<shared_ptr<SpinPermScheme>>(),
+        .def("adjust_order",
+             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+                 bool, bool, typename GeneralFCIDUMP<FL>::FP) const) &
+                 GeneralFCIDUMP<FL>::adjust_order,
              py::arg("merge") = true, py::arg("is_drt") = false,
+             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("adjust_order",
+             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+                 const vector<shared_ptr<SpinPermScheme>> &, bool, bool,
+                 typename GeneralFCIDUMP<FL>::FP) const) &
+                 GeneralFCIDUMP<FL>::adjust_order,
+             py::arg("schemes"), py::arg("merge") = true,
+             py::arg("is_drt") = false,
+             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("adjust_order",
+             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+                 const vector<shared_ptr<GeneralSymmPermScheme<FL>>> &, bool,
+                 bool, typename GeneralFCIDUMP<FL>::FP) const) &
+                 GeneralFCIDUMP<FL>::adjust_order,
+             py::arg("schemes"), py::arg("merge") = true,
+             py::arg("is_drt") = false,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("merge_terms", &GeneralFCIDUMP<FL>::merge_terms,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
@@ -3611,6 +3697,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                                &GeneralFCIDUMP<FL>::template orb_sym<uint8_t>)
         .def_property_readonly("orb_sym_lz",
                                &GeneralFCIDUMP<FL>::template orb_sym<int16_t>)
+        .def("__add__", &GeneralFCIDUMP<FL>::add)
         .def("__repr__", [](GeneralFCIDUMP<FL> *self) {
             stringstream ss;
             ss << *self;

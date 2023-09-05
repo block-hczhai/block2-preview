@@ -36,8 +36,12 @@ class SymmetryTypes(IntFlag):
     SAnySGFCPX = 64 | 16 | 4
     SO4 = 128
     PHSU2 = 256
+    SO3 = 512
+    LZ = 1024
     SAnySO4 = 64 | 128
     SAnyPHSU2 = 64 | 256
+    SAnySO3 = 64 | 512
+    SAnyLZ = 64 | 1024
 
 
 class ParallelTypes(IntFlag):
@@ -227,12 +231,23 @@ class Block2Wrapper:
             self.bcs = self.bc.sany if self.bc is not None else None
             self.brs = b.sany
             self.SX = self.SXT = b.SAny
-            if SymmetryTypes.SU2 in symm_type:
+            if SymmetryTypes.SU2 in symm_type or SymmetryTypes.SO3 in symm_type:
                 self.SX = b.SAny.init_su2
             elif SymmetryTypes.SZ in symm_type:
                 self.SX = b.SAny.init_sz
             elif SymmetryTypes.SGF in symm_type:
                 self.SX = b.SAny.init_sgf
+            elif SymmetryTypes.LZ in symm_type:
+
+                def init_lz(n, lz):
+                    q = self.SXT()
+                    q.types[0] = self.b.SAnySymmTypes.U1Fermi
+                    q.types[1] = self.b.SAnySymmTypes.LZ
+                    q.values[0] = n
+                    q.values[1] = lz
+                    return q
+
+                self.SX = init_lz
             elif SymmetryTypes.SO4 in symm_type:
 
                 def init_so4(n, twos, nh=None, twosh=None):
@@ -623,6 +638,7 @@ class DMRGDriver:
                 SymmetryTypes.SU2 not in bw.symm_type
                 and SymmetryTypes.PHSU2 not in bw.symm_type
                 and SymmetryTypes.SO4 not in bw.symm_type
+                and SymmetryTypes.SO3 not in bw.symm_type
             ) or heis_twos != -1:
                 singlet_embedding = False
             if SymmetryTypes.SO4 in bw.symm_type:
@@ -643,6 +659,20 @@ class DMRGDriver:
                 else:
                     self.target = bw.SX(abs(n_elec - n_sites), spin)
                     self.left_vacuum = bw.SX(0, 0)
+            elif SymmetryTypes.SO3 in bw.symm_type:
+                self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
+                if singlet_embedding:
+                    assert heis_twosz == 0
+                    self.target = bw.SX(n_elec, 0, 0)
+                    self.left_vacuum = bw.SX(0, pg_irrep, 0)
+                else:
+                    self.target = bw.SX(n_elec, pg_irrep, 0)
+                    self.left_vacuum = self.vacuum
+            elif SymmetryTypes.LZ in bw.symm_type:
+                self.vacuum = bw.SX(0, 0) if vacuum is None else vacuum
+                assert heis_twosz == 0
+                self.target = bw.SX(n_elec, pg_irrep)
+                self.left_vacuum = self.vacuum
             else:
                 self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
                 if singlet_embedding:
@@ -672,6 +702,10 @@ class DMRGDriver:
                 self.ghamil = self.get_so4_hamiltonian()
             elif SymmetryTypes.PHSU2 in bw.symm_type:
                 self.ghamil = self.get_phsu2_hamiltonian()
+            elif SymmetryTypes.SO3 in bw.symm_type:
+                self.ghamil = self.get_so3_hamiltonian()
+            elif SymmetryTypes.LZ in bw.symm_type:
+                self.ghamil = self.get_lz_hamiltonian()
             elif pauli_mode:
                 self.ghamil = self.get_pauli_hamiltonian()
             else:
@@ -1069,6 +1103,196 @@ class DMRGDriver:
                     bz.deallocate()
 
         return PHSU2Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+
+    def get_so3_hamiltonian(self):
+        assert SymmetryTypes.SO3 in self.symm_type
+        GH = self.bw.bs.GeneralHamiltonian
+        super_self = self
+        import numpy as np
+
+        class SO3Hamiltonian(GH):
+            def __init__(self, vacuum, n_sites, orb_sym):
+                GH.__init__(self)
+                self.opf = super_self.bw.bs.OperatorFunctions(super_self.bw.brs.CG())
+                self.vacuum = vacuum
+                self.n_sites = n_sites
+                self.orb_sym = orb_sym
+                self.basis = super_self.bw.brs.VectorStateInfo(
+                    [self.get_site_basis(m) for m in range(self.n_sites)]
+                )
+                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo(
+                    [super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)]
+                )
+                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat(
+                    [super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)]
+                )
+                self.init_site_ops()
+
+            def get_site_basis(self, m):
+                """Single site states."""
+                bz = super_self.bw.brs.StateInfo()
+                if self.orb_sym[m] == 0:
+                    bz.allocate(2)
+                    bz.quanta[0] = super_self.bw.SX(0, 0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, 0, 0)
+                    bz.n_states[0] = bz.n_states[1] = 1
+                elif self.orb_sym[m] == 1:
+                    bz.allocate(4)
+                    bz.quanta[0] = super_self.bw.SX(0, 0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, 2, 0)
+                    bz.quanta[2] = super_self.bw.SX(2, 2, 0)
+                    bz.quanta[3] = super_self.bw.SX(3, 0, 0)
+                    bz.n_states[0] = bz.n_states[1] = 1
+                    bz.n_states[2] = bz.n_states[3] = 1
+                elif self.orb_sym[m] == 2:
+                    bz.allocate(8)
+                    bz.quanta[0] = super_self.bw.SX(0, 0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, 4, 0)
+                    bz.quanta[2] = super_self.bw.SX(2, 2, 0)
+                    bz.quanta[3] = super_self.bw.SX(2, 6, 0)
+                    bz.quanta[4] = super_self.bw.SX(3, 2, 0)
+                    bz.quanta[5] = super_self.bw.SX(3, 6, 0)
+                    bz.quanta[6] = super_self.bw.SX(4, 4, 0)
+                    bz.quanta[7] = super_self.bw.SX(5, 0, 0)
+                    bz.n_states[0] = bz.n_states[1] = 1
+                    bz.n_states[2] = bz.n_states[3] = 1
+                    bz.n_states[4] = bz.n_states[5] = 1
+                    bz.n_states[6] = bz.n_states[7] = 1
+                else:
+                    return NotImplemented
+                bz.sort_states()
+                return bz
+
+            def init_site_ops(self):
+                """Initialize operator quantum numbers at each site (site_op_infos)
+                and primitive (single character) site operators (site_norm_ops)."""
+                i_alloc = super_self.bw.b.IntVectorAllocator()
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                # site op infos
+                max_n, max_s = 20, 20
+                for m in range(self.n_sites):
+                    qs = {self.vacuum}
+                    for n in range(-max_n, max_n + 1, 1):
+                        for s in range(0, max_s + 1, 2):
+                            qs.add(super_self.bw.SX(n, s, 0))
+                    for q in sorted(qs):
+                        mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                        mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
+                        self.site_op_infos[m].append((q, mat))
+
+                # prim ops
+                for m in range(self.n_sites):
+                    l = self.orb_sym[m] * 2
+
+                    # ident
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
+                    mat.allocate(info)
+                    if l == 0:
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array([1.0])
+                    elif l == 2:
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 2, 2, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(2, 2, 2, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(3, 0, 0, 0))] = np.array([1.0])
+                    else:
+                        raise NotImplementedError()
+                    self.site_norm_ops[m][""] = mat
+
+                    # C
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(1, l, 0))
+                    mat.allocate(info)
+                    if l == 0:
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
+                    elif l == 2:
+                        mat[info.find_state(super_self.bw.SX(0, l, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, l, l, 0))] = np.array([2 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(2, 0, l, 0))] = np.array([3 ** 0.5])
+                    else:
+                        raise NotImplementedError()
+                    self.site_norm_ops[m]["C%d" % l] = mat
+
+                    # D
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(-1, l, 0))
+                    mat.allocate(info)
+                    if l == 0:
+                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array([1.0])
+                    elif l == 2:
+                        mat[info.find_state(super_self.bw.SX(1, 0, l, 0))] = np.array([3 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(2, l, l, 0))] = np.array([2 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(3, l, 0, 0))] = np.array([1.0])
+                    else:
+                        raise NotImplementedError()
+                    self.site_norm_ops[m]["D%d" % l] = mat
+
+            def get_site_string_op(self, m, expr):
+                """Construct longer site operators from primitive ones."""
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                if expr in self.site_norm_ops[m]:
+                    return self.site_norm_ops[m][expr]
+                l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
+                a = self.get_site_string_op(m, expr[l.left_idx : l.mid_idx - 1])
+                b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
+                idq = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
+                r = super_self.bw.bs.SparseMatrix(d_alloc)
+                dq = super_self.bw.SX(expr.count('C') - expr.count('D'), idq[0] if len(idq) != 0 else 0, 0)
+                r.allocate(self.find_site_op_info(m, dq))
+                self.opf.product(0, a, b, r)
+                self.site_norm_ops[m][expr] = r
+                return r
+
+            def init_string_quanta(self, exprs, term_l, left_vacuum):
+                rr = super_self.bw.VectorVectorSX()
+                for ix, expr in enumerate(exprs):
+                    r = super_self.bw.VectorSX(
+                        [super_self.bw.SX(0, 0, 0)] * (term_l[ix] + 1)
+                    )
+                    l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
+                    gr = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
+                    r[-1] = super_self.bw.SX(expr.count('C') - expr.count('D'), gr[0] if len(gr) != 0 else 0, 0)
+                    lacc, nacc = 0, 0
+                    while True:  # (.+(.+(.+.)0)0)0
+                        l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
+                        if l.right_idx == -1:
+                            break
+                        exprl, exprr = (
+                            expr[0 : l.mid_idx - 1],
+                            expr[l.mid_idx : l.right_idx - 1],
+                        )
+                        lacc += exprl.count('C') + exprl.count('D')
+                        nacc += exprl.count('C') - exprl.count('D')
+                        lr = super_self.bw.b.GeneralSymmTensor.get_level(exprr, 0)
+                        gr = super_self.bw.b.GeneralSymmTensor.get_quanta(exprr, lr)
+                        r[lacc] = super_self.bw.SX(nacc, gr[0] if len(gr) != 0 else 0, 0)
+                        expr = exprr
+                    rr.append(r)
+                return rr
+
+            def get_string_quanta(self, ref, expr, idxs, k):
+                """Quantum number for string operators (orbital dependent part)."""
+                return ref[k], ref[-1] - ref[k]
+
+            def get_string_quantum(self, expr, idxs):
+                """Total quantum number for a string operator."""
+                l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
+                g = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
+                return super_self.bw.SX(expr.count('C') - expr.count('D'), g[0] if len(g) != 0 else 0, 0)
+
+            def deallocate(self):
+                """Release memory."""
+                for ops in self.site_norm_ops:
+                    for p in ops.values():
+                        p.deallocate()
+                for infos in self.site_op_infos:
+                    for _, p in infos:
+                        p.deallocate()
+                for bz in self.basis:
+                    bz.deallocate()
+
+        return SO3Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
         bw = self.bw

@@ -30,7 +30,8 @@ def get_rhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
 
     if pg_symm and mol.symmetry:
         orb_sym = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, mo, tol=1e-2)
-        orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
+        if mol.groupname.upper() != 'SO3':
+            orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
         orb_sym = orb_sym[ncore : ncore + ncas]
     else:
         orb_sym = [0] * ncas
@@ -74,12 +75,14 @@ def get_uhf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         orb_syma = symm.label_orb_symm(
             mol, mol.irrep_name, mol.symm_orb, mo_a, tol=1e-2
         )
-        orb_syma = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_syma]
+        if mol.groupname.upper() != 'SO3':
+            orb_syma = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_syma]
         orb_syma = orb_syma[ncore : ncore + ncas]
         orb_symb = symm.label_orb_symm(
             mol, mol.irrep_name, mol.symm_orb, mo_b, tol=1e-2
         )
-        orb_symb = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_symb]
+        if mol.groupname.upper() != 'SO3':
+            orb_symb = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_symb]
         orb_symb = orb_symb[ncore : ncore + ncas]
         if orb_syma == orb_symb:
             orb_sym = orb_syma
@@ -136,7 +139,8 @@ def get_ghf_integrals(mf, ncore=0, ncas=None, pg_symm=True, g2e_symm=1):
         s = np.kron(np.eye(2, dtype=int), mol.intor_symmetric("int1e_ovlp"))
         symm_orb = [np.kron(np.eye(2, dtype=int), c) for c in mol.symm_orb]
         orb_sym = symm.label_orb_symm(mol, mol.irrep_name, symm_orb, mo, s=s, tol=1e-2)
-        orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
+        if mol.groupname.upper() != 'SO3':
+            orb_sym = [symm.irrep_name2id(mol.groupname, ir) for ir in orb_sym]
         orb_sym = orb_sym[ncore * 2 : ncore * 2 + ncas * 2]
     else:
         orb_sym = [0] * (ncas * 2)

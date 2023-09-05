@@ -188,13 +188,14 @@ struct SO3RSHCG : SU2CG {
         if (tm1 != tm2 && tm1 != -tm2)
             return 0.0;
         else if (tm1 == tm2)
-            return tm1 == 0 ? sqrtl(2.0)
-                            : (tm1 > 0 ? (long double)(1 - (tm1 & 2))
-                                       : complex<long double>(0.0, -1.0));
+            return tm1 == 0
+                       ? (long double)1.0
+                       : (tm1 > 0 ? (long double)(1 - (tm1 & 2)) * sqrtl(0.5)
+                                  : complex<long double>(0.0, -sqrtl(0.5)));
         else
-            return tm1 > 0
-                       ? complex<long double>(0.0, (long double)(1 - (tm1 & 2)))
-                       : (long double)1.0;
+            return tm1 > 0 ? complex<long double>(
+                                 0.0, (long double)(1 - (tm1 & 2)) * sqrtl(0.5))
+                           : sqrtl(0.5);
     }
     complex<long double> cg(int tja, int tjb, int tjc, int tma, int tmb,
                             int tmc) const {
@@ -252,7 +253,7 @@ template <typename FL> struct AnyCG {
     }
     virtual FL racah(int ta, int tb, int tc, int td, int te, int tf) const {
         int tmc = tc % 2;
-        FL r = 0.0;
+        FL r = (FL)0.0;
         for (int tma = -ta; tma <= ta; tma += 2)
             for (int tmb = -tb; tmb <= tb; tmb += 2)
                 for (int tmd = -td; tmd <= td; tmd += 2)
@@ -263,6 +264,9 @@ template <typename FL> struct AnyCG {
                                  cg(ta, tb, te, tma, tmb, tme) *
                                  cg(te, td, tc, tme, tmd, tmc);
         return r / sqrt((te + 1) * (tf + 1));
+    }
+    virtual FL phase(int ta, int tb, int tc) const {
+        return (FL)(1 - ((ta + tb - tc) & 2));
     }
 };
 

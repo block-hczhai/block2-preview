@@ -518,6 +518,120 @@ template <typename FL> struct GeneralSymmTensor {
                 break;
         return tjs;
     }
+    static int count_cds(const string &x) {
+        int ncd = 0;
+        for (auto &c : x)
+            if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
+                  (c >= '0' && c <= '9') || c == '[' || c == ']' || c == ','))
+                ncd++;
+        return ncd;
+    }
+    static map<vector<int>, string>
+    parse_expr_angular_expr(const string &expr, const vector<int16_t> &idxs,
+                            int ii = 0) {
+        Level l = get_level(expr, 0);
+        if (l.right_idx == -1) {
+            vector<int16_t> xjs = get_quanta(expr, l);
+            stringstream ss;
+            ss << expr[0] << (xjs.size() == 0 ? idxs[ii] * 2 : xjs[0]);
+            return map<vector<int>, string>{make_pair(vector<int>(), ss.str())};
+        } else {
+            string lexpr = expr.substr(l.left_idx, l.mid_idx - 1 - l.left_idx);
+            string rexpr = expr.substr(l.mid_idx, l.right_idx - 1 - l.mid_idx);
+            map<vector<int>, string> lm =
+                parse_expr_angular_expr(lexpr, idxs, ii);
+            map<vector<int>, string> rm =
+                parse_expr_angular_expr(rexpr, idxs, ii + l.left_cnt);
+            Level gl = get_level(lexpr, 0);
+            Level gr = get_level(rexpr, 0);
+            vector<int16_t> tjs = get_quanta(expr, l);
+            vector<int16_t> ltjs = get_quanta(lexpr, gl);
+            vector<int16_t> rtjs = get_quanta(rexpr, gr);
+            vector<int> mml(ltjs.size() + 1, 0), mmr(rtjs.size() + 1, 0);
+            int ixx, ix;
+            for (ix = 0, ixx = 0; ix < (int)ltjs.size(); ix++)
+                if (ltjs[ix] == -1)
+                    mml[ix] = ixx++;
+            mml[ltjs.size()] = ixx;
+            for (ix = 0, ixx = 0; ix < (int)rtjs.size(); ix++)
+                if (rtjs[ix] == -1)
+                    mmr[ix] = ixx++;
+            mmr[rtjs.size()] = ixx;
+            map<vector<int>, string> r;
+            for (const auto &xl : lm) {
+                vector<int16_t> xltjs =
+                    get_quanta(xl.second, get_level(xl.second, 0));
+                for (const auto &xr : rm) {
+                    vector<int16_t> xrtjs =
+                        get_quanta(xr.second, get_level(xr.second, 0));
+                    vector<pair<int16_t, int16_t>> mjs_sz;
+                    size_t tot_sz = 1;
+                    for (size_t it = 0; it < tjs.size(); it++)
+                        if (tjs[it] == -1) {
+                            int16_t ixl = xltjs[it], ixr = xrtjs[it];
+                            mjs_sz.push_back(
+                                make_pair(abs(ixl - ixr), ixl + ixr));
+                            tot_sz *= (ixl + ixr - abs(ixl - ixr)) / 2 + 1;
+                        }
+                    for (size_t ix = 0, im, ixx; ix < tot_sz; ix++) {
+                        ixx = ix;
+                        vector<int16_t> xtjs = tjs;
+                        vector<int> rkl = xl.first, rkr = xr.first, rk;
+                        bool okay = true;
+                        im = 0;
+                        for (size_t it = 0; it < xtjs.size(); it++)
+                            if (xtjs[it] != -1) {
+                                int16_t ixl = xltjs[it], ixr = xrtjs[it];
+                                if (!(xtjs[it] >= abs(ixl - ixr) &&
+                                      xtjs[it] <= ixl + ixr &&
+                                      ((xtjs[it] + ixl + ixr) & 1) == 0)) {
+                                    okay = false;
+                                    break;
+                                }
+                                if (xtjs[it] == 0) {
+                                    if (rtjs.size() != 0 && rtjs[it] == -1)
+                                        rkr[rkr.size() - mmr.back() + mmr[it]] =
+                                            -1;
+                                    else if (ltjs.size() != 0 && ltjs[it] == -1)
+                                        rkl[rkl.size() - mml.back() + mml[it]] =
+                                            -1;
+                                }
+                            } else {
+                                int16_t dm =
+                                    (mjs_sz[im].second - mjs_sz[im].first) / 2 +
+                                    1;
+                                xtjs[it] = ixx % dm * 2 + mjs_sz[im].first;
+                                rk.push_back(xtjs[it]);
+                                ixx /= dm;
+                                im++;
+                            }
+                        if (okay) {
+                            vector<int> rkk;
+                            for (int x : rkl)
+                                if (x != -1)
+                                    rkk.push_back(x);
+                            for (int x : rkr)
+                                if (x != -1)
+                                    rkk.push_back(x);
+                            rkk.insert(rkk.end(), rk.begin(), rk.end());
+                            stringstream ss;
+                            ss << "(" << xl.second << "+" << xr.second << ")";
+                            if (xtjs.size() == 1)
+                                ss << xtjs[0];
+                            else {
+                                ss << "[";
+                                for (size_t p = 0; p < xtjs.size(); p++)
+                                    ss << xtjs[p]
+                                       << (p == xtjs.size() - 1 ? "]" : ",");
+                            }
+                            r[rkk] = ss.str();
+                        }
+                    }
+                }
+            }
+            return r;
+        }
+    }
     static map<vector<int>, GeneralSymmTensor>
     parse_expr_angular(const string &expr, const vector<int16_t> &idxs,
                        const vector<shared_ptr<AnyCG<FL>>> &cgs, int ii = 0) {
@@ -789,6 +903,50 @@ template <typename FL> struct GeneralSymmExpr {
             }
         }
     }
+    void reduce_expr(const FL *reduced_data, vector<string> &exprs,
+                     vector<vector<uint16_t>> &indices,
+                     vector<vector<FL>> &idata, FP cutoff = (FP)1E-12) {
+        using T = GeneralSymmTensor<FL>;
+        map<char, vector<int>> site_idx_mp;
+        for (size_t ix = 0; ix < site_sym.size(); ix++)
+            site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
+        size_t ml_stride = 1, ml_size = 1;
+        int ml_len = data.size() == 0 ? 0 : (int)data[0].second[0].first.size();
+        for (int i = 0; i < n_ops; i++)
+            ml_stride *= (size_t)n_reduced_sites;
+        for (int i = 0; i < ml_len; i++)
+            ml_size *= (size_t)(max_l + max_l + 1);
+        vector<int16_t> ls(n_ops, 0);
+        vector<uint16_t> idx(n_ops, 0);
+        map<string, size_t> mp;
+        for (size_t it = 0; it < ml_stride; it++) {
+            size_t itv = it;
+            for (int il = 0; il < n_ops; il++) {
+                ls[n_ops - 1 - il] = (int16_t)site_sym[itv % n_reduced_sites];
+                idx[n_ops - 1 - il] = (uint16_t)(itv % n_reduced_sites);
+                itv /= n_reduced_sites;
+            }
+            auto pex = T::parse_expr_angular_expr(expr, ls);
+            for (const auto &mex : pex) {
+                size_t ipg = 0;
+                for (auto &mf : mex.first)
+                    ipg = ipg * (max_l + max_l + 1) + mf / 2;
+                ipg *= ml_stride;
+                if (abs(reduced_data[ipg + it]) <= cutoff)
+                    continue;
+                size_t ik =
+                    mp.count(mex.second) ? mp.at(mex.second) : exprs.size();
+                if (ik == exprs.size()) {
+                    mp[mex.second] = exprs.size();
+                    exprs.push_back(mex.second);
+                    indices.push_back(vector<uint16_t>());
+                    idata.push_back(vector<FL>());
+                }
+                indices[ik].insert(indices[ik].end(), idx.begin(), idx.end());
+                idata[ik].push_back(reduced_data[ipg + it]);
+            }
+        }
+    }
     string to_str() const {
         stringstream ss;
         ss << "N-SITES = " << n_sites << " -> " << n_reduced_sites
@@ -941,6 +1099,329 @@ template <typename FL> struct GeneralSymmRecoupling {
                 it++;
         }
         return v;
+    }
+    static map<string, FL> exchange(const map<string, FL> &x, int8_t n,
+                                    int8_t i,
+                                    const vector<shared_ptr<AnyCG<FL>>> &cgs) {
+        map<string, FL> r = x;
+        if (i != 0)
+            r = recouple(r, 0, i, cgs);
+        int8_t ii = i == 0 ? 0 : T::get_level(r.cbegin()->first, 0).mid_idx;
+        if (i + 2 < n)
+            r = recouple(r, ii, 2, cgs);
+        typename T::Level h = T::get_level(r.cbegin()->first, ii);
+        while (h.left_cnt != 1 || h.right_cnt != 1)
+            h = T::get_level(r.cbegin()->first, h.left_idx);
+        map<string, FL> rr;
+        for (const auto &mr : r) {
+            stringstream ss;
+            string lexpr =
+                mr.first.substr(h.left_idx, h.mid_idx - 1 - h.left_idx);
+            string rexpr =
+                mr.first.substr(h.mid_idx, h.right_idx - 1 - h.mid_idx);
+            ss << mr.first.substr(0, h.left_idx) << rexpr << '+' << lexpr
+               << mr.first.substr(h.right_idx - 1);
+            vector<int16_t> tjs = T::get_quanta(mr.first, h);
+            vector<int16_t> ltjs = T::get_quanta(lexpr, T::get_level(lexpr, 0));
+            vector<int16_t> rtjs = T::get_quanta(rexpr, T::get_level(rexpr, 0));
+            FL fx = mr.second * (FL)-1.0;
+            for (size_t j = 0; j < cgs.size(); j++)
+                fx *= cgs[j]->phase(ltjs[j], rtjs[j], tjs[j]);
+            if (abs(fx) >= 1E-12)
+                rr[ss.str()] = fx;
+        }
+        return rr;
+    }
+    static map<string, FL>
+    sort_indices(const map<string, FL> &x, const vector<uint16_t> &indices,
+                 const vector<shared_ptr<AnyCG<FL>>> &cgs) {
+        int16_t n = (int16_t)indices.size();
+        map<string, FL> r = x;
+        vector<uint16_t> idx = indices;
+        for (int16_t i = 0; i < n; i++)
+            for (int16_t j = n - 2; j >= i; j--)
+                if (idx[j] > idx[j + 1]) {
+                    r = exchange(r, n, j, cgs);
+                    swap(idx[j], idx[j + 1]);
+                }
+        return r;
+    }
+    static map<string, FL>
+    recouple_split(const map<string, FL> &x,
+                   const vector<uint16_t> &ref_indices, int split_idx,
+                   const vector<shared_ptr<AnyCG<FL>>> &cgs) {
+        int nn = ref_indices.size();
+        vector<uint16_t> ref_split_idx;
+        int ref_mid = -1;
+        for (int i = 1; i < nn; i++)
+            if (ref_indices[i] != ref_indices[i - 1]) {
+                ref_split_idx.push_back(i);
+                if (i == split_idx)
+                    ref_mid = (int)ref_split_idx.size() - 1;
+            }
+        if (ref_split_idx.size() == 0)
+            return x;
+        if (split_idx == nn)
+            ref_mid = (int)ref_split_idx.size() - 1;
+        map<string, FL> r = x;
+        if (split_idx != -1 && split_idx != -2) {
+            // handle npdm split
+            int ii = 0, ir = 0;
+            for (int i = ref_mid; i < (int)ref_split_idx.size(); i++) {
+                r = recouple(r, ii, ref_split_idx[i] - ir, cgs);
+                ii = T::get_level(r.begin()->first, ii).mid_idx;
+                ir = ref_split_idx[i];
+            }
+            typename T::Level h = T::get_level(r.begin()->first, 0);
+            ii = h.left_idx;
+            for (int i = ref_mid - 1; i >= 0; i--) {
+                r = recouple(r, ii, ref_split_idx[i], cgs);
+                ii = T::get_level(r.begin()->first, ii).left_idx;
+            }
+        } else if (split_idx == -1) {
+            // handle hamiltonian split
+            int ii = 0, ir = 0;
+            for (auto &rr : ref_split_idx) {
+                r = recouple(r, ii, rr - ir, cgs);
+                ii = T::get_level(r.begin()->first, ii).mid_idx, ir = rr;
+            }
+        } else if (split_idx == -2) {
+            // handle drt hamiltonian split
+            int ii = 0;
+            for (int i = (int)ref_split_idx.size() - 1; i >= 0; i--) {
+                r = recouple(r, ii, ref_split_idx[i], cgs);
+                ii = T::get_level(r.begin()->first, ii).left_idx;
+            }
+        }
+        return r;
+    }
+};
+
+struct GeneralSymmPermPattern {
+    uint16_t n; // string length
+    vector<uint16_t> mask;
+    vector<uint16_t> data;
+    GeneralSymmPermPattern(uint16_t n,
+                           const vector<uint16_t> &mask = vector<uint16_t>())
+        : n(n), mask(mask), data(initialize(n, mask)) {}
+    static vector<uint16_t>
+    all_reordering(const vector<uint16_t> &x,
+                   const vector<uint16_t> &mask = vector<uint16_t>()) {
+        if (x.size() == 0)
+            return x;
+        vector<pair<uint16_t, uint16_t>> pp;
+        for (auto &ix : x)
+            if (pp.size() == 0 || ix != pp.back().first)
+                pp.push_back(make_pair(ix, 1));
+            else
+                pp.back().second++;
+        uint16_t maxx = pp.back().first + 1;
+        // find the max one and its count
+        vector<uint16_t> ha(x.size(), maxx);
+        // i = number of max one
+        // ha = all possible lists of the max one and undetermined ones (maxx)
+        for (uint16_t i = 1; i <= pp.back().second; i++) {
+            vector<uint16_t> hb;
+            for (int j = 0, k; j < (int)ha.size(); j += x.size()) {
+                for (k = (int)x.size() - 1; k >= 0; k--)
+                    if (ha[j + k] != maxx)
+                        break;
+                    else {
+                        hb.insert(hb.end(), ha.begin() + j,
+                                  ha.begin() + (j + x.size()));
+                        hb[hb.size() - x.size() + k] = pp.back().first;
+                    }
+            }
+            ha = hb;
+        }
+        if (pp.size() == 1)
+            return ha;
+        vector<uint16_t> g = all_reordering(
+            vector<uint16_t>(x.begin(), x.end() - pp.back().second));
+        vector<uint16_t> r(ha.size() * g.size() /
+                           (x.size() - pp.back().second));
+        size_t ir = 0;
+        for (int h = 0; h < (int)ha.size(); h += x.size())
+            for (int j = 0; j < (int)g.size();
+                 j += x.size() - pp.back().second) {
+                memcpy(r.data() + ir, ha.data() + h,
+                       x.size() * sizeof(uint16_t));
+                for (int k = 0, kk = 0; k < (int)x.size(); k++)
+                    if (r[ir + k] == maxx)
+                        r[ir + k] = g[j + kk++];
+                if (mask.size() != 0) {
+                    bool skip = false;
+                    for (int k = 1; k < (int)x.size(); k++)
+                        skip = skip || (mask[k] == mask[k - 1] &&
+                                        r[ir + k] != r[ir + k - 1]);
+                    if (skip)
+                        continue;
+                }
+                ir += x.size();
+            }
+        r.resize(ir);
+        return r;
+    }
+    static vector<uint16_t>
+    initialize(uint16_t n, const vector<uint16_t> &mask = vector<uint16_t>()) {
+        int mi = n;
+        if (mask.size() != 0) {
+            mi = 1;
+            for (uint16_t j = 1; j < n; j++)
+                mi += mask[j] != mask[j - 1];
+        }
+        map<pair<uint16_t, uint16_t>, vector<vector<uint16_t>>> mp;
+        for (uint16_t i = 0; i <= n; i++)
+            mp[make_pair(0, i)] = vector<vector<uint16_t>>();
+        mp.at(make_pair(0, 0)).push_back(vector<uint16_t>());
+        // i = distinct numbers, j = length
+        for (uint16_t i = 1; i <= mi; i++) {
+            for (uint16_t j = i; j <= n; j++) {
+                mp[make_pair(i, j)] = vector<vector<uint16_t>>();
+                vector<vector<uint16_t>> &mpv = mp.at(make_pair(i, j));
+                for (uint16_t k = 1; k <= j - i + 1; k++) {
+                    vector<vector<uint16_t>> &mpx =
+                        mp.at(make_pair(i - 1, j - k));
+                    for (auto &x : mpx) {
+                        mpv.push_back(x);
+                        mpv.back().insert(mpv.back().end(), k, i - 1);
+                    }
+                }
+            }
+        }
+        size_t cnt = 0;
+        for (uint16_t i = 0; i <= mi; i++)
+            cnt += mp.at(make_pair(i, n)).size();
+        vector<uint16_t> r(cnt * (n + 2));
+        size_t ic = 0;
+        for (uint16_t i = 0; i <= mi; i++) {
+            vector<vector<uint16_t>> &mpx = mp.at(make_pair(i, n));
+            for (auto &x : mpx) {
+                r[ic++] = i;
+                memcpy(r.data() + ic, x.data(), sizeof(uint16_t) * n);
+                for (r[ic + n] = (n - 1) >> 1;
+                     r[ic + n] < n - 1 && x[r[ic + n]] == x[r[ic + n] + 1];
+                     r[ic + n]++)
+                    ;
+                r[ic + n]++;
+                ic += n + 1;
+            }
+        }
+        return r;
+    }
+    size_t count() const { return data.size() / (n + 2); }
+    vector<uint16_t> operator[](size_t i) const {
+        return vector<uint16_t>(data.begin() + i * (n + 2) + 1,
+                                data.begin() + i * (n + 2) + n + 1);
+    }
+    uint16_t get_split_index(size_t i) const {
+        return data[i * (n + 2) + n + 1];
+    }
+    string to_str() const {
+        stringstream ss;
+        size_t cnt = data.size() / (n + 2);
+        ss << "N = " << n << " COUNT = " << data.size() / (n + 2) << endl;
+        for (size_t ic = 0; ic < cnt; ic++) {
+            for (uint16_t j = 0; j < n + 1; j++)
+                ss << data[ic * (n + 2) + j] << (j == 0 ? " : " : " ");
+            ss << "| " << data[ic * (n + 2) + n + 1] << endl;
+        }
+        return ss.str();
+    }
+};
+
+// generate appropriate spin recoupling formulae after reordering
+template <typename FL> struct GeneralSymmPermScheme {
+    vector<vector<uint16_t>> index_patterns;
+    vector<map<vector<uint16_t>, vector<pair<FL, string>>>> data;
+    vector<uint16_t> mask;
+    vector<int16_t> targets;
+    vector<shared_ptr<AnyCG<FL>>> cgs;
+    GeneralSymmPermScheme() {}
+    GeneralSymmPermScheme(string spin_str,
+                          const vector<shared_ptr<AnyCG<FL>>> &cgs,
+                          bool is_npdm = false, bool is_drt = false) {
+        int nn = GeneralSymmTensor<FL>::count_cds(spin_str);
+        GeneralSymmPermScheme r = GeneralSymmPermScheme::initialize(
+            nn, spin_str, cgs, is_npdm, is_drt);
+        index_patterns = r.index_patterns;
+        data = r.data;
+        targets = r.targets;
+        this->cgs = r.cgs;
+    }
+    static GeneralSymmPermScheme
+    initialize(int nn, const string &spin_str,
+               const vector<shared_ptr<AnyCG<FL>>> &cgs, bool is_npdm = false,
+               bool is_drt = false,
+               const vector<uint16_t> &mask = vector<uint16_t>()) {
+        using R = GeneralSymmRecoupling<FL>;
+        using T = GeneralSymmTensor<FL>;
+        GeneralSymmPermPattern spat(nn, mask);
+        GeneralSymmPermScheme r;
+        r.cgs = cgs;
+        r.index_patterns.resize(spat.count());
+        r.data.resize(spat.count());
+        int ntg = threading->activate_global();
+        map<vector<uint16_t>, map<string, FL>> ref_ps;
+        map<string, FL> p = map<string, FL>{make_pair(spin_str, (FL)1.0)};
+        for (int i = spat.count() - 1; i >= 0; i--) {
+            vector<uint16_t> irr = spat[i];
+            r.index_patterns[i] = irr;
+            vector<uint16_t> rr =
+                GeneralSymmPermPattern::all_reordering(irr, mask);
+            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
+            vector<map<string, FL>> ps(nj);
+#pragma omp parallel for schedule(static, 20) num_threads(ntg)
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
+                vector<uint16_t> perm = T::find_pattern_perm(indices);
+                ps[jj] = R::recouple_split(
+                    ref_ps.count(perm) ? ref_ps.at(perm)
+                                       : R::sort_indices(p, indices, cgs),
+                    irr, iq, cgs);
+            }
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
+                vector<uint16_t> perm = T::find_pattern_perm(indices);
+                r.data[i][perm] = vector<pair<FL, string>>();
+                vector<pair<FL, string>> &udq = r.data[i].at(perm);
+                udq.reserve(ps[jj].size());
+                for (auto &mr : ps[jj])
+                    udq.push_back(make_pair(mr.second, mr.first));
+                assert(udq.size() != 0);
+                if (i == spat.count() - 1)
+                    ref_ps[perm] = ps[jj];
+            }
+        }
+        threading->activate_normal();
+        r.targets = T::get_quanta(spin_str, T::get_level(spin_str, 0));
+        r.mask = mask;
+        return r;
+    }
+    string to_str() const {
+        stringstream ss;
+        int cnt = index_patterns.size();
+        int nn = cnt == 0 ? 0 : index_patterns[0].size();
+        ss << "N = " << nn << " COUNT = " << cnt << endl;
+        for (size_t ic = 0; ic < cnt; ic++) {
+            for (uint16_t j = 0; j < nn; j++)
+                ss << index_patterns[ic][j] << " ";
+            ss << " :: " << endl;
+            for (auto &r : data[ic]) {
+                for (uint16_t j = 0; j < nn; j++)
+                    ss << r.first[j] << " ";
+                ss << " = ";
+                for (auto &g : r.second) {
+                    ss << setw(10) << setprecision(6) << fixed << g.first
+                       << " * [ " << g.second << " ] ";
+                }
+                ss << endl;
+            }
+        }
+        return ss.str();
     }
 };
 
