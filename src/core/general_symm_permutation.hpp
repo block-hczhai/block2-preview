@@ -1005,7 +1005,7 @@ template <typename FL> struct GeneralSymmRecoupling {
                         for (int16_t j12 = abs(j1 - j2); j12 <= j1 + j2;
                              j12 += 2) {
                             FL f = (FL)cgs[ik]->racah(j1, j2, j, j3, j12, j23) *
-                                   sqrt((j12 + 1) * (j23 + 1));
+                                   (FL)(FP)sqrt((j12 + 1) * (j23 + 1));
                             if (abs(f) < 1E-12)
                                 continue;
                             vector<int16_t> k = mcgs[im].first;
@@ -1061,7 +1061,7 @@ template <typename FL> struct GeneralSymmRecoupling {
                         for (int16_t j23 = abs(j2 - j3); j23 <= j2 + j3;
                              j23 += 2) {
                             FL f = (FL)cgs[ik]->racah(j3, j2, j, j1, j23, j12) *
-                                   sqrt((j23 + 1) * (j12 + 1));
+                                   (FL)(FP)sqrt((j23 + 1) * (j12 + 1));
                             if (abs(f) < 1E-12)
                                 continue;
                             vector<int16_t> k = mcgs[im].first;

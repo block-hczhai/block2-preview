@@ -263,7 +263,7 @@ template <typename FL> struct AnyCG {
                                  cg(tb, td, tf, tmb, tmd, tmf) *
                                  cg(ta, tb, te, tma, tmb, tme) *
                                  cg(te, td, tc, tme, tmd, tmc);
-        return r / sqrt((te + 1) * (tf + 1));
+        return r / (FL)(FP)sqrt((te + 1) * (tf + 1));
     }
     virtual FL phase(int ta, int tb, int tc) const {
         return (FL)(1 - ((ta + tb - tc) & 2));
