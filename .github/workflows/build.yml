@@ -255,6 +255,7 @@ jobs:
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
           git clone https://github.com/Homebrew/brew arm-brew
           cd arm-brew && git checkout 3.6.16 && cd ..
+          ./arm-brew/bin/brew update
           OMPGZ=$(./arm-brew/bin/brew fetch --force --bottle-tag=arm64_big_sur libomp | grep "Downloaded to" | awk '{print $3}')
           ./arm-brew/bin/brew install ${OMPGZ}
           export OMPROOT=$(./arm-brew/bin/brew --prefix libomp)
