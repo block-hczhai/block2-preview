@@ -17,6 +17,8 @@ elif [ "${PYTHON_VERSION}" = "3.9" ]; then
     PY_VER=cp39-cp39
 elif [ "${PYTHON_VERSION}" = "3.10" ]; then
     PY_VER=cp310-cp310
+elif [ "${PYTHON_VERSION}" = "3.11" ]; then
+    PY_VER=cp311-cp311
 fi
 
 PY_EXE=/opt/python/"${PY_VER}"/bin/python3
