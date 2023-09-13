@@ -275,7 +275,7 @@ class Block2Wrapper:
                 self.SX = init_phsu2
             self.VectorSX = b.VectorSAny
             self.VectorVectorSX = b.VectorVectorSAny
-            self.VectorPG = b.VectorUInt32
+            self.VectorPG = b.VectorInt
         elif SymmetryTypes.SU2 in symm_type:
             self.bs = self.bx.su2
             self.bcs = self.bc.su2 if self.bc is not None else None
@@ -1293,6 +1293,141 @@ class DMRGDriver:
                     bz.deallocate()
 
         return SO3Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+
+    def get_lz_hamiltonian(self):
+        assert SymmetryTypes.LZ in self.symm_type
+        GH = self.bw.bs.GeneralHamiltonian
+        super_self = self
+        import numpy as np
+
+        class LZHamiltonian(GH):
+            def __init__(self, vacuum, n_sites, orb_sym):
+                GH.__init__(self)
+                self.opf = super_self.bw.bs.OperatorFunctions(super_self.bw.brs.CG())
+                self.vacuum = vacuum
+                self.n_sites = n_sites
+                self.orb_sym = orb_sym
+                self.basis = super_self.bw.brs.VectorStateInfo([
+                    self.get_site_basis(m) for m in range(self.n_sites)
+                ])
+                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo([
+                    super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
+                ])
+                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat([
+                    super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
+                ])
+                self.init_site_ops()
+
+            def get_site_basis(self, m):
+                """Single site states."""
+                bz = super_self.bw.brs.StateInfo()
+                bz.allocate(2)
+                bz.quanta[0] = super_self.bw.SX(0, 0)
+                bz.quanta[1] = super_self.bw.SX(1, self.orb_sym[m])
+                bz.n_states[0] = bz.n_states[1] = 1
+                bz.sort_states()
+                return bz
+
+            def init_site_ops(self):
+                """Initialize operator quantum numbers at each site (site_op_infos)
+                and primitive (single character) site operators (site_norm_ops)."""
+                i_alloc = super_self.bw.b.IntVectorAllocator()
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                # site op infos
+                max_n = 10
+                for m in range(self.n_sites):
+                    qs = {self.vacuum}
+                    for n in range(-max_n, max_n + 1, 1):
+                        for nz in range(-max_n, max_n + 1, 1):
+                            qs.add(super_self.bw.SX(n, nz * self.orb_sym[m]))
+                    for q in sorted(qs):
+                        mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                        mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
+                        self.site_op_infos[m].append((q, mat))
+
+                # prim ops
+                for m in range(self.n_sites):
+
+                    # ident
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
+                    mat.allocate(info)
+                    mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
+                    mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                    self.site_norm_ops[m][""] = mat
+
+                    # C
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(1, self.orb_sym[m]))
+                    mat.allocate(info)
+                    mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
+                    self.site_norm_ops[m]["C"] = mat
+
+                    # D
+                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                    info = self.find_site_op_info(m, super_self.bw.SX(-1, -self.orb_sym[m]))
+                    mat.allocate(info)
+                    mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                    self.site_norm_ops[m]["D"] = mat
+
+            def get_site_string_op(self, m, expr):
+                """Construct longer site operators from primitive ones."""
+                d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                if expr in self.site_norm_ops[m]:
+                    return self.site_norm_ops[m][expr]
+                a = self.get_site_string_op(m, expr[:1])
+                b = self.get_site_string_op(m, expr[1:])
+                dq = a.info.delta_quantum + b.info.delta_quantum
+                r = super_self.bw.bs.SparseMatrix(d_alloc)
+                r.allocate(self.find_site_op_info(m, dq))
+                self.opf.product(0, a, b, r)
+                self.site_norm_ops[m][expr] = r
+                return r
+
+            def init_string_quanta(self, exprs, term_l, left_vacuum):
+                from itertools import accumulate
+                qs = {
+                    '': super_self.bw.SX(0, 0),
+                    'C':  super_self.bw.SX(1, 0),
+                    'D':  super_self.bw.SX(-1, 0),
+                }
+                return super_self.bw.VectorVectorSX([super_self.bw.VectorSX(list(accumulate(
+                    [qs['']] + [qs[x] for x in expr], lambda x, y: x + y)))
+                    for expr in exprs
+                ])
+
+            def get_string_quanta(self, ref, expr, idxs, k):
+                """Quantum number for string operators (orbital dependent part)."""
+                l, r = ref[k], ref[-1] - ref[k]
+                for j, (ex, ix) in enumerate(zip(expr, idxs)):
+                    ipg = self.orb_sym[ix]
+                    if j < k:
+                        l.values[1] += ipg if ex == 'C' else -ipg
+                    else:
+                        r.values[1] += ipg if ex == 'C' else -ipg
+                return l, r
+
+            def get_string_quantum(self, expr, idxs):
+                """Total quantum number for a string operator."""
+                qs = lambda ix: {
+                    '': super_self.bw.SX(0, 0),
+                    'C':  super_self.bw.SX(1, self.orb_sym[ix]),
+                    'D':  super_self.bw.SX(-1, -self.orb_sym[ix]),
+                }
+                return sum([qs(0)['']] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+
+            def deallocate(self):
+                """Release memory."""
+                for ops in self.site_norm_ops:
+                    for p in ops.values():
+                        p.deallocate()
+                for infos in self.site_op_infos:
+                    for _, p in infos:
+                        p.deallocate()
+                for bz in self.basis:
+                    bz.deallocate()
+
+        return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
         bw = self.bw
@@ -4463,6 +4598,8 @@ class ExprBuilder:
             self.data.elem_type = bw.b.ElemOpTypes.SGF
         elif SymmetryTypes.SGB in bw.symm_type:
             self.data.elem_type = bw.b.ElemOpTypes.SGB
+        else:
+            self.data.elem_type = bw.b.ElemOpTypes.SGF
         self.data.const_e = 0.0
         self.bw = bw
 

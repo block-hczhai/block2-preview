@@ -58,7 +58,7 @@ inline int32_t operator-(SAnySymmTypes a, SAnySymmTypes b) {
 template <int8_t L = 6> struct SAnyT {
     const static int8_t ll = L;
     typedef void is_sany_t;
-    typedef uint32_t pg_t;
+    typedef int pg_t;
     array<SAnySymmTypes, L> types;
     array<int32_t, L> values;
     static array<int32_t, L> invalid_init() {
