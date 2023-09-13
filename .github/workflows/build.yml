@@ -25,7 +25,6 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, macos-11 ]
         python: [ 3.9 ]
-        manylinux: [ 2010 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
         exclude:
@@ -181,7 +180,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, macos-11 ]
         python: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
-        manylinux: [ 2010 ]
+        manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
         exclude:
