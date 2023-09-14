@@ -41,7 +41,9 @@ class SymmetryTypes(IntFlag):
     SAnySO4 = 64 | 128
     SAnyPHSU2 = 64 | 256
     SAnySO3 = 64 | 512
-    SAnyLZ = 64 | 1024
+    SAnySU2LZ = 64 | 1 | 1024
+    SAnySZLZ = 64 | 2 | 1024
+    SAnySGFLZ = 64 | 4 | 1024
 
 
 class ParallelTypes(IntFlag):
@@ -231,15 +233,39 @@ class Block2Wrapper:
             self.bcs = self.bc.sany if self.bc is not None else None
             self.brs = b.sany
             self.SX = self.SXT = b.SAny
-            if SymmetryTypes.SU2 in symm_type or SymmetryTypes.SO3 in symm_type:
-                self.SX = b.SAny.init_su2
-            elif SymmetryTypes.SZ in symm_type:
-                self.SX = b.SAny.init_sz
-            elif SymmetryTypes.SGF in symm_type:
-                self.SX = b.SAny.init_sgf
-            elif SymmetryTypes.LZ in symm_type:
+            if SymmetryTypes.LZ in symm_type and SymmetryTypes.SU2 in symm_type:
 
-                def init_lz(n, lz):
+                def init_su2_lz(n, twos_low, twos, lz=None):
+                    if lz is None:
+                        twos_low, twos, lz = twos_low, twos_low, twos
+                    q = self.SXT()
+                    q.types[0] = self.b.SAnySymmTypes.U1Fermi
+                    q.types[1] = self.b.SAnySymmTypes.SU2Fermi
+                    q.types[2] = self.b.SAnySymmTypes.SU2Fermi
+                    q.types[3] = self.b.SAnySymmTypes.LZ
+                    q.values[0] = n
+                    q.values[1] = twos_low
+                    q.values[2] = twos
+                    q.values[3] = lz
+                    return q
+
+                self.SX = init_su2_lz
+            elif SymmetryTypes.LZ in symm_type and SymmetryTypes.SZ in symm_type:
+
+                def init_sz_lz(n, twos, lz):
+                    q = self.SXT()
+                    q.types[0] = self.b.SAnySymmTypes.U1Fermi
+                    q.types[1] = self.b.SAnySymmTypes.U1Fermi
+                    q.types[2] = self.b.SAnySymmTypes.LZ
+                    q.values[0] = n
+                    q.values[1] = twos
+                    q.values[2] = lz
+                    return q
+
+                self.SX = init_sz_lz
+            elif SymmetryTypes.LZ in symm_type and SymmetryTypes.SGF in symm_type:
+
+                def init_sgf_lz(n, lz):
                     q = self.SXT()
                     q.types[0] = self.b.SAnySymmTypes.U1Fermi
                     q.types[1] = self.b.SAnySymmTypes.LZ
@@ -247,7 +273,13 @@ class Block2Wrapper:
                     q.values[1] = lz
                     return q
 
-                self.SX = init_lz
+                self.SX = init_sgf_lz
+            elif SymmetryTypes.SU2 in symm_type or SymmetryTypes.SO3 in symm_type:
+                self.SX = b.SAny.init_su2
+            elif SymmetryTypes.SZ in symm_type:
+                self.SX = b.SAny.init_sz
+            elif SymmetryTypes.SGF in symm_type:
+                self.SX = b.SAny.init_sgf
             elif SymmetryTypes.SO4 in symm_type:
 
                 def init_so4(n, twos, nh=None, twosh=None):
@@ -668,7 +700,7 @@ class DMRGDriver:
                 else:
                     self.target = bw.SX(n_elec, pg_irrep, 0)
                     self.left_vacuum = self.vacuum
-            elif SymmetryTypes.LZ in bw.symm_type:
+            elif SymmetryTypes.LZ in bw.symm_type and SymmetryTypes.SGF in bw.symm_type:
                 self.vacuum = bw.SX(0, 0) if vacuum is None else vacuum
                 assert heis_twosz == 0
                 self.target = bw.SX(n_elec, pg_irrep)
@@ -1007,10 +1039,10 @@ class DMRGDriver:
                 for m in range(self.n_sites):
                     qs = {self.vacuum}
                     for n in range(1, max_n_odd + 1, 2):
-                        for s in range(-max_n_odd, max_s_odd + 1, 2):
+                        for s in range(-max_s_odd, max_s_odd + 1, 2):
                             qs.add(super_self.bw.SX(n, s))
                     for n in range(0, max_n_even + 1, 2):
-                        for s in range(-max_n_even, max_s_even + 1, 2):
+                        for s in range(-max_s_even, max_s_even + 1, 2):
                             qs.add(super_self.bw.SX(n, s))
                     for q in sorted(qs):
                         mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
@@ -1321,10 +1353,25 @@ class DMRGDriver:
             def get_site_basis(self, m):
                 """Single site states."""
                 bz = super_self.bw.brs.StateInfo()
-                bz.allocate(2)
-                bz.quanta[0] = super_self.bw.SX(0, 0)
-                bz.quanta[1] = super_self.bw.SX(1, self.orb_sym[m])
-                bz.n_states[0] = bz.n_states[1] = 1
+                if SymmetryTypes.SU2 in super_self.symm_type:
+                    bz.allocate(3)
+                    bz.quanta[0] = super_self.bw.SX(0, 0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, 1, self.orb_sym[m])
+                    bz.quanta[2] = super_self.bw.SX(2, 0, 2 * self.orb_sym[m])
+                    bz.n_states[0] = bz.n_states[1] = bz.n_states[2] = 1
+                elif SymmetryTypes.SZ in super_self.symm_type:
+                    bz.allocate(4)
+                    bz.quanta[0] = super_self.bw.SX(0, 0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, 1, self.orb_sym[m])
+                    bz.quanta[2] = super_self.bw.SX(1, -1, self.orb_sym[m])
+                    bz.quanta[3] = super_self.bw.SX(2, 0, 2 * self.orb_sym[m])
+                    bz.n_states[0] = bz.n_states[1] = 1
+                    bz.n_states[2] = bz.n_states[3] = 1
+                else:
+                    bz.allocate(2)
+                    bz.quanta[0] = super_self.bw.SX(0, 0)
+                    bz.quanta[1] = super_self.bw.SX(1, self.orb_sym[m])
+                    bz.n_states[0] = bz.n_states[1] = 1
                 bz.sort_states()
                 return bz
 
@@ -1334,12 +1381,33 @@ class DMRGDriver:
                 i_alloc = super_self.bw.b.IntVectorAllocator()
                 d_alloc = super_self.bw.b.DoubleVectorAllocator()
                 # site op infos
-                max_n = 10
+                max_n, max_s = 10, 10
+                max_n_odd, max_s_odd = max_n | 1, max_s | 1
+                max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
                 for m in range(self.n_sites):
                     qs = {self.vacuum}
-                    for n in range(-max_n, max_n + 1, 1):
-                        for nz in range(-max_n, max_n + 1, 1):
-                            qs.add(super_self.bw.SX(n, nz * self.orb_sym[m]))
+                    if SymmetryTypes.SU2 in super_self.symm_type:
+                        for n in range(-max_n_odd, max_n_odd + 1, 2):
+                            for s in range(1, max_s_odd + 1, 2):
+                                for nz in range(-max_n_odd, max_n_odd + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, nz * self.orb_sym[m]))
+                        for n in range(-max_n_even, max_n_even + 1, 2):
+                            for s in range(0, max_s_even + 1, 2):
+                                for nz in range(-max_n_even, max_n_even + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, nz * self.orb_sym[m]))
+                    elif SymmetryTypes.SZ in super_self.symm_type:
+                        for n in range(-max_n_odd, max_n_odd + 1, 2):
+                            for s in range(-max_s_odd, max_s_odd + 1, 2):
+                                for nz in range(-max_n_odd, max_n_odd + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, nz * self.orb_sym[m]))
+                        for n in range(-max_n_even, max_n_even + 1, 2):
+                            for s in range(-max_s_even, max_s_even + 1, 2):
+                                for nz in range(-max_n_even, max_n_even + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, nz * self.orb_sym[m]))
+                    elif SymmetryTypes.SGF in super_self.symm_type:
+                        for n in range(-max_n, max_n + 1, 1):
+                            for nz in range(-max_n, max_n + 1, 1):
+                                qs.add(super_self.bw.SX(n, nz * self.orb_sym[m]))
                     for q in sorted(qs):
                         mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
                         mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
@@ -1348,36 +1416,112 @@ class DMRGDriver:
                 # prim ops
                 for m in range(self.n_sites):
 
-                    # ident
-                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                    info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
-                    mat.allocate(info)
-                    mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
-                    mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
-                    self.site_norm_ops[m][""] = mat
+                    if SymmetryTypes.SU2 in super_self.symm_type:
+                        # ident
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 1, 1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(2, 0, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m][""] = mat
 
-                    # C
-                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                    info = self.find_site_op_info(m, super_self.bw.SX(1, self.orb_sym[m]))
-                    mat.allocate(info)
-                    mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
-                    self.site_norm_ops[m]["C"] = mat
+                        # C
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 1, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))] = np.array([-2 ** 0.5])
+                        self.site_norm_ops[m]["C"] = mat
 
-                    # D
-                    mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                    info = self.find_site_op_info(m, super_self.bw.SX(-1, -self.orb_sym[m]))
-                    mat.allocate(info)
-                    mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
-                    self.site_norm_ops[m]["D"] = mat
+                        # D
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(-1, 1, -self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))] = np.array([2 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(2, 1, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m]["D"] = mat
+                    elif SymmetryTypes.SZ in super_self.symm_type:
+                        # ident
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m][""] = mat
+
+                        # c
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m]["c"] = mat
+
+                        # d
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(-1, -1, -self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m]["d"] = mat
+
+                        # C
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(1, -1, self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([-1.0])
+                        self.site_norm_ops[m]["C"] = mat
+
+                        # D
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(-1, 1, -self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([-1.0])
+                        self.site_norm_ops[m]["D"] = mat
+                    elif SymmetryTypes.SGF in super_self.symm_type:
+                        # ident
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m][""] = mat
+
+                        # C
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(1, self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
+                        self.site_norm_ops[m]["C"] = mat
+
+                        # D
+                        mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                        info = self.find_site_op_info(m, super_self.bw.SX(-1, -self.orb_sym[m]))
+                        mat.allocate(info)
+                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                        self.site_norm_ops[m]["D"] = mat
 
             def get_site_string_op(self, m, expr):
                 """Construct longer site operators from primitive ones."""
                 d_alloc = super_self.bw.b.DoubleVectorAllocator()
                 if expr in self.site_norm_ops[m]:
                     return self.site_norm_ops[m][expr]
-                a = self.get_site_string_op(m, expr[:1])
-                b = self.get_site_string_op(m, expr[1:])
-                dq = a.info.delta_quantum + b.info.delta_quantum
+                if SymmetryTypes.SU2 in super_self.symm_type:
+                    l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
+                    a = self.get_site_string_op(m, expr[l.left_idx:l.mid_idx - 1])
+                    b = self.get_site_string_op(m, expr[l.mid_idx:l.right_idx - 1])
+                    idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
+                    jdq = a.info.delta_quantum + b.info.delta_quantum
+                    dq = super_self.bw.SX(jdq.values[0], idq, idq, jdq.values[3])
+                else:
+                    a = self.get_site_string_op(m, expr[:1])
+                    b = self.get_site_string_op(m, expr[1:])
+                    dq = a.info.delta_quantum + b.info.delta_quantum
                 r = super_self.bw.bs.SparseMatrix(d_alloc)
                 r.allocate(self.find_site_op_info(m, dq))
                 self.opf.product(0, a, b, r)
@@ -1385,12 +1529,39 @@ class DMRGDriver:
                 return r
 
             def init_string_quanta(self, exprs, term_l, left_vacuum):
+                if SymmetryTypes.SU2 in super_self.symm_type:
+                    rr = super_self.bw.VectorVectorSX()
+                    for ix, expr in enumerate(exprs):
+                        r = super_self.bw.VectorSX([super_self.bw.SX(0, 0, 0)] * (term_l[ix] + 1))
+                        gr = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
+                        r[-1] = super_self.bw.SX(expr.count('C') - expr.count('D'), gr, 0)
+                        lacc, nacc = 0, 0
+                        while True: # (.+(.+(.+.)0)0)0
+                            l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
+                            if l.right_idx == -1:
+                                break
+                            exprl, exprr = expr[0:l.mid_idx - 1], expr[l.mid_idx:l.right_idx - 1]
+                            lacc += exprl.count('C') + exprl.count('D')
+                            nacc += exprl.count('C') - exprl.count('D')
+                            r[lacc] = super_self.bw.SX(nacc, super_self.bw.b.SpinPermRecoupling.get_target_twos(exprr), 0)
+                            expr = exprr
+                        rr.append(r)
+                    return rr
+                elif SymmetryTypes.SZ in super_self.symm_type:
+                    qs = {
+                        '': super_self.bw.SX(0, 0, 0),
+                        'c':  super_self.bw.SX(1, 1, 0),
+                        'd':  super_self.bw.SX(-1, -1, 0),
+                        'C':  super_self.bw.SX(1, -1, 0),
+                        'D':  super_self.bw.SX(-1, 1, 0),
+                    }
+                else:
+                    qs = {
+                        '': super_self.bw.SX(0, 0),
+                        'C':  super_self.bw.SX(1, 0),
+                        'D':  super_self.bw.SX(-1, 0),
+                    }
                 from itertools import accumulate
-                qs = {
-                    '': super_self.bw.SX(0, 0),
-                    'C':  super_self.bw.SX(1, 0),
-                    'D':  super_self.bw.SX(-1, 0),
-                }
                 return super_self.bw.VectorVectorSX([super_self.bw.VectorSX(list(accumulate(
                     [qs['']] + [qs[x] for x in expr], lambda x, y: x + y)))
                     for expr in exprs
@@ -1399,21 +1570,50 @@ class DMRGDriver:
             def get_string_quanta(self, ref, expr, idxs, k):
                 """Quantum number for string operators (orbital dependent part)."""
                 l, r = ref[k], ref[-1] - ref[k]
-                for j, (ex, ix) in enumerate(zip(expr, idxs)):
-                    ipg = self.orb_sym[ix]
+                iv = 1 + (SymmetryTypes.SZ in super_self.symm_type) + 2 * (SymmetryTypes.SU2 in super_self.symm_type)
+                j = 0
+                for ixx, ex in enumerate(expr):
+                    if ex not in 'cdCD':
+                        continue
+                    ipg = self.orb_sym[idxs[j]]
                     if j < k:
-                        l.values[1] += ipg if ex == 'C' else -ipg
+                        l.values[iv] += ipg if ex in 'cC' else -ipg
                     else:
-                        r.values[1] += ipg if ex == 'C' else -ipg
+                        r.values[iv] += ipg if ex in 'cC' else -ipg
+                    j += 1
                 return l, r
 
             def get_string_quantum(self, expr, idxs):
                 """Total quantum number for a string operator."""
-                qs = lambda ix: {
-                    '': super_self.bw.SX(0, 0),
-                    'C':  super_self.bw.SX(1, self.orb_sym[ix]),
-                    'D':  super_self.bw.SX(-1, -self.orb_sym[ix]),
-                }
+                if SymmetryTypes.SU2 in super_self.symm_type:
+                    idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
+                    qs = lambda ix: {
+                        '': super_self.bw.SX(0, 0, 0),
+                        'C':  super_self.bw.SX(1, 1, self.orb_sym[ix]),
+                        'D':  super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
+                    }
+                    r = qs(0)['']
+                    j = 0
+                    for ixx, ex in enumerate(expr):
+                        if ex in 'CD':
+                            r = r + qs(idxs[j])[ex]
+                            j += 1
+                    r.values[1] = r.values[2] = idq
+                    return r
+                elif SymmetryTypes.SZ in super_self.symm_type:
+                    qs = lambda ix: {
+                        '': super_self.bw.SX(0, 0, 0),
+                        'c':  super_self.bw.SX(1, 1, self.orb_sym[ix]),
+                        'd':  super_self.bw.SX(-1, -1, -self.orb_sym[ix]),
+                        'C':  super_self.bw.SX(1, -1, self.orb_sym[ix]),
+                        'D':  super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
+                    }
+                else:
+                    qs = lambda ix: {
+                        '': super_self.bw.SX(0, 0),
+                        'C':  super_self.bw.SX(1, self.orb_sym[ix]),
+                        'D':  super_self.bw.SX(-1, -self.orb_sym[ix]),
+                    }
                 return sum([qs(0)['']] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
 
             def deallocate(self):
@@ -1480,7 +1680,7 @@ class DMRGDriver:
             orb_sym = [x % 10 for x in self.orb_sym]
         else:
             orb_sym = self.orb_sym
-        fcidump.orb_sym = bw.b.VectorUInt8([bk_map[x] for x in orb_sym])
+        fcidump.orb_sym = bw.VectorPG([bk_map[x] for x in orb_sym])
         if filename is not None:
             fcidump.write(filename)
         return fcidump
@@ -1574,7 +1774,7 @@ class DMRGDriver:
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
-    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, hxe=None, iprint=1):
+    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, hxe=None, k_symm=None, iprint=1):
         bw = self.bw
         import numpy as np
 
@@ -1595,24 +1795,38 @@ class DMRGDriver:
             if h1e is not None:
                 x = np.array(orb_sym, dtype=int)
                 if x.ndim == 1:
-                    mask = (x[:, None] ^ x[None, :]) != 0
+                    if k_symm is None:
+                        mask = (x[:, None] ^ x[None, :]) != 0
+                    else:
+                        mask = (x[:, None] - x[None, :]) != 0
                     error += sum(np.sum(np.abs(h[mask])) for h in h1e)
                     h1e[0][mask] = 0
                     h1e[1][mask] = 0
                 else:
                     for i in range(len(h1e)):
-                        mask = (x[i][:, None] ^ x[i][None, :]) != 0
+                        if k_symm is None:
+                            mask = (x[i][:, None] ^ x[i][None, :]) != 0
+                        else:
+                            mask = (x[i][:, None] - x[i][None, :]) != 0
                         error += np.sum(np.abs(h1e[i][mask]))
                         h1e[i][mask] = 0
             if g2e is not None:
                 x = np.array(orb_sym, dtype=int)
                 if x.ndim == 1:
-                    mask = (
-                        x[:, None, None, None]
-                        ^ x[None, :, None, None]
-                        ^ x[None, None, :, None]
-                        ^ x[None, None, None, :]
-                    ) != 0
+                    if k_symm is None:
+                        mask = (
+                            x[:, None, None, None]
+                            ^ x[None, :, None, None]
+                            ^ x[None, None, :, None]
+                            ^ x[None, None, None, :]
+                        ) != 0
+                    else:
+                        mask = (
+                            x[:, None, None, None]
+                            - x[None, :, None, None]
+                            + x[None, None, :, None]
+                            - x[None, None, None, :]
+                        ) != 0
                     error += sum(np.sum(np.abs(g[mask])) for g in g2e) * 0.5
                     error += np.sum(np.abs(g2e[1][mask])) * 0.5
                     g2e[0][mask] = 0
@@ -1621,12 +1835,20 @@ class DMRGDriver:
                 else:
                     js = [[0, 0, 0, 0], [0, 0, 1, 1], [1, 1, 1, 1]]
                     for i in range(len(g2e)):
-                        mask = (
-                            x[js[i][0]][:, None, None, None]
-                            ^ x[js[i][1]][None, :, None, None]
-                            ^ x[js[i][2]][None, None, :, None]
-                            ^ x[js[i][3]][None, None, None, :]
-                        ) != 0
+                        if k_symm is None:
+                            mask = (
+                                x[js[i][0]][:, None, None, None]
+                                ^ x[js[i][1]][None, :, None, None]
+                                ^ x[js[i][2]][None, None, :, None]
+                                ^ x[js[i][3]][None, None, None, :]
+                            ) != 0
+                        else:
+                            mask = (
+                                x[js[i][0]][:, None, None, None]
+                                - x[js[i][1]][None, :, None, None]
+                                + x[js[i][2]][None, None, :, None]
+                                - x[js[i][3]][None, None, None, :]
+                            ) != 0
                         error += np.sum(np.abs(g2e[i][mask])) * 0.5
                         if i == 1:
                             error += np.sum(np.abs(g2e[i][mask])) * 0.5
@@ -1634,17 +1856,28 @@ class DMRGDriver:
         else:
             if h1e is not None:
                 x = np.array(orb_sym, dtype=int)
-                mask = (x[:, None] ^ x[None, :]) != 0
+                if k_symm is None:
+                    mask = (x[:, None] ^ x[None, :]) != 0
+                else:
+                    mask = (x[:, None] - x[None, :]) != 0
                 error += np.sum(np.abs(h1e[mask]))
                 h1e[mask] = 0
             if g2e is not None:
                 x = np.array(orb_sym, dtype=int)
-                mask = (
-                    x[:, None, None, None]
-                    ^ x[None, :, None, None]
-                    ^ x[None, None, :, None]
-                    ^ x[None, None, None, :]
-                ) != 0
+                if k_symm is None:
+                    mask = (
+                        x[:, None, None, None]
+                        ^ x[None, :, None, None]
+                        ^ x[None, None, :, None]
+                        ^ x[None, None, None, :]
+                    ) != 0
+                else:
+                    mask = (
+                        x[:, None, None, None]
+                        - x[None, :, None, None]
+                        + x[None, None, :, None]
+                        - x[None, None, None, :]
+                    ) != 0
                 error += np.sum(np.abs(g2e[mask])) * 0.5
                 g2e[mask] = 0
         if iprint:
@@ -1806,11 +2039,12 @@ class DMRGDriver:
                 g2e = gg2e
 
         if symmetrize and self.orb_sym is not None:
-            x_orb_sym = bw.b.VectorUInt8(self.orb_sym)
+            x_orb_sym = bw.VectorPG(self.orb_sym)
             if self.reorder_idx is not None:
                 rev_idx = np.argsort(self.reorder_idx)
-                x_orb_sym = bw.b.VectorUInt8(np.array(self.orb_sym)[rev_idx])
-            self.integral_symmetrize(x_orb_sym, h1e=h1e, g2e=g2e, iprint=iprint)
+                x_orb_sym = bw.VectorPG(np.array(self.orb_sym)[rev_idx])
+            k_symm = 0 if SymmetryTypes.LZ in bw.symm_type else None
+            self.integral_symmetrize(x_orb_sym, h1e=h1e, g2e=g2e, k_symm=k_symm, iprint=iprint)
 
         if integral_cutoff != 0:
             error = 0
