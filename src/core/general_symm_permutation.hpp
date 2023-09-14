@@ -648,8 +648,10 @@ template <typename FL> struct GeneralSymmTensor {
                     make_pair(vector<int>(),
                               d_angular(xjs.size() == 0 ? idxs[ii] * 2 : xjs[0],
                                         idxs[ii]))};
-            else
+            else {
                 assert(false);
+                return map<vector<int>, GeneralSymmTensor>();
+            }
         } else {
             string lexpr = expr.substr(l.left_idx, l.mid_idx - 1 - l.left_idx);
             string rexpr = expr.substr(l.mid_idx, l.right_idx - 1 - l.mid_idx);
