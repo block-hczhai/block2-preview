@@ -29,6 +29,7 @@ sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}',"
 ls -l /opt/python
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip
 /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
+$(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2
 
 if [ "${PARALLEL}" = "mpi" ]; then
     yum install -y wget openssh-clients openssh-server
@@ -49,9 +50,9 @@ if [ "${PARALLEL}" = "mpi" ]; then
     sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
     sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmpi", "libopen-pal", "libopen-rte"]): continue' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
-    sed -i '/for soname, src_path/a \                if "libmpi.so" in soname: patcher.replace_needed(fn, (soname, "libmpi.so"))' \
+    sed -i '/for soname, src_path/a \                if "libmpi.so" in soname: patcher.replace_needed(fn, soname, "libmpi.so")' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
-    sed -i '/for n in needed/a \                if "libmpi.so" in n: patcher.replace_needed(path, (n, "libmpi.so"))' \
+    sed -i '/for n in needed/a \                if "libmpi.so" in n: patcher.replace_needed(path, n, "libmpi.so")' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 fi
 
