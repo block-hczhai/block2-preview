@@ -337,7 +337,7 @@ template <typename FL> struct GeneralFCIDUMP {
                 for (auto &x : idx_perm_mp[i])
                     idx_pats[x.second] = make_pair(i, x.first);
             // first divide all indices according to scheme classes
-            vector<vector<int>> idx_patidx(kk);
+            vector<vector<size_t>> idx_patidx(kk);
             if (indices.size() == 0)
                 continue;
             vector<uint16_t> idx_idx(nn), idx_pat(nn), idx_mat(nn);
