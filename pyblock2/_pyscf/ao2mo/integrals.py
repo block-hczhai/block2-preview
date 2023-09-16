@@ -345,9 +345,9 @@ def lz_symm_adaptation(mol):
     g_irrep_map = {} # map from dooh to c2
     symm_orb_map = {} # orbital rotation
     for ix in mol.irrep_id:
-        rx, qx = ix % 10, ix // 10
+        rx, qx = ix % 10, (ix % 100) // 10
         g_irrep_map[ix] = rx & 4
-        z_irrep_map[ix] = (-1) ** ((rx & 1) == ((rx & 4) >> 2)) * ((qx << 1) + ((rx & 2) >> 1))
+        z_irrep_map[ix] = (-1) ** ((rx & 1) != ((rx & 4) >> 2)) * ((qx << 1) + ((rx & 2) >> 1))
         if z_irrep_map[ix] == 0:
             symm_orb_map[(ix, ix)] = 1
         else:

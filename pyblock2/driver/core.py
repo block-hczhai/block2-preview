@@ -1680,7 +1680,7 @@ class DMRGDriver:
             orb_sym = [x % 10 for x in self.orb_sym]
         else:
             orb_sym = self.orb_sym
-        fcidump.orb_sym = bw.VectorPG([bk_map[x] for x in orb_sym])
+        fcidump.orb_sym = bw.b.VectorUInt8([bk_map[x] for x in orb_sym])
         if filename is not None:
             fcidump.write(filename)
         return fcidump
