@@ -1628,6 +1628,168 @@ class DMRGDriver:
                     bz.deallocate()
 
         return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+    
+    def get_custom_hamiltonian(self, site_basis, site_ops, orb_dependent_ops='cdCD'):
+
+        GH = self.bw.bs.GeneralHamiltonian
+        super_self = self
+        import numpy as np
+        from itertools import accumulate
+
+        if SymmetryTypes.SZ in super_self.symm_type:
+
+            class CustomSZHamiltonian(GH):
+
+                def __init__(self, vacuum, n_sites, orb_sym):
+                    GH.__init__(self)
+                    self.opf = super_self.bw.bs.OperatorFunctions(super_self.bw.brs.CG())
+                    self.vacuum = vacuum
+                    self.n_sites = n_sites
+                    self.orb_sym = orb_sym
+                    self.basis = super_self.bw.brs.VectorStateInfo([
+                        self.get_site_basis(m) for m in range(self.n_sites)
+                    ])
+                    self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo([
+                        super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
+                    ])
+                    self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat([
+                        super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
+                    ])
+                    self.init_site_ops()
+
+                def get_site_basis(self, m):
+                    """Single site states."""
+                    assert len(site_basis) == self.n_sites
+                    bz = super_self.bw.brs.StateInfo()
+                    bz.allocate(len(site_basis[m]))
+                    for ix, (k, v) in enumerate(site_basis[m]):
+                        bz.quanta[ix] = k
+                        bz.n_states[ix] = v
+                    bz.sort_states()
+                    return bz
+
+                def init_site_ops(self):
+                    """Initialize operator quantum numbers at each site (site_op_infos)
+                    and primitive (single character) site operators (site_norm_ops)."""
+                    i_alloc = super_self.bw.b.IntVectorAllocator()
+                    d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                    # site op infos
+                    max_n, max_s = 10, 10
+                    max_n_odd, max_s_odd = max_n | 1, max_s | 1
+                    max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
+                    for m in range(self.n_sites):
+                        qs = {self.vacuum}
+                        for n in range(-max_n_odd, max_n_odd + 1, 2):
+                            for s in range(-max_s_odd, max_s_odd + 1, 2):
+                                qs.add(super_self.bw.SX(n, s, self.orb_sym[m]))
+                        for n in range(-max_n_even, max_n_even + 1, 2):
+                            for s in range(-max_s_even, max_s_even + 1, 2):
+                                qs.add(super_self.bw.SX(n, s, 0))
+                        for q in sorted(qs):
+                            mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                            mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
+                            self.site_op_infos[m].append((q, mat))
+
+                    assert len(site_ops) == self.n_sites
+
+                    # prim ops
+                    for m, ops in enumerate(site_ops):
+
+                        assert "" in ops # must have identity
+
+                        q_map = {}
+                        pv = 0
+                        for ix, (k, v) in enumerate(site_basis[m]):
+                            for iv in range(v):
+                                q_map[pv + iv] = (iv, k, pv + v)
+                            pv += v
+
+                        for name, op in ops.items():
+
+                            assert op.shape == (pv, pv)
+                            blocks = []
+                            dq = site_basis[m][0][0]
+                            for i in range(op.shape[0]):
+                                if q_map[i][0] != 0:
+                                    continue
+                                for j in range(op.shape[1]):
+                                    if q_map[j][0] != 0:
+                                        continue
+                                    mat = np.array(op[i:q_map[i][2], j:q_map[j][2]], copy=True)
+                                    if np.linalg.norm(mat) >= 1E-20:
+                                        dq = q_map[i][1] - q_map[j][1]
+                                        blocks.append((q_map[j][1], mat))
+
+                            mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                            info = self.find_site_op_info(m, dq)
+                            mat.allocate(info)
+                            for q, mx in blocks:
+                                mat[info.find_state(q)] = mx
+                            self.site_norm_ops[m][name] = mat
+
+                def get_site_string_ops(self, m, ops):
+                    """Construct longer site operators from primitive ones."""
+                    d_alloc = super_self.bw.b.DoubleVectorAllocator()
+                    for k in ops:
+                        if k in self.site_norm_ops[m]:
+                            ops[k] = self.site_norm_ops[m][k]
+                        else:
+                            xx = self.site_norm_ops[m][k[0]]
+                            for p in k[1:]:
+                                xp = self.site_norm_ops[m][p]
+                                q = xx.info.delta_quantum + xp.info.delta_quantum
+                                mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                                mat.allocate(self.find_site_op_info(m, q))
+                                self.opf.product(0, xx, xp, mat)
+                                xx = mat
+                            ops[k] = self.site_norm_ops[m][k] = xx
+                    return ops
+
+                def init_string_quanta(self, exprs, term_l, left_vacuum):
+                    """Quantum number for string operators (orbital independent part)."""
+                    qs = {}
+                    for norm_ops in self.site_norm_ops:
+                        for k, v in norm_ops.items():
+                            if k not in qs:
+                                qs[k] = v.info.delta_quantum
+                                qs[k].pg = 0
+                    return super_self.bw.VectorVectorSX([super_self.bw.VectorSX(list(accumulate(
+                        [qs[""]] + [qs[x] for x in expr], lambda x, y: x + y)))
+                        for expr in exprs
+                    ])
+
+                def get_string_quanta(self, ref, expr, idxs, k):
+                    """Quantum number for string operators (orbital dependent part)."""
+                    l, r = ref[k], ref[-1] - ref[k]
+                    for j, (ex, ix) in enumerate(zip(expr, idxs)):
+                        ipg = self.orb_sym[ix]
+                        if ex not in orb_dependent_ops:
+                            pass
+                        elif j < k:
+                            l.pg = l.pg ^ ipg
+                        else:
+                            r.pg = r.pg ^ ipg
+                    return l, r
+
+                def get_string_quantum(self, expr, idxs):
+                    """Total quantum number for a string operator."""
+                    qs = lambda ix: { k : v.info.delta_quantum for k, v in self.site_norm_ops[ix].items() }
+                    return sum([qs(0)['']] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+
+                def deallocate(self):
+                    """Release memory."""
+                    for ops in self.site_norm_ops:
+                        for p in ops.values():
+                            p.deallocate()
+                    for infos in self.site_op_infos:
+                        for _, p in infos:
+                            p.deallocate()
+                    for bz in self.basis:
+                        bz.deallocate()
+
+            return CustomSZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+        else:
+            return NotImplemented
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
         bw = self.bw
