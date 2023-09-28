@@ -696,7 +696,6 @@ struct HDRTMPO {
         vector<FL> matx, matq;
         for (int i = 0; i < hdrt->n_init_qs; i++)
             gauges[i] = vector<FL>(shapes[i], (FL)1.0);
-        cout << 1 << endl;
         for (int k = hdrt->n_sites - 1, j = hdrt->n_init_qs, jz = 0, pz, l;
              k >= 0; k--) {
             for (pz = jz, jz = j; j < hdrt->n_rows() && hdrt->qs[j][0] == k;

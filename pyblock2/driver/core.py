@@ -4048,6 +4048,11 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
 
+    def copy_mps(self, mps, tag):
+        ket = mps.deep_copy(tag)
+        ket.info.save_data(self.scratch + "/%s-mps_info.bin" % ket.info.tag)
+        return ket
+
     def load_mps(self, tag, nroots=1):
         import os
 
