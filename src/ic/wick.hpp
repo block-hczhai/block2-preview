@@ -163,6 +163,19 @@ struct WickIndex {
         sort(r.begin(), r.end());
         return set<WickIndex>(r.begin(), r.end());
     }
+    void save(ostream &ofs) const {
+        size_t lname = (size_t)name.length();
+        ofs.write((char *)&lname, sizeof(lname));
+        ofs.write((char *)&name[0], sizeof(char) * lname);
+        ofs.write((char *)&types, sizeof(types));
+    }
+    void load(istream &ifs) {
+        size_t lname = 0;
+        ifs.read((char *)&lname, sizeof(lname));
+        name = string(lname, ' ');
+        ifs.read((char *)&name[0], sizeof(char) * lname);
+        ifs.read((char *)&types, sizeof(types));
+    }
 };
 
 struct WickPermutation {
@@ -306,6 +319,19 @@ struct WickPermutation {
             r[ir++] = WickPermutation(x, false);
         assert(ir == nr);
         return r;
+    }
+    void save(ostream &ofs) const {
+        size_t ldata = (size_t)data.size();
+        ofs.write((char *)&ldata, sizeof(ldata));
+        ofs.write((char *)&data[0], sizeof(int16_t) * ldata);
+        ofs.write((char *)&negative, sizeof(negative));
+    }
+    void load(istream &ifs) {
+        size_t ldata = 0;
+        ifs.read((char *)&ldata, sizeof(ldata));
+        data.resize(ldata);
+        ifs.read((char *)&data[0], sizeof(int16_t) * ldata);
+        ifs.read((char *)&negative, sizeof(negative));
     }
 };
 
@@ -741,6 +767,37 @@ struct WickTensor {
             }
         }
         return r;
+    }
+    void save(ostream &ofs) const {
+        size_t lname = (size_t)name.length();
+        ofs.write((char *)&lname, sizeof(lname));
+        ofs.write((char *)&name[0], sizeof(char) * lname);
+        size_t lindices = (size_t)indices.size();
+        ofs.write((char *)&lindices, sizeof(lindices));
+        for (size_t i = 0; i < lindices; i++)
+            indices[i].save(ofs);
+        size_t lperms = (size_t)perms.size();
+        ofs.write((char *)&lperms, sizeof(lperms));
+        for (size_t i = 0; i < lperms; i++)
+            perms[i].save(ofs);
+        ofs.write((char *)&type, sizeof(type));
+    }
+    void load(istream &ifs) {
+        size_t lname = 0;
+        ifs.read((char *)&lname, sizeof(lname));
+        name = string(lname, ' ');
+        ifs.read((char *)&name[0], sizeof(char) * lname);
+        size_t lindices = 0;
+        ifs.read((char *)&lindices, sizeof(lindices));
+        indices.resize(lindices);
+        for (size_t i = 0; i < lindices; i++)
+            indices[i].load(ifs);
+        size_t lperms = 0;
+        ifs.read((char *)&lperms, sizeof(lperms));
+        perms.resize(lperms);
+        for (size_t i = 0; i < lperms; i++)
+            perms[i].load(ifs);
+        ifs.read((char *)&type, sizeof(type));
     }
 };
 
@@ -1460,6 +1517,32 @@ struct WickString {
             xtensors[i] = xtensors[xidxs[i]];
         xtensors.resize(xidxs.size());
         return WickString(xtensors, xctr_indices, xfactor);
+    }
+    void save(ostream &ofs) const {
+        size_t ltensors = (size_t)tensors.size();
+        ofs.write((char *)&ltensors, sizeof(ltensors));
+        for (size_t i = 0; i < ltensors; i++)
+            tensors[i].save(ofs);
+        size_t lctr_indices = (size_t)ctr_indices.size();
+        ofs.write((char *)&lctr_indices, sizeof(lctr_indices));
+        for (const auto &wi : ctr_indices)
+            wi.save(ofs);
+        ofs.write((char *)&factor, sizeof(factor));
+    }
+    void load(istream &ifs) {
+        size_t ltensors = 0;
+        ifs.read((char *)&ltensors, sizeof(ltensors));
+        tensors.resize(ltensors);
+        for (size_t i = 0; i < ltensors; i++)
+            tensors[i].load(ifs);
+        size_t lctr_indices = 0;
+        ifs.read((char *)&lctr_indices, sizeof(lctr_indices));
+        for (size_t i = 0; i < lctr_indices; i++) {
+            WickIndex wi;
+            wi.load(ifs);
+            ctr_indices.insert(wi);
+        }
+        ifs.read((char *)&factor, sizeof(factor));
     }
 };
 
@@ -2528,6 +2611,19 @@ struct WickExpr {
     }
     WickExpr simplify() const {
         return simplify_delta().simplify_zero().simplify_merge();
+    }
+    void save(ostream &ofs) const {
+        size_t lterms = (size_t)terms.size();
+        ofs.write((char *)&lterms, sizeof(lterms));
+        for (size_t i = 0; i < lterms; i++)
+            terms[i].save(ofs);
+    }
+    void load(istream &ifs) {
+        size_t lterms = 0;
+        ifs.read((char *)&lterms, sizeof(lterms));
+        terms.resize(lterms);
+        for (size_t i = 0; i < lterms; i++)
+            terms[i].load(ifs);
     }
 };
 

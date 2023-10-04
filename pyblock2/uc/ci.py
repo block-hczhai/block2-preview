@@ -24,11 +24,11 @@ import numpy as np
 
 class CI(lib.StreamObject):
     def __init__(self, mf, frozen=None, mo_coeff=None, mo_occ=None, ci_order=2):
-        from pyscf.scf import hf, addons
+        from pyscf.scf import hf, rohf, addons
 
         if isinstance(mf, hf.KohnShamDFT):
             raise RuntimeError("CI Warning: The first argument mf is a DFT object.")
-        if isinstance(mf, scf.rohf.ROHF):
+        if isinstance(mf, rohf.ROHF):
             lib.logger.warn(mf, 'RCI method does not support ROHF method. ROHF object '
                             'is converted to UHF object and UCI method is called.')
             mf = addons.convert_to_uhf(mf)

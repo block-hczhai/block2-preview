@@ -307,7 +307,31 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def_static("add_types", &WickIndex::add_types)
         .def_static("parse_with_types", &WickIndex::parse_with_types)
         .def_static("parse_set", &WickIndex::parse_set)
-        .def_static("parse_set_with_types", &WickIndex::parse_set_with_types);
+        .def_static("parse_set_with_types", &WickIndex::parse_set_with_types)
+        .def("save",
+             [](WickIndex *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("WickIndex::save on '" + filename +
+                                         "' failed.");
+                 self->save(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("WickIndex::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](WickIndex *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("WickIndex::load on '" + filename +
+                                    "' failed.");
+            self->load(ifs);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("WickIndex::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return *self;
+        });
 
     py::bind_vector<vector<WickIndex>>(m, "VectorWickIndex");
     py::bind_set_block2<std::set<WickIndex>>(m, "SetWickIndex");
@@ -345,7 +369,31 @@ template <typename S = void> void bind_wick(py::module &m) {
                     &WickPermutation::pair_anti_symmetric)
         .def_static("all", &WickPermutation::all)
         .def_static("pair_symmetric", &WickPermutation::pair_symmetric,
-                    py::arg("n"), py::arg("hermitian") = false);
+                    py::arg("n"), py::arg("hermitian") = false)
+        .def("save",
+             [](WickPermutation *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("WickPermutation::save on '" +
+                                         filename + "' failed.");
+                 self->save(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("WickPermutation::save on '" +
+                                         filename + "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](WickPermutation *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("WickPermutation::load on '" + filename +
+                                    "' failed.");
+            self->load(ifs);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("WickPermutation::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return *self;
+        });
 
     py::bind_vector<vector<WickPermutation>>(m, "VectorWickPermutation");
     py::bind_map<map<pair<string, int>, vector<WickPermutation>>>(
@@ -415,7 +463,31 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("get_permutation_rules", &WickTensor::get_permutation_rules)
         .def_static("get_index_map", &WickTensor::get_index_map)
         .def_static("get_all_index_permutations",
-                    &WickTensor::get_all_index_permutations);
+                    &WickTensor::get_all_index_permutations)
+        .def("save",
+             [](WickTensor *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("WickTensor::save on '" + filename +
+                                         "' failed.");
+                 self->save(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("WickTensor::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](WickTensor *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("WickTensor::load on '" + filename +
+                                    "' failed.");
+            self->load(ifs);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("WickTensor::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return *self;
+        });
 
     py::bind_vector<vector<WickTensor>>(m, "VectorWickTensor");
 
@@ -449,10 +521,35 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("simple_sort", &WickString::simple_sort)
         .def("quick_sort", &WickString::quick_sort)
         .def("simplify_delta", &WickString::simplify_delta)
-        .def("__repr__", [](WickString *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
+        .def("__repr__",
+             [](WickString *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("save",
+             [](WickString *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("WickString::save on '" + filename +
+                                         "' failed.");
+                 self->save(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("WickString::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](WickString *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("WickString::load on '" + filename +
+                                    "' failed.");
+            self->load(ifs);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("WickString::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return *self;
         });
 
     py::bind_vector<vector<WickString>>(m, "VectorWickString");
@@ -505,10 +602,35 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def("remove_inactive", &WickExpr::remove_inactive)
         .def("add_spin_free_trans_symm", &WickExpr::add_spin_free_trans_symm)
         .def("conjugate", &WickExpr::conjugate)
-        .def("__repr__", [](WickExpr *self) {
-            stringstream ss;
-            ss << *self;
-            return ss.str();
+        .def("__repr__",
+             [](WickExpr *self) {
+                 stringstream ss;
+                 ss << *self;
+                 return ss.str();
+             })
+        .def("save",
+             [](WickExpr *self, const string &filename) {
+                 ofstream ofs(filename.c_str(), ios::binary);
+                 if (!ofs.good())
+                     throw runtime_error("WickExpr::save on '" + filename +
+                                         "' failed.");
+                 self->save(ofs);
+                 if (!ofs.good())
+                     throw runtime_error("WickExpr::save on '" + filename +
+                                         "' failed.");
+                 ofs.close();
+             })
+        .def("load", [](WickExpr *self, const string &filename) {
+            ifstream ifs(filename.c_str(), ios::binary);
+            if (!ifs.good())
+                throw runtime_error("WickExpr::load on '" + filename +
+                                    "' failed.");
+            self->load(ifs);
+            if (ifs.fail() || ifs.bad())
+                throw runtime_error("WickExpr::load on '" + filename +
+                                    "' failed.");
+            ifs.close();
+            return *self;
         });
 
     py::bind_vector<vector<WickExpr>>(m, "VectorWickExpr");

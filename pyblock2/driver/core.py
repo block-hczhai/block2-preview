@@ -4729,6 +4729,8 @@ class WickNormalOrder:
         )
         is_single = lambda x: (x & b.WickIndexTypes.Single) != b.WickIndexTypes.Nothing
 
+        assert cidx.dtype == bool
+
         def ix(x):
             p = {"I": cidx, "S": midx, "E": ~cidx & ~midx}
             r = np.outer(p[x[0]], p[x[1]])
@@ -4836,6 +4838,8 @@ class WickNormalOrder:
             cidxa, cidxb = cidx
         else:
             cidxa, cidxb = cidx, cidx
+        assert cidxa.dtype == bool
+        assert cidxb.dtype == bool
 
         def ix(x):
             p = {"i": cidxa, "e": ~cidxa, "I": cidxb, "E": ~cidxb}
@@ -4928,6 +4932,8 @@ class WickNormalOrder:
         is_inactive = (
             lambda x: (x & b.WickIndexTypes.Inactive) != b.WickIndexTypes.Nothing
         )
+
+        assert cidx.dtype == bool
 
         def ix(x):
             p = {"I": cidx, "E": ~cidx}
