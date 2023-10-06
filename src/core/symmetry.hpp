@@ -412,8 +412,8 @@ struct SZShort {
     typedef void is_sz_t;
     typedef uint8_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SZShort() : data(0) {}
     explicit SZShort(uint32_t data) : data(data) {}
     SZShort(int n, int twos, int pg)
@@ -481,8 +481,8 @@ struct SZLong {
     typedef void is_sz_t;
     typedef uint8_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SZLong() : data(0) {}
     explicit SZLong(uint32_t data) : data(data) {}
     SZLong(int n, int twos, int pg)
@@ -557,8 +557,8 @@ template <bool IF> struct SGLong {
     typedef uint8_t pg_t;
     static const bool GIF = IF;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SGLong() : data(0) {}
     explicit SGLong(uint32_t data) : data(data) {}
     SGLong(int n, int pg) : data((((uint32_t)n) << 16) | pg) {}
@@ -618,8 +618,8 @@ struct SZLongLong {
     typedef void is_sz_t;
     typedef uint8_t pg_t;
     uint64_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    // S(invalid) must have maximal data
+    const static uint64_t invalid = 0xFFFFFFFFFFFFFFFFULL;
     SZLongLong() : data(0) {}
     explicit SZLongLong(uint64_t data) : data(data) {}
     SZLongLong(int n, int twos, int pg)
@@ -702,8 +702,8 @@ struct SZKLong {
     typedef void is_sz_t;
     typedef uint32_t pg_t;
     uint64_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    // S(invalid) must have maximal data
+    const static uint64_t invalid = 0xFFFFFFFFFFFFFFFFULL;
     SZKLong() : data(0) {}
     explicit SZKLong(uint64_t data) : data(data) {}
     SZKLong(int n, int twos, int pg)
@@ -828,8 +828,8 @@ struct SZLZ {
     typedef void is_sz_t;
     typedef int16_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SZLZ() : data(0) {}
     explicit SZLZ(uint32_t data) : data(data) {}
     SZLZ(int n, int twos, int pg)
@@ -919,8 +919,8 @@ struct SU2Short {
     typedef void is_su2_t;
     typedef uint8_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SU2Short() : data(0) {}
     explicit SU2Short(uint32_t data) : data(data) {}
     SU2Short(int n, int twos, int pg)
@@ -1031,8 +1031,8 @@ struct SU2Long {
     typedef void is_su2_t;
     typedef uint8_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SU2Long() : data(0) {}
     explicit SU2Long(uint32_t data) : data(data) {}
     SU2Long(int n, int twos, int pg)
@@ -1147,8 +1147,8 @@ struct SU2LongLong {
     typedef void is_su2_t;
     typedef uint8_t pg_t;
     uint64_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    // S(invalid) must have maximal data
+    const static uint64_t invalid = 0xFFFFFFFFFFFFFFFFULL;
     SU2LongLong() : data(0) {}
     explicit SU2LongLong(uint64_t data) : data(data) {}
     SU2LongLong(int n, int twos, int pg)
@@ -1277,8 +1277,8 @@ struct SU2KLong {
     typedef void is_su2_t;
     typedef uint32_t pg_t;
     uint64_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint64_t invalid = 0x7FFFFFFFFFFFFFFFULL;
+    // S(invalid) must have maximal data
+    const static uint64_t invalid = 0xFFFFFFFFFFFFFFFFULL;
     SU2KLong() : data(0) {}
     explicit SU2KLong(uint64_t data) : data(data) {}
     SU2KLong(int n, int twos, int pg)
@@ -1455,8 +1455,8 @@ struct SU2LZ {
     typedef void is_su2_t;
     typedef int16_t pg_t;
     uint32_t data;
-    // S(invalid) must have maximal particle number n
-    const static uint32_t invalid = 0x7FFFFFFFU;
+    // S(invalid) must have maximal data
+    const static uint32_t invalid = 0xFFFFFFFFU;
     SU2LZ() : data(0) {}
     explicit SU2LZ(uint32_t data) : data(data) {}
     SU2LZ(int n, int twos, int pg)
