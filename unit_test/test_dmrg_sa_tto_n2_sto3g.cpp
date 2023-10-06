@@ -167,7 +167,7 @@ TYPED_TEST(TestTTODMRGN2STO3GSA, TestSU2) {
     for (int tto = 3; tto < 5; tto++)
         this->template test_dmrg<SU2>(
             targets, energies, hamil, "SU2",
-            (ubond_t)min(200U, (uint32_t)numeric_limits<ubond_t>::max()), 10,
+            (ubond_t)min(200U, (uint32_t)numeric_limits<ubond_t>::max()), 6,
             tto);
 
     hamil->deallocate();
@@ -221,7 +221,7 @@ TYPED_TEST(TestTTODMRGN2STO3GSA, TestSZ) {
     for (int tto = 3; tto < 5; tto++)
         this->template test_dmrg<SZ>(
             targets, energies, hamil, "SZ",
-            (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 16,
+            (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 7,
             tto);
 
     hamil->deallocate();

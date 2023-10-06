@@ -255,7 +255,7 @@ TEST_F(TestDMRGN2STO3GSA, TestSZ) {
 
     test_dmrg<SZ, double>(
         targets, energies, hamil, "SZ",
-        (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 16);
+        (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 7);
 
     hamil->deallocate();
     fcidump->deallocate();

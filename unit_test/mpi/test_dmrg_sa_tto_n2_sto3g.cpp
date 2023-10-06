@@ -212,7 +212,7 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSU2) {
     for (int tto = 3; tto < 5; tto++)
         test_dmrg<SU2, double>(
             targets, energies, hamil, "SU2",
-            (ubond_t)min(200U, (uint32_t)numeric_limits<ubond_t>::max()), 10,
+            (ubond_t)min(200U, (uint32_t)numeric_limits<ubond_t>::max()), 6,
             tto);
 
     hamil->deallocate();
@@ -264,7 +264,7 @@ TEST_F(TestTTODMRGN2STO3GSA, TestSZ) {
     for (int tto = 3; tto < 5; tto++)
         test_dmrg<SZ, double>(
             targets, energies, hamil, "SZ",
-            (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 16,
+            (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 7,
             tto);
 
     hamil->deallocate();

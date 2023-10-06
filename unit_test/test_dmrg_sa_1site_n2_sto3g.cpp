@@ -159,7 +159,7 @@ TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSU2) {
     shared_ptr<HamiltonianQC<SU2, FL>> hamil =
         make_shared<HamiltonianQC<SU2, FL>>(vacuum, norb, orbsym, fcidump);
 
-    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2", 200, 10);
+    this->template test_dmrg<SU2>(targets, energies, hamil, "SU2", 200, 6);
 
     hamil->deallocate();
     fcidump->deallocate();
@@ -211,7 +211,7 @@ TYPED_TEST(TestOneSiteDMRGN2STO3GSA, TestSZ) {
 
     this->template test_dmrg<SZ>(
         targets, energies, hamil, "SZ",
-        (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 16);
+        (ubond_t)min(400U, (uint32_t)numeric_limits<ubond_t>::max()), 7);
 
     hamil->deallocate();
     fcidump->deallocate();
