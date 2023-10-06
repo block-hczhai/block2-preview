@@ -32,6 +32,9 @@ author = 'Huanchen Zhai'
 extensions = [
     "breathe",
     "nbsphinx",
+    'sphinx.ext.autodoc',
+    'sphinx.ext.mathjax',
+    'sphinx_rtd_theme',
 ]
 
 breathe_projects = {"block2": "../build/doxygenxml/"}
