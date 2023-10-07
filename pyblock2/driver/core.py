@@ -2542,6 +2542,34 @@ class DMRGDriver:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
 
+    def get_site_mpo(self, op, site_index, iprint=1):
+        import numpy as np
+
+        bw = self.bw
+        b = self.expr_builder()
+
+        if self.reorder_idx is not None:
+            ridx = np.argsort(self.reorder_idx)
+            site_index = ridx[site_index]
+
+        mpo_lq = None
+        if SymmetryTypes.SU2 in bw.symm_type:
+            assert op in ["C", "D"]
+            mpo_lq = bw.SX(-1, 1, 0) if op == "C" else bw.SX(1, 1, 0)
+            b.add_term(op, [site_index], 2 ** 0.5)
+        elif SymmetryTypes.SZ in bw.symm_type:
+            assert op in ["c", "d", "C", "D"]
+            b.add_term(op, [site_index], 1.0)
+        elif SymmetryTypes.SGF in bw.symm_type:
+            assert op in ["C", "D"]
+            b.add_term(op, [site_index], 1.0)
+
+        if self.mpi is not None:
+            b.iscale(1.0 / self.mpi.size)
+
+        bx = b.finalize()
+        return self.get_mpo(bx, iprint, left_vacuum=mpo_lq)
+
     def get_spin_square_mpo(self, iprint=1):
         import numpy as np
 
