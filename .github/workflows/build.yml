@@ -23,7 +23,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-11 ]
+        os: [ ubuntu-20.04, macos-11 ]
         python: [ 3.9 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
@@ -47,13 +47,13 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 
       - name: install requirements (linux / mpi)
-        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-22.04'
+        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-20.04'
         run: |
           sudo apt-get install libopenmpi-dev
           python -m pip install mpi4py
 
       - name: build gtest (linux)
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-20.04'
         env:
           CC: gcc-9
           CXX: g++-9
@@ -106,7 +106,7 @@ jobs:
           make -j 2
 
       - name: build test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-22.04'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
           CC: gcc-9
@@ -137,7 +137,7 @@ jobs:
           ./block2_tests
 
       - name: run test (serial-pytest, linux)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-22.04'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
           python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -151,7 +151,7 @@ jobs:
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (any-symm-pytest, linux)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-22.04'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
           python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -187,7 +187,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-11, macos-12 ]
+        os: [ ubuntu-20.04, macos-11, macos-12 ]
         python: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
@@ -195,7 +195,7 @@ jobs:
         exclude:
           - os: macos-11
             parallel: mpi
-          - os: ubuntu-22.04
+          - os: ubuntu-20.04
             plat: arm64
           - os: macos-11
             plat: arm64
@@ -285,7 +285,7 @@ jobs:
           delocate-wheel --require-archs=arm64 -k dist/*.whl
 
       - name: prepare build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-22.04'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -294,7 +294,7 @@ jobs:
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-22.04'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
         uses: ./.github/actions/build-wheel
         with:
           python-version: ${{ matrix.python }}
@@ -317,7 +317,7 @@ jobs:
   pypi:
     name: pypi
     needs: [build, test]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     if: startsWith(github.ref, 'refs/tags/')
     environment:
       name: github-pages
@@ -382,7 +382,7 @@ jobs:
   publish:
     name: publish
     needs: [build, test]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v3
