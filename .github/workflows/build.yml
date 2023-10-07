@@ -54,6 +54,9 @@ jobs:
 
       - name: build gtest (linux)
         if: matrix.os == 'ubuntu-22.04'
+        env:
+          CC: gcc-9
+          CXX: g++-9
         run: |
           lscpu
           sudo apt-get install libgtest-dev
@@ -79,6 +82,8 @@ jobs:
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
+          CC: gcc-9
+          CXX: g++-9
         run: |
           mkdir build
           cd build
@@ -91,6 +96,8 @@ jobs:
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
+          CC: gcc-9
+          CXX: g++-9
         run: |
           mkdir build
           cd build
@@ -102,6 +109,8 @@ jobs:
         if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-22.04'
         env:
           MKLROOT: ~/.local
+          CC: gcc-9
+          CXX: g++-9
         run: |
           mkdir build_test
           cd build_test
