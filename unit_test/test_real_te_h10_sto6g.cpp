@@ -260,11 +260,7 @@ void TestRealTEH10STO6G<FL>::test_dmrg(
     mpo->deallocate();
 }
 
-#ifdef _USE_COMPLEX
-typedef ::testing::Types<complex<double>> TestFL;
-#else
 typedef ::testing::Types<double> TestFL;
-#endif
 
 TYPED_TEST_CASE(TestRealTEH10STO6G, TestFL);
 

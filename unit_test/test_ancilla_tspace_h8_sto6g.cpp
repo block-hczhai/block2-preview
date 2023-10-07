@@ -179,11 +179,7 @@ void TestTSpaceAncillaH8STO6G<FL>::test_imag_te(
     mpo->deallocate();
 }
 
-#ifdef _USE_COMPLEX
-typedef ::testing::Types<complex<double>, double> TestFL;
-#else
 typedef ::testing::Types<double> TestFL;
-#endif
 
 TYPED_TEST_CASE(TestTSpaceAncillaH8STO6G, TestFL);
 
