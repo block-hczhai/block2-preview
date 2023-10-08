@@ -4135,6 +4135,16 @@ class DMRGDriver:
         r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return r
 
+    def mps_change_complex(self, mps, tag):
+        bw = self.bw
+        assert tag != mps.info.tag
+        if SymmetryTypes.CPX in bw.symm_type:
+            r = bw.bs.trans_mps_to_real(mps, tag)
+        else:
+            r = bw.bs.trans_mps_to_complex(mps, tag)
+        r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        return r
+
     def mps_change_to_sz(self, mps, tag, sz=None):
         bw = self.bw
         assert SymmetryTypes.SU2 in bw.symm_type

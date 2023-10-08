@@ -22,3 +22,16 @@
 
 template void bind_fl_mps<SZ, complex<double>>(py::module &m);
 template void bind_fl_mps<SU2, complex<double>>(py::module &m);
+
+template void
+bind_fl_trans_mps<SU2, complex<double>, double>(py::module &m,
+                                                const string &aux_name);
+template void
+bind_fl_trans_mps<SU2, double, complex<double>>(py::module &m,
+                                                const string &aux_name);
+template void
+bind_fl_trans_mps<SZ, complex<double>, double>(py::module &m,
+                                               const string &aux_name);
+template void
+bind_fl_trans_mps<SZ, double, complex<double>>(py::module &m,
+                                               const string &aux_name);

@@ -255,6 +255,11 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg<SU2, complex<double>>(m_su2_cpx, "SU2");
     bind_dmrg<SZ, complex<double>>(m_sz_cpx, "SZ");
     bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(m_su2_cpx, "sz");
+
+    bind_fl_trans_mps<SU2, complex<double>, double>(m_su2_cpx, "real");
+    bind_fl_trans_mps<SU2, double, complex<double>>(m_su2, "complex");
+    bind_fl_trans_mps<SZ, complex<double>, double>(m_sz_cpx, "real");
+    bind_fl_trans_mps<SZ, double, complex<double>>(m_sz, "complex");
 #endif
 #endif
 
@@ -285,6 +290,11 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg<SGB, complex<double>>(m_sgb_cpx, "SGB");
 #ifdef _USE_SU2SZ
     bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(m_sz_cpx, "sgf");
+
+    bind_fl_trans_mps<SGF, complex<double>, double>(m_su2_cpx, "real");
+    bind_fl_trans_mps<SGF, double, complex<double>>(m_su2, "complex");
+    bind_fl_trans_mps<SGB, complex<double>, double>(m_sz_cpx, "real");
+    bind_fl_trans_mps<SGB, double, complex<double>>(m_sz, "complex");
 #endif
 #endif
 #endif
@@ -319,6 +329,11 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_trans_mps<SZ, complex<float>, complex<double>>(m_sz_cpx_sp,
                                                            "double");
     bind_fl_trans_mps<SZ, complex<double>, complex<float>>(m_sz_cpx, "float");
+
+    bind_fl_trans_mps<SU2, complex<float>, float>(m_su2_cpx_sp, "real");
+    bind_fl_trans_mps<SU2, float, complex<float>>(m_su2_sp, "complex");
+    bind_fl_trans_mps<SZ, complex<float>, float>(m_sz_cpx_sp, "real");
+    bind_fl_trans_mps<SZ, float, complex<float>>(m_sz_sp, "complex");
 #endif
 #endif
 
@@ -348,6 +363,11 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_trans_mps<SGB, complex<float>, complex<double>>(m_sgb_cpx_sp,
                                                             "double");
     bind_fl_trans_mps<SGB, complex<double>, complex<float>>(m_sgb_cpx, "float");
+
+    bind_fl_trans_mps<SGF, complex<float>, float>(m_su2_cpx_sp, "real");
+    bind_fl_trans_mps<SGF, float, complex<float>>(m_su2_sp, "complex");
+    bind_fl_trans_mps<SGB, complex<float>, float>(m_sz_cpx_sp, "real");
+    bind_fl_trans_mps<SGB, float, complex<float>>(m_sz_sp, "complex");
 #endif
 #endif
 

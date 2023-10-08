@@ -2462,6 +2462,15 @@ extern template auto bind_fl_spin_specific<SU2, complex<double>>(py::module &m)
 extern template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
     py::module &m, const string &aux_name)
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
+
+extern template void
+bind_fl_trans_mps<SU2, double, complex<double>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SU2, complex<double>, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, double, complex<double>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, complex<double>, double>(py::module &m, const string &aux_name);
 #endif
 
 #endif
@@ -2715,6 +2724,14 @@ extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
     -> decltype(typename SZ::is_sz_t(typename SGF::is_sg_t()));
 #endif
 
+extern template void
+bind_fl_trans_mps<SGF, double, complex<double>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGF, complex<double>, double>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, double, complex<double>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, complex<double>, double>(py::module &m, const string &aux_name);
 #endif
 
 #endif
@@ -2910,6 +2927,15 @@ extern template void
 bind_fl_trans_mps<SZ, complex<double>, complex<float>>(py::module &m,
                                                        const string &aux_name);
 
+extern template void
+bind_fl_trans_mps<SU2, float, complex<float>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SU2, complex<float>, float>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, float, complex<float>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SZ, complex<float>, float>(py::module &m, const string &aux_name);
+
 #endif
 
 #endif
@@ -3046,6 +3072,14 @@ extern template void
 bind_fl_trans_mps<SGB, complex<double>, complex<float>>(py::module &m,
                                                         const string &aux_name);
 
+extern template void
+bind_fl_trans_mps<SGF, float, complex<float>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGF, complex<float>, float>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, float, complex<float>>(py::module &m, const string &aux_name);
+extern template void
+bind_fl_trans_mps<SGB, complex<float>, float>(py::module &m, const string &aux_name);
 #endif
 
 #endif

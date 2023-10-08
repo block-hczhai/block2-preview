@@ -27,3 +27,8 @@ template struct block2::TransMPS<block2::SZ, complex<double>, complex<float>>;
 template struct block2::TransMPS<block2::SZ, complex<float>, complex<double>>;
 template struct block2::TransMPS<block2::SU2, complex<double>, complex<float>>;
 template struct block2::TransMPS<block2::SU2, complex<float>, complex<double>>;
+
+template struct block2::TransMPS<block2::SZ, float, complex<float>>;
+template struct block2::TransMPS<block2::SZ, complex<float>, float>;
+template struct block2::TransMPS<block2::SU2, float, complex<float>>;
+template struct block2::TransMPS<block2::SU2, complex<float>, float>;
