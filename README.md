@@ -115,6 +115,8 @@ Features
     * Block-sparse (outer) / elementwise-sparse (CSR, inner)
 * Fermionic MPS algebra (non-spin-adapted only)
 * Determinant/CSF coefficients of MPS
+    * Extracting Determinant/CSF coefficients from MPS
+    * Constructing MPS from Determinant/CSF coefficients
 * Multi-level parallel DMRG
     * Parallelism over sites (2-site only)
     * Parallelism over sum of MPOs (distributed)
