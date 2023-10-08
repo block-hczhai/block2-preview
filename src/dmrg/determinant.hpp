@@ -177,6 +177,111 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
+    shared_ptr<UnfusedMPS<S, FL>>
+    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+        shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
+        r->info = info;
+        r->canonical_form = string(n_sites - 1, 'L') + "K";
+        r->center = n_sites - 1;
+        r->n_sites = n_sites;
+        r->dot = 1;
+        r->tensors.resize(n_sites);
+        S vacuum = info->left_dims_fci[0]->quanta[0];
+        vector<pair<S, int>> cur_nodes =
+            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        info->left_dims[0] =
+            make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
+        for (int i = 0; i < n_sites; i++)
+            info->left_dims[i + 1] = make_shared<StateInfo<S>>(
+                info->left_dims_fci[i + 1]->deep_copy());
+        info->right_dims[n_sites] = make_shared<StateInfo<S>>(
+            info->right_dims_fci[n_sites]->deep_copy());
+        for (int i = n_sites - 1; i >= 0; i--)
+            info->right_dims[i] =
+                make_shared<StateInfo<S>>(info->right_dims_fci[i]->deep_copy());
+        for (int k = 0; k < n_sites; k++) {
+            vector<uint8_t> basis_iqs(4);
+            for (uint8_t j = 0; j < info->basis[k]->n; j++)
+                if (info->basis[k]->quanta[j].n() == 0)
+                    basis_iqs[0] = j;
+                else if (info->basis[k]->quanta[j].n() == 2)
+                    basis_iqs[3] = j;
+                else if (info->basis[k]->quanta[j].twos() == 1)
+                    basis_iqs[1] = j;
+                else if (info->basis[k]->quanta[j].twos() == -1)
+                    basis_iqs[2] = j;
+                else
+                    assert(false);
+            shared_ptr<SparseTensor<S, FL>> t =
+                make_shared<SparseTensor<S, FL>>();
+            vector<pair<S, int>> next_nodes;
+            map<S, MKL_INT> lsh, rsh;
+            vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
+                info->basis[k]->n);
+            vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
+            // determine shape
+            for (const auto &irx : cur_nodes) {
+                int ir = irx.second;
+                S pq = irx.first;
+                for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
+                    if (data[ir][j] != 0) {
+                        S nq = pq + info->basis[k]->quanta[basis_iqs[j]];
+                        next_nodes.push_back(make_pair(nq, data[ir][j]));
+                        blocks[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                            make_pair(lsh[pq], rsh[nq]));
+                        if (k == n_sites - 1) {
+                            int idx =
+                                (int)(lower_bound(dets.begin(), dets.end(),
+                                                  data[ir][j]) -
+                                      dets.begin());
+                            assert(idx < (int)dets.size() &&
+                                   dets[idx] == data[ir][j]);
+                            coeffs[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                                vals[idx]);
+                        } else
+                            rsh[nq]++;
+                    }
+                lsh[pq]++;
+            }
+            if (k == n_sites - 1) {
+                assert(rsh.size() == 1);
+                rsh.begin()->second = 1;
+            }
+            // create tensor
+            t->data.resize(blocks.size());
+            for (uint8_t j = 0; j < (uint8_t)blocks.size(); j++)
+                for (const auto &mp : blocks[j]) {
+                    shared_ptr<GTensor<FL>> gt = make_shared<GTensor<FL>>(
+                        lsh.at(mp.first.first), 1, rsh.at(mp.first.second));
+                    t->data[j].push_back(make_pair(
+                        make_pair(mp.first.first, mp.first.second), gt));
+                    if (k == n_sites - 1)
+                        for (size_t im = 0; im < mp.second.size(); im++)
+                            (*gt)({mp.second[im].first, 0,
+                                   mp.second[im].second}) =
+                                coeffs[j].at(mp.first)[im];
+                    else
+                        for (const auto &mx : mp.second)
+                            (*gt)({mx.first, 0, mx.second}) = (FL)(FP)1.0;
+                }
+            cur_nodes = next_nodes;
+            // put shape in bond dims
+            for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
+                total_bond_t new_total = 0;
+                if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
+                    info->left_dims[k + 1]->n_states[p] =
+                        (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
+                    new_total += info->left_dims[k + 1]->n_states[p];
+                } else
+                    info->left_dims[k + 1]->n_states[p] = 0;
+                info->left_dims[k + 1]->n_states_total = new_total;
+            }
+            r->tensors[k] = t;
+        }
+        info->check_bond_dimensions();
+        info->save_mutable();
+        return r;
+    }
     // set the value for each determinant to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
@@ -416,6 +521,111 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
+    shared_ptr<UnfusedMPS<S, FL>>
+    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+        shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
+        r->info = info;
+        r->canonical_form = string(n_sites - 1, 'L') + "K";
+        r->center = n_sites - 1;
+        r->n_sites = n_sites;
+        r->dot = 1;
+        r->tensors.resize(n_sites);
+        S vacuum = info->left_dims_fci[0]->quanta[0];
+        vector<pair<S, int>> cur_nodes =
+            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        info->left_dims[0] =
+            make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
+        for (int i = 0; i < n_sites; i++)
+            info->left_dims[i + 1] = make_shared<StateInfo<S>>(
+                info->left_dims_fci[i + 1]->deep_copy());
+        info->right_dims[n_sites] = make_shared<StateInfo<S>>(
+            info->right_dims_fci[n_sites]->deep_copy());
+        for (int i = n_sites - 1; i >= 0; i--)
+            info->right_dims[i] =
+                make_shared<StateInfo<S>>(info->right_dims_fci[i]->deep_copy());
+        for (int k = 0; k < n_sites; k++) {
+            vector<uint8_t> basis_iqs(4);
+            for (uint8_t j = 0; j < info->basis[k]->n; j++)
+                if (info->basis[k]->quanta[j].n() == 0)
+                    basis_iqs[0] = j;
+                else if (info->basis[k]->quanta[j].n() == 2)
+                    basis_iqs[3] = j;
+                else if (info->basis[k]->quanta[j].twos() == 1)
+                    basis_iqs[1] = basis_iqs[2] = j;
+                else
+                    assert(false);
+            shared_ptr<SparseTensor<S, FL>> t =
+                make_shared<SparseTensor<S, FL>>();
+            vector<pair<S, int>> next_nodes;
+            map<S, MKL_INT> lsh, rsh;
+            vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
+                info->basis[k]->n);
+            vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
+            // determine shape
+            for (const auto &irx : cur_nodes) {
+                int ir = irx.second;
+                S pq = irx.first;
+                for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
+                    if (data[ir][j] != 0) {
+                        S nq = pq + info->basis[k]->quanta[basis_iqs[j]];
+                        if (nq.count() > 1)
+                            nq = nq[j == 1];
+                        next_nodes.push_back(make_pair(nq, data[ir][j]));
+                        blocks[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                            make_pair(lsh[pq], rsh[nq]));
+                        if (k == n_sites - 1) {
+                            int idx =
+                                (int)(lower_bound(dets.begin(), dets.end(),
+                                                  data[ir][j]) -
+                                      dets.begin());
+                            assert(idx < (int)dets.size() &&
+                                   dets[idx] == data[ir][j]);
+                            coeffs[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                                vals[idx]);
+                        } else
+                            rsh[nq]++;
+                    }
+                lsh[pq]++;
+            }
+            if (k == n_sites - 1) {
+                assert(rsh.size() == 1);
+                rsh.begin()->second = 1;
+            }
+            // create tensor
+            t->data.resize(blocks.size());
+            for (uint8_t j = 0; j < (uint8_t)blocks.size(); j++)
+                for (const auto &mp : blocks[j]) {
+                    shared_ptr<GTensor<FL>> gt = make_shared<GTensor<FL>>(
+                        lsh.at(mp.first.first), 1, rsh.at(mp.first.second));
+                    t->data[j].push_back(make_pair(
+                        make_pair(mp.first.first, mp.first.second), gt));
+                    if (k == n_sites - 1)
+                        for (size_t im = 0; im < mp.second.size(); im++)
+                            (*gt)({mp.second[im].first, 0,
+                                   mp.second[im].second}) =
+                                coeffs[j].at(mp.first)[im];
+                    else
+                        for (const auto &mx : mp.second)
+                            (*gt)({mx.first, 0, mx.second}) = (FL)(FP)1.0;
+                }
+            cur_nodes = next_nodes;
+            // put shape in bond dims
+            for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
+                total_bond_t new_total = 0;
+                if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
+                    info->left_dims[k + 1]->n_states[p] =
+                        (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
+                    new_total += info->left_dims[k + 1]->n_states[p];
+                } else
+                    info->left_dims[k + 1]->n_states[p] = 0;
+                info->left_dims[k + 1]->n_states_total = new_total;
+            }
+            r->tensors[k] = t;
+        }
+        info->check_bond_dimensions();
+        info->save_mutable();
+        return r;
+    }
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
@@ -590,6 +800,107 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     using TRIE<DeterminantTRIE<S, FL>, FL, 2>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
+    shared_ptr<UnfusedMPS<S, FL>>
+    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+        shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
+        r->info = info;
+        r->canonical_form = string(n_sites - 1, 'L') + "K";
+        r->center = n_sites - 1;
+        r->n_sites = n_sites;
+        r->dot = 1;
+        r->tensors.resize(n_sites);
+        S vacuum = info->left_dims_fci[0]->quanta[0];
+        vector<pair<S, int>> cur_nodes =
+            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        info->left_dims[0] =
+            make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
+        for (int i = 0; i < n_sites; i++)
+            info->left_dims[i + 1] = make_shared<StateInfo<S>>(
+                info->left_dims_fci[i + 1]->deep_copy());
+        info->right_dims[n_sites] = make_shared<StateInfo<S>>(
+            info->right_dims_fci[n_sites]->deep_copy());
+        for (int i = n_sites - 1; i >= 0; i--)
+            info->right_dims[i] =
+                make_shared<StateInfo<S>>(info->right_dims_fci[i]->deep_copy());
+        for (int k = 0; k < n_sites; k++) {
+            vector<uint8_t> basis_iqs(2);
+            for (uint8_t j = 0; j < info->basis[k]->n; j++)
+                if (info->basis[k]->quanta[j].n() == 0)
+                    basis_iqs[0] = j;
+                else if (info->basis[k]->quanta[j].n() == 1)
+                    basis_iqs[1] = j;
+                else
+                    assert(false);
+            shared_ptr<SparseTensor<S, FL>> t =
+                make_shared<SparseTensor<S, FL>>();
+            vector<pair<S, int>> next_nodes;
+            map<S, MKL_INT> lsh, rsh;
+            vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
+                info->basis[k]->n);
+            vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
+            // determine shape
+            for (const auto &irx : cur_nodes) {
+                int ir = irx.second;
+                S pq = irx.first;
+                for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
+                    if (data[ir][j] != 0) {
+                        S nq = pq + info->basis[k]->quanta[basis_iqs[j]];
+                        next_nodes.push_back(make_pair(nq, data[ir][j]));
+                        blocks[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                            make_pair(lsh[pq], rsh[nq]));
+                        if (k == n_sites - 1) {
+                            int idx =
+                                (int)(lower_bound(dets.begin(), dets.end(),
+                                                  data[ir][j]) -
+                                      dets.begin());
+                            assert(idx < (int)dets.size() &&
+                                   dets[idx] == data[ir][j]);
+                            coeffs[basis_iqs[j]][make_pair(pq, nq)].push_back(
+                                vals[idx]);
+                        } else
+                            rsh[nq]++;
+                    }
+                lsh[pq]++;
+            }
+            if (k == n_sites - 1) {
+                assert(rsh.size() == 1);
+                rsh.begin()->second = 1;
+            }
+            // create tensor
+            t->data.resize(blocks.size());
+            for (uint8_t j = 0; j < (uint8_t)blocks.size(); j++)
+                for (const auto &mp : blocks[j]) {
+                    shared_ptr<GTensor<FL>> gt = make_shared<GTensor<FL>>(
+                        lsh.at(mp.first.first), 1, rsh.at(mp.first.second));
+                    t->data[j].push_back(make_pair(
+                        make_pair(mp.first.first, mp.first.second), gt));
+                    if (k == n_sites - 1)
+                        for (size_t im = 0; im < mp.second.size(); im++)
+                            (*gt)({mp.second[im].first, 0,
+                                   mp.second[im].second}) =
+                                coeffs[j].at(mp.first)[im];
+                    else
+                        for (const auto &mx : mp.second)
+                            (*gt)({mx.first, 0, mx.second}) = (FL)(FP)1.0;
+                }
+            cur_nodes = next_nodes;
+            // put shape in bond dims
+            for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
+                total_bond_t new_total = 0;
+                if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
+                    info->left_dims[k + 1]->n_states[p] =
+                        (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
+                    new_total += info->left_dims[k + 1]->n_states[p];
+                } else
+                    info->left_dims[k + 1]->n_states[p] = 0;
+                info->left_dims[k + 1]->n_states_total = new_total;
+            }
+            r->tensors[k] = t;
+        }
+        info->check_bond_dimensions();
+        info->save_mutable();
+        return r;
+    }
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {
@@ -797,6 +1108,10 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
     typedef typename GMatrix<FL>::FP FP;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
+    shared_ptr<UnfusedMPS<S, FL>>
+    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+        throw runtime_error("Not implemented for arbitrary symmetry!");
+    }
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
                   int max_rank = -1, const vector<uint8_t> &ref = {}) {

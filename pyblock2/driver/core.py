@@ -3592,7 +3592,7 @@ class DMRGDriver:
     def get_trans_4pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
-    def get_csf_coefficients(self, ket, cutoff=0.1, iprint=1):
+    def get_csf_coefficients(self, ket, cutoff=0.1, max_print=200, iprint=1):
         bw = self.bw
         iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
         import numpy as np, time
@@ -3607,7 +3607,7 @@ class DMRGDriver:
             print("Number of %s = %10d (cutoff = %9.5g)" % (dname, len(dtrie), cutoff))
         ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
         dvals = np.array(dtrie.vals)
-        gidx = np.argsort(np.abs(dvals))[::-1][:500]
+        gidx = np.argsort(np.abs(dvals))[::-1][:max_print]
         if iprint:
             print(
                 "Sum of weights of included %s = %20.15f\n"
@@ -3621,7 +3621,7 @@ class DMRGDriver:
                     det = "".join([ddstr[x] for x in np.array(dtrie[idx])])
                 val = dvals[idx]
                 print(dname, "%10d" % ii, det, " = %20.15f" % val)
-            if len(dvals) > 500:
+            if len(dvals) > max_print:
                 print(" ... and more ... ")
         dets = np.zeros((len(dtrie), ket.n_sites), dtype=np.uint8)
         for i in range(len(dtrie)):
@@ -4135,6 +4135,21 @@ class DMRGDriver:
         r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return r
 
+    def mps_change_to_sz(self, mps, tag, sz=None):
+        bw = self.bw
+        assert SymmetryTypes.SU2 in bw.symm_type
+        assert tag != mps.info.tag
+        mps.info.load_mutable()
+        mps.load_mutable()
+        umps = bw.bs.trans_unfused_mps_to_sz(bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg)
+        if sz is not None:
+            umps.resolve_singlet_embedding(sz)
+        zmps = umps.finalize()
+
+        zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
+        return zmps
+
     def get_random_mps(
         self,
         tag,
@@ -4238,6 +4253,45 @@ class DMRGDriver:
         mps_info.save_mutable()
         mps.save_data()
         mps_info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        return mps
+
+    def get_mps_from_csf_coefficients(self, dets, dvals, tag, dot=2, target=None,
+                                      full_fci=True, left_vacuum=None):
+        bw = self.bw
+        assert self.reorder_idx is None
+
+        dtrie = bw.bs.DeterminantTRIE(self.n_sites, True)
+        ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
+        map_dets = {}
+        assert len(dets) == len(dvals)
+        for it, det in enumerate(dets):
+            ddet = det
+            if isinstance(ddet, str):
+                ddet = [ddstr.index(x) for x in ddet]
+            if tuple(ddet) not in map_dets:
+                map_dets[tuple(ddet)] = dvals[it]
+            else:
+                map_dets[tuple(ddet)] += dvals[it]
+        for det, val in map_dets.items():
+            dtrie.append(bw.b.VectorUInt8(det))
+            dtrie.vals.append(val)
+        dtrie.sort_dets()
+
+        if target is None:
+            target = self.target
+        if left_vacuum is None:
+            left_vacuum = self.left_vacuum
+        mps_info = bw.brs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        mps_info.tag = tag
+        if full_fci:
+            mps_info.set_bond_dimension_full_fci(left_vacuum, self.vacuum)
+        else:
+            mps_info.set_bond_dimension_fci(left_vacuum, self.vacuum)
+        mps_info.bond_dim = len(dets)
+
+        mps = dtrie.construct_mps(mps_info).finalize()
+        mps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
 
     def expr_builder(self):

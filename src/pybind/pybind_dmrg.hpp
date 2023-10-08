@@ -517,11 +517,14 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("clear", &DeterminantTRIE<S, FL>::clear)
         .def("copy", &DeterminantTRIE<S, FL>::copy)
         .def("__len__", &DeterminantTRIE<S, FL>::size)
+        .def("sort_dets", &DeterminantTRIE<S, FL>::sort_dets)
         .def("append", &DeterminantTRIE<S, FL>::push_back, py::arg("det"))
         .def("find", &DeterminantTRIE<S, FL>::find, py::arg("det"))
         .def("__getitem__", &DeterminantTRIE<S, FL>::operator[], py::arg("idx"))
         .def("get_state_occupation",
              &DeterminantTRIE<S, FL>::get_state_occupation)
+        .def("construct_mps", &DeterminantTRIE<S, FL>::construct_mps,
+             py::arg("info"))
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0, py::arg("max_rank") = -1,
              py::arg("ref") = vector<uint8_t>())

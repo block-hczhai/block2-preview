@@ -307,7 +307,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
             for (; j < n_init_qs && (iabc != abc[j] || ipg != pgs[j]); j++)
                 i += xs[j].back();
         }
-        for (int j = 0, k = n_sites - 1; k >= 0; k--) {
+        for (int k = n_sites - 1; k >= 0; k--) {
             uint8_t d = (uint8_t)string("0+-2").find(x[k]);
             i += xs[j][d], j = jds[j][d];
         }
