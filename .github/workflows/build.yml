@@ -23,12 +23,12 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-11 ]
+        os: [ ubuntu-20.04, macos-12 ]
         python: [ 3.9 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
         exclude:
-          - os: macos-11
+          - os: macos-12
             parallel: mpi
       fail-fast: false
 
@@ -66,7 +66,7 @@ jobs:
           sudo cp lib/*.a /usr/lib
 
       - name: build gtest (macos)
-        if: matrix.os == 'macos-11'
+        if: matrix.os == 'macos-12'
         run: |
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
@@ -119,7 +119,7 @@ jobs:
           make -j 2
 
       - name: build test (serial, macos)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-11'
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-12'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
@@ -144,7 +144,7 @@ jobs:
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-11'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-12'
         run: |
           python -m pip install pytest 'pyscf==2.0.1' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -158,7 +158,7 @@ jobs:
           py.test -s pyblock2/unit_test/*.py --symm sany
 
       - name: run test (any-symm-pytest, macos)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-11'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-12'
         run: |
           python -m pip install pytest 'pyscf==2.0.1' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -187,22 +187,16 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-11, macos-12 ]
+        os: [ ubuntu-20.04, macos-12 ]
         python: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
         exclude:
-          - os: macos-11
+          - os: macos-12
             parallel: mpi
           - os: ubuntu-20.04
             plat: arm64
-          - os: macos-11
-            plat: arm64
-          - os: macos-12
-            plat: x86_64
-          - os: macos-12
-            parallel: mpi
       fail-fast: false
 
     steps:
@@ -220,7 +214,7 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 
       - name: build wheels (macos-x86_64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-11' && matrix.plat == 'x86_64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-12' && matrix.plat == 'x86_64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '10.9'
