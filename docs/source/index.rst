@@ -127,11 +127,11 @@ Features
    :maxdepth: 2
    :caption: Python Interface Tutorial
 
-   tutorial/hubbard
-   tutorial/heisenberg
    tutorial/qc-hamiltonians
    tutorial/energy-extrapolation
    tutorial/custom-hamiltonian
+   tutorial/hubbard
+   tutorial/heisenberg
 
 .. raw:: latex
 

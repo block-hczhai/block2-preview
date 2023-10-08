@@ -17,6 +17,11 @@ Interfaces for DMRGSCF
 To do DMRGSCF, we need to connect ``block2`` to some external softwares for the CASSCF part.
 See :ref:`user_dmrgscf`, :ref:`user_open_molcas`, and :ref:`user_forte`.
 
+Python Interface (high level)
+-----------------------------
+
+See https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html.
+
 Python Interface (low level)
 ----------------------------
 
@@ -53,11 +58,6 @@ Test State-Interaction (SI)-DMRG (need `pyscf` module): ::
     python3 -m pyblock2.sidmrg
 
 For special topics, see :ref:`dev_mpo_reloading`, :ref:`dev_orbital_rotation`, :ref:`dev_pg_mapping`.
-
-Python Interface (high level)
------------------------------
-
-See https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html.
 
 Input File (C++ Executable)
 ---------------------------

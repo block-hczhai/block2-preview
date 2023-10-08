@@ -19,7 +19,7 @@ One can install ``block2`` using ``pip``:
 
       pip install block2-mpi
 
-* Binary format are prepared via ``pip`` for python 3.7, 3.8, 3.9, and 3.10 with macOS (x86 and arm64, no-MPI) or Linux (no-MPI/openMPI).
+* Binary format are prepared via ``pip`` for python 3.7, 3.8, 3.9, 3.10, and 3.11 with macOS (x86 and arm64, no-MPI) or Linux (no-MPI/openMPI).
   If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source
   (for example, ``pip install block2 --no-binary block2``).
 
@@ -33,7 +33,7 @@ One can install ``block2`` using ``pip``:
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.2rc7``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
+  where ``<version>`` can be some development version number like ``0.5.2rc13``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 Manual Installation
 -------------------
