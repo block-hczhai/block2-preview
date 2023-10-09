@@ -68,7 +68,7 @@ For a list of DMRG references for methods implemented in ``block2``, see: https:
 
 Documentation: https://block2.readthedocs.io/en/latest/
 
-Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hubbard.html
+Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
 
 Source code: https://github.com/block-hczhai/block2-preview
 

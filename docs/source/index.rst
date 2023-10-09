@@ -132,6 +132,7 @@ Features
    tutorial/qc-hamiltonians
    tutorial/energy-extrapolation
    tutorial/custom-hamiltonian
+   tutorial/greens-function
    tutorial/hubbard
    tutorial/heisenberg
 
