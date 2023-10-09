@@ -2987,7 +2987,10 @@ class DMRGDriver:
 
         bip_ent = np.zeros(len(self._dmrg.sweep_wfn_spectra), dtype=np.float64)
         for ix, x in enumerate(self._dmrg.sweep_wfn_spectra):
-            ldsq = np.array(x, dtype=np.float128) ** 2
+            if hasattr(np, 'float128'):
+                ldsq = np.array(x, dtype=np.float128) ** 2
+            else:
+                ldsq = np.array(x, dtype=np.float64) ** 2
             ldsq = ldsq[ldsq != 0]
             bip_ent[ix] = float(np.sum(-ldsq * np.log(ldsq)))
         return bip_ent
