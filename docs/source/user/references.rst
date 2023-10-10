@@ -2,14 +2,17 @@
 References
 ==========
 
+If you find **block2** useful in your research, please cite the paper
+
+* Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K. L. Block2: a comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. arXiv preprint `arXiv:2310.03920 <https://arxiv.org/abs/2310.03920>`_.
+
 A detailed description of the parallel DMRG algorithm implemented in **block2** can be found in the following paper
 
-* Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+* Zhai, H.; Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
 
-Please cite this paper if you find **block2** useful in your research.
 For the large site code, please cite 
   
-* Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762.
+* Larsson, H. R.; Zhai, H.; Gunst, K.; Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762.
 
 You can find a bibtex file in `CITATIONS.bib <https://github.com/block-hczhai/block2-preview/blob/master/CITATIONS.bib>`_.
 

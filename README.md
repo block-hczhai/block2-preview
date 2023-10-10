@@ -24,6 +24,10 @@ Main contributors:
 
 If you find this package useful for your scientific research, please cite the work as:
 
+ - Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K. L. Block2: a comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. arXiv preprint [arXiv:2310.03920](https://arxiv.org/abs/2310.03920).
+
+For parallel ab initio DMRG, please cite
+
  - Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116, doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
 
 For the large site code, please cite
