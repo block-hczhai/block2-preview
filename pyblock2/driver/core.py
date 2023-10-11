@@ -3643,7 +3643,10 @@ class DMRGDriver:
             if ref.center == 0:
                 if ket.dot == 2:
                     ket.center += 1
-                    ket.canonical_form = ket.canonical_form[:-1] + "S"
+                    if ket.canonical_form[-1] == 'C':
+                        ket.canonical_form = ket.canonical_form[:-1] + "S"
+                    else:
+                        ket.canonical_form = ket.canonical_form[:-1] + "T"
                 while ket.center != 0:
                     ket.move_left(self.ghamil.opf.cg, self.prule)
             else:
@@ -4105,6 +4108,13 @@ class DMRGDriver:
     def mps_change_singlet_embedding(self, mps, tag, forward, left_vacuum=None):
         cp_mps = mps.deep_copy(tag)
         while cp_mps.center > 0:
+            if cp_mps.center == cp_mps.n_sites - 2 and cp_mps.dot == 2 and \
+                cp_mps.canonical_form[cp_mps.center] == 'L':
+                if cp_mps.canonical_form[-1] == 'C':
+                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'S'
+                else:
+                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'T'
+                cp_mps.center = cp_mps.n_sites - 1
             cp_mps.move_left(self.ghamil.opf.cg, self.prule)
         if forward:
             if left_vacuum is None:
