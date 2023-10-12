@@ -927,6 +927,23 @@ struct WickString {
             xfac = atof(fac_expr.c_str());
         return WickString(tensors, ctr_idxs, xfac);
     }
+    void fix_index_names() {
+        set<WickIndex> new_ctr_idxs;
+        for (auto wi : ctr_indices) {
+            if ((int)(wi.name[0]) >= 123)
+                wi.name[0] -= 58;
+            else if ((int)(wi.name[0]) < 0)
+                wi.name[0] = (int)wi.name[0] + 256 - 58;
+            new_ctr_idxs.insert(wi);
+        }
+        ctr_indices = new_ctr_idxs;
+        for (auto &wt : tensors)
+            for (auto &wi : wt.indices)
+                if ((int)(wi.name[0]) >= 123)
+                    wi.name[0] -= 58;
+                else if ((int)(wi.name[0]) < 0)
+                    wi.name[0] = (int)wi.name[0] + 256 - 58;
+    }
     vector<WickString> substitute(
         const map<string, pair<WickTensor, vector<WickString>>> &defs) const {
         vector<WickString> r = {*this};
@@ -954,6 +971,8 @@ struct WickString {
                             WickIndex g = wi;
                             for (int i = 0; i < 100; i++) {
                                 g.name[0] = wi.name[0] + i;
+                                if ((int)(g.name[0]) >= 123)
+                                    g.name[0] -= 58;
                                 if (!used_idxs.count(g))
                                     break;
                             }
@@ -1032,6 +1051,8 @@ struct WickString {
                 for (int i = 1; i < 100; i++) {
                     WickIndex g = idx;
                     g.name[0] += i;
+                    if ((int)(g.name[0]) >= 123)
+                        g.name[0] -= 58;
                     if (!used_idxs.count(g)) {
                         used_idxs.insert(g);
                         mp_idxs[idx] = g;

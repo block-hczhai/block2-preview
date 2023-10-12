@@ -511,6 +511,7 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def(py::self * double())
         .def("__abs__", &WickString::abs)
         .def_static("parse", &WickString::parse)
+        .def("fix_index_names", &WickString::fix_index_names)
         .def("substitute", &WickString::substitute)
         .def("index_map", &WickString::index_map)
         .def("used_indices", &WickString::used_indices)
