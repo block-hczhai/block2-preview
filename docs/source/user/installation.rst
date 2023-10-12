@@ -15,7 +15,7 @@ One can install ``block2`` using ``pip``:
 
       pip install block2
 
-* Hybrid openMP/MPI version (requiring openMPI 4.0.x) ::
+* Hybrid openMP/MPI version (requiring openMPI 4.1.x) ::
 
       pip install block2-mpi
 
@@ -172,7 +172,7 @@ We can create an ``anaconda`` virtual environment (optional): ::
 
 Then make sure that a working ``mpi`` library is in the environment, using, for example: ::
 
-    module load openmpi/4.0.4
+    module load openmpi/4.1.6
     module load gcc/9.2.0
 
 Then we should install ``mpi4py`` using this ``mpi`` library via ``--no-binary`` option of ``pip``: ::
@@ -183,7 +183,7 @@ Sometimes, the above procedure may still give the ``undefined symbol: ompi_mpi_l
 Then it is possible that the ``mpi4py`` is still linked to the ``mpich`` (version 3 or lower) library installed in ``anaconda``.
 If this is the case, one should first ``conda uninstall mpich`` and then ``python -m pip -v install --no-binary :all: mpi4py``
 and if the installation is successful, we can ``ldd $(python -c 'from mpi4py import MPI;print(MPI.__file__)')``
-to check the linkage of the ``libmpi.so``. Ideally it should points to the ``openmpi/4.0.4`` library or any other version 4.0 mpi
+to check the linkage of the ``libmpi.so``. Ideally it should points to the ``openmpi/4.1.6`` library or any other version 4.1 mpi
 library. Alternatively, if you do not want to uninstall the ``mpich`` in ``anaconda``, you may install ``block2`` from source using
 the same ``mpich`` library.
 

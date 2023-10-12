@@ -33,9 +33,9 @@ $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install aud
 
 if [ "${PARALLEL}" = "mpi" ]; then
     yum install -y wget openssh-clients openssh-server
-    wget https://download.open-mpi.org/release/open-mpi/v4.0/openmpi-4.0.6.tar.gz
-    tar zxf openmpi-4.0.6.tar.gz
-    cd openmpi-4.0.6
+    wget https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.6.tar.gz
+    tar zxf openmpi-4.1.6.tar.gz
+    cd openmpi-4.1.6
     ./configure --prefix=/usr/local |& tee config.out
     make -j 4 |& tee make.out
     make install |& tee install.out
