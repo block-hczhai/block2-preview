@@ -350,3 +350,11 @@ library is linked to only pure "so.1" or only pure "so".
 **Error:** ::
 
     Insert ``cout`` in openMP parallel code will cause stuck. Because it is not thread-safe. Use ``printf`` instead.
+
+[2023-10-13]
+
+**Error:** ::
+
+    ImportError: /.../block2.cpython-38-x86_64-linux-gnu.so: undefined symbol: _ZNSt15__exception_ptr13exception_ptr10_M_releaseEv
+
+**Solution:** This happens when code is compiled using gcc/12.2.0 but gcc module is not loaded. If compile using gcc/9.2.0 there is no problem.
