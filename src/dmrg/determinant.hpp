@@ -42,29 +42,31 @@ namespace block2 {
 // time complexity: (D = MPS bond dimension)
 //    (n_dets << 4^n_sites) : n_sites * n_dets * D * D
 //    (n_dets  ~ 4^n_sites) : (4 / 3) * n_dets * D * D
-template <typename D, typename FL, uint8_t L = 4> struct TRIE {
+template <typename D, typename FL, uint8_t L = 4, typename IT = long long>
+struct TRIE {
     typedef typename GMatrix<FL>::FP FP;
-    vector<array<int, L>> data;
-    vector<int> dets, invs;
+    typedef IT XIT;
+    vector<array<IT, L>> data;
+    vector<IT> dets, invs;
     vector<FL> vals;
     int n_sites;
     bool enable_look_up;
     TRIE(int n_sites, bool enable_look_up = false)
         : n_sites(n_sites), enable_look_up(enable_look_up) {
         data.reserve(n_sites + 1);
-        data.push_back(array<int, L>());
+        data.push_back(array<IT, L>());
     }
     // empty trie
     void clear() {
         data.clear(), dets.clear(), invs.clear(), vals.clear();
-        data.push_back(array<int, L>());
+        data.push_back(array<IT, L>());
     }
     // deep copy
     shared_ptr<D> copy() {
         shared_ptr<D> dett = make_shared<D>(n_sites, enable_look_up);
-        dett->data = vector<array<int, L>>(data.begin(), data.end());
-        dett->dets = vector<int>(dets.begin(), dets.end());
-        dett->invs = vector<int>(invs.begin(), invs.end());
+        dett->data = vector<array<IT, L>>(data.begin(), data.end());
+        dett->dets = vector<IT>(dets.begin(), dets.end());
+        dett->invs = vector<IT>(invs.begin(), invs.end());
         dett->vals = vector<FL>(vals.begin(), vals.end());
         return dett;
     }
@@ -73,12 +75,13 @@ template <typename D, typename FL, uint8_t L = 4> struct TRIE {
     // add a determinant to trie
     void push_back(const vector<uint8_t> &det) {
         assert((int)det.size() == n_sites);
-        int cur = 0;
+        IT cur = 0;
         for (int i = 0; i < n_sites; i++) {
             uint8_t j = det[i];
             if (data[cur][j] == 0) {
-                data[cur][j] = (int)data.size();
-                data.push_back(array<int, L>());
+                assert(data.size() <= (size_t)numeric_limits<IT>::max());
+                data[cur][j] = (IT)data.size();
+                data.push_back(array<IT, L>());
             }
             cur = data[cur][j];
         }
@@ -100,7 +103,7 @@ template <typename D, typename FL, uint8_t L = 4> struct TRIE {
             gidx[i] = i;
         sort(gidx.begin(), gidx.end(),
              [this](int i, int j) { return this->dets[i] < this->dets[j]; });
-        vector<int> ndets = dets;
+        vector<IT> ndets = dets;
         vector<FL> nvals = vals;
         for (int i = 0; i < (int)gidx.size(); i++) {
             dets[i] = ndets[gidx[i]];
@@ -109,9 +112,9 @@ template <typename D, typename FL, uint8_t L = 4> struct TRIE {
     }
     // find the index of a determinant
     // dets must be sorted
-    int find(const vector<uint8_t> &det) {
+    IT find(const vector<uint8_t> &det) {
         assert((int)det.size() == n_sites);
-        int cur = 0;
+        IT cur = 0;
         for (int i = 0; i < n_sites; i++) {
             uint8_t j = det[i];
             if (data[cur][j] == 0)
@@ -126,7 +129,8 @@ template <typename D, typename FL, uint8_t L = 4> struct TRIE {
     vector<uint8_t> operator[](int idx) const {
         assert(enable_look_up && idx < dets.size());
         vector<uint8_t> r(n_sites, 0);
-        for (int cur = dets[idx], i = n_sites - 1, ir; i >= 0; i--, cur = ir) {
+        IT cur = dets[idx], ir;
+        for (int i = n_sites - 1; i >= 0; i--, cur = ir) {
             ir = invs[cur];
             for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
                 if (data[ir][j] == cur) {
@@ -167,6 +171,7 @@ template <typename, typename, typename = void> struct DeterminantTRIE;
 template <typename S, typename FL>
 struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     : TRIE<DeterminantTRIE<S, FL>, FL> {
+    typedef typename TRIE<DeterminantTRIE<S, FL>, FL>::XIT IT;
     typedef typename GMatrix<FL>::FP FP;
     using TRIE<DeterminantTRIE<S, FL>, FL>::data;
     using TRIE<DeterminantTRIE<S, FL>, FL>::dets;
@@ -187,8 +192,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         r->dot = 1;
         r->tensors.resize(n_sites);
         S vacuum = info->left_dims_fci[0]->quanta[0];
-        vector<pair<S, int>> cur_nodes =
-            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        vector<pair<S, IT>> cur_nodes =
+            vector<pair<S, IT>>{make_pair(vacuum, 0)};
         info->left_dims[0] =
             make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
         for (int i = 0; i < n_sites; i++)
@@ -214,14 +219,14 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                     assert(false);
             shared_ptr<SparseTensor<S, FL>> t =
                 make_shared<SparseTensor<S, FL>>();
-            vector<pair<S, int>> next_nodes;
+            vector<pair<S, IT>> next_nodes;
             map<S, MKL_INT> lsh, rsh;
             vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
                 info->basis[k]->n);
             vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
             // determine shape
             for (const auto &irx : cur_nodes) {
-                int ir = irx.second;
+                IT ir = irx.second;
                 S pq = irx.first;
                 for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
                     if (data[ir][j] != 0) {
@@ -307,7 +312,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                  mps->info->vacuum, false);
         for (int d = 0; d < n_sites; d++) {
             pinfos[d + 1].resize(4);
-            for (int j = 0; j < pinfos[d + 1].size(); j++) {
+            for (int j = 0; j < (int)pinfos[d + 1].size(); j++) {
                 map<S, MKL_INT> qkets;
                 for (auto &m : mps->tensors[d]->data[j]) {
                     S bra = m.first.first, ket = m.first.second;
@@ -332,8 +337,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
-                    data[0][j] = (int)data.size();
-                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                    assert(data.size() <= (size_t)numeric_limits<IT>::max());
+                    data[0][j] = (IT)data.size();
+                    data.push_back(array<IT, 4>{0, 0, 0, 0});
                 }
         }
         shared_ptr<SparseMatrix<S, FL>> zmat =
@@ -342,11 +348,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         for (size_t j = 0; j < zmat->total_memory; j++)
             zmat->data[j] = 1.0;
         vector<uint8_t> zdet(n_sites);
-        for (uint8_t j = 0; j < (int)data[0].size(); j++)
+        for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
             if (data[0][j] != 0)
                 ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0, 0));
 
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>, int, int>>
             pptrs;
         int ntg = threading->activate_global();
@@ -389,7 +395,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                     if (ccmp[ip - pstart] == nullptr)
                         continue;
                     auto &p = ptrs[ip];
-                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    IT cur = get<0>(p);
+                    int j = get<1>(p), d = get<2>(p);
                     int nh = get<5>(p), np = get<6>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
@@ -402,7 +409,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                             vals.push_back(cmp->data[0]);
                             if (enable_look_up) {
                                 invs.resize(data.size());
-                                for (int i = 0, curx = 0; i < n_sites; i++) {
+                                IT curx = 0;
+                                for (int i = 0; i < n_sites; i++) {
                                     uint8_t jj = det[i];
                                     invs[data[curx][jj]] = curx;
                                     curx = data[curx][jj];
@@ -416,8 +424,10 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                             for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                                  jj++)
                                 if (data[cur][jj] == 0) {
-                                    data[cur][jj] = (int)data.size();
-                                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                                    assert(data.size() <=
+                                           (size_t)numeric_limits<IT>::max());
+                                    data[cur][jj] = (IT)data.size();
+                                    data.push_back(array<IT, 4>{0, 0, 0, 0});
                                 }
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
@@ -512,6 +522,7 @@ template <typename S, typename FL>
 struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     : TRIE<DeterminantTRIE<S, FL>, FL> {
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename TRIE<DeterminantTRIE<S, FL>, FL>::XIT IT;
     using TRIE<DeterminantTRIE<S, FL>, FL>::data;
     using TRIE<DeterminantTRIE<S, FL>, FL>::dets;
     using TRIE<DeterminantTRIE<S, FL>, FL>::vals;
@@ -531,8 +542,8 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         r->dot = 1;
         r->tensors.resize(n_sites);
         S vacuum = info->left_dims_fci[0]->quanta[0];
-        vector<pair<S, int>> cur_nodes =
-            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        vector<pair<S, IT>> cur_nodes =
+            vector<pair<S, IT>>{make_pair(vacuum, 0)};
         info->left_dims[0] =
             make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
         for (int i = 0; i < n_sites; i++)
@@ -556,14 +567,14 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                     assert(false);
             shared_ptr<SparseTensor<S, FL>> t =
                 make_shared<SparseTensor<S, FL>>();
-            vector<pair<S, int>> next_nodes;
+            vector<pair<S, IT>> next_nodes;
             map<S, MKL_INT> lsh, rsh;
             vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
                 info->basis[k]->n);
             vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
             // determine shape
             for (const auto &irx : cur_nodes) {
-                int ir = irx.second;
+                IT ir = irx.second;
                 S pq = irx.first;
                 for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
                     if (data[ir][j] != 0) {
@@ -638,7 +649,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>>>
             ptrs;
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
@@ -678,8 +689,9 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
-                    data[0][j] = (int)data.size();
-                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                    assert(data.size() <= (size_t)numeric_limits<IT>::max());
+                    data[0][j] = (IT)data.size();
+                    data.push_back(array<IT, 4>{0, 0, 0, 0});
                 }
         }
         shared_ptr<SparseMatrix<S, FL>> zmat =
@@ -688,10 +700,10 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         for (size_t j = 0; j < zmat->total_memory; j++)
             zmat->data[j] = 1.0;
         vector<uint8_t> zdet(n_sites);
-        for (uint8_t j = 0; j < (int)data[0].size(); j++)
+        for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
             if (data[0][j] != 0)
                 ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet));
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>>>
             pptrs;
         int ntg = threading->activate_global();
@@ -735,7 +747,8 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                     if (ccmp[ip - pstart] == nullptr)
                         continue;
                     auto &p = ptrs[ip];
-                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    IT cur = get<0>(p);
+                    int j = get<1>(p), d = get<2>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
@@ -747,7 +760,8 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                             vals.push_back(cmp->data[0]);
                             if (enable_look_up) {
                                 invs.resize(data.size());
-                                for (int i = 0, curx = 0; i < n_sites; i++) {
+                                IT curx = 0;
+                                for (int i = 0; i < n_sites; i++) {
                                     uint8_t jj = det[i];
                                     invs[data[curx][jj]] = curx;
                                     curx = data[curx][jj];
@@ -761,8 +775,10 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                             for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                                  jj++)
                                 if (data[cur][jj] == 0) {
-                                    data[cur][jj] = (int)data.size();
-                                    data.push_back(array<int, 4>{0, 0, 0, 0});
+                                    assert(data.size() <=
+                                           (size_t)numeric_limits<IT>::max());
+                                    data[cur][jj] = (IT)data.size();
+                                    data.push_back(array<IT, 4>{0, 0, 0, 0});
                                 }
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
@@ -791,6 +807,7 @@ template <typename S, typename FL>
 struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     : TRIE<DeterminantTRIE<S, FL>, FL, 2> {
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename TRIE<DeterminantTRIE<S, FL>, FL, 2>::XIT IT;
     using TRIE<DeterminantTRIE<S, FL>, FL, 2>::data;
     using TRIE<DeterminantTRIE<S, FL>, FL, 2>::dets;
     using TRIE<DeterminantTRIE<S, FL>, FL, 2>::vals;
@@ -810,8 +827,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         r->dot = 1;
         r->tensors.resize(n_sites);
         S vacuum = info->left_dims_fci[0]->quanta[0];
-        vector<pair<S, int>> cur_nodes =
-            vector<pair<S, int>>{make_pair(vacuum, 0)};
+        vector<pair<S, IT>> cur_nodes =
+            vector<pair<S, IT>>{make_pair(vacuum, 0)};
         info->left_dims[0] =
             make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
         for (int i = 0; i < n_sites; i++)
@@ -833,14 +850,14 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                     assert(false);
             shared_ptr<SparseTensor<S, FL>> t =
                 make_shared<SparseTensor<S, FL>>();
-            vector<pair<S, int>> next_nodes;
+            vector<pair<S, IT>> next_nodes;
             map<S, MKL_INT> lsh, rsh;
             vector<map<pair<S, S>, vector<pair<MKL_INT, MKL_INT>>>> blocks(
                 info->basis[k]->n);
             vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
             // determine shape
             for (const auto &irx : cur_nodes) {
-                int ir = irx.second;
+                IT ir = irx.second;
                 S pq = irx.first;
                 for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
                     if (data[ir][j] != 0) {
@@ -914,7 +931,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
             make_shared<VectorAllocator<uint32_t>>();
         shared_ptr<VectorAllocator<FP>> d_alloc =
             make_shared<VectorAllocator<FP>>();
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>, int, int>>
             ptrs;
         vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
@@ -950,8 +967,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
-                    data[0][j] = (int)data.size();
-                    data.push_back(array<int, 2>{0, 0});
+                    assert(data.size() <= (size_t)numeric_limits<IT>::max());
+                    data[0][j] = (IT)data.size();
+                    data.push_back(array<IT, 2>{0, 0});
                 }
         }
         shared_ptr<SparseMatrix<S, FL>> zmat =
@@ -963,7 +981,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         for (uint8_t j = 0; j < (int)data[0].size(); j++)
             if (data[0][j] != 0)
                 ptrs.push_back(make_tuple(data[0][j], j, 0, zmat, zdet, 0, 0));
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
                      vector<uint8_t>, int, int>>
             pptrs;
         int ntg = threading->activate_global();
@@ -1006,7 +1024,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                     if (ccmp[ip - pstart] == nullptr)
                         continue;
                     auto &p = ptrs[ip];
-                    int cur = get<0>(p), j = get<1>(p), d = get<2>(p);
+                    IT cur = get<0>(p);
+                    int j = get<1>(p), d = get<2>(p);
                     int nh = get<5>(p), np = get<6>(p);
                     vector<uint8_t> det = get<4>(p);
                     det[d] = j;
@@ -1019,7 +1038,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                             vals.push_back(cmp->data[0]);
                             if (enable_look_up) {
                                 invs.resize(data.size());
-                                for (int i = 0, curx = 0; i < n_sites; i++) {
+                                IT curx = 0;
+                                for (int i = 0; i < n_sites; i++) {
                                     uint8_t jj = det[i];
                                     invs[data[curx][jj]] = curx;
                                     curx = data[curx][jj];
@@ -1033,8 +1053,10 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                             for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
                                  jj++)
                                 if (data[cur][jj] == 0) {
-                                    data[cur][jj] = (int)data.size();
-                                    data.push_back(array<int, 2>{0, 0});
+                                    assert(data.size() <=
+                                           (size_t)numeric_limits<IT>::max());
+                                    data[cur][jj] = (IT)data.size();
+                                    data.push_back(array<IT, 2>{0, 0});
                                 }
                         }
                         for (uint8_t jj = 0; jj < (uint8_t)data[cur].size();
