@@ -3600,6 +3600,12 @@ class DMRGDriver:
         iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
         import numpy as np, time
 
+        if ket.center != 0:
+            ket = self.copy_mps(ket, tag="CSF-TMP")
+            self.align_mps_center(ket, ref=0)
+            if iprint:
+                print("mps center changed (temporarily)")
+
         tx = time.perf_counter()
         dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
         dtrie.evaluate(bw.bs.UnfusedMPS(ket), cutoff)
@@ -3638,9 +3644,10 @@ class DMRGDriver:
     def align_mps_center(self, ket, ref):
         if self.mpi is not None:
             self.mpi.barrier()
+        refc = ref if isinstance(ref, int) else ref.center
         ket.info.bond_dim = max(ket.info.bond_dim, ket.info.get_max_bond_dimension())
-        if ket.center != ref.center:
-            if ref.center == 0:
+        if ket.center != refc:
+            if refc == 0:
                 if ket.dot == 2:
                     ket.center += 1
                     if ket.canonical_form[-1] == 'C':

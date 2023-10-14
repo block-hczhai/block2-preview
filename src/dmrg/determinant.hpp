@@ -42,7 +42,7 @@ namespace block2 {
 // time complexity: (D = MPS bond dimension)
 //    (n_dets << 4^n_sites) : n_sites * n_dets * D * D
 //    (n_dets  ~ 4^n_sites) : (4 / 3) * n_dets * D * D
-template <typename D, typename FL, uint8_t L = 4, typename IT = long long>
+template <typename D, typename FL, uint8_t L = 4, typename IT = uint32_t>
 struct TRIE {
     typedef typename GMatrix<FL>::FP FP;
     typedef IT XIT;
@@ -112,7 +112,7 @@ struct TRIE {
     }
     // find the index of a determinant
     // dets must be sorted
-    IT find(const vector<uint8_t> &det) {
+    int find(const vector<uint8_t> &det) {
         assert((int)det.size() == n_sites);
         IT cur = 0;
         for (int i = 0; i < n_sites; i++) {

@@ -4496,6 +4496,9 @@ if not pre_run:
         dtrie = DeterminantTRIE(n_sites, True)
         mps.info.load_mutable()
         mps.load_mutable()
+        if mps.center != 0:
+            _print("Warning: sample an MPS with center != 0 will be highly inefficient!")
+            _print("One can load the MPS and do one extra sweep to change the center.")
         dtrie.evaluate(UnfusedMPS(mps), sample_cutoff, max_rank, VectorUInt8(sample_ref))
 
         if "sample_phase" in dic:
