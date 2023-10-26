@@ -3425,11 +3425,14 @@ class DMRGDriver:
             self.align_mps_center(mbra, mket)
 
             scheme = bw.b.NPDMScheme(perms)
+            opdq = (mbra.info.target - mket.info.target)[0]
             if iprint >= 4:
+                print('NPDM dq =', opdq)
                 print(scheme.to_str())
             pmpo = bw.bs.GeneralNPDMMPO(
                 self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
             )
+            pmpo.delta_quantum = opdq
             pmpo.iprint = 2 if iprint >= 4 else min(iprint, 1)
             if self.mpi:
                 pmpo.parallel_rule = self.prule

@@ -777,11 +777,10 @@ template <typename S, typename FL> struct TensorFunctions {
         shared_ptr<NPDMScheme> scheme;
         shared_ptr<NPDMCounter> counter;
         int center;
-        S vacuum;
+        S ref_q;
         NPDMIndexer(const shared_ptr<NPDMScheme> &scheme,
-                    const shared_ptr<NPDMCounter> &counter, int center,
-                    S vacuum)
-            : scheme(scheme), counter(counter), center(center), vacuum(vacuum) {
+                    const shared_ptr<NPDMCounter> &counter, int center, S ref_q)
+            : scheme(scheme), counter(counter), center(center), ref_q(ref_q) {
             plidxs.resize(scheme->left_terms.size() + 1, 0);
             pridxs.resize(scheme->right_terms.size() +
                               scheme->last_right_terms.size() + 1,
@@ -847,7 +846,7 @@ template <typename S, typename FL> struct TensorFunctions {
                  (uint16_t)((ixx >> 12) & 0xFFFLL), (uint16_t)(ixx & 0xFFFLL)},
                 {});
             shared_ptr<OpElement<S, FL>> op =
-                make_shared<OpElement<S, FL>>(op_name, sx, vacuum);
+                make_shared<OpElement<S, FL>>(op_name, sx, ref_q);
             return xopt->ops.count(op) ? xopt->ops.at(op) : nullptr;
         }
     };
@@ -857,9 +856,9 @@ template <typename S, typename FL> struct TensorFunctions {
     // but for one-dot it should be aligned with fuse_left
     // better cache_left can save time for the M^3 part
     virtual vector<pair<shared_ptr<OpExpr<S>>, FL>>
-    tensor_product_npdm_fragment(const shared_ptr<NPDMScheme> &scheme, S vacuum,
-                                 const string &filename, int n_sites,
-                                 int center, int parallel_center,
+    tensor_product_npdm_fragment(const shared_ptr<NPDMScheme> &scheme,
+                                 S main_opdq, const string &filename,
+                                 int n_sites, int center, int parallel_center,
                                  const shared_ptr<OperatorTensor<S, FL>> &lopt,
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &cmat,
@@ -867,7 +866,9 @@ template <typename S, typename FL> struct TensorFunctions {
                                  bool cache_left, bool compressed, bool low_mem,
                                  FL accu_factor) const {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(1);
-        if (center == n_sites - 1) {
+        if (center == n_sites - 1 ||
+            main_opdq.combine(vmat->info->delta_quantum,
+                              cmat->info->delta_quantum) == S(S::invalid)) {
             expectations[0] = make_pair(make_shared<OpCounter<S>>(0), (FL)0.0);
             return expectations;
         }
@@ -882,7 +883,7 @@ template <typename S, typename FL> struct TensorFunctions {
         npdm_middle_intermediates(scheme, counter, n_sites, center, mshape,
                                   mshape_presum);
         shared_ptr<NPDMIndexer> indexer =
-            make_shared<NPDMIndexer>(scheme, counter, center, vacuum);
+            make_shared<NPDMIndexer>(scheme, counter, center, main_opdq);
         expectations[0] = make_pair(make_shared<OpCounter<S>>(mshape), (FL)0.0);
         shared_ptr<GTensor<FL, uint64_t>> result =
             make_shared<GTensor<FL, uint64_t>>(vector<uint64_t>{mshape});
@@ -946,9 +947,9 @@ template <typename S, typename FL> struct TensorFunctions {
                                         continue;
                                     // FIXME: not working for non-singlet
                                     // operators
-                                    S opdq = (lmat->info->delta_quantum +
-                                              rmat->info->delta_quantum)[0];
-                                    if (opdq.combine(bra_dq, ket_dq) ==
+                                    if (main_opdq.combine(
+                                            lmat->info->delta_quantum,
+                                            -rmat->info->delta_quantum) ==
                                         S(S::invalid))
                                         continue;
                                     if (!left_partials.count(
@@ -962,7 +963,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                                           ->delta_quantum] =
                                             xmat;
                                         opf->tensor_left_partial_expectation(
-                                            0, lmat, xmat, cmat, vmat, opdq);
+                                            0, lmat, xmat, cmat, vmat,
+                                            main_opdq);
                                     }
                                 }
                                 uint64_t iresult =
@@ -1018,9 +1020,9 @@ template <typename S, typename FL> struct TensorFunctions {
                                         continue;
                                     // FIXME: not working for non-singlet
                                     // operators
-                                    S opdq = (lmat->info->delta_quantum +
-                                              rmat->info->delta_quantum)[0];
-                                    if (opdq.combine(bra_dq, ket_dq) ==
+                                    if (main_opdq.combine(
+                                            lmat->info->delta_quantum,
+                                            -rmat->info->delta_quantum) ==
                                         S(S::invalid))
                                         continue;
                                     if (!right_partials.count(
@@ -1034,7 +1036,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                                            ->delta_quantum] =
                                             xmat;
                                         opf->tensor_right_partial_expectation(
-                                            0, xmat, rmat, cmat, vmat, opdq);
+                                            0, xmat, rmat, cmat, vmat,
+                                            main_opdq);
                                     }
                                 }
                                 uint64_t iresult =
@@ -1119,9 +1122,9 @@ template <typename S, typename FL> struct TensorFunctions {
                                 shared_ptr<SparseMatrix<S, FL>> rmat =
                                     r_partials[ixr];
                                 // FIXME: not working for non-singlet operators
-                                S opdq = (lmat->info->delta_quantum +
-                                          rmat->info->delta_quantum)[0];
-                                if (opdq.combine(bra_dq, ket_dq) ==
+                                if (main_opdq.combine(
+                                        lmat->info->delta_quantum,
+                                        -rmat->info->delta_quantum) ==
                                     S(S::invalid))
                                     continue;
                                 if (!c_partials.back().second.count(
@@ -1143,7 +1146,7 @@ template <typename S, typename FL> struct TensorFunctions {
                     }
                     parallel_for(
                         c_compute.size(),
-                        [&c_compute, &c_partials, &cmat, &vmat](
+                        [&c_compute, &c_partials, &cmat, &vmat, main_opdq](
                             const shared_ptr<TensorFunctions> &tf, size_t i) {
                             shared_ptr<SparseMatrix<S, FL>> lmat =
                                 c_partials[c_compute[i].first].first;
@@ -1151,10 +1154,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                 c_partials[c_compute[i].first].second.at(
                                     c_compute[i].second);
                             // FIXME: not working for non-singlet operators
-                            S opdq = (lmat->info->delta_quantum +
-                                      rmat->info->delta_quantum)[0];
                             tf->opf->tensor_left_partial_expectation(
-                                0, lmat, rmat, cmat, vmat, opdq);
+                                0, lmat, rmat, cmat, vmat, main_opdq);
                         });
                     parallel_for(
                         left_idxs.size() * right_idxs.size(),
@@ -1227,9 +1228,9 @@ template <typename S, typename FL> struct TensorFunctions {
                                 shared_ptr<SparseMatrix<S, FL>> lmat =
                                     l_partials[ixl];
                                 // FIXME: not working for non-singlet operators
-                                S opdq = (lmat->info->delta_quantum +
-                                          rmat->info->delta_quantum)[0];
-                                if (opdq.combine(bra_dq, ket_dq) ==
+                                if (main_opdq.combine(
+                                        lmat->info->delta_quantum,
+                                        -rmat->info->delta_quantum) ==
                                     S(S::invalid))
                                     continue;
                                 if (!c_partials.back().second.count(
@@ -1251,7 +1252,7 @@ template <typename S, typename FL> struct TensorFunctions {
                     }
                     parallel_for(
                         c_compute.size(),
-                        [&c_compute, &c_partials, &cmat, &vmat](
+                        [&c_compute, &c_partials, &cmat, &vmat, main_opdq](
                             const shared_ptr<TensorFunctions> &tf, size_t i) {
                             shared_ptr<SparseMatrix<S, FL>> rmat =
                                 c_partials[c_compute[i].first].first;
@@ -1259,10 +1260,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                 c_partials[c_compute[i].first].second.at(
                                     c_compute[i].second);
                             // FIXME: not working for non-singlet operators
-                            S opdq = (lmat->info->delta_quantum +
-                                      rmat->info->delta_quantum)[0];
                             tf->opf->tensor_right_partial_expectation(
-                                0, lmat, rmat, cmat, vmat, opdq);
+                                0, lmat, rmat, cmat, vmat, main_opdq);
                         });
                     parallel_for(
                         left_idxs.size() * right_idxs.size(),

@@ -670,7 +670,7 @@ refined A\ :sub:`1g` states: ::
     num_thrds 16
 
 The transition density matrices between states with different point group irreducible representations are also available by simply
-adding the keyword ``tran_twopdm`` and ``conventional_npdm`` after the corresponding multi-target state-averaged calculation. [#note1]_
+adding the keyword ``tran_twopdm`` after the corresponding multi-target state-averaged calculation. [#note1]_
 
 Restart DMRG Energy Calculation
 -------------------------------
@@ -810,7 +810,6 @@ The following input file computes the 2-particle transition density matrix for t
     maxM 500
     maxiter 30
     restart_tran_twopdm
-    conventional_npdm
     num_thrds 16
 
 Note that in the above input file, keywords such as ``nelec``, ``spin``, ``irrep``, and ``nroots`` will be unimportant.

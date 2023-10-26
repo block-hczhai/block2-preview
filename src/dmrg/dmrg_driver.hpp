@@ -569,6 +569,7 @@ template <typename S, typename FL> struct DMRGDriver {
                 ghamil, scheme,
                 algo_type & ExpectationAlgorithmTypes::SymbolFree);
         ppmpo->iprint = iprint >= 4 ? 2 : (iprint >= 2 ? 1 : 0);
+        ppmpo->delta_quantum = (mbra->info->target - mket->info->target)[0];
         ppmpo->build();
 
         shared_ptr<MPO<S, FL>> pmpo = make_shared<SimplifiedMPO<S, FL>>(

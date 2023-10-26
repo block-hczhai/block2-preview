@@ -2826,6 +2826,7 @@ if not pre_run:
         pmpo.iprint = 2 if outputlevel >= 4 else min(outputlevel, 1)
         if MPI is not None:
             pmpo.parallel_rule = npdm_prule
+        pmpo.delta_quantum = (bmps.info.target - kmps.info.target)[0]
         pmpo.build()
 
         pmpo = SimplifiedMPO(pmpo, Rule(), False, False)

@@ -2036,6 +2036,7 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("cutoff", &GeneralNPDMMPO<S, FL>::cutoff)
         .def_readwrite("iprint", &GeneralNPDMMPO<S, FL>::iprint)
         .def_readwrite("left_vacuum", &GeneralNPDMMPO<S, FL>::left_vacuum)
+        .def_readwrite("delta_quantum", &GeneralNPDMMPO<S, FL>::delta_quantum)
         .def_readwrite("symbol_free", &GeneralNPDMMPO<S, FL>::symbol_free)
         .def_readwrite("parallel_rule", &GeneralNPDMMPO<S, FL>::parallel_rule)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,

@@ -54,6 +54,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
     int iprint;
     bool symbol_free;
     S left_vacuum = S(S::invalid);
+    S delta_quantum = S(S::invalid);
     shared_ptr<ParallelRule<S>> parallel_rule = nullptr;
     GeneralNPDMMPO(const shared_ptr<GeneralHamiltonian<S, FL>> &hamil,
                    const shared_ptr<NPDMScheme> &scheme,
@@ -68,7 +69,8 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         shared_ptr<GeneralHamiltonian<S, FL>> hamil =
             dynamic_pointer_cast<GeneralHamiltonian<S, FL>>(MPO<S, FL>::hamil);
         shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
-            OpNames::Zero, SiteIndex(), hamil->vacuum);
+            OpNames::Zero, SiteIndex(),
+            delta_quantum == S(S::invalid) ? hamil->vacuum : delta_quantum);
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -933,11 +935,13 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     }
             }
             if (symbol_free) {
-                S q = scheme->middle_terms.size() > 0 &&
-                              scheme->middle_terms[0].size() > 0
-                          ? hamil->get_string_quantum(
-                                scheme->middle_terms[0][0], nullptr)
-                          : hamil->vacuum;
+                S q = delta_quantum == S(S::invalid)
+                          ? (scheme->middle_terms.size() > 0 &&
+                                     scheme->middle_terms[0].size() > 0
+                                 ? hamil->get_string_quantum(
+                                       scheme->middle_terms[0][0], nullptr)
+                                 : hamil->vacuum)
+                          : delta_quantum;
                 (*pmop)[im] = make_shared<OpElement<S, FL>>(OpNames::XPDM,
                                                             SiteIndex(), q);
                 (*pmexpr)[im] = make_shared<OpExpr<S>>();
