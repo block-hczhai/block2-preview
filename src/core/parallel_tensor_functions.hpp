@@ -317,8 +317,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                                                          OpNames::XR);
                                     if (rmat == nullptr)
                                         continue;
-                                    // FIXME: not working for non-singlet
-                                    // operators
                                     if (main_opdq.combine(
                                             lmat->info->delta_quantum,
                                             -rmat->info->delta_quantum) ==
@@ -406,8 +404,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                                                          OpNames::XL);
                                     if (lmat == nullptr)
                                         continue;
-                                    // FIXME: not working for non-singlet
-                                    // operators
                                     if (main_opdq.combine(
                                             lmat->info->delta_quantum,
                                             -rmat->info->delta_quantum) ==
@@ -523,7 +519,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                                 uint64_t ir = right_idxs[ixr].second;
                                 shared_ptr<SparseMatrix<S, FL>> rmat =
                                     r_partials[ixr];
-                                // FIXME: not working for non-singlet operators
                                 if (main_opdq.combine(
                                         lmat->info->delta_quantum,
                                         -rmat->info->delta_quantum) ==
@@ -556,7 +551,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                             shared_ptr<SparseMatrix<S, FL>> rmat =
                                 c_partials[c_compute[i].first].second.at(
                                     c_compute[i].second);
-                            // FIXME: not working for non-singlet operators
                             tf->opf->tensor_left_partial_expectation(
                                 0, lmat, rmat, cmat, vmat, main_opdq);
                         });
@@ -642,7 +636,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                                 uint64_t il = left_idxs[ixl].second;
                                 shared_ptr<SparseMatrix<S, FL>> lmat =
                                     l_partials[ixl];
-                                // FIXME: not working for non-singlet operators
                                 if (main_opdq.combine(
                                         lmat->info->delta_quantum,
                                         -rmat->info->delta_quantum) ==
@@ -675,7 +668,6 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                             shared_ptr<SparseMatrix<S, FL>> lmat =
                                 c_partials[c_compute[i].first].second.at(
                                     c_compute[i].second);
-                            // FIXME: not working for non-singlet operators
                             tf->opf->tensor_right_partial_expectation(
                                 0, lmat, rmat, cmat, vmat, main_opdq);
                         });
