@@ -522,17 +522,23 @@ struct NDArray {
 
         if (!bx.is_c_order())
             trans_b = 0;
-        else if (nbr != 0 && !(idxbx[ctr_idx[0]] == 0 &&
-                               idxbx[ctr_idx[nbr - 1]] == nbr - 1))
+        else if (nbr != 0 && !(idxbx[ctr_idx[0]] == 0 && idxbx[ctr_idx[nbr - 1]] == nbr - 1))
             trans_b = 0;
         else if (nctr == 0)
             trans_b = 1;
-        else if (idxbx[ctr_idx[nbr]] == nbr &&
-                 idxbx[ctr_idx[nbr + nctr - 1]] == nbr + nctr - 1)
-            trans_b = 1;
-        else if (idxbx[ctr_idx[nbr]] == ndimb - nctr &&
-                 idxbx[ctr_idx[nbr + nctr - 1]] == ndimb - 1)
-            trans_b = -1;
+        else if (idxbx[ctr_idx[nbr]] == nbr && idxbx[ctr_idx[nbr + nctr - 1]] == nbr + nctr - 1) {
+            bool ok = true;
+            for (int irx = nbr + 1; irx < nbr + nctr - 1 && ok; irx++)
+                ok = ok && idxbx[ctr_idx[irx]] == irx;
+            if (ok)
+                trans_b = 1;
+        } else if (idxbx[ctr_idx[nbr]] == ndimb - nctr && idxbx[ctr_idx[nbr + nctr - 1]] == ndimb - 1) {
+            bool ok = true;
+            for (int irx = nbr + 1; irx < nbr + nctr - 1 && ok; irx++)
+                ok = ok && idxbx[ctr_idx[irx]] == ndimb - nctr + irx - nbr;
+            if (ok)
+                trans_b = -1;
+        }
 
         // permute or reshape
         if (trans_a == 0) {
