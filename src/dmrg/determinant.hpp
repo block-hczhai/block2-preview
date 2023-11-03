@@ -283,6 +283,25 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
             }
             r->tensors[k] = t;
         }
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (info->right_dims[i]->n_states_total >
+                (total_bond_t)dets.size()) {
+                total_bond_t new_total = 0;
+                for (int k = 0; k < info->right_dims[i]->n; k++) {
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)info->right_dims[i]
+                                            ->n_states[k] *
+                                        dets.size() /
+                                        info->right_dims[i]->n_states_total) +
+                                   0.1);
+                    assert(new_n_states != 0);
+                    info->right_dims[i]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
+                    new_total += info->right_dims[i]->n_states[k];
+                }
+                info->right_dims[i]->n_states_total = new_total;
+            }
         info->check_bond_dimensions();
         info->save_mutable();
         return r;
@@ -633,6 +652,25 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
             }
             r->tensors[k] = t;
         }
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (info->right_dims[i]->n_states_total >
+                (total_bond_t)dets.size()) {
+                total_bond_t new_total = 0;
+                for (int k = 0; k < info->right_dims[i]->n; k++) {
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)info->right_dims[i]
+                                            ->n_states[k] *
+                                        dets.size() /
+                                        info->right_dims[i]->n_states_total) +
+                                   0.1);
+                    assert(new_n_states != 0);
+                    info->right_dims[i]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
+                    new_total += info->right_dims[i]->n_states[k];
+                }
+                info->right_dims[i]->n_states_total = new_total;
+            }
         info->check_bond_dimensions();
         info->save_mutable();
         return r;
@@ -914,6 +952,25 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
             }
             r->tensors[k] = t;
         }
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (info->right_dims[i]->n_states_total >
+                (total_bond_t)dets.size()) {
+                total_bond_t new_total = 0;
+                for (int k = 0; k < info->right_dims[i]->n; k++) {
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)info->right_dims[i]
+                                            ->n_states[k] *
+                                        dets.size() /
+                                        info->right_dims[i]->n_states_total) +
+                                   0.1);
+                    assert(new_n_states != 0);
+                    info->right_dims[i]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
+                    new_total += info->right_dims[i]->n_states[k];
+                }
+                info->right_dims[i]->n_states_total = new_total;
+            }
         info->check_bond_dimensions();
         info->save_mutable();
         return r;
