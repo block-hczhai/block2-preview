@@ -65,6 +65,21 @@ jobs:
           sudo make
           sudo cp lib/*.a /usr/lib
 
+      - name: fix mkl for amd cpu
+        if: matrix.os == 'ubuntu-20.04'
+        env:
+          CC: gcc-9
+          CXX: g++-9
+        run: |
+          lscpu
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          echo $CPUTYPE
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            echo "int mkl_serv_intel_cpu_true() { return 1; }" > fixcpu.c
+            $CC -shared -fPIC -o libfixcpu.so fixcpu.c
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
+
       - name: build gtest (macos)
         if: matrix.os == 'macos-12'
         run: |
