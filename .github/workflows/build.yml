@@ -77,8 +77,8 @@ jobs:
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
             echo "int mkl_serv_intel_cpu_true() { return 1; }" > fixcpu.c
             $CC -shared -fPIC -o libfixcpu.so fixcpu.c
-            export LD_PRELOAD=$PWD/libfixcpu.so
           fi
+          getconf LONG_BIT
 
       - name: build gtest (macos)
         if: matrix.os == 'macos-12'
@@ -145,8 +145,18 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
-      - name: run test (serial)
-        if: matrix.parallel == 'serial'
+      - name: run test (serial, linux)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
+        run: |
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
+          cd build_test
+          ./block2_tests
+
+      - name: run test (serial, macos)
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-12'
         run: |
           cd build_test
           ./block2_tests
@@ -156,6 +166,11 @@ jobs:
         run: |
           python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
+          echo $LD_PRELOAD
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
@@ -170,6 +185,11 @@ jobs:
         run: |
           python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
+          echo $LD_PRELOAD
           py.test -s pyblock2/unit_test/*.py --symm sany
 
       - name: run test (any-symm-pytest, macos)
@@ -193,6 +213,10 @@ jobs:
       - name: run test (mpi)
         if: matrix.parallel == 'mpi'
         run: |
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
           cd build_test
           mpirun -n 2 ./block2_tests
 

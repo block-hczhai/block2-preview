@@ -349,7 +349,7 @@ library is linked to only pure "so.1" or only pure "so".
 
 **Error:** ::
 
-    Insert ``cout`` in openMP parallel code will cause stuck. Because it is not thread-safe. Use ``printf`` instead.
+    Insert ``cout`` in openMP parallel code will cause dead lock. Because it is not thread-safe. Use ``printf`` instead.
 
 [2023-10-13]
 
@@ -358,3 +358,23 @@ library is linked to only pure "so.1" or only pure "so".
     ImportError: /.../block2.cpython-38-x86_64-linux-gnu.so: undefined symbol: _ZNSt15__exception_ptr13exception_ptr10_M_releaseEv
 
 **Solution:** This happens when code is compiled using gcc/12.2.0 but gcc module is not loaded. If compile using gcc/9.2.0 there is no problem.
+
+[2023-11-03]
+
+**Error:** ::
+
+    INTEL MKL ERROR: /opt/hostedtoolcache/Python/3.9.18/x64/lib/libmkl_def.so.1: undefined symbol: mkl_sparse_optimize_bsr_trsm_i8.
+    Intel MKL FATAL ERROR: Cannot load libmkl_def.so.1.
+
+.. highlight:: bash
+
+**Solution:** Check if this only happens in the AMD CPU but not Intel CPU. If this is the case, we can fix this by the ``fakeintel`` trick ::
+
+    export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+    if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+        echo "int mkl_serv_intel_cpu_true() { return 1; }" > fixcpu.c
+        $CC -shared -fPIC -o libfixcpu.so fixcpu.c
+        export LD_PRELOAD=$PWD/libfixcpu.so
+    fi
+
+.. highlight:: text
