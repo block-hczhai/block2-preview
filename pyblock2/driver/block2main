@@ -544,7 +544,7 @@ full_integral = "full_integral" in dic
 XExpect = ComplexExpect if complex_mps else Expect
 
 simpl_rule = RuleQC()
-if has_tran:
+if has_tran or ("use_complex" in dic) or ("use_hybrid_complex" in dic):
     simpl_rule = NoTransposeRule(simpl_rule)
 if anti_herm:
     simpl_rule = AntiHermitianRuleQC(simpl_rule)
