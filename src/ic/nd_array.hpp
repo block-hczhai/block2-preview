@@ -147,7 +147,7 @@ struct NDArray {
     }
     int ndim() const { return (int)shape.size(); }
     size_t size() const {
-        return accumulate(shape.cbegin(), shape.cend(), 1,
+        return accumulate(shape.cbegin(), shape.cend(), 1ULL,
                           multiplies<size_t>());
     }
     size_t max_size() const {
