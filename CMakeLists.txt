@@ -20,6 +20,7 @@ OPTION(ARCH_ARM64 "MacOS arch arm64" OFF)
 OPTION(APPLE_ACC_SINGLE_PREC "Fix Apple Accelerate single prec" ON)
 OPTION(BUILD_LIB "Build python block2.so" OFF)
 OPTION(BUILD_CLIB "Build C++ block2.so" OFF)
+OPTION(FORCE_LIB_ABS_PATH "Using absolute path when linking libraries" ON)
 
 IF (NOT ${USE_DMRG})
     SET(USE_BIG_SITE OFF)
@@ -31,6 +32,10 @@ ENDIF()
 SET(PROJECT_NAME block2)
 SET(PROJECT_VERSION 2.0)
 PROJECT(${PROJECT_NAME} VERSION ${PROJECT_VERSION})
+
+IF (${FORCE_LIB_ABS_PATH})
+    CMAKE_POLICY(SET CMP0060 NEW) # force using absolute path when linking libraries
+ENDIF()
 
 # Check Python3 and Pybind11
 

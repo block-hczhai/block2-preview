@@ -378,3 +378,13 @@ library is linked to only pure "so.1" or only pure "so".
     fi
 
 .. highlight:: text
+
+[2023-11-30]
+
+**Error:** ::
+
+    /.../block2.cpython-38-x86_64-linux-gnu.so: undefined symbol: _ZNSt15__exception_ptr13exception_ptr9_M_addrefEv
+
+**Solution:** This can be caused by loading the wrong ``libstdc++.so.6`` at runtime. For example, when using a new ``g++`` to build the code,
+    and there is an old ``/anaconda3/envs/python3.7/lib/libstdc++.so.6`` which is linked by cmake and loaded at runtime, this error can happen.
+    Adding ``LD_PRELOAD=/lib64/libstdc++.so.6`` at runtime is one way to fix this.
