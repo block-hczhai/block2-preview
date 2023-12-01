@@ -294,7 +294,8 @@ struct EffectiveFunctions<
         typename const_fl_type<FL>::FL const_e, FL omega, FL eta,
         const shared_ptr<SparseMatrix<S, FL>> &real_bra,
         int n_harmonic_projection = 0, bool iprint = false, FP conv_thrd = 5E-6,
-        int max_iter = 5000, int soft_max_iter = -1,
+        int max_iter = 5000, int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int nmult = 0, nmultx = 0;
         frame_<FP>()->activate(0);
@@ -367,7 +368,8 @@ struct EffectiveFunctions<
                 DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond,
                 nmultx, iprint,
                 para_rule == nullptr ? nullptr : para_rule->comm, 1E-4,
-                max_iter, soft_max_iter, 2, 50);
+                max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size);
             nmultp = nmult;
             nmult = 0;
             igf = IterativeMatrixFunctions<FL>::deflated_conjugate_gradient(
@@ -465,7 +467,8 @@ struct EffectiveFunctions<
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
         bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1,
+        int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50,
         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
@@ -534,7 +537,7 @@ struct EffectiveFunctions<
         vector<FP> xeners = IterativeMatrixFunctions<FC>::harmonic_davidson(
             f, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter);
+            max_iter, soft_max_iter, deflation_min_size, deflation_max_size);
         vector<typename const_fl_type<FP>::FL> eners(xeners.size());
         for (size_t i = 0; i < xeners.size(); i++)
             eners[i] = (typename const_fl_type<FP>::FL)xeners[i];
@@ -675,7 +678,8 @@ struct EffectiveFunctions<S, FL,
         typename const_fl_type<FL>::FL const_e, FL omega, FL eta,
         const shared_ptr<SparseMatrix<S, FL>> &real_bra,
         int n_harmonic_projection = 0, bool iprint = false, FP conv_thrd = 5E-6,
-        int max_iter = 5000, int soft_max_iter = -1,
+        int max_iter = 5000, int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(false);
         return make_tuple(0.0, make_pair(0, 0), (size_t)0, 0.0);
@@ -699,7 +703,8 @@ struct EffectiveFunctions<S, FL,
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
         bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1,
+        int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50,
         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         assert(false);

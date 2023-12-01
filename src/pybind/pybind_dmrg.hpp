@@ -1196,6 +1196,10 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::davidson_max_iter)
         .def_readwrite("davidson_soft_max_iter",
                        &DMRG<S, FL, FLS>::davidson_soft_max_iter)
+        .def_readwrite("davidson_def_min_size",
+                       &DMRG<S, FL, FLS>::davidson_def_min_size)
+        .def_readwrite("davidson_def_max_size",
+                       &DMRG<S, FL, FLS>::davidson_def_max_size)
         .def_readwrite("davidson_shift", &DMRG<S, FL, FLS>::davidson_shift)
         .def_readwrite("davidson_type", &DMRG<S, FL, FLS>::davidson_type)
         .def_readwrite("conn_adjust_step", &DMRG<S, FL, FLS>::conn_adjust_step)
@@ -1490,6 +1494,10 @@ void bind_fl_linear(py::module &m) {
                        &Linear<S, FL, FLS>::linear_soft_max_iter)
         .def_readwrite("conv_required_sweeps",
                        &Linear<S, FL, FLS>::conv_required_sweeps)
+        .def_readwrite("linear_def_min_size",
+                       &Linear<S, FL, FLS>::linear_def_min_size)
+        .def_readwrite("linear_def_max_size",
+                       &Linear<S, FL, FLS>::linear_def_max_size)
         .def_readwrite("gf_omega", &Linear<S, FL, FLS>::gf_omega)
         .def_readwrite("gf_eta", &Linear<S, FL, FLS>::gf_eta)
         .def_readwrite("gf_extra_omegas", &Linear<S, FL, FLS>::gf_extra_omegas)
@@ -2465,13 +2473,17 @@ extern template auto bind_fl_trans_mps_spin_specific<SU2, SZ, complex<double>>(
     -> decltype(typename SU2::is_su2_t(typename SZ::is_sz_t()));
 
 extern template void
-bind_fl_trans_mps<SU2, double, complex<double>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SU2, double, complex<double>>(py::module &m,
+                                                const string &aux_name);
 extern template void
-bind_fl_trans_mps<SU2, complex<double>, double>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SU2, complex<double>, double>(py::module &m,
+                                                const string &aux_name);
 extern template void
-bind_fl_trans_mps<SZ, double, complex<double>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SZ, double, complex<double>>(py::module &m,
+                                               const string &aux_name);
 extern template void
-bind_fl_trans_mps<SZ, complex<double>, double>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SZ, complex<double>, double>(py::module &m,
+                                               const string &aux_name);
 #endif
 
 #endif
@@ -2726,13 +2738,17 @@ extern template auto bind_fl_trans_mps_spin_specific<SZ, SGF, complex<double>>(
 #endif
 
 extern template void
-bind_fl_trans_mps<SGF, double, complex<double>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGF, double, complex<double>>(py::module &m,
+                                                const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGF, complex<double>, double>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGF, complex<double>, double>(py::module &m,
+                                                const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGB, double, complex<double>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGB, double, complex<double>>(py::module &m,
+                                                const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGB, complex<double>, double>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGB, complex<double>, double>(py::module &m,
+                                                const string &aux_name);
 #endif
 
 #endif
@@ -2929,13 +2945,17 @@ bind_fl_trans_mps<SZ, complex<double>, complex<float>>(py::module &m,
                                                        const string &aux_name);
 
 extern template void
-bind_fl_trans_mps<SU2, float, complex<float>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SU2, float, complex<float>>(py::module &m,
+                                              const string &aux_name);
 extern template void
-bind_fl_trans_mps<SU2, complex<float>, float>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SU2, complex<float>, float>(py::module &m,
+                                              const string &aux_name);
 extern template void
-bind_fl_trans_mps<SZ, float, complex<float>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SZ, float, complex<float>>(py::module &m,
+                                             const string &aux_name);
 extern template void
-bind_fl_trans_mps<SZ, complex<float>, float>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SZ, complex<float>, float>(py::module &m,
+                                             const string &aux_name);
 
 #endif
 
@@ -3074,13 +3094,17 @@ bind_fl_trans_mps<SGB, complex<double>, complex<float>>(py::module &m,
                                                         const string &aux_name);
 
 extern template void
-bind_fl_trans_mps<SGF, float, complex<float>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGF, float, complex<float>>(py::module &m,
+                                              const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGF, complex<float>, float>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGF, complex<float>, float>(py::module &m,
+                                              const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGB, float, complex<float>>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGB, float, complex<float>>(py::module &m,
+                                              const string &aux_name);
 extern template void
-bind_fl_trans_mps<SGB, complex<float>, float>(py::module &m, const string &aux_name);
+bind_fl_trans_mps<SGB, complex<float>, float>(py::module &m,
+                                              const string &aux_name);
 #endif
 
 #endif

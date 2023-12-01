@@ -214,6 +214,9 @@ template <typename S> struct ParallelCommunicator {
     virtual void allreduce_max(vector<complex<float>> &vs) {
         assert(size == 1);
     }
+    virtual void reduce_max(uint64_t *data, size_t len, int owner) {
+        assert(size == 1);
+    }
     virtual void reduce_sum(const shared_ptr<SparseMatrixGroup<S, double>> &mat,
                             int owner) {
         assert(size == 1);
@@ -299,6 +302,7 @@ template <typename S> struct ParallelCommunicator {
     // mainly for no communication parallel execution in serial
     virtual void reduce_sum_optional(double *data, size_t len, int owner) {}
     virtual void reduce_sum_optional(uint64_t *data, size_t len, int owner) {}
+    virtual void reduce_max_optional(uint64_t *data, size_t len, int owner) {}
     virtual void allreduce_logical_or(bool &v) { assert(size == 1); }
     virtual void waitall() { assert(size == 1); }
 };

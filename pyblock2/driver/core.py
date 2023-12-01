@@ -2775,6 +2775,7 @@ class DMRGDriver:
         cutoff=1e-20,
         twosite_to_onesite=None,
         dav_max_iter=4000,
+        dav_def_max_size=50,
         proj_mpss=None,
         proj_weights=None,
         store_wfn_spectra=True,
@@ -2820,6 +2821,7 @@ class DMRGDriver:
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
         dmrg.davidson_max_iter = dav_max_iter + 100
         dmrg.davidson_soft_max_iter = dav_max_iter
+        dmrg.davidson_def_max_size = dav_def_max_size
         dmrg.store_wfn_spectra = store_wfn_spectra
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff

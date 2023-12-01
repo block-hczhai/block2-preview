@@ -36,6 +36,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -107,6 +108,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     size_t sweep_cumulative_nflop = 0;
     size_t sweep_max_pket_size = 0;
     size_t sweep_max_eff_ham_size = 0;
+    size_t sweep_max_eff_wfn_size = 0;
+    int davidson_def_min_size = 2;
+    int davidson_def_max_size = 50;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
            tsvd = 0, torth = 0;
     bool print_connection_time = false;
@@ -586,9 +590,12 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->bra->tensors[i], me->ket->tensors[i]);
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size =
+            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, davidson_type,
+                          davidson_soft_max_iter, davidson_def_min_size,
+                          davidson_def_max_size, davidson_type,
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
@@ -885,9 +892,12 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         me->ket->tensors[i]);
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size =
+            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
         pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                          davidson_soft_max_iter, davidson_type,
+                          davidson_soft_max_iter, davidson_def_min_size,
+                          davidson_def_max_size, davidson_type,
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
@@ -1336,23 +1346,44 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
                                                 x_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size = max(
+                sweep_max_eff_wfn_size,
+                accumulate(
+                    h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                    [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                        return x + y->total_memory;
+                    }) +
+                    accumulate(
+                        x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
+                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
+                            return x + y->total_memory;
+                        }));
         } else {
             h_eff = me->multi_eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size,
+                    accumulate(
+                        h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                            return x + y->total_memory;
+                        }));
         }
         teff += _t.get_time();
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
-                davidson_max_iter, davidson_soft_max_iter, davidson_type,
+                davidson_max_iter, davidson_soft_max_iter,
+                davidson_def_min_size, davidson_def_max_size, davidson_type,
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, davidson_type,
+                            davidson_soft_max_iter, davidson_def_min_size,
+                            davidson_def_max_size, davidson_type,
                             davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                             me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
@@ -1677,22 +1708,43 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
                                                 x_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size = max(
+                sweep_max_eff_wfn_size,
+                accumulate(
+                    h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                    [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                        return x + y->total_memory;
+                    }) +
+                    accumulate(
+                        x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
+                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
+                            return x + y->total_memory;
+                        }));
         } else {
             h_eff = me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size,
+                    accumulate(
+                        h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                            return x + y->total_memory;
+                        }));
         }
         teff += _t.get_time();
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
-                davidson_max_iter, davidson_soft_max_iter, davidson_type,
+                davidson_max_iter, davidson_soft_max_iter,
+                davidson_def_min_size, davidson_def_max_size, davidson_type,
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
             pdi =
                 h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, davidson_type,
+                            davidson_soft_max_iter, davidson_def_min_size,
+                            davidson_def_max_size, davidson_type,
                             davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                             me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
@@ -1802,6 +1854,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
+        sweep_max_eff_wfn_size = 0;
         frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
@@ -2092,6 +2145,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
+        sweep_max_eff_wfn_size = 0;
         frame_<FPS>()->reset_peak_used_memory();
         sweep_energies.resize(me->n_sites - me->dot + 1, vector<FPLS>{1E9});
         sweep_time.resize(me->n_sites - me->dot + 1, 0);
@@ -2367,6 +2421,15 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                              << " | Tidle = " << tt[1] / comm->size
                              << " | Twait = " << tt[2] / comm->size;
                     }
+                    size_t sweep_max_eff_ham_size_pm = sweep_max_eff_ham_size;
+                    size_t sweep_max_eff_wfn_size_pm = sweep_max_eff_wfn_size;
+                    if (me->para_rule != nullptr) {
+                        shared_ptr<ParallelCommunicator<S>> comm =
+                            me->para_rule->comm;
+                        uint64_t tt[2] = {(uint64_t)sweep_max_eff_ham_size_pm,
+                                          (uint64_t)sweep_max_eff_wfn_size_pm};
+                        comm->reduce_max_optional(&tt[0], 2, comm->root);
+                    }
                     size_t dmain = frame_<FPS>()->peak_used_memory[0];
                     size_t dseco = frame_<FPS>()->peak_used_memory[1];
                     size_t imain = frame_<FPS>()->peak_used_memory[2];
@@ -2378,7 +2441,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                          << Parsing::to_size_string(imain + iseco) << " ("
                          << (imain * 100 / (imain + iseco)) << "%)";
                     sout << " | Hmem = "
-                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                         << Parsing::to_size_string(sweep_max_eff_ham_size_pm *
+                                                    sizeof(FL));
+                    sout << " | Wmem = "
+                         << Parsing::to_size_string(sweep_max_eff_wfn_size_pm *
                                                     sizeof(FL));
                     sout << " | Pmem = "
                          << Parsing::to_size_string(sweep_max_pket_size *
@@ -2480,6 +2546,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
     int linear_max_iter = 5000;
     int linear_soft_max_iter = -1;
     int conv_required_sweeps = 3;
+    int linear_def_min_size = 2;
+    int linear_def_max_size = 50;
     ConvergenceTypes conv_type = ConvergenceTypes::LastMinimal;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
@@ -2495,6 +2563,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     size_t sweep_cumulative_nflop = 0;
     size_t sweep_max_pket_size = 0;
     size_t sweep_max_eff_ham_size = 0;
+    size_t sweep_max_eff_wfn_size = 0;
     double tprt = 0, tmult = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0,
            tsplt = 0, tsvd = 0;
     Timer _t, _t2;
@@ -2722,6 +2791,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 linear_use_precondition, me->bra->tensors[i], right_bra);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size, l_eff->ket->total_memory);
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
@@ -2758,6 +2829,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     real_bra, cg_n_harmonic_projection,
                                     iprint >= 3, linear_conv_thrd,
                                     linear_max_iter, linear_soft_max_iter,
+                                    linear_def_min_size, linear_def_max_size,
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
@@ -2798,7 +2870,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         cg_n_harmonic_projection, iprint >= 3, linear_conv_thrd,
-                        linear_max_iter, linear_soft_max_iter, me->para_rule);
+                        linear_max_iter, linear_soft_max_iter,
+                        linear_def_min_size, linear_def_max_size,
+                        me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
                         l_eff, lme->mpo->const_e, solver_type, gf_omega, gf_eta,
@@ -3437,6 +3511,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 me->bra->tensors[i], right_bra);
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size, l_eff->ket->total_memory);
             teff += _t.get_time();
             if (eq_type == EquationTypes::Normal) {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
@@ -3473,6 +3549,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                     real_bra, cg_n_harmonic_projection,
                                     iprint >= 3, linear_conv_thrd,
                                     linear_max_iter, linear_soft_max_iter,
+                                    linear_def_min_size, linear_def_max_size,
                                     me->para_rule);
                         else
                             lpdi = EffectiveFunctions<S, FL>::greens_function(
@@ -3513,7 +3590,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     lpdi = EffectiveFunctions<S, FL>::greens_function_squared(
                         l_eff, lme->mpo->const_e, gf_omega, gf_eta, real_bra,
                         cg_n_harmonic_projection, iprint >= 3, linear_conv_thrd,
-                        linear_max_iter, linear_soft_max_iter, me->para_rule);
+                        linear_max_iter, linear_soft_max_iter,
+                        linear_def_min_size, linear_def_max_size,
+                        me->para_rule);
                 else
                     lpdi = EffectiveFunctions<S, FL>::greens_function(
                         l_eff, lme->mpo->const_e, solver_type, gf_omega, gf_eta,
@@ -3964,6 +4043,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         sweep_cumulative_nflop = 0;
         sweep_max_pket_size = 0;
         sweep_max_eff_ham_size = 0;
+        sweep_max_eff_wfn_size = 0;
         frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
@@ -4255,6 +4335,14 @@ template <typename S, typename FL, typename FLS> struct Linear {
                              << " | Twait = " << tt[2];
                         cout << endl;
                     }
+                    size_t sweep_max_eff_ham_size_pm = sweep_max_eff_ham_size;
+                    size_t sweep_max_eff_wfn_size_pm = sweep_max_eff_wfn_size;
+                    if (lme != nullptr && lme->para_rule != nullptr) {
+                        uint64_t tt[2] = {(uint64_t)sweep_max_eff_ham_size_pm,
+                                          (uint64_t)sweep_max_eff_wfn_size_pm};
+                        lme->para_rule->comm->reduce_max_optional(
+                            &tt[0], 2, lme->para_rule->comm->root);
+                    }
                     size_t dmain = frame_<FPS>()->peak_used_memory[0];
                     size_t dseco = frame_<FPS>()->peak_used_memory[1];
                     size_t imain = frame_<FPS>()->peak_used_memory[2];
@@ -4266,7 +4354,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                          << Parsing::to_size_string(imain + iseco) << " ("
                          << (imain * 100 / (imain + iseco)) << "%)";
                     cout << " | Hmem = "
-                         << Parsing::to_size_string(sweep_max_eff_ham_size *
+                         << Parsing::to_size_string(sweep_max_eff_ham_size_pm *
+                                                    sizeof(FL));
+                    cout << " | Wmem = "
+                         << Parsing::to_size_string(sweep_max_eff_wfn_size_pm *
                                                     sizeof(FL));
                     cout << " | Pmem = "
                          << Parsing::to_size_string(sweep_max_pket_size *
@@ -4384,6 +4475,7 @@ struct Expect {
     vector<FPS> wfn_spectra;
     size_t sweep_cumulative_nflop = 0;
     size_t sweep_max_eff_ham_size = 0;
+    size_t sweep_max_eff_wfn_size = 0;
     pair<size_t, size_t> max_move_env_mem;
     double tex = 0, teff = 0, tmve = 0, tblk = 0;
     Timer _t, _t2;
@@ -4566,6 +4658,8 @@ struct Expect {
                 teff += _t.get_time();
                 sweep_max_eff_ham_size =
                     max(sweep_max_eff_ham_size, k_eff->op->get_total_memory());
+                sweep_max_eff_wfn_size =
+                    max(sweep_max_eff_wfn_size, k_eff->ket->total_memory);
                 pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
                                     me->para_rule);
                 tex += _t.get_time();
@@ -4590,6 +4684,8 @@ struct Expect {
                 teff += _t.get_time();
                 sweep_max_eff_ham_size =
                     max(sweep_max_eff_ham_size, k_eff->op->get_total_memory());
+                sweep_max_eff_wfn_size =
+                    max(sweep_max_eff_wfn_size, k_eff->ket->total_memory);
                 pdi = k_eff->expect(me->mpo->const_e, algo_type, ex_type,
                                     me->para_rule);
                 tex += _t.get_time();
@@ -4737,6 +4833,8 @@ struct Expect {
         teff += _t.get_time();
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size =
+            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         auto pdi = h_eff->expect(me->mpo->const_e, algo_type, ex_type,
                                  me->para_rule, fuse_left);
         tex += _t.get_time();
@@ -4905,6 +5003,8 @@ struct Expect {
         teff += _t.get_time();
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size =
+            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         tex += _t.get_time();
@@ -5049,6 +5149,12 @@ struct Expect {
         teff += _t.get_time();
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size = max(
+            sweep_max_eff_wfn_size,
+            accumulate(h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                       [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                           return x + y->total_memory;
+                       }));
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         tex += _t.get_time();
@@ -5284,6 +5390,12 @@ struct Expect {
         teff += _t.get_time();
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+        sweep_max_eff_wfn_size = max(
+            sweep_max_eff_wfn_size,
+            accumulate(h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                       [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                           return x + y->total_memory;
+                       }));
         auto pdi =
             h_eff->expect(me->mpo->const_e, algo_type, ex_type, me->para_rule);
         tex += _t.get_time();
@@ -5466,6 +5578,7 @@ struct Expect {
         me->prepare();
         sweep_cumulative_nflop = 0;
         sweep_max_eff_ham_size = 0;
+        sweep_max_eff_wfn_size = 0;
         frame_<FPS>()->reset_peak_used_memory();
         vector<int> sweep_range;
         if (forward)
@@ -5545,6 +5658,15 @@ struct Expect {
                          << " | Twait = " << tt[2];
                     cout << endl;
                 }
+                size_t sweep_max_eff_ham_size_pm = sweep_max_eff_ham_size;
+                size_t sweep_max_eff_wfn_size_pm = sweep_max_eff_wfn_size;
+                if (me->para_rule != nullptr) {
+                    shared_ptr<ParallelCommunicator<S>> comm =
+                        me->para_rule->comm;
+                    uint64_t tt[2] = {(uint64_t)sweep_max_eff_ham_size_pm,
+                                      (uint64_t)sweep_max_eff_wfn_size_pm};
+                    comm->reduce_max_optional(&tt[0], 2, comm->root);
+                }
                 size_t dmain = frame_<FPS>()->peak_used_memory[0];
                 size_t dseco = frame_<FPS>()->peak_used_memory[1];
                 size_t imain = frame_<FPS>()->peak_used_memory[2];
@@ -5554,7 +5676,10 @@ struct Expect {
                 cout << " | Imem = " << Parsing::to_size_string(imain + iseco)
                      << " (" << (imain * 100 / (imain + iseco)) << "%)";
                 cout << " | Hmem = "
-                     << Parsing::to_size_string(sweep_max_eff_ham_size *
+                     << Parsing::to_size_string(sweep_max_eff_ham_size_pm *
+                                                sizeof(FL));
+                cout << " | Wmem = "
+                     << Parsing::to_size_string(sweep_max_eff_wfn_size_pm *
                                                 sizeof(FL));
                 cout << " | MaxBmem = "
                      << Parsing::to_size_string(max_move_env_mem.first *

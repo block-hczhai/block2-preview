@@ -297,6 +297,8 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
     using DMRGBigSite<S, FL, FLS>::ext_mes;
     using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
     using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_def_min_size;
+    using DMRGBigSite<S, FL, FLS>::davidson_def_max_size;
     using DMRGBigSite<S, FL, FLS>::noise_type;
     using DMRGBigSite<S, FL, FLS>::decomp_type;
     using DMRGBigSite<S, FL, FLS>::energies;
@@ -464,7 +466,8 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
         pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                             davidson_soft_max_iter, DavidsonTypes::Normal, 0.0,
+                             davidson_soft_max_iter, davidson_def_min_size,
+                             davidson_def_max_size, DavidsonTypes::Normal, 0.0,
                              me->para_rule);
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
@@ -549,6 +552,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                 const auto pdi2 =
                     aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                    davidson_max_iter, davidson_soft_max_iter,
+                                   davidson_def_min_size, davidson_def_max_size,
                                    DavidsonTypes::Normal, 0.0, me->para_rule);
                 const FPS energy =
                     (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
@@ -598,6 +602,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
             auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
             pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                  davidson_max_iter, davidson_soft_max_iter,
+                                 davidson_def_min_size, davidson_def_max_size,
                                  DavidsonTypes::Normal, 0.0, me->para_rule);
             const FPS energy = (FPS)std::get<0>(pdi) + (FPS)me->mpo->const_e;
             smallest_energy = min(energy, smallest_energy);
@@ -630,6 +635,8 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
     using DMRGBigSite<S, FL, FLS>::me;
     using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
     using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_def_min_size;
+    using DMRGBigSite<S, FL, FLS>::davidson_def_max_size;
     using DMRGBigSite<S, FL, FLS>::noise_type;
     using DMRGBigSite<S, FL, FLS>::decomp_type;
     using DMRGBigSite<S, FL, FLS>::energies;
@@ -721,7 +728,8 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                         Partition<S, FL>::get_uniq_labels({h_eff->hop_mat});
                     vector<vector<pair<uint8_t, S>>> msubsl =
                         Partition<S, FL>::get_uniq_sub_labels(
-                            h_eff->op->mat, h_eff->hop_mat, msl, h_eff->hop_left_vacuum);
+                            h_eff->op->mat, h_eff->hop_mat, msl,
+                            h_eff->hop_left_vacuum);
                     diag_info->initialize_diag(
                         cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
                         h_eff->right_op_infos, h_eff->diag->info,
@@ -749,6 +757,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 const auto pdi2 =
                     h_eff->eigs(iprint >= 3, davidson_conv_thrd,
                                 davidson_max_iter, davidson_soft_max_iter,
+                                davidson_def_min_size, davidson_def_max_size,
                                 DavidsonTypes::Normal, 0.0, me->para_rule);
                 const auto energy =
                     (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
@@ -802,6 +811,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
         } else {
             pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
                               davidson_max_iter, davidson_soft_max_iter,
+                              davidson_def_min_size, davidson_def_max_size,
                               DavidsonTypes::Normal, 0.0, me->para_rule);
         }
         teig += _t.get_time();

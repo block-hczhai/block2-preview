@@ -384,6 +384,13 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void allreduce_max(vector<complex<float>> &vs) override {
         allreduce_max(vs.data(), vs.size());
     }
+    void reduce_max(uint64_t *data, size_t len, int owner) override {
+        _t.get_time();
+        int ierr = MPI_Reduce(rank == owner ? MPI_IN_PLACE : data, data, len,
+                              MPI_UINT64_T, MPI_MAX, owner, comm);
+        assert(ierr == 0);
+        tcomm += _t.get_time();
+    }
     void allreduce_min(double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
@@ -724,6 +731,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     }
     void reduce_sum_optional(uint64_t *data, size_t len, int owner) override {
         reduce_sum(data, len, owner);
+    }
+    void reduce_max_optional(uint64_t *data, size_t len, int owner) override {
+        reduce_max(data, len, owner);
     }
     void waitall() override {
         _t.get_time();

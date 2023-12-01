@@ -408,7 +408,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // energy, ndav, nflop, tdav
     tuple<typename const_fl_type<FP>::FL, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-         int soft_max_iter = -1,
+         int soft_max_iter = -1, int deflation_min_size = 2,
+         int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
          const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
@@ -437,13 +438,13 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
-                      projection_weights)
+                      conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                      deflation_max_size, ors, projection_weights)
                 : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
-                      projection_weights);
+                      conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                      deflation_max_size, ors, projection_weights);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1002,7 +1003,8 @@ template <typename S, typename FL> struct LinearEffectiveHamiltonian {
     // energy, ndav, nflop, tdav
     tuple<typename const_fl_type<FP>::FL, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-         int soft_max_iter = -1,
+         int soft_max_iter = -1, int deflation_min_size = 2,
+         int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
         int ndav = 0;
@@ -1029,7 +1031,7 @@ template <typename S, typename FL> struct LinearEffectiveHamiltonian {
         vector<FP> eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
             *this, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter);
+            max_iter, soft_max_iter, deflation_min_size, deflation_max_size);
         for (size_t ih = 0; ih < h_effs.size(); ih++)
             h_effs[ih]->post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
@@ -1458,7 +1460,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     // energies, ndav, nflop, tdav
     tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
     eigs(bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-         int soft_max_iter = -1,
+         int soft_max_iter = -1, int deflation_min_size = 2,
+         int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
          const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
          const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
@@ -1492,13 +1495,13 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *tf, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
-                      projection_weights)
+                      conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                      deflation_max_size, ors, projection_weights)
                 : IterativeMatrixFunctions<FL>::harmonic_davidson(
                       *this, aa, bs, shift, davidson_type, ndav, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter, 2, 50, ors,
-                      projection_weights);
+                      conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                      deflation_max_size, ors, projection_weights);
         vector<typename const_fl_type<FP>::FL> eners(xeners.size());
         for (size_t i = 0; i < xeners.size(); i++)
             eners[i] = (typename const_fl_type<FP>::FL)xeners[i];
