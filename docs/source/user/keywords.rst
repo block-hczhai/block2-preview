@@ -538,6 +538,11 @@ davidson\_soft\_max\_iter
     If this numebr is -1, or larger than or equal to ``davidson_max_iter``,
     this keyword has no effect and ``davidson_max_iter`` is used instead.
 
+davidson\_def\_max\_size
+    Optional. Max size of the Krylov subspace in Davidson. Default is 50.
+    The Davidson working memory is two times this number times ``Wmem`` printed during sweeps.
+    One may reduce this number to save memory when the MPS bond dimension is very large.
+
 n\_sub\_sweeps
     Optional. Number of sweeps for each time step. Defualt is 2.
     This keyword only has effect when used with ``delta_t`` and when ``te_type`` is ``rk4``.

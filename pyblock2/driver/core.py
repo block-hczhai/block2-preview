@@ -346,6 +346,7 @@ class DMRGDriver:
         clean_scratch=True,
         restart_dir=None,
         n_threads=None,
+        n_mkl_threads=1,
         symm_type=SymmetryTypes.SU2,
         mpi=None,
         stack_mem_ratio=0.4,
@@ -371,8 +372,8 @@ class DMRGDriver:
         bw.b.Global.threading = bw.b.Threading(
             bw.b.ThreadingTypes.OperatorBatchedGEMM | bw.b.ThreadingTypes.Global,
             n_threads,
-            n_threads,
-            1,
+            n_threads // n_mkl_threads,
+            n_mkl_threads,
         )
         bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
         self.reorder_idx = None

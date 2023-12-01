@@ -270,6 +270,7 @@ jobs:
           gsed -i "/mkl/d" setup.py
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+          gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
           export OMPROOT=$(brew --prefix libomp)
           echo ${OMPROOT}
           cmake --version
@@ -298,6 +299,7 @@ jobs:
           gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DARCH_ARM64=ON'," setup.py
+          gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
           gsed -i "/mkl/d" setup.py
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
