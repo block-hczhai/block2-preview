@@ -3667,6 +3667,12 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                     py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order",
              (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+                 const string &, bool, typename GeneralFCIDUMP<FL>::FP) const) &
+                 GeneralFCIDUMP<FL>::adjust_order,
+             py::arg("fermionic_ops"), py::arg("merge") = true,
+             py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("adjust_order",
+             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
                  bool, bool, typename GeneralFCIDUMP<FL>::FP) const) &
                  GeneralFCIDUMP<FL>::adjust_order,
              py::arg("merge") = true, py::arg("is_drt") = false,

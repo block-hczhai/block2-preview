@@ -5192,9 +5192,16 @@ class ExprBuilder:
             self.data.data[i] = self.bw.VectorFL(d * np.array(ix))
         return self
 
-    def finalize(self, adjust_order=True, merge=True, is_drt=False):
+    def finalize(self, adjust_order=True, merge=True, is_drt=False, fermionic_ops=None):
         if adjust_order:
-            self.data = self.data.adjust_order(merge=merge, is_drt=is_drt)
+            if fermionic_ops is not None:
+                assert (SymmetryTypes.SU2 not in self.bw.symm_type
+                    and SymmetryTypes.PHSU2 not in self.bw.symm_type
+                    and SymmetryTypes.SO4 not in self.bw.symm_type
+                    and SymmetryTypes.SO3 not in self.bw.symm_type)
+                self.data = self.data.adjust_order(fermionic_ops, merge=merge)
+            else:
+                self.data = self.data.adjust_order(merge=merge, is_drt=is_drt)
         elif merge:
             self.data.merge_terms()
         return self.data

@@ -313,6 +313,59 @@ template <typename FL> struct GeneralFCIDUMP {
             return r;
         }
     };
+    // abelian symmetry case
+    shared_ptr<GeneralFCIDUMP> adjust_order(const string &fermionic_ops,
+                                            bool merge = true,
+                                            FP cutoff = (FP)0.0) const {
+        unordered_map<string, uint64_t> r_exprs;
+        unordered_map<char, int8_t> is_op_f;
+        for (size_t it = 0; it < fermionic_ops.length(); it++)
+            is_op_f[fermionic_ops[it]] = 1;
+        vector<vector<uint16_t>> r_indices;
+        vector<vector<FL>> r_data;
+        for (size_t ix = 0; ix < exprs.size(); ix++) {
+            int nn = (int)exprs[ix].length();
+            vector<uint16_t> idx_idx(nn);
+            for (size_t i = 0; i < (nn == 0 ? 1 : indices[ix].size());
+                 i += (nn == 0 ? 1 : nn)) {
+                for (int j = 0; j < nn; j++)
+                    idx_idx[j] = j;
+                string xex = exprs[ix];
+                int8_t n = 0;
+                for (int xi = 0; xi < (int)nn - 1; xi++)
+                    for (int xj = xi; xj >= 0; xj--)
+                        if (indices[ix][i + idx_idx[xj]] >
+                            indices[ix][i + idx_idx[xj + 1]]) {
+                            swap(idx_idx[xj], idx_idx[xj + 1]);
+                            swap(xex[xj], xex[xj + 1]);
+                            n ^= (is_op_f.count(xex[xj]) &&
+                                  is_op_f.count(xex[xj + 1]));
+                        }
+                if (!r_exprs.count(xex)) {
+                    r_exprs[xex] = r_data.size();
+                    r_indices.push_back(vector<uint16_t>());
+                    r_data.push_back(vector<FL>());
+                }
+                uint64_t ir = r_exprs.at(xex);
+                for (int j = 0; j < nn; j++)
+                    r_indices[ir].push_back(indices[ix][i + idx_idx[j]]);
+                r_data[ir].push_back((FL)(FP)(1 - (n << 1)) *
+                                     data[ix][nn == 0 ? i : i / nn]);
+            }
+        }
+        shared_ptr<GeneralFCIDUMP> r = make_shared<GeneralFCIDUMP>();
+        r->params = params;
+        r->const_e = const_e;
+        r->elem_type = elem_type;
+        r->exprs.resize(r_exprs.size());
+        for (auto &x : r_exprs)
+            r->exprs[x.second] = x.first;
+        r->indices = r_indices;
+        r->data = r_data;
+        if (merge)
+            r->merge_terms(cutoff);
+        return r;
+    }
     template <typename T, typename FLX>
     shared_ptr<GeneralFCIDUMP>
     adjust_order_impl(const vector<shared_ptr<T>> &schemes, bool merge = true,
