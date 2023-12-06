@@ -2781,6 +2781,7 @@ class DMRGDriver:
         proj_weights=None,
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
+        lowmem_noise=False,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -2818,7 +2819,10 @@ class DMRGDriver:
 
         if dav_type is not None:
             dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
-        dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+        if lowmem_noise:
+            dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollectedLowMem
+        else:
+            dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollected
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
         dmrg.davidson_max_iter = dav_max_iter + 100
         dmrg.davidson_soft_max_iter = dav_max_iter
