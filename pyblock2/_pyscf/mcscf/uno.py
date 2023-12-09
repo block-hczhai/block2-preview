@@ -299,7 +299,7 @@ def get_uno(mf, do_loc=True, iprint=True):
 
     # clmo = scdm(c_orbs, ova, s12inv)  # local "AOs" in core space
     # almo = scdm(a_orbs, ova, s12inv)  # local "AOs" in active space
-    vlmo = scdm(v_orbs, ova, s12inv)  # local "AOs" in external space
+    vlmo = scdm(v_orbs, ova, s12inv) if v_orbs.shape[1] != 0 else v_orbs  # local "AOs" in external space
 
     # 3.3 Sorting each space (core, active, external) based on "orbital energy" to
     # prevent high-lying orbitals standing in valence space.
