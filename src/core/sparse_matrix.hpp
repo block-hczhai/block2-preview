@@ -1038,9 +1038,21 @@ template <typename S, typename FL> struct SparseMatrix {
         return r;
     }
     virtual FP norm() const {
-        assert(total_memory <= (size_t)numeric_limits<MKL_INT>::max());
-        return GMatrixFunctions<FL>::norm(
-            GMatrix<FL>(data, (MKL_INT)total_memory, 1));
+        if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
+            return GMatrixFunctions<FL>::norm(
+                GMatrix<FL>(data, (MKL_INT)total_memory, 1));
+        else {
+            const size_t chunk_size = 1 << 30;
+            FP nmsq = (FP)0.0;
+            for (size_t offset = 0; offset < total_memory;
+                 offset += chunk_size) {
+                FP pnmsq = GMatrixFunctions<FL>::norm(GMatrix<FL>(
+                    data + offset,
+                    (MKL_INT)(min(chunk_size, total_memory - offset)), 1));
+                nmsq = nmsq + pnmsq * pnmsq;
+            }
+            return sqrt(nmsq);
+        }
     }
     // ratio of zero elements to total size
     virtual FP sparsity() const {
@@ -1051,9 +1063,18 @@ template <typename S, typename FL> struct SparseMatrix {
     }
     void iscale(FL d) const {
         assert(factor == (FP)1.0);
-        assert(total_memory <= (size_t)numeric_limits<MKL_INT>::max());
-        GMatrixFunctions<FL>::iscale(
-            GMatrix<FL>(data, (MKL_INT)total_memory, 1), d);
+        if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
+            GMatrixFunctions<FL>::iscale(
+                GMatrix<FL>(data, (MKL_INT)total_memory, 1), d);
+        else {
+            const size_t chunk_size = 1 << 30;
+            for (size_t offset = 0; offset < total_memory; offset += chunk_size)
+                GMatrixFunctions<FL>::iscale(
+                    GMatrix<FL>(
+                        data + offset,
+                        (MKL_INT)(min(chunk_size, total_memory - offset)), 1),
+                    d);
+        }
     }
     void normalize() const { iscale(1 / norm()); }
     // K = L(l)C or C = L(l)S
