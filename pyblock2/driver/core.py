@@ -3605,7 +3605,7 @@ class DMRGDriver:
     def get_trans_4pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
-    def get_csf_coefficients(self, ket, cutoff=0.1, max_print=200, iprint=1):
+    def get_csf_coefficients(self, ket, cutoff=0.1, given_dets=None, max_print=200, iprint=1):
         bw = self.bw
         iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
         import numpy as np, time
@@ -3618,13 +3618,24 @@ class DMRGDriver:
 
         tx = time.perf_counter()
         dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
+        ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
+        if given_dets is not None:
+            uniq = set()
+            for det in given_dets:
+                ddet = det
+                if isinstance(ddet, str):
+                    ddet = [ddstr.index(x) for x in ddet]
+                if tuple(ddet) in uniq:
+                    continue
+                else:
+                    uniq.add(tuple(ddet))
+                dtrie.append(bw.b.VectorUInt8(ddet))
         dtrie.evaluate(bw.bs.UnfusedMPS(ket), cutoff)
         if iprint:
             print("dtrie finished", time.perf_counter() - tx)
         dname = "CSF" if SymmetryTypes.SU2 in bw.symm_type else "DET"
         if iprint:
             print("Number of %s = %10d (cutoff = %9.5g)" % (dname, len(dtrie), cutoff))
-        ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
         dvals = np.array(dtrie.vals)
         gidx = np.argsort(np.abs(dvals))[::-1][:max_print]
         if iprint:
