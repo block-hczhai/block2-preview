@@ -1051,7 +1051,7 @@ template <typename S, typename FL> struct SparseMatrix {
                     (MKL_INT)(min(chunk_size, total_memory - offset)), 1));
                 nmsq = nmsq + pnmsq * pnmsq;
             }
-            return sqrt(nmsq);
+            return sqrt(abs(nmsq));
         }
     }
     // ratio of zero elements to total size
@@ -2047,8 +2047,6 @@ template <typename S, typename FL> struct SparseMatrixGroup {
         else {
             FP normsq = 0.0;
             for (int i = 0; i < n; i++) {
-                assert((*this)[i]->total_memory <=
-                       (size_t)numeric_limits<MKL_INT>::max());
                 FP norm = (*this)[i]->norm();
                 normsq += norm * norm;
             }
