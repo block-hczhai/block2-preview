@@ -2165,6 +2165,8 @@ class DMRGDriver:
         add_ident=True,
         esptein_nesbet_partition=False,
         ancilla=False,
+        reorder_imat=None,
+        gaopt_opts=None,
         iprint=1,
     ):
         import numpy as np
@@ -2263,8 +2265,20 @@ class DMRGDriver:
                     optimal_reorder = [0, 6, 3, 5, 7, 1, 4, 2, 8]
                 orb_opt = [optimal_reorder[x] for x in np.array(x_orb_sym)]
                 idx = np.argsort(orb_opt)
-            elif reorder == "fiedler" or reorder == True:
-                idx = self.orbital_reordering(h1e, g2e)
+            elif (reorder == "fiedler" or reorder == True) and reorder_imat is None:
+                idx = self.orbital_reordering(h1e, g2e, method='fiedler')
+            elif reorder == "gaopt" and reorder_imat is None:
+                if gaopt_opts is None:
+                    idx = self.orbital_reordering(h1e, g2e, method='gaopt')
+                else:
+                    idx = self.orbital_reordering(h1e, g2e, method='gaopt', **gaopt_opts)
+            elif (reorder == "fiedler" or reorder == True) and reorder_imat is not None:
+                idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='fiedler')
+            elif reorder == "gaopt" and reorder_imat is not None:
+                if gaopt_opts is None:
+                    idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='gaopt')
+                else:
+                    idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='gaopt', **gaopt_opts)
             else:
                 raise RuntimeError("Unknown reorder", reorder)
             if iprint:
@@ -2746,7 +2760,7 @@ class DMRGDriver:
             b.add_const(ecore)
         return self.get_mpo(b.finalize(adjust_order=False), **kwargs)
 
-    def orbital_reordering(self, h1e, g2e):
+    def orbital_reordering(self, h1e, g2e, method='fiedler', **kwargs):
         bw = self.bw
         import numpy as np
 
@@ -2759,6 +2773,46 @@ class DMRGDriver:
         kmat = np.abs(h1e) * 1e-7 + xmat
         kmat = bw.b.VectorDouble(kmat.ravel())
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
+
+        if method == "gaopt":
+            opts = dict(n_generations=10000, n_configs=len(h1e) * 2,
+                n_elite=8, clone_rate=0.1, mutate_rate=0.1
+            )
+            n_tasks = kwargs.pop('n_tasks', 64)
+            opts.update(kwargs)
+            idxs = []
+            for i_task in range(0, n_tasks):
+                bw.b.Random.rand_seed(1234 + i_task)
+                idx = bw.b.OrbitalOrdering.ga_opt(len(h1e), kmat, **opts)
+                f = bw.b.OrbitalOrdering.evaluate(len(h1e), kmat, idx)
+                idx = tuple(idx)
+                idxs.append(idx)
+            idx = sorted(list(set(idxs)))[0]
+
+        return np.array(idx, dtype=int)
+
+    def orbital_reordering_interaction_matrix(self, imat, method='fiedler', **kwargs):
+        bw = self.bw
+        import numpy as np
+
+        kmat = bw.b.VectorDouble(imat.ravel())
+        idx = bw.b.OrbitalOrdering.fiedler(len(imat), kmat)
+
+        if method == "gaopt":
+            opts = dict(n_generations=10000, n_configs=len(imat) * 2,
+                n_elite=8, clone_rate=0.1, mutate_rate=0.1
+            )
+            n_tasks = kwargs.pop('n_tasks', 64)
+            opts.update(kwargs)
+            idxs = []
+            for i_task in range(0, n_tasks):
+                bw.b.Random.rand_seed(1234 + i_task)
+                idx = bw.b.OrbitalOrdering.ga_opt(len(imat), kmat, **opts)
+                f = bw.b.OrbitalOrdering.evaluate(len(imat), kmat, idx)
+                idx = tuple(idx)
+                idxs.append(idx)
+            idx = sorted(list(set(idxs)))[0]
+
         return np.array(idx, dtype=int)
 
     # return min_ket < ket | mpo | ket > / < ket | ket >
@@ -3006,12 +3060,13 @@ class DMRGDriver:
         bw = self.bw
         if SymmetryTypes.SU2 in bw.symm_type:
             return NotImplemented
-        elif SymmetryTypes.SZ in bw.symm_type:
+        elif SymmetryTypes.SZ in bw.symm_type or SymmetryTypes.SGF in bw.symm_type:
+            is_sgf = SymmetryTypes.SGF in bw.symm_type
             if orb_type == 1:
-                h_terms = OrbitalEntropy.get_one_orb_rdm_h_terms(self.n_sites)
+                h_terms = OrbitalEntropy.get_one_orb_rdm_h_terms(self.n_sites, is_sgf=is_sgf)
             else:
                 h_terms = OrbitalEntropy.get_two_orb_rdm_h_terms(
-                    self.n_sites, ij_symm=ij_symm
+                    self.n_sites, ij_symm=ij_symm, is_sgf=is_sgf
                 )
             mpos = {}
             for ih, htss in h_terms.items():
@@ -3062,10 +3117,15 @@ class DMRGDriver:
                     assert len(ld) == 4
                 elif orb_type == 2:
                     ld = OrbitalEntropy.get_two_orb_rdm_eigvals(ld)
+            elif SymmetryTypes.SGF in bw.symm_type:
+                if orb_type == 1:
+                    assert len(ld) == 2
+                elif orb_type == 2:
+                    ld = OrbitalEntropy.get_two_orb_rdm_eigvals(ld)
             else:
                 return NotImplemented
             ld = ld[ld != 0]
-            ent = float(np.sum(-ld * np.log(ld)))
+            ent = float(np.sum(-ld * np.log(ld)).real)
             ents[ih] = ent
         if orb_type == 2 and ij_symm:
             for ih in mpos:
@@ -3073,14 +3133,16 @@ class DMRGDriver:
         return ents
 
     def get_orbital_entropies_use_npdm(self, ket, orb_type=1, iprint=0):
+        bw = self.bw
         import numpy as np
 
+        is_sgf = SymmetryTypes.SGF in bw.symm_type
         ents = np.zeros((self.n_sites,) * orb_type)
         mket = ket.deep_copy(ket.info.tag + "@ORB-ENT-TMP")
         if orb_type == 1:
-            exprs, nx = OrbitalEntropy.get_one_orb_rdm_exprs()
+            exprs, nx = OrbitalEntropy.get_one_orb_rdm_exprs(is_sgf=is_sgf)
         else:
-            exprs, nx = OrbitalEntropy.get_two_orb_rdm_exprs()
+            exprs, nx = OrbitalEntropy.get_two_orb_rdm_exprs(is_sgf=is_sgf)
 
         pdms = self.get_npdm(
             mket,
@@ -3090,7 +3152,8 @@ class DMRGDriver:
             iprint=iprint,
         )
 
-        rrdms = np.zeros(ents.shape + (nx,))
+        rrdms = np.zeros(ents.shape + (nx,),
+            dtype=complex if SymmetryTypes.CPX in bw.symm_type else float)
         for ((_, m), v), pdm in zip(exprs.items(), pdms):
             for ix, f in v:
                 if orb_type == 1:
@@ -3110,7 +3173,7 @@ class DMRGDriver:
                 ld = np.array(rrdms[i])
                 ld[np.abs(ld) < 1e-14] = 0
                 ld = ld[ld != 0]
-                ent = float(np.sum(-ld * np.log(ld)))
+                ent = float(np.sum(-ld * np.log(ld)).real)
                 ents[i] = ent
         elif orb_type == 2:
             for i in range(self.n_sites):
@@ -3119,8 +3182,15 @@ class DMRGDriver:
                     ld = OrbitalEntropy.get_two_orb_rdm_eigvals(ld, diag_only=i == j)
                     ld[np.abs(ld) < 1e-14] = 0
                     ld = ld[ld != 0]
-                    ent = float(np.sum(-ld * np.log(ld)))
+                    ent = float(np.sum(-ld * np.log(ld)).real)
                     ents[i, j] = ent
+        # do not apply orbital reordering for entropies
+        if self.reorder_idx is not None:
+            idx = self.reorder_idx
+            for i in range(orb_type):
+                ents = ents[(slice(None),) * i + (idx,)]
+        if self.mpi is not None:
+            self.mpi.barrier()
         return ents
 
     def get_orbital_interaction_matrix(self, ket, use_npdm=True, iprint=0):
@@ -3373,14 +3443,39 @@ class DMRGDriver:
             elif npdm_expr is not None:
                 op_str = npdm_expr
             else:
-                op_str = "C" * pdm_type + "D" * pdm_type
+                op_str = ["C" * pdm_type + "D" * pdm_type]
             if mask is None:
-                perm = bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, op_str, True)
-            else:
-                perm = bw.b.SpinPermScheme.initialize_sz(
-                    pdm_type * 2, op_str, True, mask=bw.b.VectorUInt16(mask)
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                        for cd in op_str
+                    ]
                 )
-            perms = bw.b.VectorSpinPermScheme([perm])
+            elif len(mask) != 0 and not isinstance(mask[0], int):
+                assert len(mask) == len(op_str)
+                pts = (
+                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                )
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
+                        )
+                        for cd, xm, pt in zip(op_str, mask, pts)
+                    ]
+                )
+            else:
+                pts = (
+                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
+                )
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sz(
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                        )
+                        for cd, pt in zip(op_str, pts)
+                    ]
+                )
 
         if iprint >= 1:
             print("npdm string =", op_str)
@@ -3569,13 +3664,16 @@ class DMRGDriver:
         if self.reorder_idx is not None:
             rev_idx = np.argsort(self.reorder_idx)
             for ip in range(len(npdms)):
-                for i in range(scheme.n_max_ops):
+                for i in range(npdms[ip].ndim):
                     npdms[ip] = npdms[ip][(slice(None),) * i + (rev_idx,)]
 
         if self.mpi is not None:
             self.mpi.barrier()
 
-        if SymmetryTypes.SU2 in bw.symm_type or SymmetryTypes.SGF in bw.symm_type:
+        if SymmetryTypes.SU2 in bw.symm_type:
+            assert len(npdms) == 1
+            npdms = npdms[0]
+        elif SymmetryTypes.SGF in bw.symm_type and npdm_expr is not None and isinstance(npdm_expr, str):
             assert len(npdms) == 1
             npdms = npdms[0]
 
@@ -5288,6 +5386,7 @@ class OrbitalEntropy:
     ops = "1-n-N+nN:D-nD:d-Nd:Dd:C-nC:N-nN:Cd:-Nd:c-Nc:Dc:n-nN:nD:Cc:-Nc:nC:nN".split(
         ":"
     )
+    ops_ghf = "1-N:D:C:N".split(":")
 
     @staticmethod
     def parse_expr(x):
@@ -5302,38 +5401,50 @@ class OrbitalEntropy:
         return x
 
     @staticmethod
-    def get_one_orb_rdm_h_terms(n_sites):
+    def get_one_orb_rdm_h_terms(n_sites, is_sgf=False):
         h_terms = {}
+        ops = OrbitalEntropy.ops_ghf if is_sgf else OrbitalEntropy.ops
         for i in range(n_sites):
             ih_terms = []
-            for ix in [0, 5, 10, 15]:
+            for ix in ([0, 3] if is_sgf else [0, 5, 10, 15]):
                 xh_terms = {}
-                for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix]):
+                for x in OrbitalEntropy.parse_expr(ops[ix]):
                     xh_terms[x[1:]] = ([i] * len(x[1:]), 1.0 if x[0] == "+" else -1.0)
                 ih_terms.append(xh_terms)
             h_terms[(i,)] = ih_terms
         return h_terms
 
     @staticmethod
-    def get_two_orb_rdm_h_terms(n_sites, ij_symm=True, block_symm=True):
+    def get_two_orb_rdm_h_terms(n_sites, ij_symm=True, block_symm=True, is_sgf=False):
         h_terms = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
         if block_symm:
-            ts = (
-                "1/1 1/6 2/5 6/1 1/11 3/9 11/1 6/6 1/16 2/15 -3/14 -4/13 6/11 7/10 "
-                + "-8/9 11/6 12/5 16/1 11/11 6/16 8/14 16/6 11/16 12/15 16/11 16/16"
-            )
+            if is_sgf:
+                ts = "1/1 1/4 2/3 4/1 4/4"
+            else:
+                ts = (
+                    "1/1 1/6 2/5 6/1 1/11 3/9 11/1 6/6 1/16 2/15 -3/14 -4/13 6/11 7/10 "
+                    + "-8/9 11/6 12/5 16/1 11/11 6/16 8/14 16/6 11/16 12/15 16/11 16/16"
+                )
         else:
-            ts = (
-                "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
-                + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
-                + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
-            )
+            if is_sgf:
+                ts = "1/1 1/4 2/3 -3/2 4/1 4/4"
+            else:
+                ts = (
+                    "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
+                    + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+                    + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
+                )
         ts = [[int(v) for v in u.split("/")] for u in ts.split()]
-        tsm = (
-            "1/1 1/6 6/1 1/11 11/1 6/6 1/16 6/11 11/6 16/1 "
-            + "11/11 6/16 16/6 11/16 16/11 16/16"
-        )
+        if is_sgf:
+            tsm = "1/1 1/4 4/1 4/4"
+            ops = OrbitalEntropy.ops_ghf
+        else:
+            tsm = (
+                "1/1 1/6 6/1 1/11 11/1 6/6 1/16 6/11 11/6 16/1 "
+                + "11/11 6/16 16/6 11/16 16/11 16/16"
+            )
+            ops = OrbitalEntropy.ops
         tsm = [[int(v) for v in u.split("/")] for u in tsm.split()]
         for i in range(n_sites):
             for j in range(n_sites):
@@ -5344,8 +5455,8 @@ class OrbitalEntropy:
                     ff = -1 if ix < 0 else 1
                     ix = abs(ix)
                     xh_terms = {}
-                    for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix - 1]):
-                        for y in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[iy - 1]):
+                    for x in OrbitalEntropy.parse_expr(ops[ix - 1]):
+                        for y in OrbitalEntropy.parse_expr(ops[iy - 1]):
                             f = ff if x[0] == y[0] else -ff
                             if i <= j:
                                 k = x[1:] + y[1:]
@@ -5365,30 +5476,36 @@ class OrbitalEntropy:
         return h_terms
 
     @staticmethod
-    def get_one_orb_rdm_exprs():
+    def get_one_orb_rdm_exprs(is_sgf=False):
+        ops = OrbitalEntropy.ops_ghf if is_sgf else OrbitalEntropy.ops
         exprs = {}
-        for iix, ix in enumerate([0, 5, 10, 15]):
-            for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[ix]):
+        for iix, ix in enumerate([0, 3] if is_sgf else [0, 5, 10, 15]):
+            for x in OrbitalEntropy.parse_expr(ops[ix]):
                 kk = (x[1:], (0,) * len(x[1:]))
                 if kk not in exprs:
                     exprs[kk] = []
                 exprs[kk].append((iix, 1.0 if x[0] == "+" else -1.0))
-        return exprs, 4
+        return exprs, (2 if is_sgf else 4)
 
     @staticmethod
-    def get_two_orb_rdm_exprs():
+    def get_two_orb_rdm_exprs(is_sgf=False):
         exprs = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
-        ts = (
-            "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
-            + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
-            + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
-        )
+        if is_sgf:
+            ts = "1/1 1/4 2/3 -3/2 4/1 4/4"
+            ops = OrbitalEntropy.ops_ghf
+        else:
+            ts = (
+                "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
+                + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+                + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
+            )
+            ops = OrbitalEntropy.ops
         ts = [[int(v) for v in u.split("/")] for u in ts.split()]
         for ii, (ix, iy) in enumerate(ts):
             ff = -1 if ix < 0 else 1
-            for x in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[abs(ix) - 1]):
-                for y in OrbitalEntropy.parse_expr(OrbitalEntropy.ops[iy - 1]):
+            for x in OrbitalEntropy.parse_expr(ops[abs(ix) - 1]):
+                for y in OrbitalEntropy.parse_expr(ops[iy - 1]):
                     kk = (x[1:] + y[1:], (0,) * len(x[1:]) + (1,) * len(y[1:]))
                     if kk not in exprs:
                         exprs[kk] = []
@@ -5399,32 +5516,44 @@ class OrbitalEntropy:
     def get_two_orb_rdm_eigvals(ld, diag_only=False):
         import numpy as np
 
-        if diag_only and len(ld) == 36:
+        if diag_only and len(ld) == 6:
+            return ld[np.array([0, 1, 4, 5], dtype=int)]
+        elif diag_only and len(ld) == 36:
             return ld[
                 np.array(
                     [0, 1, 4, 5, 8, 9, 10, 15, 20, 25, 26, 27, 30, 31, 34, 35],
                     dtype=int,
                 )
             ]
-        if len(ld) == 16:
+        if len(ld) == 16 or len(ld) == 4:
             return ld
-        elif len(ld) == 26:
-            lx = np.zeros((16,), dtype=ld.dtype)
+        elif len(ld) == 26 or len(ld) == 5:
+            if len(ld) == 26:
+                lx = np.zeros((16,), dtype=ld.dtype)
+                dds = [1, 2, 2, 1, 4, 1, 2, 2, 1]
+            else:
+                lx = np.zeros((4,), dtype=ld.dtype)
+                dds = [1, 2, 1]
             ix, ip = 0, 0
-            for d in [1, 2, 2, 1, 4, 1, 2, 2, 1]:
+            for d in dds:
                 if d == 1:
                     lx[ix] = ld[ip]
                 else:
-                    dd = np.zeros((d, d))
+                    dd = np.zeros((d, d), dtype=ld.dtype)
                     dd[np.triu_indices(d)] = ld[ip : ip + d * (d + 1) // 2]
                     lx[ix : ix + d] = np.linalg.eigvalsh(dd, UPLO="U")
                 ix += d
                 ip += d * (d + 1) // 2
             assert ix == len(lx) and ip == len(ld)
-        elif len(ld) == 36:
-            lx = np.zeros((16,), dtype=ld.dtype)
+        elif len(ld) == 36 or len(ld) == 6:
+            if len(ld) == 36:
+                lx = np.zeros((16,), dtype=ld.dtype)
+                dds = [1, 2, 2, 1, 4, 1, 2, 2, 1]
+            else:
+                lx = np.zeros((4,), dtype=ld.dtype)
+                dds = [1, 2, 1]
             ix, ip = 0, 0
-            for d in [1, 2, 2, 1, 4, 1, 2, 2, 1]:
+            for d in dds:
                 if d == 1:
                     lx[ix] = ld[ip]
                 else:
