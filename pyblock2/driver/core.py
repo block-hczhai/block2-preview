@@ -3673,7 +3673,7 @@ class DMRGDriver:
         if SymmetryTypes.SU2 in bw.symm_type:
             assert len(npdms) == 1
             npdms = npdms[0]
-        elif SymmetryTypes.SGF in bw.symm_type and npdm_expr is not None and isinstance(npdm_expr, str):
+        elif SymmetryTypes.SGF in bw.symm_type and (npdm_expr is None or isinstance(npdm_expr, str)):
             assert len(npdms) == 1
             npdms = npdms[0]
 
