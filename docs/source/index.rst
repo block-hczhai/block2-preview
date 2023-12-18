@@ -130,6 +130,8 @@ Features
    :caption: Python Interface Tutorial
 
    tutorial/qc-hamiltonians
+   tutorial/restarting-dmrg
+   tutorial/dmrg-soc
    tutorial/energy-extrapolation
    tutorial/custom-hamiltonian
    tutorial/greens-function
