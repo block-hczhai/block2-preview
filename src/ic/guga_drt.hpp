@@ -934,23 +934,3 @@ struct MRCIDistinctRowTable<S, typename enable_if<!is_void<S>::value>::type>
 };
 
 } // namespace block2
-
-// #include "../core/symmetry.hpp"
-
-// using namespace block2;
-
-// int main() {
-//     // DistinctRowTable<void> drt(3, 0, 2);
-//     MRCIDistinctRowTable<SU2> drt(
-//         5, 0, 9, 0,
-//         vector<SU2::pg_t>{0, 0, 0, 0, 0, 2, 3, 2, 2, 2, 0, 3, 0, 0});
-//     vector<vector<uint8_t>> refs;
-//     refs.push_back(vector<uint8_t>{0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 3, 3, 3,
-//     3});
-//     // refs.push_back(vector<uint8_t> {0, 0, 3, 3, 0, 1, 2});
-//     // refs.push_back(vector<uint8_t> {0, 0, 3, 3, 1, 0, 2});
-//     drt.initialize_mrci(2, refs);
-//     // drt.initialize();
-//     cout << drt.to_str() << endl;
-//     return 0;
-// }

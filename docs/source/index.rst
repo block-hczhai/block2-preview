@@ -130,11 +130,11 @@ Features
    :caption: Python Interface Tutorial
 
    tutorial/qc-hamiltonians
+   tutorial/energy-extrapolation
    tutorial/restarting-dmrg
    tutorial/dmrg-soc
-   tutorial/energy-extrapolation
-   tutorial/custom-hamiltonian
    tutorial/greens-function
+   tutorial/custom-hamiltonian
    tutorial/hubbard
    tutorial/heisenberg
 
