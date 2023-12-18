@@ -2836,6 +2836,8 @@ class DMRGDriver:
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
         lowmem_noise=False,
+        sweep_start=0,
+        forward=None,
     ):
         bw = self.bw
         if bond_dims is None:
@@ -2893,15 +2895,18 @@ class DMRGDriver:
         if n_sweeps == -1:
             return None
         me.init_environments(iprint >= 2)
+        if forward is None:
+            forward = ket.center == 0
         if twosite_to_onesite is None:
-            ener = dmrg.solve(n_sweeps, ket.center == 0, tol)
+            ener = dmrg.solve(n_sweeps, forward, tol, sweep_start)
         else:
             assert twosite_to_onesite < n_sweeps
-            ener = dmrg.solve(twosite_to_onesite, ket.center == 0, 0)
-            dmrg.me.dot = 1
-            for ext_me in dmrg.ext_mes:
-                ext_me.dot = 1
-            ener = dmrg.solve(n_sweeps, ket.center == 0, tol, twosite_to_onesite)
+            if sweep_start < twosite_to_onesite:
+                ener = dmrg.solve(twosite_to_onesite, forward, 0, sweep_start)
+                dmrg.me.dot = 1
+                for ext_me in dmrg.ext_mes:
+                    ext_me.dot = 1
+            ener = dmrg.solve(n_sweeps, forward, tol, twosite_to_onesite)
             ket.dot = 1
             if self.mpi is not None:
                 self.mpi.barrier()
@@ -3788,6 +3793,7 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
 
+    # if restarting from the middle, this method should not be used
     def adjust_mps(self, ket, dot=None):
         if dot is None:
             dot = ket.dot

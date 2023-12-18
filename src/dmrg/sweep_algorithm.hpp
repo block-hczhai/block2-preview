@@ -113,6 +113,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     int davidson_def_max_size = 50;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
            tsvd = 0, torth = 0;
+    double accumulated_elapsed_time = 0;
     bool print_connection_time = false;
     // store all wfn singular values (for analysis) at each site
     bool store_wfn_spectra = false;
@@ -2332,7 +2333,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         Timer start, current;
         start.get_time();
         current.get_time();
-        energies.resize(sweep_start);
+        energies.resize(sweep_start, vector<FPLS>(1, (FPLS)(FPS)0.0));
         discarded_weights.resize(sweep_start);
         mps_quanta.resize(sweep_start);
         bool converged;
@@ -2370,7 +2371,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             double tswp = current.get_time();
             if (iprint >= 1) {
                 cout << "Time elapsed = " << fixed << setw(10)
-                     << setprecision(3) << current.current - start.current;
+                     << setprecision(3)
+                     << current.current - start.current +
+                            accumulated_elapsed_time;
                 cout << fixed << setprecision(10);
                 if (get<0>(sweep_results).size() == 1)
                     cout << " | E = " << setw(18) << get<0>(sweep_results)[0];
@@ -2488,6 +2491,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 break;
         }
         this->forward = forward;
+        accumulated_elapsed_time += current.current - start.current;
         if (!converged && iprint > 0 && tol != 0)
             cout << "ATTENTION: DMRG is not converged to desired tolerance of "
                  << scientific << tol << endl;
