@@ -4,15 +4,19 @@ References
 
 If you find **block2** useful in your research, please cite the paper
 
-* Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K. L. Block2: a comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. arXiv preprint `arXiv:2310.03920 <https://arxiv.org/abs/2310.03920>`_.
+* Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K.-L. Block2: a comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. *The Journal of Chemical Physics* 2023, **159**, 234801. doi: `10.1063/5.0180424 <https://doi.org/10.1063/5.0180424>`_
 
 A detailed description of the parallel DMRG algorithm implemented in **block2** can be found in the following paper
 
-* Zhai, H.; Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116.
+* Zhai, H.; Chan, G. K.-L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116. doi: `10.1063/5.0050902 <https://doi.org/10.1063/5.0050902>`_
 
-For the large site code, please cite 
+For large site DMRG-MRCI/MRPT, please cite
   
-* Larsson, H. R.; Zhai, H.; Gunst, K.; Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762.
+* Larsson, H. R.; Zhai, H.; Gunst, K.; Chan, G. K.-L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762. doi: `10.1021/acs.jctc.1c00957 <https://doi.org/10.1021/acs.jctc.1c00957>`_
+
+For DMRG with spin-orbit-coupling, please cite
+
+* Zhai, H.; Chan, G. K.-L. A comparison between the one- and two-step spin-orbit coupling approaches based on the ab initio Density Matrix Renormalization Group. *The Journal of Chemical Physics* 2022, **157**, 164108. doi: `10.1063/5.0107805 <https://doi.org/10.1063/5.0107805>`_
 
 You can find a bibtex file in `CITATIONS.bib <https://github.com/block-hczhai/block2-preview/blob/master/CITATIONS.bib>`_.
 

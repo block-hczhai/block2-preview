@@ -24,15 +24,19 @@ Main contributors:
 
 If you find this package useful for your scientific research, please cite the work as:
 
- - Zhai, H.; Larsson, H. R.; Lee, S.; Cui, Z.; Zhu, T.; Sun, C.; Peng, L.; Peng, R.; Liao, K.; Tölle, J.; Yang, J.; Li, S.; Chan, G. K. L. Block2: a comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. arXiv preprint [arXiv:2310.03920](https://arxiv.org/abs/2310.03920).
+ - H. Zhai, H. R. Larsson, S. Lee, Z.-H. Cui, T. Zhu, C. Sun, L. Peng, R. Peng, K. Liao, J. Tölle, J. Yang, S. Li, and G. K.-L. Chan. Block2: A comprehensive open source framework to develop and apply state-of-the-art DMRG algorithms in electronic structure and beyond. *The Journal of Chemical Physics* **159**, 234801 (2023). doi: [10.1063/5.0180424](https://doi.org/10.1063/5.0180424)
 
 For parallel ab initio DMRG, please cite
 
- - Zhai, H., Chan, G. K. L. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2021, **154**, 224116, doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
+ - H. Zhai, and G. K.-L. Chan. Low communication high performance ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* **154**, 224116 (2021). doi: [10.1063/5.0050902](https://doi.org/10.1063/5.0050902).
 
-For the large site code, please cite
+For large site DMRG-MRCI/MRPT, please cite
 
- - Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762,  doi: [10.1021/acs.jctc.1c00957](https://doi.org/10.1021/acs.jctc.1c00957).
+ - H. R. Larsson, H. Zhai, K. Gunst, and G. K.-L. Chan. Matrix product states with large sites. *Journal of Chemical Theory and Computation* **18**, 749-762 (2022). doi: [10.1021/acs.jctc.1c00957](https://doi.org/10.1021/acs.jctc.1c00957).
+
+For DMRG with spin-orbit-coupling, please cite
+
+ - H. Zhai, and G. K.-L. Chan. A comparison between the one- and two-step spin-orbit coupling approaches based on the ab initio Density Matrix Renormalization Group. *The Journal of Chemical Physics* **157**, 164108 (2022). doi: [10.1063/5.0107805](https://doi.org/10.1063/5.0107805).
 
 You can find a bibtex file in `CITATIONS.bib`.
 
@@ -55,7 +59,7 @@ One can install ``block2`` using ``pip``:
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.2rc13``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
+  where ``<version>`` can be some development version number like ``0.5.3rc5``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 The detailed instructions on manual installation can be found [here](https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation).
 
