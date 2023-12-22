@@ -3765,11 +3765,18 @@ class DMRGDriver:
                 dets[i] = np.array(dtrie[i])
         return dets, dvals
 
-    def align_mps_center(self, ket, ref):
+    def compress_mps(self, ket, max_bond_dim=None):
+        refc = ket.n_sites - ket.dot if ket.center == 0 else 0
+        self.align_mps_center(ket, refc, max_bond_dim=max_bond_dim)
+        return ket
+
+    def align_mps_center(self, ket, ref, max_bond_dim=None):
         if self.mpi is not None:
             self.mpi.barrier()
         refc = ref if isinstance(ref, int) else ref.center
         ket.info.bond_dim = max(ket.info.bond_dim, ket.info.get_max_bond_dimension())
+        if max_bond_dim is not None:
+            ket.info.bond_dim = max_bond_dim
         if ket.center != refc:
             if refc == 0:
                 if ket.dot == 2:
