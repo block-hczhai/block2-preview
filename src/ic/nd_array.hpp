@@ -350,6 +350,15 @@ struct NDArray {
         NDArray::transpose(*this, r);
         return r;
     }
+    NDArray operator*(double d) const {
+        NDArray r(shape, strides);
+        size_t sz = size();
+        for (size_t i = 0; i < sz; i++) {
+            const ssize_t ii = linear_index(i);
+            r.data[ii] = data[ii] * d;
+        }
+        return r;
+    }
     NDArray operator-() const {
         NDArray r(shape, strides);
         size_t sz = size();
@@ -360,6 +369,26 @@ struct NDArray {
         return r;
     }
     NDArray operator-(const NDArray &other) const { return *this + (-other); }
+    NDArray operator+=(const NDArray &other) {
+        assert(shape == other.shape);
+        size_t sz = size();
+        for (size_t i = 0; i < sz; i++) {
+            const ssize_t ii = linear_index(i);
+            const ssize_t jj = other.linear_index(i);
+            data[ii] += other.data[jj];
+        }
+        return *this;
+    }
+    NDArray operator-=(const NDArray &other) {
+        assert(shape == other.shape);
+        size_t sz = size();
+        for (size_t i = 0; i < sz; i++) {
+            const ssize_t ii = linear_index(i);
+            const ssize_t jj = other.linear_index(i);
+            data[ii] -= other.data[jj];
+        }
+        return *this;
+    }
     NDArray operator+(const NDArray &other) const {
         assert(ndim() == other.ndim());
         int dim = ndim();

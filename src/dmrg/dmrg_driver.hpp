@@ -64,6 +64,12 @@ template <typename S, typename FL> struct DMRGDriver {
                 Parsing::mkdir(restart_dir);
             frame_<FP>()->restart_dir = restart_dir;
         }
+        if (n_threads == -1)
+            n_threads = threading_()->n_threads_global;
+        threading_() = make_shared<Threading>(
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global,
+            n_threads, n_threads, 1);
+        threading_()->seq_type = SeqTypes::Tasked;
     }
     ~DMRGDriver() { frame_<FP>() = nullptr; }
     void initialize_system(
@@ -174,6 +180,8 @@ template <typename S, typename FL> struct DMRGDriver {
         mpo = make_shared<SimplifiedMPO<S, FL>>(mpo, make_shared<Rule<S, FL>>(),
                                                 false, false);
         mpo = make_shared<IdentityAddedMPO<S, FL>>(mpo);
+        if (prule != nullptr)
+            mpo = make_shared<ParallelMPO<S, FL>>(mpo, prule);
         return mpo;
     }
     shared_ptr<MPS<S, FL>>
@@ -570,10 +578,15 @@ template <typename S, typename FL> struct DMRGDriver {
                 algo_type & ExpectationAlgorithmTypes::SymbolFree);
         ppmpo->iprint = iprint >= 4 ? 2 : (iprint >= 2 ? 1 : 0);
         ppmpo->delta_quantum = (mbra->info->target - mket->info->target)[0];
+        if (prule != nullptr)
+            ppmpo->parallel_rule = prule;
         ppmpo->build();
 
         shared_ptr<MPO<S, FL>> pmpo = make_shared<SimplifiedMPO<S, FL>>(
             ppmpo, make_shared<Rule<S, FL>>(), false, false);
+
+        if (prule != nullptr)
+            pmpo = make_shared<ParallelMPO<S, FL>>(pmpo, prule);
 
         shared_ptr<MovingEnvironment<S, FL, FL>> pme =
             make_shared<MovingEnvironment<S, FL, FL>>(pmpo, mbra, mket, "NPDM");
