@@ -131,7 +131,7 @@ The following input file can be used to compute the ground state energy: ::
     ``num_thrds`` indicates the number of OpenMP threads (shared-memory parallelism) to use.
 
     ``hf_occ integral`` has no effects in ``block2``, but it is required in ``StackBlock``.
-    If this line appear, ``block2main`` will try to write some output files in a stackblock-compatible format.
+    If this line appears, ``block2main`` will try to write some output files in a stackblock-compatible format.
 
     By default, the calculation will be done in the spin-adapted mode, which is the most efficient.
     One can optionally add the keyword ``nonspinadapted`` to use the non-spin-adapted mode.

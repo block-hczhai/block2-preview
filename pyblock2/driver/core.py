@@ -3210,7 +3210,7 @@ class DMRGDriver:
         return 0.5 * (s1[:, None] + s1[None, :] - s2) * (1 - np.identity(len(s1)))
 
     def get_conventional_npdm(
-        self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0
+        self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0, max_bond_dim=None
     ):
         bw = self.bw
         import numpy as np
@@ -3244,6 +3244,8 @@ class DMRGDriver:
             mps.info.bond_dim = max(
                 mps.info.bond_dim, mps.info.get_max_bond_dimension()
             )
+            if max_bond_dim is not None:
+                mps.info.bond_dim = max_bond_dim
 
         self.align_mps_center(mbra, mket)
         hamil = bw.bs.HamiltonianQC(
@@ -3371,6 +3373,7 @@ class DMRGDriver:
         fused_contraction_rotation=True,
         cutoff=1e-24,
         iprint=0,
+        max_bond_dim=None
     ):
         bw = self.bw
         import numpy as np
@@ -3380,7 +3383,7 @@ class DMRGDriver:
 
         if NPDMAlgorithmTypes.Conventional in algo_type or soc:
             return self.get_conventional_npdm(
-                ket, pdm_type, bra, soc, site_type, iprint
+                ket, pdm_type, bra, soc, site_type, iprint, max_bond_dim
             )
 
         if self.mpi is not None:
@@ -3527,6 +3530,8 @@ class DMRGDriver:
                 mps.info.bond_dim = max(
                     mps.info.bond_dim, mps.info.get_max_bond_dimension()
                 )
+                if max_bond_dim is not None:
+                    mps.info.bond_dim = max_bond_dim
                 mps.info.deallocate_mutable()
 
             self.align_mps_center(mbra, mket)
