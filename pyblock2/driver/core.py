@@ -380,6 +380,8 @@ class DMRGDriver:
         self.pg = "c1"
         self.orb_sym = None
         self.ghamil = None
+        self._dmrg = None
+        self._sweep_wfn_spectra = None
 
     @property
     def symm_type(self):
@@ -908,7 +910,6 @@ class DMRGDriver:
 
                 # prim ops
                 for m in range(self.n_sites):
-
                     # ident
                     mat = super_self.bw.bs.SparseMatrix(d_alloc)
                     info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
@@ -922,10 +923,10 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(1, 1))
                     mat.allocate(info)
                     mat[info.find_state(super_self.bw.SX(0, 1, 1, 0))] = np.array(
-                        [-(2 ** 0.5)]
+                        [-(2**0.5)]
                     )
                     mat[info.find_state(super_self.bw.SX(1, 0, 0, 1))] = np.array(
-                        [-(2 ** 0.5) if m % 2 == 0 else 2 ** 0.5]
+                        [-(2**0.5) if m % 2 == 0 else 2**0.5]
                     )
                     self.site_norm_ops[m]["G[1,1]"] = mat
 
@@ -1006,15 +1007,15 @@ class DMRGDriver:
                 self.vacuum = vacuum
                 self.n_sites = n_sites
                 self.orb_sym = orb_sym
-                self.basis = super_self.bw.brs.VectorStateInfo([
-                    self.get_site_basis(m) for m in range(self.n_sites)
-                ])
-                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo([
-                    super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
-                ])
-                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat([
-                    super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
-                ])
+                self.basis = super_self.bw.brs.VectorStateInfo(
+                    [self.get_site_basis(m) for m in range(self.n_sites)]
+                )
+                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo(
+                    [super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)]
+                )
+                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat(
+                    [super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)]
+                )
                 self.init_site_ops()
 
             def get_site_basis(self, m):
@@ -1052,7 +1053,6 @@ class DMRGDriver:
 
                 # prim ops
                 for m in range(self.n_sites):
-
                     # ident
                     mat = super_self.bw.bs.SparseMatrix(d_alloc)
                     info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
@@ -1067,8 +1067,12 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(1, 1))
                     mat.allocate(info)
                     # n=1, s=0 -> n=0, s=1 // n=0, s=-1 -> n=1, s=0
-                    mat[info.find_state(super_self.bw.SX(0, 0, 1))] = np.array([-2 ** 0.5])
-                    mat[info.find_state(super_self.bw.SX(1, -1, 0))] = np.array([1.0 if m % 2 == 0 else -1.0])
+                    mat[info.find_state(super_self.bw.SX(0, 0, 1))] = np.array(
+                        [-(2**0.5)]
+                    )
+                    mat[info.find_state(super_self.bw.SX(1, -1, 0))] = np.array(
+                        [1.0 if m % 2 == 0 else -1.0]
+                    )
                     self.site_norm_ops[m]["E"] = mat
 
                     # F
@@ -1076,7 +1080,9 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(1, -1))
                     mat.allocate(info)
                     # n=1, s=0 -> n=0, s=-1 // n=0, s=1 -> n=1, s=0
-                    mat[info.find_state(super_self.bw.SX(0, 0, 1))] = np.array([2 ** 0.5 if m % 2 == 0 else -2 ** 0.5])
+                    mat[info.find_state(super_self.bw.SX(0, 0, 1))] = np.array(
+                        [2**0.5 if m % 2 == 0 else -(2**0.5)]
+                    )
                     mat[info.find_state(super_self.bw.SX(1, 1, 0))] = np.array([1.0])
                     self.site_norm_ops[m]["F"] = mat
 
@@ -1086,12 +1092,14 @@ class DMRGDriver:
                 if expr in self.site_norm_ops[m]:
                     return self.site_norm_ops[m][expr]
                 l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
-                a = self.get_site_string_op(m, expr[l.left_idx:l.mid_idx - 1])
-                b = self.get_site_string_op(m, expr[l.mid_idx:l.right_idx - 1])
+                a = self.get_site_string_op(m, expr[l.left_idx : l.mid_idx - 1])
+                b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
                 idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
                 dq = a.info.delta_quantum + b.info.delta_quantum
                 r = super_self.bw.bs.SparseMatrix(d_alloc)
-                r.allocate(self.find_site_op_info(m, super_self.bw.SX(idq, dq.values[0])))
+                r.allocate(
+                    self.find_site_op_info(m, super_self.bw.SX(idq, dq.values[0]))
+                )
                 self.opf.product(0, a, b, r)
                 self.site_norm_ops[m][expr] = r
                 return r
@@ -1099,18 +1107,26 @@ class DMRGDriver:
             def init_string_quanta(self, exprs, term_l, left_vacuum):
                 rr = super_self.bw.VectorVectorSX()
                 for ix, expr in enumerate(exprs):
-                    r = super_self.bw.VectorSX([super_self.bw.SX(0, 0)] * (term_l[ix] + 1))
+                    r = super_self.bw.VectorSX(
+                        [super_self.bw.SX(0, 0)] * (term_l[ix] + 1)
+                    )
                     gr = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
-                    r[-1] = super_self.bw.SX(gr, expr.count('E') - expr.count('F'))
+                    r[-1] = super_self.bw.SX(gr, expr.count("E") - expr.count("F"))
                     lacc, nacc = 0, 0
-                    while True: # (.+(.+(.+.)0)0)0
+                    while True:  # (.+(.+(.+.)0)0)0
                         l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
                         if l.right_idx == -1:
                             break
-                        exprl, exprr = expr[0:l.mid_idx - 1], expr[l.mid_idx:l.right_idx - 1]
-                        lacc += exprl.count('E') + exprl.count('F')
-                        nacc += exprl.count('E') - exprl.count('F')
-                        r[lacc] = super_self.bw.SX(super_self.bw.b.SpinPermRecoupling.get_target_twos(exprr), nacc)
+                        exprl, exprr = (
+                            expr[0 : l.mid_idx - 1],
+                            expr[l.mid_idx : l.right_idx - 1],
+                        )
+                        lacc += exprl.count("E") + exprl.count("F")
+                        nacc += exprl.count("E") - exprl.count("F")
+                        r[lacc] = super_self.bw.SX(
+                            super_self.bw.b.SpinPermRecoupling.get_target_twos(exprr),
+                            nacc,
+                        )
                         expr = exprr
                     rr.append(r)
                 return rr
@@ -1122,7 +1138,7 @@ class DMRGDriver:
             def get_string_quantum(self, expr, idxs):
                 """Total quantum number for a string operator."""
                 idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
-                return super_self.bw.SX(idq, expr.count('E') - expr.count('F'))
+                return super_self.bw.SX(idq, expr.count("E") - expr.count("F"))
 
             def deallocate(self):
                 """Release memory."""
@@ -1222,13 +1238,25 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
                     mat.allocate(info)
                     if l == 0:
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
                     elif l == 2:
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 2, 2, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(2, 2, 2, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(3, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[info.find_state(super_self.bw.SX(1, 2, 2, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[info.find_state(super_self.bw.SX(2, 2, 2, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[info.find_state(super_self.bw.SX(3, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
                     else:
                         raise NotImplementedError()
                     self.site_norm_ops[m][""] = mat
@@ -1238,11 +1266,19 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(1, l, 0))
                     mat.allocate(info)
                     if l == 0:
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
                     elif l == 2:
-                        mat[info.find_state(super_self.bw.SX(0, l, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, l, l, 0))] = np.array([2 ** 0.5])
-                        mat[info.find_state(super_self.bw.SX(2, 0, l, 0))] = np.array([3 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(0, l, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[info.find_state(super_self.bw.SX(1, l, l, 0))] = np.array(
+                            [2**0.5]
+                        )
+                        mat[info.find_state(super_self.bw.SX(2, 0, l, 0))] = np.array(
+                            [3**0.5]
+                        )
                     else:
                         raise NotImplementedError()
                     self.site_norm_ops[m]["C%d" % l] = mat
@@ -1252,11 +1288,19 @@ class DMRGDriver:
                     info = self.find_site_op_info(m, super_self.bw.SX(-1, l, 0))
                     mat.allocate(info)
                     if l == 0:
-                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
                     elif l == 2:
-                        mat[info.find_state(super_self.bw.SX(1, 0, l, 0))] = np.array([3 ** 0.5])
-                        mat[info.find_state(super_self.bw.SX(2, l, l, 0))] = np.array([2 ** 0.5])
-                        mat[info.find_state(super_self.bw.SX(3, l, 0, 0))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, 0, l, 0))] = np.array(
+                            [3**0.5]
+                        )
+                        mat[info.find_state(super_self.bw.SX(2, l, l, 0))] = np.array(
+                            [2**0.5]
+                        )
+                        mat[info.find_state(super_self.bw.SX(3, l, 0, 0))] = np.array(
+                            [1.0]
+                        )
                     else:
                         raise NotImplementedError()
                     self.site_norm_ops[m]["D%d" % l] = mat
@@ -1271,7 +1315,9 @@ class DMRGDriver:
                 b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
                 idq = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
                 r = super_self.bw.bs.SparseMatrix(d_alloc)
-                dq = super_self.bw.SX(expr.count('C') - expr.count('D'), idq[0] if len(idq) != 0 else 0, 0)
+                dq = super_self.bw.SX(
+                    expr.count("C") - expr.count("D"), idq[0] if len(idq) != 0 else 0, 0
+                )
                 r.allocate(self.find_site_op_info(m, dq))
                 self.opf.product(0, a, b, r)
                 self.site_norm_ops[m][expr] = r
@@ -1285,7 +1331,11 @@ class DMRGDriver:
                     )
                     l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
                     gr = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
-                    r[-1] = super_self.bw.SX(expr.count('C') - expr.count('D'), gr[0] if len(gr) != 0 else 0, 0)
+                    r[-1] = super_self.bw.SX(
+                        expr.count("C") - expr.count("D"),
+                        gr[0] if len(gr) != 0 else 0,
+                        0,
+                    )
                     lacc, nacc = 0, 0
                     while True:  # (.+(.+(.+.)0)0)0
                         l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
@@ -1295,11 +1345,13 @@ class DMRGDriver:
                             expr[0 : l.mid_idx - 1],
                             expr[l.mid_idx : l.right_idx - 1],
                         )
-                        lacc += exprl.count('C') + exprl.count('D')
-                        nacc += exprl.count('C') - exprl.count('D')
+                        lacc += exprl.count("C") + exprl.count("D")
+                        nacc += exprl.count("C") - exprl.count("D")
                         lr = super_self.bw.b.GeneralSymmTensor.get_level(exprr, 0)
                         gr = super_self.bw.b.GeneralSymmTensor.get_quanta(exprr, lr)
-                        r[lacc] = super_self.bw.SX(nacc, gr[0] if len(gr) != 0 else 0, 0)
+                        r[lacc] = super_self.bw.SX(
+                            nacc, gr[0] if len(gr) != 0 else 0, 0
+                        )
                         expr = exprr
                     rr.append(r)
                 return rr
@@ -1312,7 +1364,9 @@ class DMRGDriver:
                 """Total quantum number for a string operator."""
                 l = super_self.bw.b.GeneralSymmTensor.get_level(expr, 0)
                 g = super_self.bw.b.GeneralSymmTensor.get_quanta(expr, l)
-                return super_self.bw.SX(expr.count('C') - expr.count('D'), g[0] if len(g) != 0 else 0, 0)
+                return super_self.bw.SX(
+                    expr.count("C") - expr.count("D"), g[0] if len(g) != 0 else 0, 0
+                )
 
             def deallocate(self):
                 """Release memory."""
@@ -1340,15 +1394,15 @@ class DMRGDriver:
                 self.vacuum = vacuum
                 self.n_sites = n_sites
                 self.orb_sym = orb_sym
-                self.basis = super_self.bw.brs.VectorStateInfo([
-                    self.get_site_basis(m) for m in range(self.n_sites)
-                ])
-                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo([
-                    super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
-                ])
-                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat([
-                    super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
-                ])
+                self.basis = super_self.bw.brs.VectorStateInfo(
+                    [self.get_site_basis(m) for m in range(self.n_sites)]
+                )
+                self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo(
+                    [super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)]
+                )
+                self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat(
+                    [super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)]
+                )
                 self.init_site_ops()
 
             def get_site_basis(self, m):
@@ -1416,73 +1470,126 @@ class DMRGDriver:
 
                 # prim ops
                 for m in range(self.n_sites):
-
                     if SymmetryTypes.SU2 in super_self.symm_type:
                         # ident
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
                         info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 1, 1, self.orb_sym[m]))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(2, 0, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 1, 1, self.orb_sym[m]))
+                        ] = np.array([1.0])
+                        mat[
+                            info.find_state(
+                                super_self.bw.SX(2, 0, 0, 2 * self.orb_sym[m])
+                            )
+                        ] = np.array([1.0])
                         self.site_norm_ops[m][""] = mat
 
                         # C
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(1, 1, self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(0, 1, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))] = np.array([-2 ** 0.5])
+                        mat[info.find_state(super_self.bw.SX(0, 1, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))
+                        ] = np.array([-(2**0.5)])
                         self.site_norm_ops[m]["C"] = mat
 
                         # D
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(-1, 1, -self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(-1, 1, -self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))] = np.array([2 ** 0.5])
-                        mat[info.find_state(super_self.bw.SX(2, 1, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 0, 1, self.orb_sym[m]))
+                        ] = np.array([2**0.5])
+                        mat[
+                            info.find_state(
+                                super_self.bw.SX(2, 1, 0, 2 * self.orb_sym[m])
+                            )
+                        ] = np.array([1.0])
                         self.site_norm_ops[m]["D"] = mat
                     elif SymmetryTypes.SZ in super_self.symm_type:
                         # ident
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
                         info = self.find_site_op_info(m, super_self.bw.SX(0, 0, 0))
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        ] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))
+                        ] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))
+                        ] = np.array([1.0])
                         self.site_norm_ops[m][""] = mat
 
                         # c
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(1, 1, self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[
+                            info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))
+                        ] = np.array([1.0])
                         self.site_norm_ops[m]["c"] = mat
 
                         # d
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(-1, -1, -self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(-1, -1, -self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        ] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))
+                        ] = np.array([1.0])
                         self.site_norm_ops[m]["d"] = mat
 
                         # C
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(1, -1, self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(1, -1, self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))] = np.array([-1.0])
+                        mat[info.find_state(super_self.bw.SX(0, 0, 0))] = np.array(
+                            [1.0]
+                        )
+                        mat[
+                            info.find_state(super_self.bw.SX(1, 1, self.orb_sym[m]))
+                        ] = np.array([-1.0])
                         self.site_norm_ops[m]["C"] = mat
 
                         # D
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(-1, 1, -self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(-1, 1, -self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))] = np.array([-1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, -1, self.orb_sym[m]))
+                        ] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(2, 0, 2 * self.orb_sym[m]))
+                        ] = np.array([-1.0])
                         self.site_norm_ops[m]["D"] = mat
                     elif SymmetryTypes.SGF in super_self.symm_type:
                         # ident
@@ -1490,21 +1597,29 @@ class DMRGDriver:
                         info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
                         mat.allocate(info)
                         mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
-                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, self.orb_sym[m]))
+                        ] = np.array([1.0])
                         self.site_norm_ops[m][""] = mat
 
                         # C
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(1, self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(1, self.orb_sym[m])
+                        )
                         mat.allocate(info)
                         mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
                         self.site_norm_ops[m]["C"] = mat
 
                         # D
                         mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                        info = self.find_site_op_info(m, super_self.bw.SX(-1, -self.orb_sym[m]))
+                        info = self.find_site_op_info(
+                            m, super_self.bw.SX(-1, -self.orb_sym[m])
+                        )
                         mat.allocate(info)
-                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = np.array([1.0])
+                        mat[
+                            info.find_state(super_self.bw.SX(1, self.orb_sym[m]))
+                        ] = np.array([1.0])
                         self.site_norm_ops[m]["D"] = mat
 
             def get_site_string_op(self, m, expr):
@@ -1514,8 +1629,8 @@ class DMRGDriver:
                     return self.site_norm_ops[m][expr]
                 if SymmetryTypes.SU2 in super_self.symm_type:
                     l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
-                    a = self.get_site_string_op(m, expr[l.left_idx:l.mid_idx - 1])
-                    b = self.get_site_string_op(m, expr[l.mid_idx:l.right_idx - 1])
+                    a = self.get_site_string_op(m, expr[l.left_idx : l.mid_idx - 1])
+                    b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
                     idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
                     jdq = a.info.delta_quantum + b.info.delta_quantum
                     dq = super_self.bw.SX(jdq.values[0], idq, idq, jdq.values[3])
@@ -1533,54 +1648,80 @@ class DMRGDriver:
                 if SymmetryTypes.SU2 in super_self.symm_type:
                     rr = super_self.bw.VectorVectorSX()
                     for ix, expr in enumerate(exprs):
-                        r = super_self.bw.VectorSX([super_self.bw.SX(0, 0, 0)] * (term_l[ix] + 1))
+                        r = super_self.bw.VectorSX(
+                            [super_self.bw.SX(0, 0, 0)] * (term_l[ix] + 1)
+                        )
                         gr = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
-                        r[-1] = super_self.bw.SX(expr.count('C') - expr.count('D'), gr, 0)
+                        r[-1] = super_self.bw.SX(
+                            expr.count("C") - expr.count("D"), gr, 0
+                        )
                         lacc, nacc = 0, 0
-                        while True: # (.+(.+(.+.)0)0)0
+                        while True:  # (.+(.+(.+.)0)0)0
                             l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
                             if l.right_idx == -1:
                                 break
-                            exprl, exprr = expr[0:l.mid_idx - 1], expr[l.mid_idx:l.right_idx - 1]
-                            lacc += exprl.count('C') + exprl.count('D')
-                            nacc += exprl.count('C') - exprl.count('D')
-                            r[lacc] = super_self.bw.SX(nacc, super_self.bw.b.SpinPermRecoupling.get_target_twos(exprr), 0)
+                            exprl, exprr = (
+                                expr[0 : l.mid_idx - 1],
+                                expr[l.mid_idx : l.right_idx - 1],
+                            )
+                            lacc += exprl.count("C") + exprl.count("D")
+                            nacc += exprl.count("C") - exprl.count("D")
+                            r[lacc] = super_self.bw.SX(
+                                nacc,
+                                super_self.bw.b.SpinPermRecoupling.get_target_twos(
+                                    exprr
+                                ),
+                                0,
+                            )
                             expr = exprr
                         rr.append(r)
                     return rr
                 elif SymmetryTypes.SZ in super_self.symm_type:
                     qs = {
-                        '': super_self.bw.SX(0, 0, 0),
-                        'c':  super_self.bw.SX(1, 1, 0),
-                        'd':  super_self.bw.SX(-1, -1, 0),
-                        'C':  super_self.bw.SX(1, -1, 0),
-                        'D':  super_self.bw.SX(-1, 1, 0),
+                        "": super_self.bw.SX(0, 0, 0),
+                        "c": super_self.bw.SX(1, 1, 0),
+                        "d": super_self.bw.SX(-1, -1, 0),
+                        "C": super_self.bw.SX(1, -1, 0),
+                        "D": super_self.bw.SX(-1, 1, 0),
                     }
                 else:
                     qs = {
-                        '': super_self.bw.SX(0, 0),
-                        'C':  super_self.bw.SX(1, 0),
-                        'D':  super_self.bw.SX(-1, 0),
+                        "": super_self.bw.SX(0, 0),
+                        "C": super_self.bw.SX(1, 0),
+                        "D": super_self.bw.SX(-1, 0),
                     }
                 from itertools import accumulate
-                return super_self.bw.VectorVectorSX([super_self.bw.VectorSX(list(accumulate(
-                    [qs['']] + [qs[x] for x in expr], lambda x, y: x + y)))
-                    for expr in exprs
-                ])
+
+                return super_self.bw.VectorVectorSX(
+                    [
+                        super_self.bw.VectorSX(
+                            list(
+                                accumulate(
+                                    [qs[""]] + [qs[x] for x in expr], lambda x, y: x + y
+                                )
+                            )
+                        )
+                        for expr in exprs
+                    ]
+                )
 
             def get_string_quanta(self, ref, expr, idxs, k):
                 """Quantum number for string operators (orbital dependent part)."""
                 l, r = ref[k], ref[-1] - ref[k]
-                iv = 1 + (SymmetryTypes.SZ in super_self.symm_type) + 2 * (SymmetryTypes.SU2 in super_self.symm_type)
+                iv = (
+                    1
+                    + (SymmetryTypes.SZ in super_self.symm_type)
+                    + 2 * (SymmetryTypes.SU2 in super_self.symm_type)
+                )
                 j = 0
                 for ixx, ex in enumerate(expr):
-                    if ex not in 'cdCD':
+                    if ex not in "cdCD":
                         continue
                     ipg = self.orb_sym[idxs[j]]
                     if j < k:
-                        l.values[iv] += ipg if ex in 'cC' else -ipg
+                        l.values[iv] += ipg if ex in "cC" else -ipg
                     else:
-                        r.values[iv] += ipg if ex in 'cC' else -ipg
+                        r.values[iv] += ipg if ex in "cC" else -ipg
                     j += 1
                 return l, r
 
@@ -1589,33 +1730,33 @@ class DMRGDriver:
                 if SymmetryTypes.SU2 in super_self.symm_type:
                     idq = super_self.bw.b.SpinPermRecoupling.get_target_twos(expr)
                     qs = lambda ix: {
-                        '': super_self.bw.SX(0, 0, 0),
-                        'C':  super_self.bw.SX(1, 1, self.orb_sym[ix]),
-                        'D':  super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
+                        "": super_self.bw.SX(0, 0, 0),
+                        "C": super_self.bw.SX(1, 1, self.orb_sym[ix]),
+                        "D": super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
                     }
-                    r = qs(0)['']
+                    r = qs(0)[""]
                     j = 0
                     for ixx, ex in enumerate(expr):
-                        if ex in 'CD':
+                        if ex in "CD":
                             r = r + qs(idxs[j])[ex]
                             j += 1
                     r.values[1] = r.values[2] = idq
                     return r
                 elif SymmetryTypes.SZ in super_self.symm_type:
                     qs = lambda ix: {
-                        '': super_self.bw.SX(0, 0, 0),
-                        'c':  super_self.bw.SX(1, 1, self.orb_sym[ix]),
-                        'd':  super_self.bw.SX(-1, -1, -self.orb_sym[ix]),
-                        'C':  super_self.bw.SX(1, -1, self.orb_sym[ix]),
-                        'D':  super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
+                        "": super_self.bw.SX(0, 0, 0),
+                        "c": super_self.bw.SX(1, 1, self.orb_sym[ix]),
+                        "d": super_self.bw.SX(-1, -1, -self.orb_sym[ix]),
+                        "C": super_self.bw.SX(1, -1, self.orb_sym[ix]),
+                        "D": super_self.bw.SX(-1, 1, -self.orb_sym[ix]),
                     }
                 else:
                     qs = lambda ix: {
-                        '': super_self.bw.SX(0, 0),
-                        'C':  super_self.bw.SX(1, self.orb_sym[ix]),
-                        'D':  super_self.bw.SX(-1, -self.orb_sym[ix]),
+                        "": super_self.bw.SX(0, 0),
+                        "C": super_self.bw.SX(1, self.orb_sym[ix]),
+                        "D": super_self.bw.SX(-1, -self.orb_sym[ix]),
                     }
-                return sum([qs(0)['']] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+                return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
 
             def deallocate(self):
                 """Release memory."""
@@ -1629,9 +1770,8 @@ class DMRGDriver:
                     bz.deallocate()
 
         return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
-    
-    def get_custom_hamiltonian(self, site_basis, site_ops, orb_dependent_ops='cdCD'):
 
+    def get_custom_hamiltonian(self, site_basis, site_ops, orb_dependent_ops="cdCD"):
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
         import numpy as np
@@ -1640,22 +1780,26 @@ class DMRGDriver:
         if SymmetryTypes.SZ in super_self.symm_type:
 
             class CustomSZHamiltonian(GH):
-
                 def __init__(self, vacuum, n_sites, orb_sym):
                     GH.__init__(self)
-                    self.opf = super_self.bw.bs.OperatorFunctions(super_self.bw.brs.CG())
+                    self.opf = super_self.bw.bs.OperatorFunctions(
+                        super_self.bw.brs.CG()
+                    )
                     self.vacuum = vacuum
                     self.n_sites = n_sites
                     self.orb_sym = orb_sym
-                    self.basis = super_self.bw.brs.VectorStateInfo([
-                        self.get_site_basis(m) for m in range(self.n_sites)
-                    ])
-                    self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo([
-                        super_self.bw.brs.VectorPLMatInfo() for _ in range(self.n_sites)
-                    ])
-                    self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat([
-                        super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)
-                    ])
+                    self.basis = super_self.bw.brs.VectorStateInfo(
+                        [self.get_site_basis(m) for m in range(self.n_sites)]
+                    )
+                    self.site_op_infos = super_self.bw.brs.VectorVectorPLMatInfo(
+                        [
+                            super_self.bw.brs.VectorPLMatInfo()
+                            for _ in range(self.n_sites)
+                        ]
+                    )
+                    self.site_norm_ops = super_self.bw.bs.VectorMapStrSpMat(
+                        [super_self.bw.bs.MapStrSpMat() for _ in range(self.n_sites)]
+                    )
                     self.init_site_ops()
 
                 def get_site_basis(self, m):
@@ -1688,15 +1832,16 @@ class DMRGDriver:
                                 qs.add(super_self.bw.SX(n, s, 0))
                         for q in sorted(qs):
                             mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
-                            mat.initialize(self.basis[m], self.basis[m], q, q.is_fermion)
+                            mat.initialize(
+                                self.basis[m], self.basis[m], q, q.is_fermion
+                            )
                             self.site_op_infos[m].append((q, mat))
 
                     assert len(site_ops) == self.n_sites
 
                     # prim ops
                     for m, ops in enumerate(site_ops):
-
-                        assert "" in ops # must have identity
+                        assert "" in ops  # must have identity
 
                         q_map = {}
                         pv = 0
@@ -1706,7 +1851,6 @@ class DMRGDriver:
                             pv += v
 
                         for name, op in ops.items():
-
                             assert op.shape == (pv, pv)
                             blocks = []
                             dq = site_basis[m][0][0]
@@ -1716,8 +1860,10 @@ class DMRGDriver:
                                 for j in range(op.shape[1]):
                                     if q_map[j][0] != 0:
                                         continue
-                                    mat = np.array(op[i:q_map[i][2], j:q_map[j][2]], copy=True)
-                                    if np.linalg.norm(mat) >= 1E-20:
+                                    mat = np.array(
+                                        op[i : q_map[i][2], j : q_map[j][2]], copy=True
+                                    )
+                                    if np.linalg.norm(mat) >= 1e-20:
                                         dq = q_map[i][1] - q_map[j][1]
                                         blocks.append((q_map[j][1], mat))
 
@@ -1754,10 +1900,19 @@ class DMRGDriver:
                             if k not in qs:
                                 qs[k] = v.info.delta_quantum
                                 qs[k].pg = 0
-                    return super_self.bw.VectorVectorSX([super_self.bw.VectorSX(list(accumulate(
-                        [qs[""]] + [qs[x] for x in expr], lambda x, y: x + y)))
-                        for expr in exprs
-                    ])
+                    return super_self.bw.VectorVectorSX(
+                        [
+                            super_self.bw.VectorSX(
+                                list(
+                                    accumulate(
+                                        [qs[""]] + [qs[x] for x in expr],
+                                        lambda x, y: x + y,
+                                    )
+                                )
+                            )
+                            for expr in exprs
+                        ]
+                    )
 
                 def get_string_quanta(self, ref, expr, idxs, k):
                     """Quantum number for string operators (orbital dependent part)."""
@@ -1774,8 +1929,11 @@ class DMRGDriver:
 
                 def get_string_quantum(self, expr, idxs):
                     """Total quantum number for a string operator."""
-                    qs = lambda ix: { k : v.info.delta_quantum for k, v in self.site_norm_ops[ix].items() }
-                    return sum([qs(0)['']] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+                    qs = lambda ix: {
+                        k: v.info.delta_quantum
+                        for k, v in self.site_norm_ops[ix].items()
+                    }
+                    return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
 
                 def deallocate(self):
                     """Release memory."""
@@ -1937,7 +2095,9 @@ class DMRGDriver:
                 [self.orb_sym[i // 2] for i in range(self.n_sites)]
             )
 
-    def integral_symmetrize(self, orb_sym, h1e=None, g2e=None, hxe=None, k_symm=None, iprint=1):
+    def integral_symmetrize(
+        self, orb_sym, h1e=None, g2e=None, hxe=None, k_symm=None, iprint=1
+    ):
         bw = self.bw
         import numpy as np
 
@@ -2119,7 +2279,7 @@ class DMRGDriver:
         if g2e.ndim == 1:
             m = n_sites * (n_sites + 1) // 2
             xtril = np.tril_indices(m)
-            r = np.zeros((m ** 2,), dtype=g2e.dtype)
+            r = np.zeros((m**2,), dtype=g2e.dtype)
             r[xtril[0] * m + xtril[1]] = g2e
             r[xtril[1] * m + xtril[0]] = g2e
             g2e = r.reshape((m, m))
@@ -2127,7 +2287,7 @@ class DMRGDriver:
         if g2e.ndim == 2:
             m = n_sites
             xtril = np.tril_indices(m)
-            r = np.zeros((m ** 2, m ** 2), dtype=g2e.dtype)
+            r = np.zeros((m**2, m**2), dtype=g2e.dtype)
             r[(xtril[0] * m + xtril[1])[:, None], xtril[0] * m + xtril[1]] = g2e
             r[(xtril[0] * m + xtril[1])[:, None], xtril[1] * m + xtril[0]] = g2e
             r[(xtril[1] * m + xtril[0])[:, None], xtril[0] * m + xtril[1]] = g2e
@@ -2209,7 +2369,9 @@ class DMRGDriver:
                 rev_idx = np.argsort(self.reorder_idx)
                 x_orb_sym = bw.VectorPG(np.array(self.orb_sym)[rev_idx])
             k_symm = 0 if SymmetryTypes.LZ in bw.symm_type else None
-            self.integral_symmetrize(x_orb_sym, h1e=h1e, g2e=g2e, k_symm=k_symm, iprint=iprint)
+            self.integral_symmetrize(
+                x_orb_sym, h1e=h1e, g2e=g2e, k_symm=k_symm, iprint=iprint
+            )
 
         if integral_cutoff != 0:
             error = 0
@@ -2266,19 +2428,27 @@ class DMRGDriver:
                 orb_opt = [optimal_reorder[x] for x in np.array(x_orb_sym)]
                 idx = np.argsort(orb_opt)
             elif (reorder == "fiedler" or reorder == True) and reorder_imat is None:
-                idx = self.orbital_reordering(h1e, g2e, method='fiedler')
+                idx = self.orbital_reordering(h1e, g2e, method="fiedler")
             elif reorder == "gaopt" and reorder_imat is None:
                 if gaopt_opts is None:
-                    idx = self.orbital_reordering(h1e, g2e, method='gaopt')
+                    idx = self.orbital_reordering(h1e, g2e, method="gaopt")
                 else:
-                    idx = self.orbital_reordering(h1e, g2e, method='gaopt', **gaopt_opts)
+                    idx = self.orbital_reordering(
+                        h1e, g2e, method="gaopt", **gaopt_opts
+                    )
             elif (reorder == "fiedler" or reorder == True) and reorder_imat is not None:
-                idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='fiedler')
+                idx = self.orbital_reordering_interaction_matrix(
+                    reorder_imat, method="fiedler"
+                )
             elif reorder == "gaopt" and reorder_imat is not None:
                 if gaopt_opts is None:
-                    idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='gaopt')
+                    idx = self.orbital_reordering_interaction_matrix(
+                        reorder_imat, method="gaopt"
+                    )
                 else:
-                    idx = self.orbital_reordering_interaction_matrix(reorder_imat, method='gaopt', **gaopt_opts)
+                    idx = self.orbital_reordering_interaction_matrix(
+                        reorder_imat, method="gaopt", **gaopt_opts
+                    )
             else:
                 raise RuntimeError("Unknown reorder", reorder)
             if iprint:
@@ -2571,7 +2741,7 @@ class DMRGDriver:
         if SymmetryTypes.SU2 in bw.symm_type:
             assert op in ["C", "D"]
             mpo_lq = bw.SX(-1, 1, 0) if op == "C" else bw.SX(1, 1, 0)
-            b.add_term(op, [site_index], 2 ** 0.5)
+            b.add_term(op, [site_index], 2**0.5)
         elif SymmetryTypes.SZ in bw.symm_type:
             assert op in ["c", "d", "C", "D"]
             b.add_term(op, [site_index], 1.0)
@@ -2729,7 +2899,11 @@ class DMRGDriver:
             for g in op_dict.values()
         ]
         values = [[v for _, v in g] for g in op_dict.values()]
-        for ex, ix, vl, in zip(exprs, indices, values):
+        for (
+            ex,
+            ix,
+            vl,
+        ) in zip(exprs, indices, values):
             b.add_term(ex, ix, vl)
         if ecore is not None:
             b.add_const(ecore)
@@ -2760,7 +2934,7 @@ class DMRGDriver:
             b.add_const(ecore)
         return self.get_mpo(b.finalize(adjust_order=False), **kwargs)
 
-    def orbital_reordering(self, h1e, g2e, method='fiedler', **kwargs):
+    def orbital_reordering(self, h1e, g2e, method="fiedler", **kwargs):
         bw = self.bw
         import numpy as np
 
@@ -2775,10 +2949,14 @@ class DMRGDriver:
         idx = bw.b.OrbitalOrdering.fiedler(len(h1e), kmat)
 
         if method == "gaopt":
-            opts = dict(n_generations=10000, n_configs=len(h1e) * 2,
-                n_elite=8, clone_rate=0.1, mutate_rate=0.1
+            opts = dict(
+                n_generations=10000,
+                n_configs=len(h1e) * 2,
+                n_elite=8,
+                clone_rate=0.1,
+                mutate_rate=0.1,
             )
-            n_tasks = kwargs.pop('n_tasks', 64)
+            n_tasks = kwargs.pop("n_tasks", 64)
             opts.update(kwargs)
             idxs = []
             for i_task in range(0, n_tasks):
@@ -2791,7 +2969,7 @@ class DMRGDriver:
 
         return np.array(idx, dtype=int)
 
-    def orbital_reordering_interaction_matrix(self, imat, method='fiedler', **kwargs):
+    def orbital_reordering_interaction_matrix(self, imat, method="fiedler", **kwargs):
         bw = self.bw
         import numpy as np
 
@@ -2799,10 +2977,14 @@ class DMRGDriver:
         idx = bw.b.OrbitalOrdering.fiedler(len(imat), kmat)
 
         if method == "gaopt":
-            opts = dict(n_generations=10000, n_configs=len(imat) * 2,
-                n_elite=8, clone_rate=0.1, mutate_rate=0.1
+            opts = dict(
+                n_generations=10000,
+                n_configs=len(imat) * 2,
+                n_elite=8,
+                clone_rate=0.1,
+                mutate_rate=0.1,
             )
-            n_tasks = kwargs.pop('n_tasks', 64)
+            n_tasks = kwargs.pop("n_tasks", 64)
             opts.update(kwargs)
             idxs = []
             for i_task in range(0, n_tasks):
@@ -2924,6 +3106,8 @@ class DMRGDriver:
             ener = list(dmrg.energies[-1])
         if self.mpi is not None:
             self.mpi.barrier()
+        if store_wfn_spectra:
+            self._sweep_wfn_spectra = dmrg.sweep_wfn_spectra
         return ener
 
     # return exp(-target_t * mpo) @ ket
@@ -3048,12 +3232,14 @@ class DMRGDriver:
         bond_dims = np.array(self._dmrg.bond_dims)[: len(energies)]
         return bond_dims, dws, energies
 
-    def get_bipartite_entanglement(self):
+    def get_bipartite_entanglement(self, ket=None):
         import numpy as np
 
-        bip_ent = np.zeros(len(self._dmrg.sweep_wfn_spectra), dtype=np.float64)
-        for ix, x in enumerate(self._dmrg.sweep_wfn_spectra):
-            if hasattr(np, 'float128'):
+        if ket is not None:
+            self.expectation(ket, self.get_identity_mpo(), ket)
+        bip_ent = np.zeros(len(self._sweep_wfn_spectra), dtype=np.float64)
+        for ix, x in enumerate(self._sweep_wfn_spectra):
+            if hasattr(np, "float128"):
                 ldsq = np.array(x, dtype=np.float128) ** 2
             else:
                 ldsq = np.array(x, dtype=np.float64) ** 2
@@ -3068,7 +3254,9 @@ class DMRGDriver:
         elif SymmetryTypes.SZ in bw.symm_type or SymmetryTypes.SGF in bw.symm_type:
             is_sgf = SymmetryTypes.SGF in bw.symm_type
             if orb_type == 1:
-                h_terms = OrbitalEntropy.get_one_orb_rdm_h_terms(self.n_sites, is_sgf=is_sgf)
+                h_terms = OrbitalEntropy.get_one_orb_rdm_h_terms(
+                    self.n_sites, is_sgf=is_sgf
+                )
             else:
                 h_terms = OrbitalEntropy.get_two_orb_rdm_h_terms(
                     self.n_sites, ij_symm=ij_symm, is_sgf=is_sgf
@@ -3157,8 +3345,10 @@ class DMRGDriver:
             iprint=iprint,
         )
 
-        rrdms = np.zeros(ents.shape + (nx,),
-            dtype=complex if SymmetryTypes.CPX in bw.symm_type else float)
+        rrdms = np.zeros(
+            ents.shape + (nx,),
+            dtype=complex if SymmetryTypes.CPX in bw.symm_type else float,
+        )
         for ((_, m), v), pdm in zip(exprs.items(), pdms):
             for ix, f in v:
                 if orb_type == 1:
@@ -3210,7 +3400,14 @@ class DMRGDriver:
         return 0.5 * (s1[:, None] + s1[None, :] - s2) * (1 - np.identity(len(s1)))
 
     def get_conventional_npdm(
-        self, ket, pdm_type=1, bra=None, soc=False, site_type=1, iprint=0, max_bond_dim=None
+        self,
+        ket,
+        pdm_type=1,
+        bra=None,
+        soc=False,
+        site_type=1,
+        iprint=0,
+        max_bond_dim=None,
     ):
         bw = self.bw
         import numpy as np
@@ -3373,7 +3570,7 @@ class DMRGDriver:
         fused_contraction_rotation=True,
         cutoff=1e-24,
         iprint=0,
-        max_bond_dim=None
+        max_bond_dim=None,
     ):
         bw = self.bw
         import numpy as np
@@ -3499,7 +3696,6 @@ class DMRGDriver:
         sp_file_names = []
 
         for sp_rank in range(sp_size):
-
             if iprint >= 1 and simulated_parallel != 0:
                 print("simulated parallel rank =", sp_rank)
 
@@ -3539,7 +3735,7 @@ class DMRGDriver:
             scheme = bw.b.NPDMScheme(perms)
             opdq = (mbra.info.target - mket.info.target)[0]
             if iprint >= 4:
-                print('NPDM dq =', opdq)
+                print("NPDM dq =", opdq)
                 print(scheme.to_str())
             pmpo = bw.bs.GeneralNPDMMPO(
                 self.ghamil, scheme, NPDMAlgorithmTypes.SymbolFree in algo_type
@@ -3612,7 +3808,6 @@ class DMRGDriver:
                 expect.me.remove_partition_files()
 
         if simulated_parallel != 0:
-
             if iprint >= 1 and simulated_parallel != 0:
                 print("simulated parallel accumulate files...")
 
@@ -3683,7 +3878,9 @@ class DMRGDriver:
         if SymmetryTypes.SU2 in bw.symm_type:
             assert len(npdms) == 1
             npdms = npdms[0]
-        elif SymmetryTypes.SGF in bw.symm_type and (npdm_expr is None or isinstance(npdm_expr, str)):
+        elif SymmetryTypes.SGF in bw.symm_type and (
+            npdm_expr is None or isinstance(npdm_expr, str)
+        ):
             assert len(npdms) == 1
             npdms = npdms[0]
 
@@ -3713,7 +3910,9 @@ class DMRGDriver:
     def get_trans_4pdm(self, bra, ket, *args, **kwargs):
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
-    def get_csf_coefficients(self, ket, cutoff=0.1, given_dets=None, max_print=200, iprint=1):
+    def get_csf_coefficients(
+        self, ket, cutoff=0.1, given_dets=None, max_print=200, iprint=1
+    ):
         bw = self.bw
         iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
         import numpy as np, time
@@ -3749,7 +3948,7 @@ class DMRGDriver:
         if iprint:
             print(
                 "Sum of weights of included %s = %20.15f\n"
-                % (dname, (dvals ** 2).sum())
+                % (dname, (dvals**2).sum())
             )
             for ii, idx in enumerate(gidx):
                 if self.reorder_idx is not None:
@@ -3786,7 +3985,7 @@ class DMRGDriver:
             if refc == 0:
                 if ket.dot == 2:
                     ket.center += 1
-                    if ket.canonical_form[-1] == 'C':
+                    if ket.canonical_form[-1] == "C":
                         ket.canonical_form = ket.canonical_form[:-1] + "S"
                     else:
                         ket.canonical_form = ket.canonical_form[:-1] + "T"
@@ -4063,7 +4262,9 @@ class DMRGDriver:
         return norm
 
     # return < bra | mpo | ket >
-    def expectation(self, bra, mpo, ket, iprint=0):
+    def expectation(
+        self, bra, mpo, ket, store_bra_spectra=False, store_ket_spectra=True, iprint=0
+    ):
         bw = self.bw
         mbra = bra.deep_copy("EXPE-BRA@TMP")
         if bra != ket:
@@ -4077,8 +4278,17 @@ class DMRGDriver:
         me.cached_contraction = True
         me.init_environments(iprint >= 2)
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
+        if bra == ket:
+            store_bra_spectra = store_bra_spectra or store_ket_spectra
+            store_ket_spectra = store_bra_spectra or store_ket_spectra
+        expect.store_bra_spectra = store_bra_spectra
+        expect.store_ket_spectra = store_ket_spectra
         expect.iprint = iprint
-        ex = expect.solve(False, mket.center != 0)
+        if store_bra_spectra or store_ket_spectra:
+            ex = expect.solve(True, mket.center == 0)
+            self._sweep_wfn_spectra = expect.sweep_wfn_spectra
+        else:
+            ex = expect.solve(False, mket.center != 0)
 
         if self.clean_scratch:
             me.remove_partition_files()
@@ -4252,12 +4462,15 @@ class DMRGDriver:
     def mps_change_singlet_embedding(self, mps, tag, forward, left_vacuum=None):
         cp_mps = mps.deep_copy(tag)
         while cp_mps.center > 0:
-            if cp_mps.center == cp_mps.n_sites - 2 and cp_mps.dot == 2 and \
-                cp_mps.canonical_form[cp_mps.center] == 'L':
-                if cp_mps.canonical_form[-1] == 'C':
-                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'S'
+            if (
+                cp_mps.center == cp_mps.n_sites - 2
+                and cp_mps.dot == 2
+                and cp_mps.canonical_form[cp_mps.center] == "L"
+            ):
+                if cp_mps.canonical_form[-1] == "C":
+                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + "S"
                 else:
-                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + 'T'
+                    cp_mps.canonical_form = cp_mps.canonical_form[:-1] + "T"
                 cp_mps.center = cp_mps.n_sites - 1
             cp_mps.move_left(self.ghamil.opf.cg, self.prule)
         if forward:
@@ -4308,7 +4521,9 @@ class DMRGDriver:
         assert tag != mps.info.tag
         mps.info.load_mutable()
         mps.load_mutable()
-        umps = bw.bs.trans_unfused_mps_to_sz(bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg)
+        umps = bw.bs.trans_unfused_mps_to_sz(
+            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg
+        )
         if sz is not None:
             umps.resolve_singlet_embedding(sz)
         zmps = umps.finalize()
@@ -4397,7 +4612,12 @@ class DMRGDriver:
         return mps
 
     def get_ancilla_mps(
-        self, tag, center=0, dot=2, target=None, full_fci=True,
+        self,
+        tag,
+        center=0,
+        dot=2,
+        target=None,
+        full_fci=True,
     ):
         bw = self.bw
         if target is None:
@@ -4422,8 +4642,9 @@ class DMRGDriver:
         mps_info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return mps
 
-    def get_mps_from_csf_coefficients(self, dets, dvals, tag, dot=2, target=None,
-                                      full_fci=True, left_vacuum=None):
+    def get_mps_from_csf_coefficients(
+        self, dets, dvals, tag, dot=2, target=None, full_fci=True, left_vacuum=None
+    ):
         bw = self.bw
         assert self.reorder_idx is None
 
@@ -5326,10 +5547,12 @@ class ExprBuilder:
     def finalize(self, adjust_order=True, merge=True, is_drt=False, fermionic_ops=None):
         if adjust_order:
             if fermionic_ops is not None:
-                assert (SymmetryTypes.SU2 not in self.bw.symm_type
+                assert (
+                    SymmetryTypes.SU2 not in self.bw.symm_type
                     and SymmetryTypes.PHSU2 not in self.bw.symm_type
                     and SymmetryTypes.SO4 not in self.bw.symm_type
-                    and SymmetryTypes.SO3 not in self.bw.symm_type)
+                    and SymmetryTypes.SO3 not in self.bw.symm_type
+                )
                 self.data = self.data.adjust_order(fermionic_ops, merge=merge)
             else:
                 self.data = self.data.adjust_order(merge=merge, is_drt=is_drt)
@@ -5424,7 +5647,7 @@ class OrbitalEntropy:
         ops = OrbitalEntropy.ops_ghf if is_sgf else OrbitalEntropy.ops
         for i in range(n_sites):
             ih_terms = []
-            for ix in ([0, 3] if is_sgf else [0, 5, 10, 15]):
+            for ix in [0, 3] if is_sgf else [0, 5, 10, 15]:
                 xh_terms = {}
                 for x in OrbitalEntropy.parse_expr(ops[ix]):
                     xh_terms[x[1:]] = ([i] * len(x[1:]), 1.0 if x[0] == "+" else -1.0)
