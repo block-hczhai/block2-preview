@@ -253,11 +253,11 @@ template <int8_t L = 6> struct SAnyT {
             else if (types[i] >= SAnySymmTypes::ZN &&
                      types[i] < SAnySymmTypes::ZNMax) {
                 const int32_t zmod = types[i] - SAnySymmTypes::ZN;
-                r.values[i] = (int32_t)(zmod - values[i]);
+                r.values[i] = (int32_t)((zmod - values[i]) % zmod);
             } else if (types[i] >= SAnySymmTypes::ZNFermi &&
                        types[i] < SAnySymmTypes::ZNFermiMax) {
                 const int32_t zmod = types[i] - SAnySymmTypes::ZNFermi;
-                r.values[i] = (int32_t)(zmod - values[i]);
+                r.values[i] = (int32_t)((zmod - values[i]) % zmod);
             } else
                 r.values[i] = values[i];
         return r;

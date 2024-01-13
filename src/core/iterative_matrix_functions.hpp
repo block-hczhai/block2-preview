@@ -548,9 +548,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                          -complex_dot(ors[j], bs[i]) / or_normsqs[j]);
             FL normx = norm(bs[i]);
             if (abs(normx * normx) < 1E-14) {
-                cout << "Cannot generate initial guess " << i
-                     << " for Davidson unitary to all given states!" << endl;
-                assert(false);
+                stringstream ss;
+                ss << "Cannot generate initial guess " << i
+                   << " for Davidson unitary to all given states (you are "
+                      "possibly targeting a global symmetry sector with no "
+                      "states)!";
+                throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);
         }

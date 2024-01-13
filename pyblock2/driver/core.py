@@ -337,6 +337,24 @@ class Block2Wrapper:
             self.VectorSX = b.VectorSGB
             self.VectorVectorSX = b.VectorVectorSGB
 
+    def set_symmetry_groups(self, *args):
+        assert self.SXT == self.b.SAny and len(args) <= 6
+
+        def init_sany(*qargs):
+            q = self.SXT()
+            assert len(qargs) == len(args)
+            for ix, (ta, qa) in enumerate(zip(args, qargs)):
+                if ta.startswith("Z") and ta.endswith("Fermi"):
+                    q.types[ix] = self.b.SAnySymmTypes.ZNFermi + int(ta[1:-5])
+                elif ta.startswith("Z"):
+                    q.types[ix] = self.b.SAnySymmTypes.ZN + int(ta[1:])
+                else:
+                    q.types[ix] = getattr(self.b.SAnySymmTypes, ta)
+                q.values[ix] = qa
+            return q
+
+        self.SX = init_sany
+
 
 class DMRGDriver:
     def __init__(
@@ -411,6 +429,170 @@ class DMRGDriver:
     def restart_dir(self, restart_dir):
         self._restart_dir = restart_dir
         self.frame.restart_dir = restart_dir
+
+    def set_symm_type(self, symm_type, reset_frame=True):
+        self.bw = Block2Wrapper(symm_type)
+        bw = self.bw
+
+        # reset_frame only required when switching between dp/sp
+        if reset_frame:
+            if SymmetryTypes.SP not in bw.symm_type:
+                bw.b.Global.frame = bw.b.DoubleDataFrame(
+                    int(self.stack_mem * 0.1),
+                    int(self.stack_mem * 0.9),
+                    self.scratch,
+                    self.stack_mem_ratio,
+                    self.stack_mem_ratio,
+                )
+                if self.fp_codec_cutoff != -1:
+                    bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
+                        self.fp_codec_cutoff, 1024
+                    )
+                bw.b.Global.frame_float = None
+                self.frame = bw.b.Global.frame
+            else:
+                bw.b.Global.frame_float = bw.b.FloatDataFrame(
+                    int(self.stack_mem * 0.1),
+                    int(self.stack_mem * 0.9),
+                    self.scratch,
+                    self.stack_mem_ratio,
+                    self.stack_mem_ratio,
+                )
+                if self.fp_codec_cutoff != -1:
+                    bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
+                        self.fp_codec_cutoff, 1024
+                    )
+                bw.b.Global.frame = None
+                self.frame = bw.b.Global.frame_float
+        self.frame.minimal_disk_usage = True
+        self.frame.use_main_stack = False
+
+        if self.mpi:
+            self.mpi = bw.brs.MPICommunicator()
+            self.prule = bw.bs.ParallelRuleSimple(
+                bw.b.ParallelSimpleTypes.Nothing, self.mpi
+            )
+
+        if self.restart_dir is not None:
+            import os
+
+            if self.mpi is None or self.mpi.rank == self.mpi.root:
+                if not os.path.isdir(self.restart_dir):
+                    os.makedirs(self.restart_dir)
+            if self.mpi is not None:
+                self.mpi.barrier()
+            self.frame.restart_dir = self.restart_dir
+
+    def set_symmetry_groups(self, *args):
+        self.bw.set_symmetry_groups(*args)
+
+    def initialize_system(
+        self,
+        n_sites,
+        n_elec=0,
+        spin=0,
+        pg_irrep=None,
+        orb_sym=None,
+        heis_twos=-1,
+        heis_twosz=0,
+        singlet_embedding=True,
+        pauli_mode=False,
+        vacuum=None,
+        left_vacuum=None,
+        target=None,
+        hamil_init=True,
+    ):
+        bw = self.bw
+        import numpy as np
+
+        if target is None:
+            if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
+                n_elec = n_sites * heis_twos
+            elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
+                n_elec = 2 * n_elec - n_sites
+            if pg_irrep is None:
+                if hasattr(self, "pg_irrep"):
+                    pg_irrep = self.pg_irrep
+                else:
+                    pg_irrep = 0
+            if (
+                SymmetryTypes.SU2 not in bw.symm_type
+                and SymmetryTypes.PHSU2 not in bw.symm_type
+                and SymmetryTypes.SO4 not in bw.symm_type
+                and SymmetryTypes.SO3 not in bw.symm_type
+            ) or heis_twos != -1:
+                singlet_embedding = False
+            if SymmetryTypes.SO4 in bw.symm_type:
+                self.vacuum = bw.SX(0, 0)
+                if singlet_embedding:
+                    self.target = bw.SX(0, 0)
+                    self.left_vacuum = bw.SX(abs(n_elec - n_sites), spin)
+                else:
+                    self.target = bw.SX(abs(n_elec - n_sites), spin)
+                    self.left_vacuum = bw.SX(0, 0)
+            elif SymmetryTypes.PHSU2 in bw.symm_type:
+                self.vacuum = bw.SX(0, 0)
+                if singlet_embedding:
+                    self.target = bw.SX(0, spin + abs(n_elec - n_sites) % 2)
+                    self.left_vacuum = bw.SX(
+                        abs(n_elec - n_sites), abs(n_elec - n_sites) % 2
+                    )
+                else:
+                    self.target = bw.SX(abs(n_elec - n_sites), spin)
+                    self.left_vacuum = bw.SX(0, 0)
+            elif SymmetryTypes.SO3 in bw.symm_type:
+                self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
+                if singlet_embedding:
+                    assert heis_twosz == 0
+                    self.target = bw.SX(n_elec, 0, 0)
+                    self.left_vacuum = bw.SX(0, pg_irrep, 0)
+                else:
+                    self.target = bw.SX(n_elec, pg_irrep, 0)
+                    self.left_vacuum = self.vacuum
+            elif SymmetryTypes.LZ in bw.symm_type and SymmetryTypes.SGF in bw.symm_type:
+                self.vacuum = bw.SX(0, 0) if vacuum is None else vacuum
+                assert heis_twosz == 0
+                self.target = bw.SX(n_elec, pg_irrep)
+                self.left_vacuum = self.vacuum
+            else:
+                self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
+                if singlet_embedding:
+                    assert heis_twosz == 0
+                    self.target = bw.SX(n_elec + spin % 2, 0, pg_irrep)
+                    self.left_vacuum = bw.SX(spin % 2, spin, 0)
+                else:
+                    self.target = bw.SX(
+                        n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
+                    )
+                    self.left_vacuum = self.vacuum
+        else:
+            self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
+            self.target = target
+            self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+        self.n_sites = n_sites
+        self.heis_twos = heis_twos
+        if orb_sym is None:
+            self.orb_sym = bw.VectorPG([0] * self.n_sites)
+        else:
+            if np.array(orb_sym).ndim == 2:
+                self.orb_sym = bw.VectorPG(list(orb_sym[0]) + list(orb_sym[1]))
+            else:
+                self.orb_sym = bw.VectorPG(orb_sym)
+        if hamil_init:
+            if SymmetryTypes.SO4 in bw.symm_type:
+                self.ghamil = self.get_so4_hamiltonian()
+            elif SymmetryTypes.PHSU2 in bw.symm_type:
+                self.ghamil = self.get_phsu2_hamiltonian()
+            elif SymmetryTypes.SO3 in bw.symm_type:
+                self.ghamil = self.get_so3_hamiltonian()
+            elif SymmetryTypes.LZ in bw.symm_type:
+                self.ghamil = self.get_lz_hamiltonian()
+            elif pauli_mode:
+                self.ghamil = self.get_pauli_hamiltonian()
+            else:
+                self.ghamil = bw.bs.GeneralHamiltonian(
+                    self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
+                )
 
     def divide_nprocs(self, n):
         """almost evenly divide n procs to two levels.
@@ -586,167 +768,6 @@ class DMRGDriver:
         ):
             const = 0
         return h1e, g2e, const
-
-    def set_symm_type(self, symm_type, reset_frame=True):
-        self.bw = Block2Wrapper(symm_type)
-        bw = self.bw
-
-        # reset_frame only required when switching between dp/sp
-        if reset_frame:
-            if SymmetryTypes.SP not in bw.symm_type:
-                bw.b.Global.frame = bw.b.DoubleDataFrame(
-                    int(self.stack_mem * 0.1),
-                    int(self.stack_mem * 0.9),
-                    self.scratch,
-                    self.stack_mem_ratio,
-                    self.stack_mem_ratio,
-                )
-                if self.fp_codec_cutoff != -1:
-                    bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
-                        self.fp_codec_cutoff, 1024
-                    )
-                bw.b.Global.frame_float = None
-                self.frame = bw.b.Global.frame
-            else:
-                bw.b.Global.frame_float = bw.b.FloatDataFrame(
-                    int(self.stack_mem * 0.1),
-                    int(self.stack_mem * 0.9),
-                    self.scratch,
-                    self.stack_mem_ratio,
-                    self.stack_mem_ratio,
-                )
-                if self.fp_codec_cutoff != -1:
-                    bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
-                        self.fp_codec_cutoff, 1024
-                    )
-                bw.b.Global.frame = None
-                self.frame = bw.b.Global.frame_float
-        self.frame.minimal_disk_usage = True
-        self.frame.use_main_stack = False
-
-        if self.mpi:
-            self.mpi = bw.brs.MPICommunicator()
-            self.prule = bw.bs.ParallelRuleSimple(
-                bw.b.ParallelSimpleTypes.Nothing, self.mpi
-            )
-
-        if self.restart_dir is not None:
-            import os
-
-            if self.mpi is None or self.mpi.rank == self.mpi.root:
-                if not os.path.isdir(self.restart_dir):
-                    os.makedirs(self.restart_dir)
-            if self.mpi is not None:
-                self.mpi.barrier()
-            self.frame.restart_dir = self.restart_dir
-
-    def initialize_system(
-        self,
-        n_sites,
-        n_elec=0,
-        spin=0,
-        pg_irrep=None,
-        orb_sym=None,
-        heis_twos=-1,
-        heis_twosz=0,
-        singlet_embedding=True,
-        pauli_mode=False,
-        vacuum=None,
-        left_vacuum=None,
-        target=None,
-        hamil_init=True,
-    ):
-        bw = self.bw
-        import numpy as np
-
-        if target is None:
-            if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
-                n_elec = n_sites * heis_twos
-            elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
-                n_elec = 2 * n_elec - n_sites
-            if pg_irrep is None:
-                if hasattr(self, "pg_irrep"):
-                    pg_irrep = self.pg_irrep
-                else:
-                    pg_irrep = 0
-            if (
-                SymmetryTypes.SU2 not in bw.symm_type
-                and SymmetryTypes.PHSU2 not in bw.symm_type
-                and SymmetryTypes.SO4 not in bw.symm_type
-                and SymmetryTypes.SO3 not in bw.symm_type
-            ) or heis_twos != -1:
-                singlet_embedding = False
-            if SymmetryTypes.SO4 in bw.symm_type:
-                self.vacuum = bw.SX(0, 0)
-                if singlet_embedding:
-                    self.target = bw.SX(0, 0)
-                    self.left_vacuum = bw.SX(abs(n_elec - n_sites), spin)
-                else:
-                    self.target = bw.SX(abs(n_elec - n_sites), spin)
-                    self.left_vacuum = bw.SX(0, 0)
-            elif SymmetryTypes.PHSU2 in bw.symm_type:
-                self.vacuum = bw.SX(0, 0)
-                if singlet_embedding:
-                    self.target = bw.SX(0, spin + abs(n_elec - n_sites) % 2)
-                    self.left_vacuum = bw.SX(
-                        abs(n_elec - n_sites), abs(n_elec - n_sites) % 2
-                    )
-                else:
-                    self.target = bw.SX(abs(n_elec - n_sites), spin)
-                    self.left_vacuum = bw.SX(0, 0)
-            elif SymmetryTypes.SO3 in bw.symm_type:
-                self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
-                if singlet_embedding:
-                    assert heis_twosz == 0
-                    self.target = bw.SX(n_elec, 0, 0)
-                    self.left_vacuum = bw.SX(0, pg_irrep, 0)
-                else:
-                    self.target = bw.SX(n_elec, pg_irrep, 0)
-                    self.left_vacuum = self.vacuum
-            elif SymmetryTypes.LZ in bw.symm_type and SymmetryTypes.SGF in bw.symm_type:
-                self.vacuum = bw.SX(0, 0) if vacuum is None else vacuum
-                assert heis_twosz == 0
-                self.target = bw.SX(n_elec, pg_irrep)
-                self.left_vacuum = self.vacuum
-            else:
-                self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
-                if singlet_embedding:
-                    assert heis_twosz == 0
-                    self.target = bw.SX(n_elec + spin % 2, 0, pg_irrep)
-                    self.left_vacuum = bw.SX(spin % 2, spin, 0)
-                else:
-                    self.target = bw.SX(
-                        n_elec if heis_twosz == 0 else heis_twosz, spin, pg_irrep
-                    )
-                    self.left_vacuum = self.vacuum
-        else:
-            self.vacuum = bw.SX(0, 0, 0) if vacuum is None else vacuum
-            self.target = target
-            self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
-        self.n_sites = n_sites
-        self.heis_twos = heis_twos
-        if orb_sym is None:
-            self.orb_sym = bw.VectorPG([0] * self.n_sites)
-        else:
-            if np.array(orb_sym).ndim == 2:
-                self.orb_sym = bw.VectorPG(list(orb_sym[0]) + list(orb_sym[1]))
-            else:
-                self.orb_sym = bw.VectorPG(orb_sym)
-        if hamil_init:
-            if SymmetryTypes.SO4 in bw.symm_type:
-                self.ghamil = self.get_so4_hamiltonian()
-            elif SymmetryTypes.PHSU2 in bw.symm_type:
-                self.ghamil = self.get_phsu2_hamiltonian()
-            elif SymmetryTypes.SO3 in bw.symm_type:
-                self.ghamil = self.get_so3_hamiltonian()
-            elif SymmetryTypes.LZ in bw.symm_type:
-                self.ghamil = self.get_lz_hamiltonian()
-            elif pauli_mode:
-                self.ghamil = self.get_pauli_hamiltonian()
-            else:
-                self.ghamil = bw.bs.GeneralHamiltonian(
-                    self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
-                )
 
     def get_pauli_hamiltonian(self):
         assert SymmetryTypes.SGB in self.symm_type
@@ -1777,9 +1798,12 @@ class DMRGDriver:
         import numpy as np
         from itertools import accumulate
 
-        if SymmetryTypes.SZ in super_self.symm_type:
+        if (
+            SymmetryTypes.SZ in super_self.symm_type
+            or SymmetryTypes.SAny in super_self.symm_type
+        ):
 
-            class CustomSZHamiltonian(GH):
+            class CustomHamiltonian(GH):
                 def __init__(self, vacuum, n_sites, orb_sym):
                     GH.__init__(self)
                     self.opf = super_self.bw.bs.OperatorFunctions(
@@ -1819,23 +1843,44 @@ class DMRGDriver:
                     i_alloc = super_self.bw.b.IntVectorAllocator()
                     d_alloc = super_self.bw.b.DoubleVectorAllocator()
                     # site op infos
-                    max_n, max_s = 10, 10
-                    max_n_odd, max_s_odd = max_n | 1, max_s | 1
-                    max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
-                    for m in range(self.n_sites):
-                        qs = {self.vacuum}
-                        for n in range(-max_n_odd, max_n_odd + 1, 2):
-                            for s in range(-max_s_odd, max_s_odd + 1, 2):
-                                qs.add(super_self.bw.SX(n, s, self.orb_sym[m]))
-                        for n in range(-max_n_even, max_n_even + 1, 2):
-                            for s in range(-max_s_even, max_s_even + 1, 2):
-                                qs.add(super_self.bw.SX(n, s, 0))
-                        for q in sorted(qs):
-                            mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
-                            mat.initialize(
-                                self.basis[m], self.basis[m], q, q.is_fermion
-                            )
-                            self.site_op_infos[m].append((q, mat))
+                    if SymmetryTypes.SZ in super_self.symm_type:
+                        max_n, max_s = 10, 10
+                        max_n_odd, max_s_odd = max_n | 1, max_s | 1
+                        max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
+                        for m in range(self.n_sites):
+                            qs = {self.vacuum}
+                            for n in range(-max_n_odd, max_n_odd + 1, 2):
+                                for s in range(-max_s_odd, max_s_odd + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, self.orb_sym[m]))
+                            for n in range(-max_n_even, max_n_even + 1, 2):
+                                for s in range(-max_s_even, max_s_even + 1, 2):
+                                    qs.add(super_self.bw.SX(n, s, 0))
+                            for q in sorted(qs):
+                                mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                                mat.initialize(
+                                    self.basis[m], self.basis[m], q, q.is_fermion
+                                )
+                                self.site_op_infos[m].append((q, mat))
+                    else:
+                        for m in range(self.n_sites):
+                            qs = {self.vacuum}
+                            for iter in range(20):
+                                new_qs = set()
+                                for q in qs:
+                                    for k, _ in site_basis[m]:
+                                        new_q = q + k
+                                        for iq in range(new_q.count):
+                                            new_qs.add(new_q[iq])
+                                        new_q = q - k
+                                        for iq in range(new_q.count):
+                                            new_qs.add(new_q[iq])
+                                qs = new_qs
+                            for q in sorted(qs):
+                                mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
+                                mat.initialize(
+                                    self.basis[m], self.basis[m], q, q.is_fermion
+                                )
+                                self.site_op_infos[m].append((q, mat))
 
                     assert len(site_ops) == self.n_sites
 
@@ -1869,6 +1914,7 @@ class DMRGDriver:
 
                             mat = super_self.bw.bs.SparseMatrix(d_alloc)
                             info = self.find_site_op_info(m, dq)
+                            assert info is not None
                             mat.allocate(info)
                             for q, mx in blocks:
                                 mat[info.find_state(q)] = mx
@@ -1946,7 +1992,7 @@ class DMRGDriver:
                     for bz in self.basis:
                         bz.deallocate()
 
-            return CustomSZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+            return CustomHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
         else:
             return NotImplemented
 
