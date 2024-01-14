@@ -134,7 +134,7 @@ Features
    tutorial/restarting-dmrg
    tutorial/dmrg-soc
    tutorial/greens-function
-   tutorial/custom-hamiltonian
+   tutorial/custom-hamiltonians
    tutorial/hubbard
    tutorial/heisenberg
 
