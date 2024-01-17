@@ -3282,7 +3282,7 @@ class DMRGDriver:
         import numpy as np
 
         if ket is not None:
-            self.expectation(ket, self.get_identity_mpo(), ket)
+            self.expectation(ket, self.get_identity_mpo(), ket, store_ket_spectra=True)
         bip_ent = np.zeros(len(self._sweep_wfn_spectra), dtype=np.float64)
         for ix, x in enumerate(self._sweep_wfn_spectra):
             if hasattr(np, "float128"):
@@ -4309,7 +4309,7 @@ class DMRGDriver:
 
     # return < bra | mpo | ket >
     def expectation(
-        self, bra, mpo, ket, store_bra_spectra=False, store_ket_spectra=True, iprint=0
+        self, bra, mpo, ket, store_bra_spectra=False, store_ket_spectra=False, iprint=0
     ):
         bw = self.bw
         mbra = bra.deep_copy("EXPE-BRA@TMP")
