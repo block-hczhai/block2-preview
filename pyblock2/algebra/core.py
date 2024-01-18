@@ -64,9 +64,17 @@ class SubTensor:
         """Scalar multiplication."""
         return SubTensor(q_labels=self.q_labels, reduced=other * self.reduced)
 
+    def __truediv__(self, other):
+        """Scalar division."""
+        return SubTensor(q_labels=self.q_labels, reduced=self.reduced / other)
+
     def __neg__(self):
         """Times (-1)."""
         return SubTensor(q_labels=self.q_labels, reduced=-self.reduced)
+
+    def conj(self):
+        """Complex conjugate."""
+        return SubTensor(q_labels=self.q_labels, reduced=np.conj(self.reduced))
 
     def equal_shape(self, other):
         """Test if two blocks have equal shape and quantum labels."""
@@ -460,9 +468,17 @@ class Tensor:
         """Scalar multiplication."""
         return Tensor(blocks=[block * other for block in self.blocks])
 
+    def __truediv__(self, other):
+        """Scalar division."""
+        return Tensor(blocks=[block / other for block in self.blocks])
+
     def __neg__(self):
         """Times (-1)."""
         return Tensor(blocks=[-block for block in self.blocks])
+
+    def conj(self):
+        """Complex conjugate."""
+        return Tensor(blocks=[block.conj() for block in self.blocks])
 
     def __repr__(self):
         return "\n".join("%3d %r" % (ib, b) for ib, b in enumerate(self.blocks))
@@ -545,12 +561,20 @@ class MPS:
         """Scalar multiplication."""
         return MPS(tensors=[self.tensors[0] * other] + self.tensors[1:])
 
+    def __truediv__(self, other):
+        """Scalar division."""
+        return MPS(tensors=[self.tensors[0] / other] + self.tensors[1:])
+
     def __rmul__(self, other):
         return self * other
 
     def __neg__(self):
         """Times (-1)."""
         return MPS(tensors=[-self.tensors[0]] + self.tensors[1:])
+
+    def conj(self):
+        """Complex conjugate."""
+        return MPS(tensors=[ts.conj() for ts in self.tensors])
 
     def __add__(self, other):
         """Add two MPS. data in `other` MPS will be put in larger reduced indices."""
@@ -581,7 +605,7 @@ class MPS:
                         mshape[0] = lb[q[0]]
                     if i != self.n_sites - 1:
                         mshape[-1] = rb[q[-1]]
-                    sub_mp[q] = SubTensor(q, np.zeros(tuple(mshape)))
+                    sub_mp[q] = SubTensor(q, np.zeros(tuple(mshape), dtype=block.reduced.dtype))
             # copy block self.blocks to smaller index in new block
             for block in self.tensors[i].blocks:
                 q = block.q_labels
@@ -633,7 +657,7 @@ class MPS:
             else:
                 lbra = Tensor.contract(left, self.tensors[i], [0], [0])
                 left = Tensor.contract(lbra, other.tensors[i], cidx, cidx)
-        assert isinstance(left, float)
+        assert isinstance(left, float) or isinstance(left, complex)
 
         return left
 
@@ -669,7 +693,7 @@ class MPS:
                 else:
                     left = Tensor.contract(
                         lbra, other.tensors[i], [0, 1], [0, 1])
-        assert isinstance(left, float)
+        assert isinstance(left, float) or isinstance(left, complex)
 
         return left
 
@@ -785,7 +809,7 @@ class MPS:
                     xsh = block.reduced.shape[:-2] + (nrr,)
                     if q not in map_blocks:
                         map_blocks[q] = SubTensor(
-                            q_labels=q, reduced=np.zeros(sh))
+                            q_labels=q, reduced=np.zeros(sh, dtype=block.reduced.dtype))
                     map_blocks[q].reduced[..., irr: irr
                                           + nrr] = block.reduced.reshape(xsh)
                 elif i == self.n_sites - 1:
@@ -795,7 +819,7 @@ class MPS:
                     xsh = (nll,) + block.reduced.shape[2:]
                     if q not in map_blocks:
                         map_blocks[q] = SubTensor(
-                            q_labels=q, reduced=np.zeros(sh))
+                            q_labels=q, reduced=np.zeros(sh, dtype=block.reduced.dtype))
                     map_blocks[q].reduced[ill:ill
                                           + nll, ...] = block.reduced.reshape(xsh)
                 else:
@@ -805,7 +829,7 @@ class MPS:
                     xsh = (nll,) + block.reduced.shape[2:-2] + (nrr,)
                     if q not in map_blocks:
                         map_blocks[q] = SubTensor(
-                            q_labels=q, reduced=np.zeros(sh))
+                            q_labels=q, reduced=np.zeros(sh, dtype=block.reduced.dtype))
                     map_blocks[q].reduced[ill:ill + nll, ...,
                                           irr:irr + nrr] = block.reduced.reshape(xsh)
             self.tensors[i] = Tensor(blocks=list(map_blocks.values()))
@@ -849,10 +873,17 @@ class MPO(MPS):
         """Scalar multiplication."""
         return MPO(tensors=[self.tensors[0] * other] + self.tensors[1:], const_e=other * self.const_e)
 
+    def __truediv__(self, other):
+        """Scalar division."""
+        return MPO(tensors=[self.tensors[0] / other] + self.tensors[1:], const_e=self.const_e / other)
 
     def __neg__(self):
         """Times (-1)."""
         return MPO(tensors=[-self.tensors[0]] + self.tensors[1:], const_e=-self.const_e)
+
+    def conj(self):
+        """Complex conjugate."""
+        return MPO(tensors=[ts.conj() for ts in self.tensors], const_e=np.conj(self.const_e))
 
     def __add__(self, other):
         """Add two MPO. data in `other` MPO will be put in larger reduced indices."""
