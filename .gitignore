@@ -12,6 +12,7 @@ nodex/
 MANIFEST
 .clang-format
 .vscode/
+.cspell/
 
 __pycache__/
 *.py[cod]

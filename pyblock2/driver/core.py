@@ -16,65 +16,135 @@
 #
 #
 
+"""Python interface of block2."""
+
+
 from enum import IntFlag
 
 
 class SymmetryTypes(IntFlag):
+    """
+    Enumeration for symmetry modes (symmetry groups, complex/real types, and floating-point precision).
+
+    ``CPX``, ``SP``, ``SAny`` can be combined with some other types using operator ``|``.
+    For example, ``SymmetryTypes.CPX | SymmetryTypes.SU2`` is the SU(2) mode with the complex number.
+    """
+    #: Real number and double precision.
     Nothing = 0
+    #: Spin-adapted Fermion mode, U(1) x SU(2) x AbelianPG.
     SU2 = 1
+    #: Non-spin-adapted Fermion mode, U(1) x U(1)[Sz] x AbelianPG.
     SZ = 2
+    #: General spin Fermion mode. U(1)[Fermion number] x AbelianPG.
     SGF = 4
+    #: General spin Boson mode. U(1)[Boson number] x AbelianPG.
     SGB = 8
+    #: Complex number. Can be combined with Fermion/Boson symmetry types.
     CPX = 16
+    #: Single precision. Can be combined with Fermion/Boson symmetry types.
     SP = 32
+    #: Complex number general spin Fermion mode, for relativistic DMRG.
     SGFCPX = 16 | 4
+    #: Single precision complex number.
     SPCPX = 32 | 16
+    #: General symmetry type.
     SAny = 64
+    #: Equivalent to 'SU2', implemented using general symmetry types.
     SAnySU2 = 64 | 1
+    #: Equivalent to 'SZ', implemented using general symmetry types.
     SAnySZ = 64 | 2
+    #: Equivalent to 'SGF', implemented using general symmetry types.
     SAnySGF = 64 | 4
+    #: Equivalent to 'SGFCPX', implemented using general symmetry types.
     SAnySGFCPX = 64 | 16 | 4
     SO4 = 128
     PHSU2 = 256
     SO3 = 512
     LZ = 1024
+    #: SO(4) symmetry for 2-D Hubbard model with NN interactions.
     SAnySO4 = 64 | 128
+    #: Particle-hole symmetry for 2-D Hubbard model with NN interactions.
     SAnyPHSU2 = 64 | 256
+    #: SO(3) spatial symmetry for atoms.
     SAnySO3 = 64 | 512
+    #: Spin-adapted mode for diatomic molecules, U(1) x SU(2) x U(1)[Lz].
     SAnySU2LZ = 64 | 1 | 1024
+    #: Non-spin-adapted mode for diatomic molecules, U(1) x U(1)[Sz] x U(1)[Lz].
     SAnySZLZ = 64 | 2 | 1024
+    #: General spin mode for diatomic molecules, U(1) x U(1)[Lz].
     SAnySGFLZ = 64 | 4 | 1024
 
 
 class ParallelTypes(IntFlag):
+    """
+    Enumeration for strategies for distributing the quantum chemistry ``h1e`` and ``g2e`` integrals.
+    See Eq. (2) in *J. Chem. Phys.* **154**, 224116 (2021).
+    """
+    #: Serial computation.
     Nothing = 0
+    #: Distribute integrals over the first index.
     I = 1
+    #: Distribute integrals over the second index.
     J = 2
+    #: Distribute integrals over the smallest index.
     SI = 3
+    #: Distribute integrals over the second smallest index.
     SJ = 4
+    #: Distribute integrals over the unordered tuple of the two smallest indices (IJ) of ``g2e``.
+    #: When ``J == K``, distribute over J. Same as 'SI' for ``h1e``.
+    #: See Eq. (5) in *J. Chem. Phys.* **154**, 224116 (2021).
     SIJ = 5
+    #: Distribute integrals over the unordered tuple of the two largest indices (KL) of ``g2e``.
+    #: When ``J == K``, distribute over J. Same as 'SJ' for ``h1e``.
+    #: See Eq. (6) in *J. Chem. Phys.* **154**, 224116 (2021).
     SKL = 6
-    UIJ = 7  # unified middle same/diff
-    UKL = 8  # unified middle same/diff
+    #: Distribute integrals over the unordered tuple of the two smallest indices (IJ) of ``g2e``.
+    #: When ``J == K``, distribute over IJ. Same as 'SI' for ``h1e``.
+    UIJ = 7
+    #: Distribute integrals over the unordered tuple of the two largest indices (KL) of ``g2e``.
+    #: When ``J == K``, distribute over KL. Same as 'SJ' for ``h1e``.
+    UKL = 8
+    #: Similar to 'UIJ', but distribute over IJ / 2.
     UIJM2 = 9
+    #: Similar to 'UKL', but distribute over KL / 2.
     UKLM2 = 10
+    #: Similar to 'UIJ', but distribute over IJ / 4.
     UIJM4 = 11
+    #: Similar to 'UKL', but distribute over KL / 4.
     UKLM4 = 12
-    MixUIJUKL = 1000  # not a good strategy
-    MixUKLUIJ = 1001  # not a good strategy
+    #: Two-layer nested UIJ (outer) and UKL (inner). Not a good strategy.
+    MixUIJUKL = 1000
+    #: Two-layer nested UKL (outer) and UIJ (inner). Not a good strategy.
+    MixUKLUIJ = 1001
+    #: Two-layer nested UIJ (outer) and SI (inner).
     MixUIJSI = 1002
 
 
 class MPOAlgorithmTypes(IntFlag):
+    """
+    Enumeration for strategies for building MPO from symbolic expression of second quantized operators.
+    Algorithms (such as ``Bipartite``) and modifiers (such as ``Fast``) can be combined using operator ``|``.
+    """
+    #: No algorithm specified (invalid).
     Nothing = 0
+    #: Bipartite algorithm. See *J. Chem. Phys.* **153**, 084118 (2020).
     Bipartite = 1
+    #: SVD algorithm. See *J. Chem. Phys.* **145**, 014102 (2016).
     SVD = 2
+    #: Use rescaled singular values for truncation. Optional for 'SVD', cannot be used alone.
     Rescaled = 4
+    #: Fast implementation for dense integrals. Optional for 'SVD' and 'Bipartite', cannot be used alone.
     Fast = 8
+    #: Separate SVD for blocks. Optional for 'SVD' and 'Bipartite', cannot be used alone.
     Blocked = 16
+    #: Sum of MPO approach. See *J. Chem. Phys.* **145**, 014102 (2016).
+    #: Optional for 'SVD' and 'Bipartite', cannot be used alone.
     Sum = 32
+    #: SVD with constraints on sparsity. See PLoS ONE 14: e0211463 (2019). Optional for 'SVD', cannot be used alone.
     Constrained = 64
+    #: SVD with block-diagonal sparsity preserved. Optional for 'SVD', cannot be used alone.
     Disjoint = 128
+    #: Separate SVD for different operator widths. Optional for 'SVD' and 'Bipartite', cannot be used alone.
     Length = 8192
     DisjointSVD = 128 | 2
     BlockedSumDisjointSVD = 128 | 32 | 16 | 2
@@ -107,6 +177,7 @@ class MPOAlgorithmTypes(IntFlag):
     BlockedSumBipartite = 32 | 16 | 1
     FastBlockedSumBipartite = 32 | 16 | 8 | 1
     BlockedSVD = 16 | 2
+    #: Fast algorithm for blocked SVD.
     FastBlockedSVD = 16 | 8 | 2
     BlockedRescaledSVD = 16 | 4 | 2
     FastBlockedRescaledSVD = 16 | 8 | 4 | 2
@@ -117,13 +188,28 @@ class MPOAlgorithmTypes(IntFlag):
     RescaledSVD = 4 | 2
     FastSVD = 8 | 2
     FastRescaledSVD = 8 | 4 | 2
+    #: Fast algorithm for bipartite (recommended).
     FastBipartite = 8 | 1
+    #: Complementary-Normal (CN) partition in conventional quantum chemistry DMRG.
+    #: Optional for 'Conventional', cannot be used alone.
     NC = 256
+    #: Complementary-Normal (CN) partition in conventional quantum chemistry DMRG.
+    #: Optional for 'Conventional', cannot be used alone.
     CN = 512
+    #: Mixed NC/CN partition in conventional quantum chemistry DMRG.
+    #: See Sec. III.A in *J. Chem. Phys.* **154**, 224116 (2021).
     Conventional = 1024
+    #: Normal-Complementary (NC) partition in conventional quantum chemistry DMRG.
+    #: See Eq. (B5) in *J. Chem. Phys.* **154**, 224116 (2021).
     ConventionalNC = 1024 | 256
+    #: Complementary-Normal (CN) partition in conventional quantum chemistry DMRG.
+    #: See Eq. (B6) in *J. Chem. Phys.* **154**, 224116 (2021).
     ConventionalCN = 1024 | 512
+    #: Allow different bra and ket in conventional quantum chemistry MPO.
+    #: Optional for 'Conventional', cannot be used alone.
     NoTranspose = 2048
+    #: Not use R complementary operator intermediates in conventional quantum chemistry MPO.
+    #: Optional for 'Conventional', cannot be used alone.
     NoRIntermed = 4096
     NoTransConventional = 2048 | 1024
     NoTransConventionalNC = 2048 | 1024 | 256
@@ -133,35 +219,108 @@ class MPOAlgorithmTypes(IntFlag):
 
 
 class NPDMAlgorithmTypes(IntFlag):
+    """
+    Enumeration for strategies for computing N-particle density matrices (NPDM).
+    See Sec. II.E.1 in *J. Chem. Phys.* **159**, 234801 (2023).
+    Items can be combined using operator ``|``.
+    """
+    #: No algorithm specified (invalid).
     Nothing = 0
+    #: Symbol-free NPDM algorithm.
     SymbolFree = 1
+    #: Normal algorithm with explicit symbols. Conflict with 'SymbolFree'.
     Normal = 2
+    #: Fast algorithm with explicit symbols. Conflict with 'SymbolFree'.
     Fast = 4
+    #: Reduced disk storage. Optional for 'SymbolFree', cannot be used alone.
     Compressed = 8
+    #: Reduced memory usage. Optional for 'SymbolFree', cannot be used alone.
     LowMem = 16
+    #: Same as ``NPDMAlgorithmTypes.SymbolFree | NPDMAlgorithmTypes.Compressed`` (recommended).
     Default = 1 | 8
+    #: Old manual implementation for 1pdm and 2pdm (less efficient).
     Conventional = 32
 
 
 class STTypes(IntFlag):
+    """
+    Enumeration for truncation of expression in DMRG for similarity-transformed Hamiltonians.
+    See Sec. II.D.3.iii in *J. Chem. Phys.* **159**, 234801 (2023).
+    """
+    #: Terms in H.
     H = 1
+    #: Terms in [H, T].
     HT = 2
+    #: Terms in 1/2 [[H, T2], T2].
     HT2T2 = 4
+    #: Terms in 1/2 [[H, T1], T1] + [[H, T2], T1].
     HT1T2 = 8
+    #: Terms in [[H, T3], T1].
     HT1T3 = 16
+    #: Terms in [[H, T3], T2].
     HT2T3 = 32
+    #: Sum of 'H' and 'HT'.
     H_HT = 1 | 2
+    #: Sum of 'H', 'HT' and 'HT2T2'.
     H_HT_HT2T2 = 1 | 2 | 4
+    #: Sum of 'H', 'HT', 'HT2T2', and 'HT1T2'.
     H_HT_HTT = 1 | 2 | 4 | 8
+    #: Sum of 'H_HT_HTT', and 'HT1T3'.
     H_HT_HTT_HT1T3 = 1 | 2 | 4 | 8 | 16
+    #: Sum of 'H_HT_HTT', and 'HT2T3'.
     H_HT_HTT_HT2T3 = 1 | 2 | 4 | 8 | 32
+    #: Sum of 'H_HT_HTT', 'HT1T3', and 'HT2T3'.
     H_HT_HTT_HT3 = 1 | 2 | 4 | 8 | 16 | 32
+    #: Sum of 'H_HT_HT2T2', and 'HT1T3'.
     H_HT_HT2T2_HT1T3 = 1 | 2 | 4 | 16
+    #: Sum of 'H_HT_HT2T2', and 'HT2T3'.
     H_HT_HT2T2_HT2T3 = 1 | 2 | 4 | 32
+    #: Sum of 'H_HT_HT2T2', 'HT1T3', and 'HT2T3'.
     H_HT_HT2T2_HT3 = 1 | 2 | 4 | 16 | 32
 
 
 class Block2Wrapper:
+    """
+    Wrapper for low-level ``block2`` C++ type bindings for different symmetries.
+
+    Attributes:
+        symm_type : :class:`SymmetryTypes`
+            The symmetry/floating point number mode.
+        b : module
+            The ``block2`` module.
+        bx : module
+            Sub-module of ``block2`` for the floating point number type.
+        bc : module
+            Sub-module of ``block2`` for the complex variant of the floating point number type.
+            For example, for ``bx = block2/block2.cpx``, ``bc = block2.cpx``.
+        bs : module
+            Sub-module of ``block2`` for the symmetry mode and floating point number types.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``bs = block2.su2``.
+        brs : module
+            Sub-module of ``block2`` for the symmetry mode
+            and the real variant of the floating point number types.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``brs = block2.su2``.
+        bcs : module
+            Sub-module of ``block2`` for the symmetry mode
+            and the complex variant of the floating point number types.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``brs = block2.cox.su2``.
+        SX : type
+            The quantum number type.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``SX = block2.SU2``.
+        VectorFL : type
+            Vector of the floating point number type.
+        VectorFP : type
+            Vector of the real variant of the floating point number type.
+            For example, for ``FL = complex<double>/double``, ``FP = double``.
+        VectorPG : type
+            Vector of the point group irrep integer type.
+        VectorSX : type
+            Vector of the quantum number type.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``VectorSX = block2.VectorSU2``.
+        VectorVectorSX : type
+            Vector of Vector of the quantum number type.
+            For example, when ``symm_type = SymmetryTypes.SU2``, ``VectorSX = block2.VectorVectorSU2``.
+    """
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
 
@@ -338,6 +497,15 @@ class Block2Wrapper:
             self.VectorVectorSX = b.VectorVectorSGB
 
     def set_symmetry_groups(self, *args):
+        """
+        Set the combination of symmetry sub-groups for ``symm_type = SAny``.
+
+        Args:
+            args : list[str]
+                List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
+                Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
+                "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+        """
         assert self.SXT == self.b.SAny and len(args) <= 6
 
         def init_sany(*qargs):
@@ -357,6 +525,17 @@ class Block2Wrapper:
 
 
 class DMRGDriver:
+    """
+    Simple Python interface for DMRG calculations.
+
+    Attributes:
+        symm_type : :class:`SymmetryTypes`
+            The symmetry/floating point number mode.
+        bw : :class:`Block2Wrapper`
+            Wrapper for low-level type bindings.
+        mpi : MPICommunicator or None
+            MPI Communicator.
+    """
     def __init__(
         self,
         stack_mem=1 << 30,
@@ -370,6 +549,41 @@ class DMRGDriver:
         stack_mem_ratio=0.4,
         fp_codec_cutoff=1e-16,
     ):
+        """
+        Initialize :class:`DMRGDriver`.
+
+        Args:
+            symm_type : :class:`SymmetryTypes`
+                The symmetry/floating point number mode. Default: ``SymmetryTypes.SU2``.
+            scratch : str
+                The working directory (scratch space). Default is "./nodex".
+            clean_scratch : bool
+                If True, large temporary files in the scratch space will be removed once the DMRG finishes successfully.
+                MPS files will not be removed. Default is True.
+            restart_dir : None or str
+                If not None, MPS will be copied to the given directory after each DMRG sweep.
+                Default is None (MPS will not be copied).
+            n_threads : int
+                Number of threads. When MPI is used, this is the number of threads for each MPI processor.
+                Default is the max number of threads available on this node.
+            n_mkl_threads : int
+                Number of threads for parallelization inside MKL (for dense matrix multiplication).
+                ``n_mkl_threads`` should be a factor of ``n_threads``. When ``n_mkl_threads`` is not 1,
+                nested threading will be used. Default is 1.
+            mpi : None or bool
+                If True, MPI parallelization is used. If False or None, serial implementation is used.
+                Default is None.
+            stack_mem : int
+                The memory used for storing renormalized operators (in bytes). Default is 1 GB.
+                When MPI is used, this is the number per MPI processor.
+                Note that this argument is only responsible for part of the memory consumption in ``block2``.
+                The other part will be dynamically determined.
+            stack_mem_ratio : float
+                The fraction of stack space occupied by the main stacks. Default is 0.4.
+            fp_codec_cutoff : float
+                Floating-point number (absolute) precision for compressed storage of renormalized operators.
+                Default is 1E-16.
+        """
         if mpi is not None and mpi:
             self.mpi = True
         else:
@@ -403,6 +617,7 @@ class DMRGDriver:
 
     @property
     def symm_type(self):
+        """The symmetry/floating point number mode."""
         return self._symm_type
 
     @symm_type.setter
@@ -412,6 +627,7 @@ class DMRGDriver:
 
     @property
     def scratch(self):
+        """The working directory (scratch space)."""
         return self._scratch
 
     @scratch.setter
@@ -423,6 +639,7 @@ class DMRGDriver:
 
     @property
     def restart_dir(self):
+        """If not None, MPS will be copied to the given directory after each DMRG sweep."""
         return self._restart_dir
 
     @restart_dir.setter
@@ -431,6 +648,16 @@ class DMRGDriver:
         self.frame.restart_dir = restart_dir
 
     def set_symm_type(self, symm_type, reset_frame=True):
+        """
+        Change the symmetry type of this :class:`DMRGDriver`.
+
+        Args:
+            symm_type : :class:`SymmetryTypes`
+                The symmetry/floating point number mode. Default: ``SymmetryTypes.SU2``.
+            reset_frame : bool
+                Whether the data frame should be reset. This is required when switching between
+                single precision and double precision. Default is True.
+        """
         self.bw = Block2Wrapper(symm_type)
         bw = self.bw
 
@@ -484,6 +711,15 @@ class DMRGDriver:
             self.frame.restart_dir = self.restart_dir
 
     def set_symmetry_groups(self, *args):
+        """
+        Set the combination of symmetry sub-groups for ``symm_type = SAny``.
+
+        Args:
+            args : list[str]
+                List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
+                Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
+                "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+        """
         self.bw.set_symmetry_groups(*args)
 
     def initialize_system(
@@ -502,6 +738,58 @@ class DMRGDriver:
         target=None,
         hamil_init=True,
     ):
+        """
+        Set the basic information of the system. Required before invoking ``get_mpo``, ``get_random_mps``, etc.
+        Note that one can directly set the ``target`` and ``vacuum``, so that
+        ``n_elec``, ``spin``, ``pg_irrep``, ``heis_twos``, and ``heis_twosz`` are not required.
+
+        Args:
+            n_sites : int
+                Number of sites (orbitals).
+            n_elec : int
+                Number of electrons int the target state.
+            spin : int
+                Two times total spin (in SU2 mode) or two times projected spin (in SZ mode) int the target state.
+            pg_irrep : None or int
+                Point group irreducible representation in the target state.
+                0 is the trivial point group irrep.
+            orb_sym : None or list[int]
+                The point group irreducible representation of each site (orbital).
+                If None, this is [0] * n_sites
+            heis_twos : int
+                For non-Heisenberg model, this should be -1 (default).
+                For Heisenberg model, this is two times the total spin of each site.
+                For example, ``heis_twos = 1`` for the most common spin-1/2 Heisenberg model.
+            heis_twosz : int
+                For Heisenberg model in SGB mode, ``spin`` is not used and ``heis_twosz`` is used
+                to specify two times the projected spin of the target state. Default is zero.
+                Not used for non-Heisenberg model.
+            singlet_embedding : bool
+                Whether singlet embedding is used for non-singlet target state in SU2 mode.
+                Default is True. Note that when this is True, ``DMRGDriver.target`` will always be the singlet
+                even if the actual target state is not singlet.
+            pauli_mode : bool
+                Whether Pauli mode should be activated. Default is False.
+                When Pauli mode is on, quantum numbers are not used. Only ``n_sites`` is required in
+                ``initialize_system``. The ``SGB`` or ``SGB|CPX`` symmetry types are required for this case.
+                In Pauli mode one can use ``DMRGDriver.get_mpo_any_pauli`` to construct MPO from XYZ Pauli
+                operators.
+            vacuum : SX or None
+                The quantum number of the reference vacuum state. If None, will be set according to other parameters.
+            target : SX or None
+                The quantum number of the target state. If None, will be set according to other parameters.
+            left_vacuum : SX or None
+                For most cases, this can be automatically determined and stored as ``DMRGDriver.left_vacuum``.
+                For Abelian symmetry mode or singlet states in non-Abelian symmetry modes, this should be equal to
+                ``vacuum``. For non-singlet states in non-Abelian symmetry modes (such as SU2), and when
+                ``singlet_embedding = True``, ``left_vacuum`` is an adjusted vacuum to represent the non-singlet
+                fictitious non-singlet spin.
+            hamil_init : bool
+                Whether the Hamiltonian object ``DMRGDriver.ghamil`` should be initialized. Default is True.
+                When a custom symmetry type is used and ``symm_type = SymmetryTypes.SAny``,
+                one can set this to False and manually initialize ``DMRGDriver.ghamil``
+                using ``DMRGDriver.get_custom_hamiltonian``.
+        """
         bw = self.bw
         import numpy as np
 
@@ -595,12 +883,24 @@ class DMRGDriver:
                 )
 
     def divide_nprocs(self, n):
-        """almost evenly divide n procs to two levels.
-        Faster than a pure sqrt method when n >= 20000000."""
+        """
+        Helper method for two-level MPI parallelization.
+        This purpose of this method is to almost evenly divide n procs to two levels.
+        Faster than a pure sqrt method when ``n >= 20000000``.
+
+        Args:
+            n : int
+                Number of MPI processors.
+
+        Returns:
+            (a, b) : tuple[int, int]
+                Number of MPI processors at two levels such that
+                ``a * b == n`` and ``abs(a - b)`` is minimized.
+        """
         bw = self.bw
-        fcts = bw.b.Prime().factors(n)
+        factors = bw.b.Prime().factors(n)
         px = []
-        for p, x in fcts:
+        for p, x in factors:
             px += [p] * x
         if len(px) == 1:
             return 1, n
@@ -615,6 +915,31 @@ class DMRGDriver:
                     return p, n // p
 
     def parallelize_integrals(self, para_type, h1e, g2e, const, msize=None, mrank=None):
+        """
+        Prepare integrals for parallel quantum chemistry DMRG.
+
+        Args:
+            para_type : ParallelTypes
+                The strategy for distributing the integrals (when ``self.mpi`` is not None).
+            h1e : np.ndarray[float|complex]
+                ``ndim = 2`` one-electron integral (serial/complete version).
+            g2e : np.ndarray[float|complex]
+                ``ndim = 4`` unpacked two-electron integral (serial/complete version).
+            const : float|complex
+                Constant term.
+            msize : None or int
+                Total number of MPI processors. If None, will be determined from ``self.mpi.size``.
+            mrank : None or int
+                The rank of current MPI processor. If None, will be determined from ``self.mpi.rank``.
+
+        Returns:
+            h1e : np.ndarray[float|complex]
+                One-electron integral with elements belonging to other processors set to zero.
+            g2e : np.ndarray[float|complex]
+                Two-electron integral with elements belonging to other processors set to zero.
+            const : float
+                Constant energy (non-zero only at the root processor).
+        """
         import numpy as np
 
         if para_type == ParallelTypes.Nothing or (self.mpi is None and msize is None):
@@ -770,6 +1095,9 @@ class DMRGDriver:
         return h1e, g2e, const
 
     def get_pauli_hamiltonian(self):
+        """
+        Internal method for setting Hamiltonian in the Pauli/SGB mode.
+        """
         assert SymmetryTypes.SGB in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
@@ -874,6 +1202,9 @@ class DMRGDriver:
         return PauliHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def get_so4_hamiltonian(self):
+        """
+        Internal method for setting Hamiltonian in the SAnySO4 mode.
+        """
         assert SymmetryTypes.SO4 in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
@@ -1016,6 +1347,9 @@ class DMRGDriver:
         return SO4Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def get_phsu2_hamiltonian(self):
+        """
+        Internal method for setting Hamiltonian in the SAnyPHSU2 mode.
+        """
         assert SymmetryTypes.PHSU2 in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
@@ -1175,6 +1509,9 @@ class DMRGDriver:
         return PHSU2Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def get_so3_hamiltonian(self):
+        """
+        Internal method for setting Hamiltonian in the SAnySO3 mode.
+        """
         assert SymmetryTypes.SO3 in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
@@ -1403,6 +1740,9 @@ class DMRGDriver:
         return SO3Hamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def get_lz_hamiltonian(self):
+        """
+        Internal method for setting Hamiltonian in the SAnySU2LZ/SAnySZLZ/SAnySGFLZ modes.
+        """
         assert SymmetryTypes.LZ in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
@@ -1793,6 +2133,29 @@ class DMRGDriver:
         return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
     def get_custom_hamiltonian(self, site_basis, site_ops, orb_dependent_ops="cdCD"):
+        """
+        Setting Hamiltonian in the general symmetry mode. ``SZ`` or ``SAny`` symmetry mode is required.
+
+        Args:
+            site_basis : list[list[tuple[SX, int]]]
+                The set of quantum number (SX) and number of states (int) in the local
+                Hilbert space at each site.
+            site_ops : list[dict[str, np.ndarray[float|complex]]]
+                The matrix representation of elementary operators in the local Hilbert space
+                at each site. matrices must be ``ndim == 2``. The indices of rows and columns
+                correspond to the list given in ``site_basis``. For example,
+                When ``site_basis[0] = [(Q1, 2), (Q2, 3), (Q3, 1)]``, each matrix in
+                ``site_ops[0]`` should have shape ``(6, 6)`` where the first 2 rows/columns
+                correspond to the Q1 block, the next 3 rows/columns correspond to the Q2 block, etc.
+                The operator name can only have one character.
+            orb_dependent_ops : str
+                List of operator names that can have point group irrep.
+                If point group or ``orb_sym`` is not used, this can be empty.
+
+        Returns:
+            ghamil : CustomHamiltonian
+                The Hamiltonian object, implicitly required for MPO and MPS construction.
+        """
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
         import numpy as np
@@ -1997,6 +2360,40 @@ class DMRGDriver:
             return NotImplemented
 
     def write_fcidump(self, h1e, g2e, ecore=0, filename=None, h1e_symm=False, pg="d2h"):
+        """
+        Write quantum chemistry integrals as a FCIDUMP format file.
+        Supports SZ, SU2, and SGF modes.
+
+        Args:
+            h1e : np.ndarray[float|complex] or list[np.ndarray[float|complex]]
+                ``ndim = 2`` one-electron integral.
+                For SZ mode, this is a list/tuple of two np.ndarray, for the aa and
+                bb components, respectively.
+            g2e : np.ndarray[float|complex] or list[np.ndarray[float|complex]] or None
+                ``ndim = 4 or 2 or 1`` unpacked/packed two-electron integral.
+                For SZ mode, this is a list/tuple of three np.ndarray, for the aa, ab, and
+                bb components, respectively.
+            ecore : float|complex
+                Constant energy. Default is 0.
+            filename : str or None
+                If not None, will write the integrals in the FCIDUMP format to
+                a file named ``filename``. Otherwise, no files will be written.
+                Default is None.
+            h1e_symm : bool
+                If True, the ``h1e`` is assumed symmetric/Hermitian and only the
+                triangular part of it will be stored. This is the standard FCIDUMP format.
+                If False, the full h1e will be stored, which will ensure the correctness
+                for non-Hermitian/anti-Hermitian integrals. Default is False.
+                Set to True if this FCIDUMP format will be read by other programs.
+            pg : str
+                Point group name. The MOLPRO convention for orb_sym is required for
+                FCIDUMP files. This point group name is used to translate from the
+                XOR convention (used by block2) to MOLPRO convention.
+
+        Returns:
+            fcidump : FCIDUMP
+                The block2 fcidump object.
+        """
         bw = self.bw
         import numpy as np
 
@@ -2053,6 +2450,34 @@ class DMRGDriver:
         return fcidump
 
     def read_fcidump(self, filename, pg="d2h", rescale=None, iprint=1):
+        """
+        Read the quantum chemistry integrals from a FCIDUMP format file.
+        Supports SZ, SU2, and SGF modes.
+        When this function returns, ``self.h1e``, ``self.g2e``, ``self.ecore``,
+        ``self.n_sites``, ``self.n_elec``, ``self.spin``, ``self.pg_irrep``,
+        and ``self.pg`` will be set.
+
+        Args:
+            filename : str
+               The name of the FCIDUMP format file.
+            pg : str
+                Point group name, used to translate from the MOLPRO convention
+                (used in FCIDUMP format) to the XOR convention (used by block2).
+            rescale : None or float or True
+                If None, will not rescale (default).
+                If zero or True, will adjust ``h1e`` and the const energy so that
+                the average diagonal element of ``h1e`` is zero.
+                If non-zero float, will adjust ``h1e`` and the const energy so that
+                the const energy becomes the given ``rescale`` number.
+                After rescale, the integrals will only be correct for the given
+                ``n_elec``.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            fcidump : FCIDUMP
+                The block2 fcidump object.
+        """
         bw = self.bw
         fcidump = bw.bx.FCIDUMP()
         fcidump.read(filename)
@@ -2117,6 +2542,14 @@ class DMRGDriver:
         return fcidump
 
     def su2_to_sgf(self):
+        """
+        Transform the spin-restricted integrals ``h1e`` and ``g2e``
+        to general spin orbital integrals ``h1e`` and ``g2e``.
+        Assuming ``self.h1e`` and ``self.g2e`` available and unpacked.
+        The transformed integrals will be stored as ``self.h1e`` and ``self.g2e``.
+        This will also change ``self.n_sites`` and ``self.orb_sym`` (if available)
+        accordingly.
+        """
         bw = self.bw
         import numpy as np
 
@@ -2144,6 +2577,28 @@ class DMRGDriver:
     def integral_symmetrize(
         self, orb_sym, h1e=None, g2e=None, hxe=None, k_symm=None, iprint=1
     ):
+        """
+        Symmetrize quantum chemistry integrals so that small elements violating
+        point group restrictions are set to zero.
+        Integrals (if not None) will be changed inplace.
+
+        Args:
+            orb_sym : list[int]
+                The point group irreducible representation of each site (orbital),
+                or the K-space irreducible representation of each site (orbital)
+                if k_symm is not None.
+            h1e : np.ndarray[float|complex] or None
+                ``ndim = 2`` one-electron integral.
+            g2e : np.ndarray[float|complex] or None
+                ``ndim = 4`` unpacked two-electron integral.
+            hxe : np.ndarray[float|complex] or None
+                Arbitrary ``ndim`` integrals or amplitudes.
+            k_symm : None or True
+                If None, ``orb_sym`` is understood as point group irreps.
+                Otherwise, ``orb_sym`` is understood as K-space irreps.
+            iprint : int
+                Verbosity. Default is 1.
+        """
         bw = self.bw
         import numpy as np
 
@@ -2253,7 +2708,26 @@ class DMRGDriver:
             print("integral symmetrize error = ", error)
 
     def get_conventional_qc_mpo(self, fcidump, algo_type=None, iprint=1):
-        """This method cannot take care of parallelization!"""
+        """
+        Construct MPO for quantum chemistry Hamiltonian, using conventional methods.
+        This method cannot take care of MPI parallelization (one may use
+        ``self.parallelize_integrals`` to parallelize the integrals before invoking
+        this method).
+
+        Args:
+            fcidump : FCIDUMP
+                The block2 fcidump object.
+            algo_type : MPOAlgorithmTypes or None
+                Strategies for building MPO from symbolic expression of second quantized operators.
+                Only the ``Conventional|NC|CN`` based algorithms are accepted in this method.
+                If None (default), ``MPOAlgorithmTypes.Conventional`` will be used.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         bw = self.bw
         hamil = bw.bs.HamiltonianQC(self.vacuum, self.n_sites, self.orb_sym, fcidump)
         import time
@@ -2312,11 +2786,37 @@ class DMRGDriver:
         return mpo
 
     def get_identity_mpo(self, ancilla=False):
+        """
+        Construct MPO for the identity operator.
+
+        Args:
+            ancilla : bool
+                If True, will generate identity MPO including ancilla sites
+                (used in finite temperature DMRG). Default is False.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         return self.get_mpo(
             self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla
         )
 
     def unpack_g2e(self, g2e, n_sites=None):
+        """
+        Unfold the 8-fold or 4-fold or 1-fold two-electron integral
+        to the 1-fold (unpacked) two-electron integral.
+
+        Args:
+            g2e : np.ndarray[float|complex]
+                ``ndim = 4 or 2 or 1`` packed/unpacked two-electron integral.
+            n_sites : int or None
+                Number of sites (orbitals). If None, will look at ``self.n_sites``.
+
+        Returns:
+            g2e : np.ndarray[float|complex]
+                ``ndim = 4`` unpacked two-electron integral.
+        """
         import numpy as np
 
         if n_sites is None:
@@ -2375,6 +2875,149 @@ class DMRGDriver:
         gaopt_opts=None,
         iprint=1,
     ):
+        """
+        Construct MPO from integrals in a quantum chemistry Hamiltonian.
+
+        Args:
+            h1e : np.ndarray[float|complex] or list[np.ndarray[float|complex]]
+                ``ndim = 2`` one-electron integral.
+                For SZ mode, this can be a list/tuple of two np.ndarray, for the aa and
+                bb components, respectively.
+                For SZ mode, if only one np.ndarray is given, the two components will be assumed
+                the same.
+            g2e : np.ndarray[float|complex] or list[np.ndarray[float|complex]]
+                ``ndim = 4 or 2 or 1`` unpacked/packed two-electron integral.
+                For SZ mode, this can be a list/tuple of three np.ndarray, for the aa, ab, and
+                bb components, respectively.
+                For SZ mode, if only one np.ndarray is given, the three components will be assumed
+                the same.
+            ecore : float|complex
+                Constant term. Default is 0.
+            para_type : ParallelTypes or None
+                The strategy for distributing the integrals (when ``self.mpi`` is not None).
+                If None, the strategy ``ParallelTypes.SIJ`` will be used. Default is None.
+                If the input integrals are already manually distributed, one should set this
+                to ``ParallelTypes.Nothing``.
+                This argument has no effect if MPI is not activated (when ``self.mpi`` is None).
+            reorder : None or str or np.ndarray[int] or True
+                The strategy for site/orbital reordering.
+                If None, orbital will not be reordered.
+                If np.ndarray[int], the orbital will be reordered using the given permutation.
+                If this is "irrep", orbitals with the same point group irrep will be put together.
+                If this is "fiedler" or True, the fiedler method will be used. See also ``reorder_imat``.
+                If this is "gaopt", the genetic algorithm will be used to find the optimal orbital
+                reordering, using the "fiedler" ordering as the initial guess.
+                See also ``reorder_imat`` and ``gaopt_opts``.
+                Note that this argument will perform the orbital reordering implicitly.
+                This implicit ordering can be recognized by ``DMRGDriver.dmrg`` and
+                ``DMRGDriver.get_npdm`` but it may not be compatible to some other operations
+                in ``DMRGDriver``. It is recommended to manually to perform the reordering
+                on the integrals ``h1e``, ``g2e`` and ``orb_sym`` before invoking this method
+                to prevent any ambiguity.
+            cutoff : float
+                Cutoff of singular values when ``MPOAlgorithmTypes.SVD`` is used for MPO construction.
+                Default is 1E-20.
+            integral_cutoff : float
+                Cutoff of individual elements in the integrals. Default is 1E-20.
+            post_integral_cutoff : float
+                Cutoff of individual elements in the transformed integrals. Default is 1E-20.
+                Only have effect if ``normal_order_ref is not None``.
+            fast_cutoff : float
+                Cutoff of individual elements in the integrals, implemented using C++ code.
+                Default is 1E-20. This is intended to be used when the integrals are very large
+                and any copying or unpacking of the integrals should be avoided to save memory.
+                This should be used together with ``unpack_g2e = False``, ``integral_cutoff = 0``
+                and ``symmetrize = False`` to avoid copying or unpacking. Default is 1E-20.
+                Only have effect if ``normal_order_ref is None``.
+            unpack_g2e : bool
+                Whether the ``g2e`` should be unpacked (using the Python code).
+                Setting this to False may save some amount of memory,
+                but many other operations on the integrals (including symmetrization and distributed
+                parallelization) may fail. Default is True.
+            algo_type : None or MPOAlgorithmTypes
+                Strategies for building MPO from symbolic expression of second quantized operators.
+                If None, ``MPOAlgorithmTypes.FastBipartite`` will be used (default).
+            normal_order_ref : None or np.ndarray[bool]
+                If not None, the integrals will be normal ordered, using ``normal_order_ref`` as the reference.
+                Elements in ``normal_order_ref`` indicate whether the orbital is doubly occupied (True)
+                or empty/singly occupied (False) in the reference state. Default is None (the integrals will not be normal ordered).
+            normal_order_single_ref : None or np.ndarray[bool]
+                Only have effect if ``normal_order_ref is not None``.
+                Elements in ``normal_order_single_ref`` indicate whether the orbital is singly occupied (True)
+                or empty/doubly occupied (False) in the reference state.
+            normal_order_wick : bool
+                Only have effect if ``normal_order_ref is not None``.
+                If True, will use ``WickNormalOrder`` implementation (via automatic symbolic derivation).
+                Otherwise, will use the manual implementation. Default is True.
+            symmetrize : bool
+                Only have effect if ``self.orb_sym is not None`` (when point group symmetry is used).
+                If True, will symmetrize integrals so that small elements violating point group restrictions
+                are set to zero. Default is True.
+            sum_mpo_mod : int
+                Only have effect if ``MPOAlgorithmTypes.Sum`` modifier appears in ``algo_type``.
+                Set the denominator for grouping indices in the sum of MPO approach.
+                When this is -1, indices will not be grouped. Default is -1.
+            compute_accurate_svd_error : bool
+                Only have effect if ``MPOAlgorithmTypes.SVD`` appears in ``algo_type``.
+                If True, will compute and print the accurate error due to SVD truncation by comparing
+                the difference between the original tensor and the contraction of its decomposed
+                parts. Setting this to False may reduce some time cost of the SVD approach.
+                Default is True.
+            csvd_sparsity : float
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Sparsity for constrained SVD. Default is 0.0.
+            csvd_eps : float
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Threshold for constrained SVD. Default is 1E-10.
+            csvd_max_iter : int
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Maximal iteration number for constrained SVD. Default is 1000.
+            disjoint_levels : None or list[float]
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                Threshold for finding connected elements at each level. Default is None.
+            disjoint_all_blocks : bool
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                If False, only SVD for part of blocks will be done using disjoint SVD.
+                Default is False.
+            disjoint_multiplier : float
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                Allowing the number of singular values to exceed the maximal number, but
+                no more than disjoint_multiplier times the maximal number. Default is 1.0.
+            block_max_length : bool
+                Only have effect if ``MPOAlgorithmTypes.SVD`` or
+                ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
+                If True, will separate the SVD or Bipartite for one- and two-electron integrals.
+                Default is False.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO.
+                This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
+                will be invoked using this MPO. Default is True.
+                One needs to set this to False to allow the MPO to be transformed into the
+                Python format.
+            esptein_nesbet_partition : bool
+                If True, will only keep the "diagonal" part of the integrals for building MPO.
+                This can be used to build the MPO for the zeroth-order Hamiltonian
+                in the Esptein-Nesbet perturbation theory (used in perturbative DMRG).
+                Default is False.
+            ancilla : bool
+                If True, will insert ancilla sites in the MPO, which can then be used
+                for finite-temperature DMRG. Default is False.
+            reorder_imat : None or np.ndarray[float]
+                Only have effect when ``reorder == "fiedler" or reorder == "gaopt"``.
+                The orbital interaction matrix (``ndim == 2``) used for computing the cost function
+                for orbital reordering. If None, the exchange integral ``Kij`` will be used.
+            gaopt_opts : dict or None
+                Only have effect when ``reorder == "gaopt"``.
+                Custom options for the genetic orbital ordering algorithm.
+                Possible keys are ``n_tasks``, ``n_generations``, ``n_configs``,
+                ``n_elite``, ``clone_rate``, and ``mutate_rate``.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         import numpy as np
 
         bw = self.bw
@@ -2720,6 +3363,72 @@ class DMRGDriver:
         add_ident=True,
         ancilla=False,
     ):
+        """
+        Construct MPO from arbitrary symbolic expression of second quantized operators.
+
+        Args:
+            expr : GeneralFCIDUMP
+                The block2 GeneralFCIDUMP object.
+                This is often obtained from the ``ExprBuilder.finalize`` method.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            cutoff : float
+                Cutoff of singular values when ``MPOAlgorithmTypes.SVD`` is used for MPO construction.
+                Default is 1E-20.
+            left_vacuum : SX or None
+                The ``left_vacuum`` of MPO. If None, this will be automatically determined.
+            algo_type : None or MPOAlgorithmTypes
+                Strategies for building MPO from symbolic expression of second quantized operators.
+                If None, ``MPOAlgorithmTypes.FastBipartite`` will be used (default).
+            sum_mpo_mod : int
+                Only have effect if ``MPOAlgorithmTypes.Sum`` modifier appears in ``algo_type``.
+                Set the denominator for grouping indices in the sum of MPO approach.
+                When this is -1, indices will not be grouped. Default is -1.
+            compute_accurate_svd_error : bool
+                Only have effect if ``MPOAlgorithmTypes.SVD`` appears in ``algo_type``.
+                If True, will compute and print the accurate error due to SVD truncation by comparing
+                the difference between the original tensor and the contraction of its decomposed
+                parts. Setting this to False may reduce some time cost of the SVD approach.
+                Default is True.
+            csvd_sparsity : float
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Sparsity for constrained SVD. Default is 0.0.
+            csvd_eps : float
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Threshold for constrained SVD. Default is 1E-10.
+            csvd_max_iter : int
+                Only have effect if ``MPOAlgorithmTypes.Constrained`` modifier appears in ``algo_type``.
+                Maximal iteration number for constrained SVD. Default is 1000.
+            disjoint_levels : None or list[float]
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                Threshold for finding connected elements at each level. Default is None.
+            disjoint_all_blocks : bool
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                If False, only SVD for part of blocks will be done using disjoint SVD.
+                Default is False.
+            disjoint_multiplier : float
+                Only have effect if ``MPOAlgorithmTypes.Disjoint`` modifier appears in ``algo_type``.
+                Allowing the number of singular values to exceed the maximal number, but
+                no more than disjoint_multiplier times the maximal number. Default is 1.0.
+            block_max_length : bool
+                Only have effect if ``MPOAlgorithmTypes.SVD`` or
+                ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
+                If True, will separate the SVD or Bipartite for one- and two-electron integrals.
+                Default is False.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO.
+                This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
+                will be invoked using this MPO. Default is True.
+                One needs to set this to False to allow the MPO to be transformed into the
+                Python format.
+            ancilla : bool
+                If True, will insert ancilla sites in the MPO, which can then be used
+                for finite-temperature DMRG. Default is False.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         bw = self.bw
         import time
 
@@ -2774,6 +3483,22 @@ class DMRGDriver:
         return mpo
 
     def get_site_mpo(self, op, site_index, iprint=1):
+        """
+        Construct MPO from the creation (C) or destroy (D) operator on a single site.
+        Supports SU2, SZ, and SGF modes.
+
+        Args:
+            op : str
+                The name of the operator.
+            site_index : int
+                The index (subscript) of the operator.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         import numpy as np
 
         bw = self.bw
@@ -2802,6 +3527,18 @@ class DMRGDriver:
         return self.get_mpo(bx, iprint, left_vacuum=mpo_lq)
 
     def get_spin_square_mpo(self, iprint=1):
+        """
+        Construct MPO for the S^2 operator where S is the total spin operator.
+        Supports SU2, SZ, and SGF modes.
+
+        Args:
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
+        """
         import numpy as np
 
         bw = self.bw
@@ -2920,15 +3657,27 @@ class DMRGDriver:
 
     def get_mpo_any_fermionic(self, op_list, ecore=None, **kwargs):
         """
+        Construct MPO from a list of second quantized fermionic operators and coefficients.
+        Supports the SGF mode only.
+
+        .. highlight:: python3
+
         Args:
             op_list : list[tuple[str, float]]
                 A list of second quantized fermionic operators and coefficients.
-                + is creation, - is destroy.
-                Example: [
-                    ('+_3 +_4 -_1 -_3', 0.0068705380508780715),
-                    ('+_3 +_4 -_4 -_3', -0.009852150878546906)
-                ]
-            ecore : core energy
+                ``+`` is creation, ``-`` is destroy. For example, ::
+
+                    [ ('+_3 +_4 -_1 -_3', 0.0068705380508780715),
+                      ('+_3 +_4 -_4 -_3', -0.009852150878546906) ]
+
+            ecore : float|complex or None
+                Constant term. Default is None (0.0).
+            kwargs : dict
+                Other options that should be passed to ``DMRGDriver.get_mpo``.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
         """
         from itertools import groupby
 
@@ -2957,15 +3706,27 @@ class DMRGDriver:
 
     def get_mpo_any_pauli(self, op_list, ecore=None, **kwargs):
         """
+        Construct MPO from a list of Pauli strings and coefficients.
+        Supports the SGB mode with the ``pauli_mode = True`` in ``DMRGDriver.initialize_system`` only.
+
+        .. highlight:: python3
+
         Args:
             op_list : list[tuple[str, float]]
                 A list of Pauli strings and coefficients.
-                Characters in the string can be IXYZ.
-                Example: [
-                    ('IIXXXIIX', 0.0559742284070319),
-                    ('IIIXIIXZ', 0.0018380565450674)
-                ]
-            ecore : core energy
+                Characters in the string can be IXYZ. For example, ::
+
+                    [ ('IIXXXIIX', 0.0559742284070319),
+                      ('IIIXIIXZ', 0.0018380565450674) ]
+
+            ecore : float|complex or None
+                Constant term. Default is None (0.0).
+            kwargs : dict
+                Other options that should be passed to ``DMRGDriver.get_mpo``.
+
+        Returns:
+            mpo : MPO
+                The block2 MPO object.
         """
         assert SymmetryTypes.SGB in self.symm_type
         import numpy as np
@@ -2981,6 +3742,30 @@ class DMRGDriver:
         return self.get_mpo(b.finalize(adjust_order=False), **kwargs)
 
     def orbital_reordering(self, h1e, g2e, method="fiedler", **kwargs):
+        """
+        Find optimal orbital ordering from integrals ``h1e`` and ``g2e``.
+        Note that this method will not actually perform any orbital ordering.
+        The exchange integral ``Kij`` (constructed from the given ``h1e`` and ``g2e``)
+        will be used for computing the cost function.
+
+        Args:
+            h1e : np.ndarray[float|complex]
+                ``ndim = 2`` one-electron integral.
+            g2e : np.ndarray[float|complex]
+                ``ndim = 4`` unpacked two-electron integral.
+            method : str
+                The algorithm name for orbital reordering.
+                Can be "gaopt" or "fiedler" (default).
+            kwargs : dict
+                Only have effect when ``method == "gaopt"``.
+                Custom options for the genetic orbital ordering algorithm.
+                Possible keys are ``n_tasks``, ``n_generations``, ``n_configs``,
+                ``n_elite``, ``clone_rate``, and ``mutate_rate``.
+
+        Returns:
+            idx : np.ndarray[int]
+                Optimal orbital ordering (permutation array).
+        """
         bw = self.bw
         import numpy as np
 
@@ -3016,6 +3801,28 @@ class DMRGDriver:
         return np.array(idx, dtype=int)
 
     def orbital_reordering_interaction_matrix(self, imat, method="fiedler", **kwargs):
+        """
+        Find optimal orbital ordering using the orbital interaction matrix
+        to compute the cost function.
+        Note that this method will not actually perform any orbital ordering.
+
+        Args:
+            imat : np.ndarray[float]
+                The orbital interaction matrix (``ndim == 2``) used
+                for computing the cost function.
+            method : str
+                The algorithm name for orbital reordering.
+                Can be "gaopt" or "fiedler" (default).
+            kwargs : dict
+                Only have effect when ``method == "gaopt"``.
+                Custom options for the genetic orbital ordering algorithm.
+                Possible keys are ``n_tasks``, ``n_generations``, ``n_configs``,
+                ``n_elite``, ``clone_rate``, and ``mutate_rate``.
+
+        Returns:
+            idx : np.ndarray[int]
+                Optimal orbital ordering (permutation array).
+        """
         bw = self.bw
         import numpy as np
 
@@ -3043,7 +3850,6 @@ class DMRGDriver:
 
         return np.array(idx, dtype=int)
 
-    # return min_ket < ket | mpo | ket > / < ket | ket >
     def dmrg(
         self,
         mpo,
@@ -3067,6 +3873,105 @@ class DMRGDriver:
         sweep_start=0,
         forward=None,
     ):
+        """
+        Perform the ground state and excited state Density Matrix
+        Renormalization Group (DMRG) algorithm, which finds the solution of the
+        following optimization problem:
+
+        .. math::
+            E_0 = \\min_{\\mathrm{ket}}
+            \\frac{\\langle \\mathrm{ket} | \\mathrm{mpo} | \\mathrm{ket} \\rangle}
+            {\\langle \\mathrm{ket} | \\mathrm{ket} \\rangle}.
+
+        Statistics during the sweeps can be obtained from ``self._dmrg`` after
+        the method returns.
+
+        Args:
+            mpo : MPO
+                The block2 MPO object.
+            ket : MPS
+                The block2 MPS object. The given MPS ``ket`` will be used as the initial
+                guess for DMRG. On exit, the MPS ``ket`` will contain the optimized
+                (ground and/or excited) state. If ``ket.nroots != 1``, state-averaged
+                DMRG will be done to find the ground and excited states.
+                If ``ket.dot == 2``, will perform 2-site DMRG algorithm.
+                If ``ket.dot == 1``, will perform 1-site DMRG algorithm.
+                The initial input ``ket`` is not required to be normalized.
+                The output optimized ``ket`` will always be normalized.
+            n_sweeps : int
+                Maximal number of DMRG sweeps. Default is 10.
+            tol : float
+                Energy converge threshold. If the absolute value of the total energy
+                difference between two consecutive sweeps is below ``tol``,
+                and the ``noise`` for the current sweep
+                is zero, the algorithm will terminate. Default is 1E-8.
+            bond_dims : None or list[int]
+                List of MPS bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of the initial MPS will be used for all sweeps.
+            noises : None or list[float]
+                List of prefactor of the noise for each sweep. Default is None.
+                If None, this is set to ``[1e-5] * 5 + [0]``.
+                Typically, this should be zero for the last few sweeps.
+            thrds : None or list[float]
+                List of the convergence threshold (square of the residual) of the Davidson
+                algorithms each sweep. Default is None.
+                If None, this is set to ``[1e-6] * 4 + [1e-7] * 1`` for double precision
+                and ``[1e-5] * 4 + [5e-6] * 1`` for single precision.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            dav_type : None or str
+                The type of the Davidson algorithm. If None, this is set to "Normal".
+                Possible other options are "NonHermitian" (required for non-Hermitian
+                Hamiltonian), "Exact" (constructing the full dense effective Hamiltonian
+                and find all eigenvalues), "ExactNonHermitian", "DavidsonPrecond", and
+                "NoPrecond". "Normal" will use the Olsen preconditioning, "DavidsonPrecond"
+                will use the Davidson preconditioning, and "NoPrecond" will not use any
+                preconditioning. Default is None.
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-20.
+            twosite_to_onesite : None or int
+                If not None and ``ket.dot == 2`` in the initial MPS, will perform
+                ``twosite_to_onesite`` 2-site sweeps and then switch to the 1-site algorithm
+                for the remaining sweeps. Default is None (no switching).
+            dav_max_iter : int
+                Maximal number of Davidson iteration. Default is 4000.
+            dav_def_max_size : int
+                Maximal size of the Davidson deflation space (Krylov space). Default is 50.
+                For very large MPS bond dimension and very small MPO bond dimension,
+                one may reduce this number to save memory.
+            proj_mpss : None or list[MPS]
+                If not None, the MPS given in ``proj_mpss`` will be projected out during sweeps.
+                Can be used for performing state-specific excited state DMRG. Default is None.
+            proj_weights : None or list[float]
+                The weights of the MPS projection. This should be larger than the energy gap between
+                the targeted state and the projected state. But if this is too large,
+                the error in the projected state will affect the quality of the targeted state.
+            store_wfn_spectra : bool
+                If True, the MPS singular value spectra will be stored as ``self._sweep_wfn_spectra``
+                which can be later used to compute the bipartite entropy.
+                If False, the spectra will not be computed. Default is True.
+            spectra_with_multiplicity : bool
+                If True, in SU2 mode, the MPS singular value will be multiplied by the multiplicity
+                of the spin quantum number. Default is False.
+            lowmem_noise : bool
+                If True, the noise step will cost less memory. Default is False.
+            sweep_start : int
+                The starting sweep index in ``bond_dims``, ``noises``, and ``thrds``. Default is 0.
+                This may be useful in restarting, when one wants to skip a few already finished
+                sweeps.
+            forward : None or bool
+                The direction of the first sweep (``forward == True`` means the
+                forward/left-to-right direction). If None, will use the canonical center of MPS
+                to determine the direction. Default is None.
+                This may be useful in restarting.
+
+        Returns:
+            energy : float|complex or list[float|complex]
+                When ``ket.nroots == 1``, this is the ground state energy.
+                When ``ket.nroots != 1``, this is a list of ground and excited state energies.
+        """
         bw = self.bw
         if bond_dims is None:
             bond_dims = [ket.info.bond_dim]
@@ -3156,7 +4061,6 @@ class DMRGDriver:
             self._sweep_wfn_spectra = dmrg.sweep_wfn_spectra
         return ener
 
-    # return exp(-target_t * mpo) @ ket
     def td_dmrg(
         self,
         mpo,
@@ -3175,6 +4079,70 @@ class DMRGDriver:
         krylov_conv_thrd=5e-6,
         krylov_subspace_size=20,
     ):
+        """
+        Perform the time-dependent DMRG algorithm, which computes:
+
+        .. math::
+            |\\mathrm{ket'}\\rangle = \\exp (-t \\cdot \\mathrm{mpo} ) |\\mathrm{ket}\\rangle.
+
+        Statistics during the sweeps can be obtained from ``self._te`` after
+        the method returns.
+
+        Args:
+            mpo : MPO
+                The block2 MPO object.
+            ket : MPS
+                The block2 MPS object at time zero.
+                When this MPS has a very low bond dimension, this implementation
+                of td-DMRG may be inaccurate.
+                On exit, this MPS will not be modified.
+            delta_t : None or float or complex
+                The time step. When this is complex, ``SymmetryTypes.CPX`` must be used.
+                If None, will be determined using ``delta_t = target_t / n_steps``.
+            target_t : None or float or complex
+                The target time (the time parameter in the final state).
+                If None, will be determined using ``target_t = delta_t * n_steps``.
+            final_mps_tag : None or str
+                The tag of the output MPS. If None, the output MPS tag will be
+                ``"TD-" + ket.info.tag``.
+                One can set this to be same as the ``tag`` of ``ket``, then the ``ket``
+                object should not be used after calling this method.
+            te_type : str
+                The time evolution algorithm. Can be "rk4" (the time-step-targeting method)
+                or "tdvp" (the time-dependent variational principle method).
+            n_steps : None or int
+                The number of time steps.
+                If None, will be determined using ``n_steps = int(abs(target_t) / abs(delta_t) + 0.1)``.
+            bond_dims : None or list[int]
+                MPS bond dimension for each time step.
+                If None, will be set to the bond dimension of the initial MPS for all steps.
+            n_sub_sweeps : int
+                For ``te_type = "rk4"``, this is the number of sweeps performed for each
+                time step. Default is 2.
+            normalize_mps : bool
+                If True, MPS will be normalized after each time step. Default is False.
+            hermitian : bool
+                If True, the ``mpo`` operator will be assumed to be Hermitian.
+                Default is False. Only have effects when ``te_type = "tdvp"``.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-20.
+            krylov_conv_thrd : float
+                Convergence threshold (square of the residual) of the Matrix
+                exponentiation algorithm. Default is 5E-6.
+                Only have effects when ``te_type = "tdvp"``.
+            krylov_subspace_size : int
+                Maximal size of the Krylov space of the Matrix
+                exponentiation algorithm. Default is 20.
+                Only have effects when ``te_type = "tdvp"``.
+
+        Returns:
+            final_mps : MPS
+                The time evolved MPS.
+        """
         bw = self.bw
         import numpy as np
 
@@ -3271,6 +4239,18 @@ class DMRGDriver:
         )
 
     def get_dmrg_results(self):
+        """
+        Obtain the statistics of DMRG sweeps.
+        This should be called after ``DMRGDriver.dmrg``.
+
+        Returns:
+            bond_dims : np.ndarray[int]
+                The MPS bond dimension for each sweep.
+            dws : np.ndarray[float]
+                The maximal discarded weight (sum of discarded eigenvalues) for each sweep.
+            energies : np.ndarray[list[float]]
+                The list of ground (and possibly excited) state energies at each sweep.
+        """
         import numpy as np
 
         energies = np.array(self._dmrg.energies)
@@ -3279,6 +4259,20 @@ class DMRGDriver:
         return bond_dims, dws, energies
 
     def get_bipartite_entanglement(self, ket=None):
+        """
+        Compute the bipartite entanglement of the MPS.
+
+        Args:
+            ket : MPS or None
+                The MPS. If None, will use ``self._sweep_wfn_spectra`` computed
+                during the DMRG/expectation sweeps if
+                this is called after calling ``DMRGDriver.dmrg`` or ``DMRGDriver.expectation``.
+                Default is None.
+
+        Returns:
+            bip_ent : np.ndarray[float]
+                The bipartite entanglement of the MPS after each non-terminating site.
+        """
         import numpy as np
 
         if ket is not None:
@@ -3294,6 +4288,23 @@ class DMRGDriver:
         return bip_ent
 
     def get_n_orb_rdm_mpos(self, orb_type=1, ij_symm=True, iprint=0):
+        """
+        Internal method for MPO construction for computing
+        the 1- or 2-orbital reduced density matrices.
+
+        Args:
+            orb_type : int
+                1 or 2. Indicating whether the 1- or 2-orbital reduced density matrices
+                should be computed. Default is 1.
+            ij_symm : bool
+                Whether the ``ij`` index symmetry should be used. Default is True.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            mpos : dict[tuple[int...], list[MPO]]
+                The MPOs for computing the 1- or 2-orbital reduced density matrices.
+        """
         bw = self.bw
         if SymmetryTypes.SU2 in bw.symm_type:
             return NotImplemented
@@ -3331,6 +4342,30 @@ class DMRGDriver:
     def get_orbital_entropies(
         self, ket, orb_type=1, ij_symm=True, use_npdm=True, iprint=0
     ):
+        """
+        Compute the 1- or 2- orbital entropies for the given MPS.
+
+        Args:
+            ket : MPS
+                The given MPS for computing orbital entropies.
+            orb_type : int
+                1 or 2. Indicating whether the 1- or 2-orbital reduced density matrices
+                should be computed. Default is 1.
+            ij_symm : bool
+                Whether the ``ij`` index symmetry should be used. Default is True.
+            use_npdm : bool
+                Whether the more efficient algorithm based on N-PDM should be used.
+                Default is True.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            ents : np.ndarray[float]
+                When ``orb_type == 1``, this is ``ndim == 1`` vector containing the
+                1-orbital entropies.
+                When ``orb_type == 2``, this is ``ndim == 2`` matrix containing the
+                2-orbital entropies.
+        """
         bw = self.bw
         import numpy as np
 
@@ -3372,6 +4407,26 @@ class DMRGDriver:
         return ents
 
     def get_orbital_entropies_use_npdm(self, ket, orb_type=1, iprint=0):
+        """
+        Compute the 1- or 2- orbital entropies for the given MPS
+        using the efficient algorithm based on N-PDM.
+
+        Args:
+            ket : MPS
+                The given MPS for computing orbital entropies.
+            orb_type : int
+                1 or 2. Indicating whether the 1- or 2-orbital reduced density matrices
+                should be computed. Default is 1.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            ents : np.ndarray[float]
+                When ``orb_type == 1``, this is ``ndim == 1`` vector containing the
+                1-orbital entropies.
+                When ``orb_type == 2``, this is ``ndim == 2`` matrix containing the
+                2-orbital entropies.
+        """
         bw = self.bw
         import numpy as np
 
@@ -3435,6 +4490,23 @@ class DMRGDriver:
         return ents
 
     def get_orbital_interaction_matrix(self, ket, use_npdm=True, iprint=0):
+        """
+        Compute orbital interaction matrix based on the 1- or 2-
+        orbital entropies for the given MPS.
+
+        Args:
+            ket : MPS
+                The given MPS for computing orbital interaction matrix.
+            use_npdm : bool
+                Whether the more efficient algorithm based on N-PDM should be used.
+                Default is True.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            imat : np.ndarray[float]
+                The ``ndim == 2`` orbital interaction matrix.
+        """
         import numpy as np
 
         s1 = self.get_orbital_entropies(
@@ -3455,6 +4527,64 @@ class DMRGDriver:
         iprint=0,
         max_bond_dim=None,
     ):
+        """
+        Compute the N-Particle Density Matrix (NPDM) for the given MPS using
+        the conventional method.
+
+        Args:
+            ket : MPS
+                The given MPS for computing NPDM.
+            pdm_type : int
+                1 or 2. Whether the 1PDM or 2PDM should be computed. Default is 1.
+                For ``pdm_type == 2``, the SGF mode is not supported.
+            bra : MPS or None
+                If None, will compute the normal NPDM.
+                If not None, will compute the transition NPDM between ``bra`` and ``ket``.
+            soc : bool
+                When ``pdm_type == 1`` this indicates whether the 1 particle transition
+                triplet density matrix (for spin-orbital coupling) should be computed
+                instead of the normal 1PDM. Only have effects in the SU2 mode.
+                Default is False.
+            site_type : int
+                0 or 1 or 2. Indicates whether the NPDM should be computed using the 
+                0- or 1- or 2-site algorithms. Default is 1. 0-site and 1-site are faster
+                than the 2-site algorithm for this purpose.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            max_bond_dim : None or int
+                If not None, the MPS bond dimension will be restricted during the sweeps.
+                Default is None.
+
+        Returns:
+            dm : np.ndarray[float|complex]
+                When ``pdm_type == 1``:
+
+                .. math::
+                    \\begin{cases}
+                        \\mathrm{dm}[\\sigma, i, j] =
+                            \\langle a_{i\\sigma}^\\dagger a_{j\\sigma} \\rangle & (\\mathrm{SZ}) \\\\
+                        \\mathrm{dm}[i, j] = \\sum_{\\sigma} \\langle a_{i\\sigma}^\\dagger a_{j\\sigma}
+                            \\rangle & (\\mathrm{SU2}) \\\\
+                        \\mathrm{dm}[i, j] = \\langle T_{ij} \\rangle & (\\mathrm{SU2/\\ soc}) \\\\
+                        \\mathrm{dm}[i, j] =
+                            \\langle a_{i}^\\dagger a_{j} \\rangle & (\\mathrm{SGF})
+                    \\end{cases}
+
+                When ``pdm_type == 2`` (for SU2/SZ only):
+
+                .. math::
+                    \\begin{cases}
+                        \\mathrm{dm}[0, i, j, k, l] =
+                            \\langle a_{i\\alpha}^\\dagger a_{j\\alpha}^\\dagger
+                              a_{k\\alpha}  a_{l\\alpha} \\rangle \\\\
+                        \\mathrm{dm}[1, i, j, k, l] =
+                            \\langle a_{i\\alpha}^\\dagger a_{j\\beta}^\\dagger
+                              a_{k\\beta}  a_{l\\alpha} \\rangle \\\\
+                        \\mathrm{dm}[2, i, j, k, l] =
+                            \\langle a_{i\\beta}^\\dagger a_{j\\beta}^\\dagger
+                              a_{k\\beta}  a_{l\\beta} \\rangle
+                    \\end{cases}
+        """
         bw = self.bw
         import numpy as np
 
@@ -3591,15 +4721,35 @@ class DMRGDriver:
         return dm
 
     def get_conventional_1pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 1-Particle Density Matrix (1PDM) for the given MPS using
+        the conventional method.
+        See ``DMRGDriver.get_conventional_npdm``.
+        """
         return self.get_conventional_npdm(ket, pdm_type=1, *args, **kwargs)
 
     def get_conventional_2pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 2-Particle Density Matrix (2PDM) for the given MPS using
+        the conventional method.
+        See ``DMRGDriver.get_conventional_npdm``.
+        """
         return self.get_conventional_npdm(ket, pdm_type=2, *args, **kwargs)
 
     def get_conventional_trans_1pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 1-Particle Density Matrix (T-1PDM)
+        between the given bra and ket MPSs using the conventional method.
+        See ``DMRGDriver.get_conventional_npdm``.
+        """
         return self.get_conventional_npdm(ket, pdm_type=1, bra=bra, *args, **kwargs)
 
     def get_conventional_trans_2pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 2-Particle Density Matrix (T-2PDM)
+        between the given bra and ket MPSs using the conventional method.
+        See ``DMRGDriver.get_conventional_npdm``.
+        """
         return self.get_conventional_npdm(ket, pdm_type=2, bra=bra, *args, **kwargs)
 
     def get_npdm(
@@ -3618,6 +4768,101 @@ class DMRGDriver:
         iprint=0,
         max_bond_dim=None,
     ):
+        """
+        Compute the N-Particle Density Matrix (NPDM) for the given MPS.
+        Supports SU2, SZ, and SGF modes.
+
+        Args:
+            ket : MPS
+                The given MPS for computing NPDM.
+            pdm_type : int
+                Integer >= 1. The order of the PDM. Default is 1.
+            bra : MPS or None
+                If None, will compute the normal NPDM.
+                If not None, will compute the transition NPDM between ``bra`` and ``ket``.
+            soc : bool
+                When ``pdm_type == 1`` this indicates whether the 1 particle transition
+                triplet density matrix (for spin-orbital coupling) should be computed
+                instead of the normal 1PDM. Only have effects in the SU2 mode.
+                Default is False. If True, ``NPDMAlgorithmTypes.Conventional`` is required
+                in ``algo_type``.
+            site_type : int
+                0 or 1 or 2. Indicates whether the NPDM should be computed using the
+                0- or 1- or 2-site algorithms. Default is 0. 0-site and 1-site are faster
+                than the 2-site algorithm for this purpose.
+            algo_type : None or NPDMAlgorithmTypes
+                Strategies for computing N-particle density matrices.
+                If None, this is set to ``NPDMAlgorithmTypes.Default``. Default is None.
+            npdm_expr : None or str or list[str]
+                The operator expression for the NPDM. If None, this will be determined
+                automatically. Multiple operator expressions are allowed in the SZ and
+                SGF modes. Default is None.
+            mask : None or list[int] or list[list[int]]
+                The mask for setting repeated indices for the operator expression.
+                Default is None, meaning that all indices can be different.
+            simulated_parallel : int
+                Number of processors for simulating parallel algorithm serially.
+                Default is zero, meaning that the serial algorithm is used if
+                ``self.mpi is None`` or the parallel algorithm is used if
+                ``self.mpi is not None``.
+                When ``self.mpi is None``, one can optionally set this to a positive
+                number to simulate the parallel algorithm which will be
+                computationally less efficient but requiring less amount of memory.
+            fused_contraction_rotation : bool
+                Indicating whether contraction and rotation should be done within
+                one-step, without using large memory for blocking (only saving
+                memory when no explicit left/right_contact is invoked,
+                which is the case for ``site_type == 0``). Default is True.
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-24.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            max_bond_dim : None or int
+                If not None, the MPS bond dimension will be restricted during the sweeps.
+                Default is None.
+
+        Returns:
+            dms : np.ndarray[flat|complex] or list[np.ndarray[flat|complex]]
+                A list of density matrices for different spin components in the SZ mode,
+                or the spin-traced density matrix in the SU2 mode, or
+                the spin-orbital density matrix in the SGF mode.
+
+                In the SU2 mode (when ``npdm_expr is None``):
+
+                .. math::
+                    \\mathrm{dm}[i, j, \\cdots, b, a] =
+                        \\sum_{\\sigma,\\sigma',\\cdots} \\langle a_{i\\sigma}^\dagger a_{j\\sigma'}^\dagger
+                            \\cdots a_{b\\sigma'} a_{a\\sigma} \\rangle
+
+                In the SZ mode (when ``npdm_expr is None``):
+
+                .. math::
+                    \\mathrm{dms}[0][i, \\cdots, j, k, c, b, \\cdots, a] =
+                        \\langle a_{i\\alpha}^\dagger
+                            \\cdots a_{j\\alpha}^\dagger a_{k\\alpha} a_{c\\alpha}
+                            a_{b\\alpha} \\cdots a_{a\\alpha} \\rangle \\\\
+                    \\mathrm{dms}[1][i, \\cdots, j, k, c, b, \\cdots, a] =
+                        \\langle a_{i\\alpha}^\dagger
+                            \\cdots a_{j\\alpha}^\dagger a_{k\\beta} a_{c\\beta}
+                            a_{b\\alpha} \\cdots a_{a\\alpha} \\rangle \\\\
+                    \\mathrm{dms}[2][i, \\cdots, j, k, c, b, \\cdots, a] =
+                        \\langle a_{i\\alpha}^\dagger
+                            \\cdots a_{j\\beta}^\dagger a_{k\\beta} a_{c\\beta}
+                            a_{b\\beta} \\cdots a_{a\\alpha} \\rangle \\\\
+                    \\cdots \\\\
+                    \\mathrm{dms}[\\mathrm{pdm\\_type}][i, \\cdots, j, k, c, b, \\cdots, a] =
+                        \\langle a_{i\\beta}^\dagger
+                            \\cdots a_{j\\beta}^\dagger a_{k\\beta} a_{c\\beta}
+                            a_{b\\beta} \\cdots a_{a\\beta} \\rangle
+
+                In the SGF mode (when ``npdm_expr is None``):
+
+                .. math::
+                    \\mathrm{dm}[i, j, \\cdots, b, a] = \\langle
+                        a_{i}^\dagger a_{j}^\dagger \\cdots a_{b} a_{a} \\rangle
+        """
         bw = self.bw
         import numpy as np
 
@@ -3933,32 +5178,115 @@ class DMRGDriver:
         return npdms
 
     def get_1pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 1-Particle Density Matrix (1PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=1, *args, **kwargs)
 
     def get_2pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 2-Particle Density Matrix (2PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=2, *args, **kwargs)
 
     def get_3pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 3-Particle Density Matrix (3PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=3, *args, **kwargs)
 
     def get_4pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 4-Particle Density Matrix (4PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=4, *args, **kwargs)
 
     def get_trans_1pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 1-Particle Density Matrix (T-1PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=1, bra=bra, *args, **kwargs)
 
     def get_trans_2pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 2-Particle Density Matrix (T-2PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=2, bra=bra, *args, **kwargs)
 
     def get_trans_3pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 3-Particle Density Matrix (T-3PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=3, bra=bra, *args, **kwargs)
 
     def get_trans_4pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 4-Particle Density Matrix (T-4PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
     def get_csf_coefficients(
         self, ket, cutoff=0.1, given_dets=None, max_print=200, iprint=1
     ):
+        """
+        Find the dominant Configuration State Functions (CSFs, in SU2 mode)
+        or determinants (DETs, in SZ/SGF mode) and their coefficients in the given MPS.
+
+        Args:
+            ket : MPS
+                The given MPS for computing CSF/DET coefficients.
+                If targeting non-singlet state in the SU2 mode, the MPS should be in
+                the singlet embedding format.
+            cutoff : float
+                The lower bound for the absolute value of the CSF/DET coefficients
+                that should be searched. Default is 0.1.
+                If ``cutoff == 0.0``, will compute coefficients for all CSF/DET,
+                which may take an exponential amount of time.
+            given_dets : None or list[str]
+                If not None, will compute the coefficients for the given CSF/DET set.
+                If ``cutoff != 0.0 and (given_dets == [] or given_dets is None)``,
+                will consider all possible CSF/DET with the absolute value of the coefficients
+                above ``cutoff``.
+                If ``cutoff != 0.0 and given_dets is not None and len(given_dets) != 0``,
+                the ``cutoff`` and ``given_dets`` will apply simultaneously, namely, a
+                subset of ``given_dets`` which satisfies the ``cutoff`` constraint will be
+                computed.
+            max_print : int
+                The max number of CSF/DET and their coefficients that should be print.
+                When the number of computed CSF/DET is larger than this number, only the
+                dominant ones will be printed. When ``iprint == 0``, this argument has no
+                effect and nothing will be printed.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            dets : np.ndarray[np.uint8]
+                Array of CSF/DET, represented as a matrix with shape ``(n_dets, n_sites)``.
+                The occupancy value 0, 1, 2, 3 represents "0" (empty), "+" (spin-up coupling),
+                "-" (spin-down coupling), and "2" (doubly occupied) in the SU2 mode,
+                or "0" (empty), "a" (alpha occupied),  "b" (beta occupied), and "2"
+                (doubly occupied) in the SZ/SGF mode.
+            dvals : np.ndarray[float|complex]
+                Array of coefficients for each CSF/DET with size ``n_dets``.
+                Note that the weight is the square of coefficient.
+                There can be an overall phase uncertainty for all coefficients.
+        """
         bw = self.bw
         iprint = iprint >= 1 and (self.mpi is None or self.mpi.rank == self.mpi.root)
         import numpy as np, time
@@ -4016,11 +5344,43 @@ class DMRGDriver:
         return dets, dvals
 
     def compress_mps(self, ket, max_bond_dim=None):
+        """
+        Compress the MPS to change its maximal bond dimension (inplace).
+
+        Args:
+            ket : MPS
+                The block2 MPS object.
+            max_bond_dim : None or int
+                If not None, will restrict the maximal bond dimension of the MPS
+                to the given number. Default is None.
+
+        Returns:
+            ket : MPS
+                The MPS with changed bond dimension. Note that this operation
+                can change the canonical center of the MPS as a side effect.
+        """
         refc = ket.n_sites - ket.dot if ket.center == 0 else 0
         self.align_mps_center(ket, refc, max_bond_dim=max_bond_dim)
         return ket
 
     def align_mps_center(self, ket, ref, max_bond_dim=None):
+        """
+        Change the canonical center of the given MPS, or align the canonical center
+        for two MPSs (inplace).
+
+        Args:
+            ket : MPS
+                The block2 MPS object.
+            ref : MPS or int
+                If this is MPS, will change the canonical center of ``ket`` so that
+                its center is the same as that of ``ref``.
+                If this is int, will set the canonical center of ``ket`` to the given number.
+                Only the left/right canonical forms are allowed, namely, ``ref`` cannot
+                correspond to a canonical center in the middle of MPS.
+            max_bond_dim : None or int
+                If not None, will restrict the maximal bond dimension of the resulting
+                MPS to the given number. Default is None.
+        """
         if self.mpi is not None:
             self.mpi.barrier()
         refc = ref if isinstance(ref, int) else ref.center
@@ -4050,8 +5410,27 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
 
-    # if restarting from the middle, this method should not be used
     def adjust_mps(self, ket, dot=None):
+        """
+        Adjust the MPS (inplace) for performing 1-site or 2-site sweep algorithms,
+        and find the direction of the next sweep.
+        When restarting from the middle, this method should not be called.
+        
+        Args:
+            ket : MPS
+                The block2 MPS object.
+            dot : None or int
+                If not None, should be 1 or 2 and the "site type" of the MPS
+                will be changed to "1-site" or "2-site". If None, the "site type"
+                of the MPS will not be changed. Default is None.
+        
+        Returns:
+            ket : MPS
+                The MPS with the desired "site type".
+            forward : bool
+                Indicating whether the direction of the next sweep should be forward
+                or not.
+        """
         if dot is None:
             dot = ket.dot
         bw = self.bw
@@ -4128,6 +5507,22 @@ class DMRGDriver:
         return ket, forward
 
     def split_mps(self, ket, iroot, tag):
+        """
+        Split a state-averaged MPS into individual MPSs.
+
+        Args:
+            ket : MPS
+                The state-averaged MPS object with ``ket.nroots > 1``.
+            iroot : int
+                The root index to extract from the state-averaged MPS.
+                Counting from zero. ``0 <= iroot < ket.nroots``.
+            tag : str
+                The tag of the extracted MPS.
+
+        Returns:
+            iket : MPS
+                The extracted MPS.
+        """
         bw = self.bw
         if self.mpi is not None:
             self.mpi.barrier()
@@ -4146,8 +5541,6 @@ class DMRGDriver:
         iket.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return iket
 
-    # bra = mpo @ ket
-    # bra = (left_mpo)^(-1) @ (mpo @ ket)
     def multiply(
         self,
         bra,
@@ -4165,6 +5558,73 @@ class DMRGDriver:
         linear_max_iter=4000,
         iprint=0,
     ):
+        """
+        Apply the MPO to the MPS to get a new MPS (when ``left_mpo is None``),
+        which is
+
+        .. math::
+            |\\mathrm{bra}\\rangle = \\mathrm{mpo} |\\mathrm{ket}\\rangle
+
+        or apply the inverse of an MPO to the MPS to get a new MPS,
+
+        .. math::
+            |\\mathrm{bra}\\rangle =
+            \\frac{\\mathrm{mpo} |\\mathrm{ket}\\rangle}{\\mathrm{left\\_mpo}}
+
+        or fit the MPS to an MPS with a different bond dimension
+        (when ``left_mpo is None`` and ``mpo`` is the identity MPO).
+
+        Args:
+            bra : MPS
+                The block2 MPS object. The given MPS ``bra`` will be used as the initial
+                guess for the left-hand side MPS.
+                On exit, the MPS ``bra`` will contain the optimized state fitted to
+                the value of the right-hand side.
+            mpo : MPO
+                The block2 MPO object (the right-hand side operator).
+            ket : MPS
+                The block2 MPS object (the right-hand side state).
+            n_sweeps : int
+                Maximal number of sweeps. Default is 10.
+            tol : float
+                converge threshold for the norm of ``bra`` (when ``left_mpo is None``)
+                or the overlap ``<bra|ket>``  (when ``left_mpo is not None``).
+                Default is 1E-8.
+            bond_dims : None or list[int]
+                List of ``ket`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of ``ket`` will be used.
+            bra_bond_dims : None or list[int]
+                List of ``bra`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of initial ``bra`` will be used.
+            noises : None or list[float]
+                List of prefactor of the noise for each sweep. Default is None.
+                If None or ``[0]``, will not add any noise.
+            noise_mpo : None or MPO
+                If not None and ``noises`` is not zero or None,
+                This MPO will be used for computing noise and ``left_mpo`` will be ignored.
+                This should be used for the MPS compression with perturbative noise task.
+            thrds : None or list[float]
+                List of the convergence threshold (square of the residual) of the
+                linear solver. Default is None.
+                If None, this is set to ``[1e-6] * 4 + [1e-7] * 1`` for double precision
+                and ``[1e-5] * 4 + [5e-6] * 1`` for single precision.
+            left_mpo : None or MPO
+                If not None and ``noise_mpo is None``, will apply the inverse
+                of this MPO to the right-hand side.
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-24.
+            linear_max_iter : int
+                Maximal number of iteration in the linear solver. Default is 4000.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+        
+        Returns:
+            norm : float|complex
+                The norm of ``bra`` (when ``left_mpo is None``)
+                or the overlap ``<bra|ket>``  (when ``left_mpo is not None``).
+        """
         bw = self.bw
         if bra.info.tag == ket.info.tag:
             raise RuntimeError("Same tag for bra and ket!!")
@@ -4223,7 +5683,6 @@ class DMRGDriver:
             self.mpi.barrier()
         return norm
 
-    # bra = mpo_a @ ket_a + mpo_b @ ket_b
     def addition(
         self,
         bra,
@@ -4241,6 +5700,61 @@ class DMRGDriver:
         cutoff=1e-24,
         iprint=0,
     ):
+        """
+        Perform the addition of two MPSs to generate a new MPS (using fitting):
+
+        .. math::
+            |\\mathrm{bra}\\rangle = \\mathrm{mpo\\_a} |\\mathrm{ket\\_a}\\rangle
+            + \\mathrm{mpo\\_b} |\\mathrm{ket\\_b}\\rangle.
+
+        Args:
+            bra : MPS
+                The block2 MPS object. The given MPS ``bra`` will be used as the initial
+                guess for the left-hand side MPS.
+                On exit, the MPS ``bra`` will contain the optimized state fitted to
+                the value of the right-hand side.
+            ket_a : MPS
+                The first input block2 MPS object.
+            ket_b : MPS
+                The second input block2 MPS object.
+            mpo_a : None or int or float or complex or MPO
+                The first input block2 MPO object.
+                If None or a scalar, this will be the identity MPO or
+                a scalar times the identity MPO. Default is None.
+            mpo_b : None or int or float or complex or MPO
+                The second input block2 MPO object.
+                If None or a scalar, this will be the identity MPO or
+                a scalar times the identity MPO. Default is None.
+            n_sweeps : int
+                Maximal number of sweeps. Default is 10.
+            tol : float
+                converge threshold for the norm of ``bra``. Default is 1E-8.
+            bra_bond_dims : None or list[int]
+                List of ``bra`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of initial ``bra`` will be used.
+            ket_a_bond_dims : None or list[int]
+                List of ``ket_a`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of ``ket_a`` will be used.
+            ket_b_bond_dims : None or list[int]
+                List of ``ket_b`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of ``ket_b`` will be used.
+            noises : None or list[float]
+                List of prefactor of the noise for each sweep. Default is None.
+                If None or ``[0]``, will not add any noise.
+            noise_mpo : None or MPO
+                If not None and ``noises`` is not zero or None,
+                This MPO will be used for computing noise.
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-24.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            norm : float|complex
+                The norm of ``bra``.
+        """
         bw = self.bw
         if bra.info.tag == ket_a.info.tag or bra.info.tag == ket_b.info.tag:
             raise RuntimeError("Same tag for bra and ket!!")
@@ -4307,10 +5821,39 @@ class DMRGDriver:
             self.mpi.barrier()
         return norm
 
-    # return < bra | mpo | ket >
     def expectation(
         self, bra, mpo, ket, store_bra_spectra=False, store_ket_spectra=True, iprint=0
     ):
+        """
+        Compute the expectation value between MPO and bra and ket MPSs:
+
+        .. math::
+            X = \\langle \\mathrm{bra} | \\mathrm{mpo} | \\mathrm{ket} \\rangle.
+
+        Args:
+            bra : MPS
+                The "bra" MPS. In complex mode, the complex conjugate of ``bra`` is implied.
+            mpo : MPO
+                The block2 MPO object, representing the operator.
+            ket : MPS
+                The "ket" MPS.
+            store_bra_spectra : bool
+                If True, the ``bra`` MPS singular value spectra will be stored as
+                ``self._sweep_wfn_spectra`` which can be later used to compute the bipartite entropy.
+                If False, the spectra will not be computed. Default is False.
+                Only one of ``store_bra_spectra`` and ``store_ket_spectra`` can be True.
+            store_ket_spectra : bool
+                If True, the ``ket`` MPS singular value spectra will be stored as
+                ``self._sweep_wfn_spectra`` which can be later used to compute the bipartite entropy.
+                If False, the spectra will not be computed. Default is False.
+                Only one of ``store_bra_spectra`` and ``store_ket_spectra`` can be True.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            ex : float|complex
+                The expectation value.
+        """
         bw = self.bw
         mbra = bra.deep_copy("EXPE-BRA@TMP")
         if bra != ket:
@@ -4363,6 +5906,67 @@ class DMRGDriver:
         linear_max_iter=4000,
         iprint=0,
     ):
+        """
+        Compute the correction vector MPS for Green's function:
+
+        .. math::
+            |\\mathrm{bra}\\rangle = \\frac
+            {\\mathrm{rmpo} |\\mathrm{ket} \\rangle}
+            {\\mathrm{mpo} + \\omega + \\eta \\mathrm{i}}
+
+        and returns the diagonal element of Green's function:
+
+        .. math::
+            G = \\langle \\mathrm{bra}|\\mathrm{rmpo}|\\mathrm{ket}\\rangle.
+
+        Args:
+            bra : MPS
+                The block2 MPS object. The given MPS ``bra`` will be used as the initial
+                guess for the correction vector MPS.
+                On exit, the MPS ``bra`` will contain the optimized state fitted to
+                the value of the right-hand side of the correction vector equation.
+            mpo : MPO
+                The input block2 MPO object in the denominator.
+            rmpo : MPO
+                The input block2 MPO object in the numerator.
+            ket : MPS
+                The input block2 MPS object in the numerator.
+            omega : float
+                The frequency.
+            eta : float
+                The broadening factor.
+            n_sweeps : int
+                Maximal number of sweeps. Default is 10.
+            tol : float
+                Converge threshold for the absolute value of the diagonal Green's function
+                value ``<bra|rmpo|ket>``. Default is 1E-8.
+            bra_bond_dims : None or list[int]
+                List of ``bra`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of initial ``bra`` will be used.
+            ket_bond_dims : None or list[int]
+                List of ``ket`` bond dimensions for each sweep. Default is None.
+                If None, the bond dimension of ``ket`` will be used.
+            noises : None or list[float]
+                List of prefactor of the noise for each sweep. Default is None.
+                If None or ``[0]``, will not add any noise.
+            thrds : None or list[float]
+                List of the convergence threshold (square of the residual) of the
+                linear solver. Default is None.
+                If None, this is set to ``[1e-6] * 4 + [1e-7] * 1`` for double precision
+                and ``[1e-5] * 4 + [5e-6] * 1`` for single precision.
+            cutoff : float
+                States with eigenvalue below this number will be discarded,
+                even when the bond dimension is large enough to keep this state.
+                Default is 1E-24.
+            linear_max_iter : int
+                Maximal number of iteration in the linear solver. Default is 4000.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            gf : complex
+                The diagonal element of Green's function ``<bra|rmpo|ket>``.
+        """
         bw = self.bw
         if bra.info.tag == ket.info.tag:
             raise RuntimeError("Same tag for bra and ket!!")
@@ -4422,6 +6026,14 @@ class DMRGDriver:
         return rgf + 1j * igf
 
     def fix_restarting_mps(self, mps):
+        """
+        Internal method for fixing the canonical form of MPS loaded from disk
+        when the calculation was interrupted in the middle of a sweep.
+
+        Args:
+            mps : MPS
+                The MPS loaded from disk.
+        """
         cg = self.ghamil.opf.cg
         if (
             mps.canonical_form[mps.center] == "L"
@@ -4483,11 +6095,37 @@ class DMRGDriver:
                 self.mpi.barrier()
 
     def copy_mps(self, mps, tag):
+        """
+        Make a deep copy of an MPS.
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS (for disk storage).
+
+        Returns:
+            ket : MPS
+                The copy of MPS.
+        """
         ket = mps.deep_copy(tag)
         ket.info.save_data(self.scratch + "/%s-mps_info.bin" % ket.info.tag)
         return ket
 
     def load_mps(self, tag, nroots=1):
+        """
+        Load an MPS from disk (from the ``DMRGDriver.scratch`` folder).
+
+        Args:
+            tag : str
+                The tag of the MPS to be loaded.
+            nroots : int
+                Number of roots in the MPS. Default is 1.
+
+        Returns:
+            mps : MPS
+                The loaded MPS.
+        """
         import os
 
         bw = self.bw
@@ -4506,6 +6144,28 @@ class DMRGDriver:
         return mps
 
     def mps_change_singlet_embedding(self, mps, tag, forward, left_vacuum=None):
+        """
+        Change MPS between the Singlet-Embedding (SE) and Non-Singlet-Embedding (NSE)
+        formats.
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+            forward : bool
+                If True, will change from NSE to SE.
+                Otherwise, will change from SE to NSE.
+            left_vacuum : None or SX
+                If ``forward == True and left_vacuum is not None``,
+                this is the left vacuum to be used in SE MPS.
+                If None, the left vacuum quantum number will be automatically
+                determined. Default is None.
+
+        Returns:
+            cp_mps : MPS
+                The output MPS.
+        """
         cp_mps = mps.deep_copy(tag)
         while cp_mps.center > 0:
             if (
@@ -4532,16 +6192,63 @@ class DMRGDriver:
         return cp_mps
 
     def mps_change_to_singlet_embedding(self, mps, tag, left_vacuum=None):
+        """
+        Change MPS from Non-Singlet-Embedding (NSE) to Singlet-Embedding (SE).
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+            left_vacuum : None or SX
+                If not None, this is the left vacuum to be used in SE MPS.
+                If None, the left vacuum quantum number will be automatically
+                determined. Default is None.
+
+        Returns:
+            cp_mps : MPS
+                The output MPS.
+        """
         return self.mps_change_singlet_embedding(
             mps, tag, forward=True, left_vacuum=left_vacuum
         )
 
     def mps_change_from_singlet_embedding(self, mps, tag, left_vacuum=None):
+        """
+        Change MPS from Singlet-Embedding (SE) to Non-Singlet-Embedding (NSE).
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+            left_vacuum : None or SX
+                Not used. Default is None.
+
+        Returns:
+            cp_mps : MPS
+                The output MPS.
+        """
         return self.mps_change_singlet_embedding(
             mps, tag, forward=False, left_vacuum=left_vacuum
         )
 
     def mps_change_precision(self, mps, tag):
+        """
+        Change MPS from single to double precision (when ``symm_type`` has
+        the ``SymmetryTypes.SP`` modifier) or from double to single precision
+        (when ``symm_type`` does not have the ``SymmetryTypes.SP`` modifier).
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+
+        Returns:
+            r : MPS
+                The output MPS.
+        """
         bw = self.bw
         assert tag != mps.info.tag
         if SymmetryTypes.SP in bw.symm_type:
@@ -4552,6 +6259,22 @@ class DMRGDriver:
         return r
 
     def mps_change_complex(self, mps, tag):
+        """
+        Change MPS from complex to real (when ``symm_type`` has
+        the ``SymmetryTypes.CPX`` modifier) or from real to complex
+        (when ``symm_type`` does not have the ``SymmetryTypes.CPX`` modifier).
+        For complex to real transformation, the imaginary part will be discarded.
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+
+        Returns:
+            r : MPS
+                The output MPS.
+        """
         bw = self.bw
         assert tag != mps.info.tag
         if SymmetryTypes.CPX in bw.symm_type:
@@ -4562,6 +6285,25 @@ class DMRGDriver:
         return r
 
     def mps_change_to_sz(self, mps, tag, sz=None):
+        """
+        Change MPS from spin-adapted to non-spin-adapted.
+        Only works in SU2 mode. The resulting MPS should be used in SZ mode.
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+            sz : None or int
+                If not None, will restrict two times the project spin of
+                the output MPS to be the given number.
+                If None, the output MPS will contain all possible project spin
+                components. Default is None.
+
+        Returns:
+            zmps : MPS
+                The output MPS.
+        """
         bw = self.bw
         assert SymmetryTypes.SU2 in bw.symm_type
         assert tag != mps.info.tag
@@ -4594,6 +6336,57 @@ class DMRGDriver:
         mrci_order=0,
         orig_dot=False,
     ):
+        """
+        Create a random MPS, which can be used as initial guess for
+        various sweep algorithms, such as DMRG.
+
+        Args:
+            tag : str
+                The tag of the output MPS, for disk storage.
+            bond_dim : int
+                The maximal bond dimension hint of the MPS. Default is 500.
+                Note that the output MPS may not have exactly the given bond dimension.
+            center : int
+                The canonical center of the MPS. Default is zero.
+            dot : int
+                Can be 1 or 2. The "site type" of the MPS. Default is 2.
+            target : None or SX.
+                The target quantum number of the MPS.
+                If None, will use ``self.target``. Default is None.
+            nroots : int
+                Number of roots in the MPS. Default is 1.
+                ``nroots > 1`` indicates the state-averaged MPS (which may be used for
+                excited state DMRG).
+            occs : None or list[float]
+                If not None, the hint of the occupancy information at each site of the MPS.
+                Default is None, and a uniform probability of occupancy will be assumed.
+            full_fci : bool
+                If True, the full fci space is used (including block quantum numbers
+                outside the space of the target quantum number). Default is True.
+            left_vacuum : None or SX
+                If not None, this is the left vacuum to be used in SE MPS.
+                If None, ``self.left_vacuum`` will be used.
+                Only has effects in SU2 mode for SE MPS with non-singlet target.
+            casci_ncore : int
+                If not zero, The number of core orbitals in a CASCI MPS.
+                These orbitals will always be kept doubly occupied
+                (if ``mrci_order == 0``). Default is zero.
+            casci_nvirt : int
+                If not zero, The number of virtual orbitals in a CASCI MPS.
+                These orbitals will always be kept empty
+                (if ``mrci_order == 0``). Default is zero.
+            mrci_order : int
+                If not zero, the core and virtual orbitals will have at most
+                ``mrci_order`` holes and electrons, respectively. Default is zero.
+            orig_dot : bool
+                If False, will always create "1-site" MPS and then change to
+                the suitable "site type". Otherwise, the "1-site" or "2-site" MPS
+                will be directly created. Default is False.
+
+        Returns:
+            mps : MPS
+                The output MPS (normalized).
+        """
         bw = self.bw
         if target is None:
             target = self.target
@@ -4665,6 +6458,28 @@ class DMRGDriver:
         target=None,
         full_fci=True,
     ):
+        """
+        Create the MPS with ancilla sites for finite-temperature algorithms.
+        This is the MPS at infinite temperature.
+
+        Args:
+            tag : str
+                The tag of the output MPS, for disk storage.
+            center : int
+                The canonical center of the MPS. Default is zero.
+            dot : int
+                Can be 1 or 2. The "site type" of the MPS. Default is 2.
+            target : None or SX.
+                The target quantum number of the MPS.
+                If None, will use ``self.target``. Default is None.
+            full_fci : bool
+                If True, the full FCI space is used (including block quantum numbers
+                outside the space of the target quantum number). Default is True.
+
+        Returns:
+            mps : MPS
+                The output MPS.
+        """
         bw = self.bw
         if target is None:
             target = bw.SX(self.n_sites * 2, 0, 0)
@@ -4691,6 +6506,38 @@ class DMRGDriver:
     def get_mps_from_csf_coefficients(
         self, dets, dvals, tag, dot=2, target=None, full_fci=True, left_vacuum=None
     ):
+        """
+        Construct an MPS from the given linear combination of Configuration
+        State Functions (CSFs, in SU2 mode) or determinants (DETs, in SZ/SGF mode).
+
+        Args:
+            dets : np.ndarray[np.uint8] or list[str]
+                Array of CSF/DET, represented as a matrix with shape ``(n_dets, n_sites)``.
+                The occupancy value 0, 1, 2, 3 represents "0" (empty), "+" (spin-up coupling),
+                "-" (spin-down coupling), and "2" (doubly occupied) in the SU2 mode,
+                or "0" (empty), "a" (alpha occupied),  "b" (beta occupied), and "2"
+                (doubly occupied) in the SZ/SGF mode.
+            dvals : np.ndarray[float|complex]
+                Array of coefficients for each CSF/DET with size ``n_dets``.
+            tag : str
+                The tag of the output MPS, for disk storage.
+            dot : int
+                Can be 1 or 2. The "site type" of the MPS. Default is 2.
+            target : None or SX.
+                The target quantum number of the MPS.
+                If None, will use ``self.target``. Default is None.
+            full_fci : bool
+                If True, the full fci space is used (including block quantum numbers
+                outside the space of the target quantum number). Default is True.
+            left_vacuum : None or SX
+                If not None, this is the left vacuum to be used in SE MPS.
+                If None, ``self.left_vacuum`` will be used.
+                Only has effects in SU2 mode for SE MPS with non-singlet target.
+
+        Returns:
+            mps : MPS
+                The output MPS.
+        """
         bw = self.bw
         assert self.reorder_idx is None
 
@@ -4729,20 +6576,70 @@ class DMRGDriver:
         return mps
 
     def expr_builder(self):
+        """
+        Get the ExprBuilder object for setting terms in second quantized operators.
+
+        Returns:
+            builder : ExprBuilder
+                The ExprBuilder object.
+        """
         return ExprBuilder(self.bw)
 
     def finalize(self):
+        """
+        Release stack memory allocated for this ``DMRGDriver`` object.
+        Once finalized, this object should not be used.
+        """
         bw = self.bw
         bw.b.Global.frame = None
 
 
 class SOCDMRGDriver(DMRGDriver):
+    """
+    Simple Python interface for DMRG calculations with Spin-Orbit-Coupling (SOC).
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def hybrid_mpo_dmrg(
         self, mpo, mpo_cpx, ket, n_sweeps=10, iprint=0, tol=1e-8, **kwargs
     ):
+        """
+        Perform the ground state and excited state Density Matrix
+        Renormalization Group (DMRG) algorithm using the sum of a real MPO and
+        a complex MPO.
+
+        Args:
+            mpo : MPO
+                The real MPO.
+            mpo_cpx : MPO
+                The complex MPO.
+            ket : MPS
+                The block2 MPS object. The given MPS ``ket`` will be used as the initial
+                guess for DMRG. On exit, the MPS ``ket`` will contain the optimized
+                (ground and/or excited) state. If ``ket.nroots != 1``, state-averaged
+                DMRG will be done to find the ground and excited states.
+                If ``ket.dot == 2``, will perform 2-site DMRG algorithm.
+                If ``ket.dot == 1``, will perform 1-site DMRG algorithm.
+                The initial input ``ket`` is not required to be normalized.
+                The output optimized ``ket`` will always be normalized.
+            n_sweeps : int
+                Maximal number of DMRG sweeps. Default is 10.
+            tol : float
+                Energy converge threshold. If the absolute value of the total energy
+                difference between two consecutive sweeps is below ``tol``,
+                and the ``noise`` for the current sweep
+                is zero, the algorithm will terminate. Default is 1E-8.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+            kwargs : dict
+                Other options that should be passed to ``DMRGDriver.dmrg``.
+
+        Returns:
+            energy : float|complex or list[float|complex]
+                When ``ket.nroots == 1``, this is the ground state energy.
+                When ``ket.nroots != 1``, this is a list of ground and excited state energies.
+        """
         bw = self.bw
         assert ket.nroots % 2 == 0
         super().dmrg(mpo, ket, n_sweeps=-1, iprint=iprint, tol=tol, **kwargs)
@@ -4767,6 +6664,25 @@ class SOCDMRGDriver(DMRGDriver):
         return ener
 
     def soc_two_step(self, energies, twoss, pdms_dict, hsomo, iprint=1):
+        """
+        The second step in the two-step SOC-DMRG.
+
+        Args:
+            energies : list[float|complex]
+                Energy of the spin-free states.
+            twoss : list[int]
+                Two times the total spin for each spin-free state.
+            pdms_dict : dict[tuple[int, int], np.ndarray[float|complex]]
+                The 1-particle triplet transition density matrix for each pair of states.
+            hsomo : np.ndarray[complex]
+                The spin-orbit coupling integral in molecular orbitals.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            heig : list[float|complex]
+                The ground and excited state energies including SOC effects.
+        """
         au2cm = 219474.631115585274529
         import numpy as np
 
@@ -4909,8 +6825,10 @@ class SOCDMRGDriver(DMRGDriver):
 
 
 class NormalOrder:
+    """Static methods for normal ordering for quantum chemistry integrals."""
     @staticmethod
     def def_ix(cidx):
+        """Internal method for index slicing."""
         import numpy as np
 
         def ix(x):
@@ -4924,6 +6842,7 @@ class NormalOrder:
 
     @staticmethod
     def def_gctr(cidx, h1e, g2e):
+        """Internal method for contraction with integrals."""
         import numpy as np
 
         def gctr(x):
@@ -4937,6 +6856,7 @@ class NormalOrder:
 
     @staticmethod
     def def_gctr_sz(cidx, h1e, g2e):
+        """Internal method for contraction with integrals in the SZ mode."""
         import numpy as np
 
         def gctr(i, x):
@@ -4950,6 +6870,7 @@ class NormalOrder:
 
     @staticmethod
     def make_su2(h1e, g2e, const_e, cidx, use_wick):
+        """Perform normal ordering of quantum chemistry integrals in the SU2 mode."""
         import numpy as np
 
         if use_wick:
@@ -4998,6 +6919,7 @@ class NormalOrder:
 
     @staticmethod
     def make_sz(h1e, g2e, const_e, cidx, use_wick):
+        """Perform normal ordering of quantum chemistry integrals in the SZ mode."""
         import numpy as np
 
         if use_wick:
@@ -5080,6 +7002,7 @@ class NormalOrder:
 
     @staticmethod
     def make_sgf(h1e, g2e, const_e, cidx, use_wick):
+        """Perform normal ordering of quantum chemistry integrals in the SGF mode."""
         import numpy as np
 
         if use_wick:
@@ -5129,8 +7052,13 @@ class NormalOrder:
 
 
 class WickNormalOrder:
+    """
+    Static methods for normal ordering for quantum chemistry integrals
+    implemented using automatic symbolic derivation.
+    """
     @staticmethod
     def make_su2(h1e, g2e, const_e, cidx, iprint=1):
+        """Perform normal ordering of quantum chemistry integrals in the SU2 mode."""
         import block2 as b
         import numpy as np
 
@@ -5212,6 +7140,10 @@ class WickNormalOrder:
 
     @staticmethod
     def make_su2_open_shell(h1e, g2e, const_e, cidx, midx, iprint=1):
+        """
+        Perform normal ordering of quantum chemistry integrals in the SU2 mode
+        for non-singlet reference states.
+        """
         import block2 as b
         import numpy as np
 
@@ -5306,6 +7238,7 @@ class WickNormalOrder:
 
     @staticmethod
     def make_sz(h1e, g2e, const_e, cidx, iprint=1):
+        """Perform normal ordering of quantum chemistry integrals in the SZ mode."""
         import block2 as b
         import numpy as np
 
@@ -5421,6 +7354,7 @@ class WickNormalOrder:
 
     @staticmethod
     def make_sgf(h1e, g2e, const_e, cidx, iprint=1):
+        """Perform normal ordering of quantum chemistry integrals in the SGF mode."""
         import block2 as b
         import numpy as np
 
@@ -5509,7 +7443,24 @@ class WickNormalOrder:
 
 
 class ExprBuilder:
+    """
+    Helper class for setting terms in second quantized operators.
+
+    Attributes:
+        bw : Block2Wrapper
+            The wrapper for low-level block2 modules.
+        data : GeneralFCIDUMP
+            The block2 GeneralFCIDUMP object.
+    """
     def __init__(self, bw=None):
+        """
+        Initialize :class:`ExprBuilder`.
+
+        Args:
+            bw : Block2Wrapper or None
+                The wrapper for low-level block2 modules. If None, will assume the SU2
+                symmetry mode.
+        """
         if bw is None:
             bw = Block2Wrapper()
         self.data = bw.bx.GeneralFCIDUMP()
@@ -5527,10 +7478,40 @@ class ExprBuilder:
         self.bw = bw
 
     def add_const(self, x):
+        """
+        Add a constant term.
+
+        Args:
+            x : int or float or complex
+                A scalar constant.
+
+        Returns:
+            self : ExprBuilder
+                The ExprBuilder object.
+        """
         self.data.const_e = self.data.const_e + x
         return self
 
     def add_term(self, expr, idx, val):
+        """
+        Add a string of elementary operators with the given coefficient
+        (when the length of ``idx`` matches the length of ``expr``),
+        or a sum of strings of elementary operators with the same name,
+        but different site indices and coefficients (when the length of ``idx``
+        is multiple of the length of ``expr``).
+
+        Args:
+            expr : str
+                The names of elementary operators, such as "cdCD".
+            idx : list[int]
+                The site index of each elementary operator.
+            val : list[float|complex] or float or complex
+                The coefficient of the term or the coefficients of multiple terms.
+
+        Returns:
+            self : ExprBuilder
+                The ExprBuilder object.
+        """
         import numpy as np
 
         self.data.exprs.append(expr)
@@ -5550,6 +7531,30 @@ class ExprBuilder:
         return self
 
     def add_sum_term(self, expr, arr, cutoff=1e-12, fast=True, factor=1.0, perm=None):
+        """
+        Add terms with coefficients as a tensor.
+
+        Args:
+            expr : str
+                The names of elementary operators, such as "cdCD".
+            arr : np.ndarray[float|complex]
+                The coefficients as a tensor. The ``ndim`` of this tensor should match
+                the length of ``expr``.
+            cutoff : float
+                If the absolute value of any coefficient is below this threshold,
+                the term will not be included. Default is 1E-12.
+            fast : bool
+                If True, will use the fast C++ implementation. Default is True.
+            factor : float
+                The scale factor for all terms.
+            perm : None or list[int]
+                If not None, a permutation will be applied on the coefficient tensor indices.
+                Default is None.
+
+        Returns:
+            self : ExprBuilder
+                The ExprBuilder object.
+        """
         import numpy as np
 
         self.data.exprs.append(expr)
@@ -5573,6 +7578,25 @@ class ExprBuilder:
         return self
 
     def add_terms(self, expr, arr, idx, cutoff=1e-12):
+        """
+        Add a sum of strings of elementary operators with the same name,
+        but different site indices and coefficients.
+
+        Args:
+            expr : str
+                The names of elementary operators, such as "cdCD".
+            arr : list[float|complex]
+                The list of coefficients.
+            idx : list[list[int]]
+                The list of operator indices.
+            cutoff : float
+                If the absolute value of any coefficient is below this threshold,
+                the term will not be included. Default is 1E-12.
+
+        Returns:
+            self : ExprBuilder
+                The ExprBuilder object.
+        """
         self.data.exprs.append(expr)
         didx, dt = [], []
         for ix, v in zip(idx, arr):
@@ -5584,6 +7608,17 @@ class ExprBuilder:
         return self
 
     def iscale(self, d):
+        """
+        Scale the coefficients of all terms by a scalar factor.
+
+        Args:
+            d : float or complex
+                The scalar factor.
+
+        Returns:
+            self : ExprBuilder
+                The ExprBuilder object.
+        """
         import numpy as np
 
         for i, ix in enumerate(self.data.data):
@@ -5591,6 +7626,28 @@ class ExprBuilder:
         return self
 
     def finalize(self, adjust_order=True, merge=True, is_drt=False, fermionic_ops=None):
+        """
+        Finalize the symbolic expression.
+
+        Args:
+            adjust_order : bool
+                If True, the order of operator indices will be automatically adjusted.
+                This is normally required for MPO construction, unless the operator indices
+                have already been sorted. Default is True.
+            merge : bool
+                If True, will merge terms whenever possible. Default is True.
+            is_drt : bool
+                If True, the DRT rule will be used. Only have effects in SU2 mode. Default is False.
+            fermionic_ops : None or str
+                If not None, the given set of operator names will be treated as Fermion
+                operators (for computing signs for swapping operators).
+                Default is None, and operators like "cdCD" will be treated as Fermion
+                operators.
+
+        Returns:
+            gfd : GeneralFCIDUMP
+                The block2 GeneralFCIDUMP object.
+        """
         if adjust_order:
             if fermionic_ops is not None:
                 assert (
@@ -5608,8 +7665,10 @@ class ExprBuilder:
 
 
 class FermionTransform:
+    """Static methods for fermion to spin operator transforms."""
     @staticmethod
     def jordan_wigner(h1e, g2e):
+        """Jordan-Wigner transform of quantum chemistry integrals."""
         import numpy as np
 
         # sort indices to ascending order, adjusting fermion sign
@@ -5669,14 +7728,20 @@ class FermionTransform:
 
 
 class OrbitalEntropy:
-    # Table 4. J. Chem. Theory Comput. 2013, 9, 2959-2973
+    """
+    Static methods for orbital entropy computations.
+    """
+    #: Entropy operators in SZ mode.
+    #: See Table 4. in *J. Chem. Theory Comput.* **9**, 2959-2973 (2013).
     ops = "1-n-N+nN:D-nD:d-Nd:Dd:C-nC:N-nN:Cd:-Nd:c-Nc:Dc:n-nN:nD:Cc:-Nc:nC:nN".split(
         ":"
     )
+    #: Entropy operators in SGF mode.
     ops_ghf = "1-N:D:C:N".split(":")
 
     @staticmethod
     def parse_expr(x):
+        """Internal method for paring entropy operator expressions."""
         x = x.replace("+", "\n+").replace("-", "\n-")
         x = x.replace("n", "cd").replace("N", "CD")
         x = [k for k in x.split("\n") if k != ""]
@@ -5689,6 +7754,7 @@ class OrbitalEntropy:
 
     @staticmethod
     def get_one_orb_rdm_h_terms(n_sites, is_sgf=False):
+        """Internal method for computing symbolic terms in one-orbital RDM."""
         h_terms = {}
         ops = OrbitalEntropy.ops_ghf if is_sgf else OrbitalEntropy.ops
         for i in range(n_sites):
@@ -5703,6 +7769,7 @@ class OrbitalEntropy:
 
     @staticmethod
     def get_two_orb_rdm_h_terms(n_sites, ij_symm=True, block_symm=True, is_sgf=False):
+        """Internal method for computing symbolic terms in two-orbital RDM."""
         h_terms = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
         if block_symm:
@@ -5764,6 +7831,7 @@ class OrbitalEntropy:
 
     @staticmethod
     def get_one_orb_rdm_exprs(is_sgf=False):
+        """Internal method for computing one-orbital RDM expressions (for NPDM engine)."""
         ops = OrbitalEntropy.ops_ghf if is_sgf else OrbitalEntropy.ops
         exprs = {}
         for iix, ix in enumerate([0, 3] if is_sgf else [0, 5, 10, 15]):
@@ -5776,6 +7844,7 @@ class OrbitalEntropy:
 
     @staticmethod
     def get_two_orb_rdm_exprs(is_sgf=False):
+        """Internal method for computing two-orbital RDM expressions (for NPDM engine)."""
         exprs = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
         if is_sgf:
@@ -5801,6 +7870,7 @@ class OrbitalEntropy:
 
     @staticmethod
     def get_two_orb_rdm_eigvals(ld, diag_only=False):
+        """Internal method for solving eigenvalue problem for two-orbital RDM."""
         import numpy as np
 
         if diag_only and len(ld) == 6:
@@ -5856,9 +7926,10 @@ class OrbitalEntropy:
 
 
 class WickSpinAdaptation:
+    """Static methods for symbolic expression processing for normal ordering."""
     @staticmethod
     def spin_tag_to_pattern(x):
-        """[1, 2, 2, 1] -> ((.+(.+.)0)1+.)0 ."""
+        """Internal method for transforming ``[1, 2, 2, 1] -> ((.+(.+.)0)1+.)0``."""
         if len(x) == 0:
             return ""
         elif len(x) == 2:
@@ -5876,7 +7947,7 @@ class WickSpinAdaptation:
 
     @staticmethod
     def adjust_spin_coupling(eq):
-        """correct up to 4-body terms."""
+        """Internal method for the adjustment of spin coupling. Correct up to 4-body terms."""
         for term in eq.terms:
             x = [t.name for t in term.tensors if t.name[0] in "CD"]
             n = len(x)
@@ -5944,6 +8015,8 @@ class WickSpinAdaptation:
 
     @staticmethod
     def get_eq_exprs(eq):
+        """Internal method for transforming from symbolic equations to second quantized operator
+        expressions that can be used in the SU2 mode."""
         import block2 as b
 
         cg = b.SU2CG()
@@ -5971,6 +8044,7 @@ class WickSpinAdaptation:
 
 
 class SimilarityTransform:
+    """Static methods for DMRG with similarity transformed Hamiltonians."""
     @staticmethod
     def make_su2(
         h1e,
@@ -5986,6 +8060,7 @@ class SimilarityTransform:
         st_type=STTypes.H_HT_HT2T2,
         iprint=1,
     ):
+        """Construct expression for the similarity transformed Hamiltonians in the SU2 mode."""
         import block2 as b
         import numpy as np
         import os
@@ -6154,6 +8229,7 @@ class SimilarityTransform:
         st_type=STTypes.H_HT_HT2T2,
         iprint=1,
     ):
+        """Construct expression for the similarity transformed Hamiltonians in the SZ mode."""
         import block2 as b
         import numpy as np
         import os
@@ -6379,6 +8455,7 @@ class SimilarityTransform:
         st_type=STTypes.H_HT_HT2T2,
         iprint=1,
     ):
+        """Construct expression for the similarity transformed Hamiltonians in the SGF mode."""
         import block2 as b
         import numpy as np
         import os

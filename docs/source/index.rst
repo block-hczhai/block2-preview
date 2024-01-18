@@ -161,6 +161,7 @@ Features
    :maxdepth: 2
    :caption: API Reference
 
+   api/pyblock2
    api/global
    api/sparse_matrix
    api/tensor_functions

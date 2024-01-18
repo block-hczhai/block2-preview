@@ -3028,7 +3028,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         return out;
     }
 
-    // Constrained SVD (SVD with contraints on sparsity)
+    // Constrained SVD (SVD with constraints on sparsity)
     // not tested for complex
     // Guillemot V, et al. (2019) PLoS ONE 14: e0211463.
     static void constrained_svd(GMatrix<FL> x, MKL_INT rank, GMatrix<FL> l,

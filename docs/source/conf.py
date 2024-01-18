@@ -20,7 +20,7 @@ import subprocess
 # -- Project information -----------------------------------------------------
 
 project = 'block2'
-copyright = '2023, Huanchen Zhai'
+copyright = '2020-2024, Huanchen Zhai'
 author = 'Huanchen Zhai'
 
 
@@ -75,6 +75,13 @@ latex_elements = {
         \usepackage[defaultsans]{lato}
         \usepackage{inconsolata}
     '''
+}
+
+sys.path[:0] = [os.path.abspath('../..')]
+
+autodoc_default_options = {
+    'member-order': 'bysource',
+    'special-members': '__init__'
 }
 
 def generate_doxygen_xml(app):
