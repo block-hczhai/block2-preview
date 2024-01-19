@@ -29,6 +29,7 @@ class SymmetryTypes(IntFlag):
     ``CPX``, ``SP``, ``SAny`` can be combined with some other types using operator ``|``.
     For example, ``SymmetryTypes.CPX | SymmetryTypes.SU2`` is the SU(2) mode with the complex number.
     """
+
     #: Real number and double precision.
     Nothing = 0
     #: Spin-adapted Fermion mode, U(1) x SU(2) x AbelianPG.
@@ -80,6 +81,7 @@ class ParallelTypes(IntFlag):
     Enumeration of strategies for distributing the quantum chemistry ``h1e`` and ``g2e`` integrals.
     See Eq. (2) in *J. Chem. Phys.* **154**, 224116 (2021).
     """
+
     #: Serial computation.
     Nothing = 0
     #: Distribute integrals over the first index.
@@ -125,6 +127,7 @@ class MPOAlgorithmTypes(IntFlag):
     Enumeration of strategies for building MPO from symbolic expression of second quantized operators.
     Algorithms (such as ``Bipartite``) and modifiers (such as ``Fast``) can be combined using operator ``|``.
     """
+
     #: No algorithm specified (invalid).
     Nothing = 0
     #: Bipartite algorithm. See *J. Chem. Phys.* **153**, 084118 (2020).
@@ -224,6 +227,7 @@ class NPDMAlgorithmTypes(IntFlag):
     See Sec. II.E.1 in *J. Chem. Phys.* **159**, 234801 (2023).
     Items can be combined using operator ``|``.
     """
+
     #: No algorithm specified (invalid).
     Nothing = 0
     #: Symbol-free NPDM algorithm.
@@ -247,6 +251,7 @@ class STTypes(IntFlag):
     Enumeration of truncation of expression in DMRG for similarity-transformed Hamiltonians.
     See Sec. II.D.3.iii in *J. Chem. Phys.* **159**, 234801 (2023).
     """
+
     #: Terms in H.
     H = 1
     #: Terms in [H, T].
@@ -321,6 +326,7 @@ class Block2Wrapper:
             Vector of Vector of the quantum number type.
             For example, when ``symm_type = SymmetryTypes.SU2``, ``VectorSX = block2.VectorVectorSU2``.
     """
+
     def __init__(self, symm_type=SymmetryTypes.SU2):
         import block2 as b
 
@@ -536,6 +542,7 @@ class DMRGDriver:
         mpi : MPICommunicator or None
             MPI Communicator.
     """
+
     def __init__(
         self,
         stack_mem=1 << 30,
@@ -787,7 +794,7 @@ class DMRGDriver:
                 fictitious non-singlet spin.
                 For most cases, this can be automatically determined and stored as ``DMRGDriver.left_vacuum``.
                 For Abelian symmetry mode or singlet states in non-Abelian symmetry modes, this should be equal to
-                ``vacuum``. 
+                ``vacuum``.
             hamil_init : bool
                 Whether the Hamiltonian object ``DMRGDriver.ghamil`` should be initialized. Default is True.
                 When a custom symmetry type is used and ``symm_type = SymmetryTypes.SAny``,
@@ -4842,35 +4849,35 @@ class DMRGDriver:
 
                 .. math::
                     \\mathrm{dm}[i, j, \\cdots, b, a] =
-                        \\sum_{\\sigma,\\sigma',\\cdots} \\langle a_{i\\sigma}^\dagger a_{j\\sigma'}^\dagger
+                        \\sum_{\\sigma,\\sigma',\\cdots} \\langle a_{i\\sigma}^\\dagger a_{j\\sigma'}^\\dagger
                             \\cdots a_{b\\sigma'} a_{a\\sigma} \\rangle
 
                 In the SZ mode (when ``npdm_expr is None``):
 
                 .. math::
                     \\mathrm{dms}[0][i, \\cdots, j, k, c, b, \\cdots, a] =
-                        \\langle a_{i\\alpha}^\dagger
-                            \\cdots a_{j\\alpha}^\dagger a_{k\\alpha} a_{c\\alpha}
+                        \\langle a_{i\\alpha}^\\dagger
+                            \\cdots a_{j\\alpha}^\\dagger a_{k\\alpha} a_{c\\alpha}
                             a_{b\\alpha} \\cdots a_{a\\alpha} \\rangle \\\\
                     \\mathrm{dms}[1][i, \\cdots, j, k, c, b, \\cdots, a] =
-                        \\langle a_{i\\alpha}^\dagger
-                            \\cdots a_{j\\alpha}^\dagger a_{k\\beta} a_{c\\beta}
+                        \\langle a_{i\\alpha}^\\dagger
+                            \\cdots a_{j\\alpha}^\\dagger a_{k\\beta} a_{c\\beta}
                             a_{b\\alpha} \\cdots a_{a\\alpha} \\rangle \\\\
                     \\mathrm{dms}[2][i, \\cdots, j, k, c, b, \\cdots, a] =
-                        \\langle a_{i\\alpha}^\dagger
-                            \\cdots a_{j\\beta}^\dagger a_{k\\beta} a_{c\\beta}
+                        \\langle a_{i\\alpha}^\\dagger
+                            \\cdots a_{j\\beta}^\\dagger a_{k\\beta} a_{c\\beta}
                             a_{b\\beta} \\cdots a_{a\\alpha} \\rangle \\\\
                     \\cdots \\\\
                     \\mathrm{dms}[\\mathrm{pdm\\_type}][i, \\cdots, j, k, c, b, \\cdots, a] =
-                        \\langle a_{i\\beta}^\dagger
-                            \\cdots a_{j\\beta}^\dagger a_{k\\beta} a_{c\\beta}
+                        \\langle a_{i\\beta}^\\dagger
+                            \\cdots a_{j\\beta}^\\dagger a_{k\\beta} a_{c\\beta}
                             a_{b\\beta} \\cdots a_{a\\beta} \\rangle
 
                 In the SGF mode (when ``npdm_expr is None``):
 
                 .. math::
                     \\mathrm{dm}[i, j, \\cdots, b, a] = \\langle
-                        a_{i}^\dagger a_{j}^\dagger \\cdots a_{b} a_{a} \\rangle
+                        a_{i}^\\dagger a_{j}^\\dagger \\cdots a_{b} a_{a} \\rangle
         """
         bw = self.bw
         import numpy as np
@@ -5424,7 +5431,7 @@ class DMRGDriver:
         Adjust the MPS (inplace) for performing 1-site or 2-site sweep algorithms,
         and find the direction of the next sweep.
         When restarting from the middle, this method should not be called.
-        
+
         Args:
             ket : MPS
                 The block2 MPS object.
@@ -5432,7 +5439,7 @@ class DMRGDriver:
                 If not None, should be 1 or 2 and the "site type" of the MPS
                 will be changed to "1-site" or "2-site". If None, the "site type"
                 of the MPS will not be changed. Default is None.
-        
+
         Returns:
             ket : MPS
                 The MPS with the desired "site type".
@@ -5628,7 +5635,7 @@ class DMRGDriver:
                 Maximal number of iteration in the linear solver. Default is 4000.
             iprint : int
                 Verbosity. Default is 0 (quiet).
-        
+
         Returns:
             norm : float|complex
                 The norm of ``bra`` (when ``left_mpo is None``)
@@ -6607,6 +6614,7 @@ class SOCDMRGDriver(DMRGDriver):
     """
     Simple Python interface for DMRG calculations with Spin-Orbit-Coupling (SOC).
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -6835,6 +6843,7 @@ class SOCDMRGDriver(DMRGDriver):
 
 class NormalOrder:
     """Static methods for normal ordering for quantum chemistry integrals."""
+
     @staticmethod
     def def_ix(cidx):
         """Internal method for index slicing."""
@@ -7065,6 +7074,7 @@ class WickNormalOrder:
     Static methods for normal ordering for quantum chemistry integrals
     implemented using automatic symbolic derivation.
     """
+
     @staticmethod
     def make_su2(h1e, g2e, const_e, cidx, iprint=1):
         """Perform normal ordering of quantum chemistry integrals in the SU2 mode."""
@@ -7461,6 +7471,7 @@ class ExprBuilder:
         data : GeneralFCIDUMP
             The block2 GeneralFCIDUMP object.
     """
+
     def __init__(self, bw=None):
         """
         Initialize :class:`ExprBuilder`.
@@ -7675,6 +7686,7 @@ class ExprBuilder:
 
 class FermionTransform:
     """Static methods for fermion to spin operator transforms."""
+
     @staticmethod
     def jordan_wigner(h1e, g2e):
         """Jordan-Wigner transform of quantum chemistry integrals."""
@@ -7740,6 +7752,7 @@ class OrbitalEntropy:
     """
     Static methods for orbital entropy computations.
     """
+
     #: Entropy operators in SZ mode.
     #: See Table 4. in *J. Chem. Theory Comput.* **9**, 2959-2973 (2013).
     ops = "1-n-N+nN:D-nD:d-Nd:Dd:C-nC:N-nN:Cd:-Nd:c-Nc:Dc:n-nN:nD:Cc:-Nc:nC:nN".split(
@@ -7936,6 +7949,7 @@ class OrbitalEntropy:
 
 class WickSpinAdaptation:
     """Static methods for symbolic expression processing for normal ordering."""
+
     @staticmethod
     def spin_tag_to_pattern(x):
         """Internal method for transforming ``[1, 2, 2, 1] -> ((.+(.+.)0)1+.)0``."""
@@ -8054,6 +8068,7 @@ class WickSpinAdaptation:
 
 class SimilarityTransform:
     """Static methods for DMRG with similarity transformed Hamiltonians."""
+
     @staticmethod
     def make_su2(
         h1e,
