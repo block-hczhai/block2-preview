@@ -2892,6 +2892,37 @@ class DMRGDriver:
         """
         Construct MPO from integrals in a quantum chemistry Hamiltonian.
 
+        For quantum chemistry Hamiltonians, the unpacked 2-electron integral ``g2e`` uses chemists' notation.
+
+        In SU2 symmetry (spin restricted) mode, the quantum chemistry Hamiltonian is given by
+
+        .. math::
+            H = \\sum_{\\sigma,ij} [\\mathrm{h1e}]_{ij}\\ a^{\\dagger}_{i\\sigma} a_{j\\sigma}
+                + \\frac{1}{2} \\sum_{\\sigma\\sigma',ijkl} [\\mathrm{g2e}]_{ijkl}\\ a^{\\dagger}_{i\\sigma}
+                a^\\dagger_{k\\sigma'} a_{l\\sigma'} a_{j\\sigma} + \\mathrm{ecore}
+
+        In SZ symmetry (spin unrestricted) mode, the quantum chemistry Hamiltonian is given by
+
+        .. math::
+            H = \\sum_{\\sigma,ij} [\\mathrm{h1e}]_{\\sigma,ij}\\ a^{\\dagger}_{i\\sigma}
+                a_{j\\sigma} + \\frac{1}{2} \\sum_{\\sigma\\sigma',ijkl} [\\mathrm{g2e}]_{\\sigma\\sigma',ijkl}
+                \\ a^{\\dagger}_{i\\sigma} a^\\dagger_{k\\sigma'} a_{l\\sigma'} a_{j\\sigma} + \\mathrm{ecore}
+
+        with
+
+        .. math::
+            [\\mathrm{h1e}][0] = [\\mathrm{h1e}]_{\\alpha} \\\\
+            [\\mathrm{h1e}][1] = [\\mathrm{h1e}]_{\\beta} \\\\
+            [\\mathrm{g2e}][0] = [\\mathrm{g2e}]_{\\alpha\\alpha} \\\\
+            [\\mathrm{g2e}][1] = [\\mathrm{g2e}]_{\\alpha\\beta} \\\\
+            [\\mathrm{g2e}][2] = [\\mathrm{g2e}]_{\\beta\\beta}
+
+        In SGF symmetry (general spin) mode, the quantum chemistry Hamiltonian is given by
+
+        .. math::
+            H = \\sum_{ij} [\\mathrm{h1e}]_{ij}\\ a^{\\dagger}_{i} a_{j} + \\frac{1}{2} \\sum_{ijkl}
+                [\\mathrm{g2e}]_{ijkl}\\ a^{\\dagger}_{i} a^\\dagger_{k} a_{l} a_{j} + \\mathrm{ecore}.
+
         Args:
             h1e : np.ndarray[float|complex] or list[np.ndarray[float|complex]]
                 ``ndim = 2`` one-electron integral.
@@ -4558,7 +4589,7 @@ class DMRGDriver:
                 If not None, will compute the transition NPDM between ``bra`` and ``ket``.
             soc : bool
                 When ``pdm_type == 1`` this indicates whether the 1 particle transition
-                triplet density matrix (for spin-orbital coupling) should be computed
+                triplet density matrix (for spin-orbit coupling) should be computed
                 instead of the normal 1PDM. Only have effects in the SU2 mode.
                 Default is False.
             site_type : int
@@ -4798,7 +4829,7 @@ class DMRGDriver:
                 If not None, will compute the transition NPDM between ``bra`` and ``ket``.
             soc : bool
                 When ``pdm_type == 1`` this indicates whether the 1 particle transition
-                triplet density matrix (for spin-orbital coupling) should be computed
+                triplet density matrix (for spin-orbit coupling) should be computed
                 instead of the normal 1PDM. Only have effects in the SU2 mode.
                 Default is False. If True, ``NPDMAlgorithmTypes.Conventional`` is required
                 in ``algo_type``.
@@ -4843,7 +4874,7 @@ class DMRGDriver:
             dms : np.ndarray[flat|complex] or list[np.ndarray[flat|complex]]
                 A list of density matrices for different spin components in the SZ mode,
                 or the spin-traced density matrix in the SU2 mode, or
-                the spin-orbital density matrix in the SGF mode.
+                the spin-orbit density matrix in the SGF mode.
 
                 In the SU2 mode (when ``npdm_expr is None``):
 
