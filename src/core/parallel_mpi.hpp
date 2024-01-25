@@ -60,7 +60,7 @@ struct MPI {
         if (_rank != 0)
             cout.setstate(ios::failbit);
     }
-    ~MPI() {
+    virtual ~MPI() {
         cout.clear();
         cout << "MPI FINALIZE: rank " << _rank << " of " << _size << endl;
         MPI_Finalize();
@@ -95,7 +95,7 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
         : ParallelCommunicator<S>(size, rank, root), comm(comm) {
         para_type = ParallelTypes::Distributed;
     }
-    ~MPICommunicator() override {
+    virtual ~MPICommunicator() override {
         if (comm != MPI_COMM_WORLD && comm != MPI_COMM_NULL) {
             int ierr = MPI_Comm_free(&comm);
             assert(ierr == 0);

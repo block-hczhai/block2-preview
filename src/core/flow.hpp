@@ -231,7 +231,7 @@ struct DSU {
         for (int i = 0; i < n; i++)
             parex[i] = i, rankx[i] = 0;
     }
-    ~DSU() {}
+    virtual ~DSU() {}
     int findx(int x) {
         if (parex[x] != x)
             parex[x] = findx(parex[x]);

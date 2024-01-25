@@ -59,8 +59,8 @@ struct DelayedSparseMatrix : DelayedSparseMatrix<S, FL> {
 // Representing sparse operator
 template <typename S, typename FL>
 struct DelayedSparseMatrix<S, FL> : SparseMatrix<S, FL> {
-    DelayedSparseMatrix<S, FL>() : SparseMatrix<S, FL>() {}
-    virtual ~DelayedSparseMatrix<S, FL>() = default;
+    DelayedSparseMatrix() : SparseMatrix<S, FL>() {}
+    virtual ~DelayedSparseMatrix() = default;
     SparseMatrixTypes get_type() const override {
         return SparseMatrixTypes::Delayed;
     }

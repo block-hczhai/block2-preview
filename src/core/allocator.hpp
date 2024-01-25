@@ -196,7 +196,7 @@ template <typename T> struct TemporaryAllocator : StackAllocator<T> {
     /** Default constructor. */
     TemporaryAllocator() : StackAllocator<T>() {}
     /** Default destructor. */
-    ~TemporaryAllocator() {
+    virtual ~TemporaryAllocator() {
         if (StackAllocator<T>::data != nullptr)
             delete[] StackAllocator<T>::data;
     }
@@ -434,7 +434,7 @@ template <typename FL> struct DataFrame {
             Parsing::mkdir(mpo_dir);
     }
     /** Destructor. */
-    ~DataFrame() { deallocate(); }
+    virtual ~DataFrame() { deallocate(); }
     /** Activate one data frame.
      * @param i The index of the data frame to be activated.
      */

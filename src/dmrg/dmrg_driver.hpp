@@ -71,7 +71,8 @@ template <typename S, typename FL> struct DMRGDriver {
             n_threads, n_threads, 1);
         threading_()->seq_type = SeqTypes::Tasked;
     }
-    ~DMRGDriver() { frame_<FP>() = nullptr; }
+    // the "virtual" is important for preventing inlining
+    virtual ~DMRGDriver() { frame_<FP>() = nullptr; }
     void initialize_system(
         int n_sites, int n_elec, int spin, int pg_irrep = -1,
         const vector<typename S::pg_t> &orb_sym = vector<typename S::pg_t>(),
