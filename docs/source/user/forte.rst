@@ -17,7 +17,7 @@ Preparation
 
 First, we need to build and install the C++ library of ``block2``. This can be done using the ``-DBUILD_CLIB=ON`` option: ::
 
-    git clone https://github.com/block-hczhai/block2-preview
+    git clone -b p0.5.3rc7 https://github.com/block-hczhai/block2-preview
     cd block2-preview
     mkdir build
     cd build
@@ -34,9 +34,12 @@ Second, we need to build `psi4 <https://github.com/psi4/psi4>`_. Make sure an ``
 which can be installed using ``apt install libeigen3-dev`` or ``conda install -c omnia eigen3``. If you use the ``conda`` package,
 you may need to add the ``cmake`` option ``-DCMAKE_PREFIX_PATH=${CONDA_PREFIX}`` so that ``cmake`` can find it.
 
+To save compiling time, one may install ``libint2`` using ``conda install conda-forge::libint==2.8.1`` before the following.
+
 Then we can build ``psi4`` as follows: ::
 
-    git clone https://github.com/psi4/psi4
+    git clone -b v1.9 https://github.com/psi4/psi4
+    git pull origin master --tags
     cd psi4
     mkdir build
     cd build
@@ -53,14 +56,15 @@ Then we can add the following environment variables: ::
     export PSI_SCRATCH=/scratch/.../psi4      # use a valid scratch folder here
 
 Then the command ``psi4`` should be available in the terminal. And ``python -c 'import psi4'`` should work.
+If there is the error ``TypeError: issubclass() arg 1 must be a class``, try ``pip install --force-reinstall typing-extensions==4.5.0``.
 
 Third, we need to build `abmit <https://github.com/jturney/ambit>`_ as follows: ::
 
-    git clone https://github.com/jturney/ambit
+    git clone -b v0.7.1 https://github.com/jturney/ambit
     cd ambit
     mkdir build
     cd build
-    cmake .. -DCMAKE_INSTALL_PREFIX=../install
+    cmake .. -DCMAKE_INSTALL_PREFIX=../install -DENABLE_TESTS=OFF
     make -j 10
     make install
     export AMBIT_DIR=$PWD/../install
@@ -70,12 +74,11 @@ Finally, we can build `forte <https://github.com/evangelistalab/forte>`_.
 Here we use a revised version with the ``block2`` interface,
 which can be found in the ``block2_dmrg`` branch of the forked repo https://github.com/hczhai/forte. To build it, we can: ::
 
-    git clone https://github.com/hczhai/forte
+    git clone -b block2_dmrg https://github.com/hczhai/forte
     cd forte
-    git checkout block2_dmrg
     $(psi4 --plugin-compile) -Dambit_DIR=${AMBIT_DIR}/share/cmake/ambit \
         -DENABLE_block2=ON \
-        -Dblock2_DIR=${AMBIT_DIR}/share/cmake/block2 \
+        -Dblock2_DIR=${BLOCK2_DIR}/share/cmake/block2 \
         -DCMAKE_PREFIX_PATH=${CONDA_PREFIX}
     make -j 10
     export FORTE_DIR=$PWD
@@ -83,7 +86,7 @@ which can be found in the ``block2_dmrg`` branch of the forked repo https://gith
 
 Then we can add the following environment variables: ::
 
-    export PYTHONPATH=${FORTE_DIR}:$PYTHONPATH
+    export PYTHONPATH=${FORTE_DIR}:${AMBIT_DIR}/lib:$PYTHONPATH
 
 Then ``python -c 'import forte'`` should work.
 
