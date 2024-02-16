@@ -28,7 +28,7 @@ sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}',"
 sed -i "/DPYTHON_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
 
 ls -l /opt/python
-/opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip
+/opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
 /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2
 

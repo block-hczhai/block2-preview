@@ -33,8 +33,8 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
@@ -43,7 +43,7 @@ jobs:
           MKLROOT: ~/.local
         run: |
           export PYT=$(which python)
-          python -m pip install pip build twine --upgrade
+          python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 
       - name: install requirements (linux / mpi)
@@ -164,7 +164,7 @@ jobs:
       - name: run test (serial-pytest, linux)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
-          python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
+          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
@@ -176,14 +176,14 @@ jobs:
       - name: run test (serial-pytest, macos)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-12'
         run: |
-          python -m pip install pytest 'pyscf==2.0.1' 'scipy==1.10.1'
+          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (any-symm-pytest, linux)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
-          python -m pip install pytest 'pyscf==2.1.0' 'scipy==1.10.1'
+          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
@@ -195,7 +195,7 @@ jobs:
       - name: run test (any-symm-pytest, macos)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-12'
         run: |
-          python -m pip install pytest 'pyscf==2.0.1' 'scipy==1.10.1'
+          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py --symm sany
 
@@ -239,8 +239,8 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
@@ -249,7 +249,7 @@ jobs:
           MKLROOT: ~/.local
         run: |
           export PYT=$(which python)
-          python -m pip install pip build twine --upgrade
+          python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
 
       - name: build wheels (macos-x86_64)
@@ -358,8 +358,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -369,7 +369,7 @@ jobs:
         run: |
           echo ${TAG_STRING:11}
           sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
-          python -m pip install pip build twine --upgrade
+          python -m pip install pip build twine setuptools --upgrade
           python -m build --sdist
 
       - name: release (serial)
@@ -420,8 +420,8 @@ jobs:
     runs-on: ubuntu-20.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.12
 
@@ -431,7 +431,7 @@ jobs:
         run: |
           echo ${TAG_STRING:11}
           sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
-          python -m pip install pip build twine --upgrade
+          python -m pip install pip build twine setuptools --upgrade
           python -m build --sdist
 
       - name: download wheels (serial)
