@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04, macos-12 ]
-        python: [ 3.9 ]
+        python: [ 3.12 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
         exclude:
@@ -227,7 +227,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-20.04, macos-12 ]
-        python: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
+        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
@@ -361,7 +361,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.12
 
       - name: build source dist (serial)
         env:
@@ -423,7 +423,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
-          python-version: 3.9
+          python-version: 3.12
 
       - name: build source dist (serial)
         env:
