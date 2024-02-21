@@ -84,7 +84,7 @@ FC = lambda x: x.expand(0).simplify() # fully contracted
 Z = P("") # zero
 
 def CommT(t, d): # commutator with t (at order d)
-    return lambda h, i: (1.0 / i) * (h ^ t).expand((d - i) * 4).simplify()
+    return lambda h, i: (1.0 / i) * (h ^ t).expand((d + 1 - i) * 4).simplify()
 
 def HBar(h, t, d): # exp(-t) h exp(t) (order d)
     return sum(itertools.accumulate([h, *range(1, d + 1)], CommT(t, d)), Z)
