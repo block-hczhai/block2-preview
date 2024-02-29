@@ -385,6 +385,9 @@ library is linked to only pure "so.1" or only pure "so".
 
     /.../block2.cpython-38-x86_64-linux-gnu.so: undefined symbol: _ZNSt15__exception_ptr13exception_ptr9_M_addrefEv
 
-**Solution:** This can be caused by loading the wrong ``libstdc++.so.6`` at runtime. For example, when using a new ``g++`` to build the code,
+**Solution A:** This can be caused by loading the wrong ``libstdc++.so.6`` at runtime. For example, when using a new ``g++`` (gcc 13.2.0) to build the code,
     and there is an old ``/anaconda3/envs/python3.7/lib/libstdc++.so.6`` which is linked by cmake and loaded at runtime, this error can happen.
     Adding ``LD_PRELOAD=/lib64/libstdc++.so.6`` at runtime is one way to fix this.
+
+**Solution B:** This can also be related to Python import order. If ``numpy`` or ``pyscf`` was built using an old version of ``gcc`` and you first
+    import ``numpy`` or ``pyscf``, then ``import block2`` will cause error. To sovle this problem, one can ``import block2`` at the beginning.
