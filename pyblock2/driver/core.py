@@ -1098,8 +1098,10 @@ class DMRGDriver:
                 )
                 mask2 = mask2a | mask2b
         if h1e is not None:
+            h1e = h1e.copy()
             h1e[~mask1.reshape(h1e.shape)] = 0.0
         if g2e is not None:
+            g2e = g2e.copy()
             g2e[~mask2.reshape(g2e.shape)] = 0.0
         if (self.mpi is not None and self.mpi.rank != self.mpi.root) or (
             self.mpi is None and mrank != 0
