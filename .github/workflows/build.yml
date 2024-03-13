@@ -82,6 +82,8 @@ jobs:
 
       - name: build gtest (macos)
         if: matrix.os == 'macos-12'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
@@ -257,6 +259,7 @@ jobs:
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '10.9'
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
           brew update
           brew install libomp
@@ -289,6 +292,7 @@ jobs:
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '11.0'
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
           brew update
           brew install libomp
