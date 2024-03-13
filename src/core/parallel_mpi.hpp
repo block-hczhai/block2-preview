@@ -63,7 +63,12 @@ struct MPI {
     virtual ~MPI() {
         cout.clear();
         cout << "MPI FINALIZE: rank " << _rank << " of " << _size << endl;
-        MPI_Finalize();
+        int flag = 1;
+        _ierr = MPI_Finalized(&flag);
+        if (!flag) {
+            _ierr = MPI_Finalize();
+            assert(_ierr == 0);
+        }
     }
     static MPI &mpi() {
         static MPI _mpi;
