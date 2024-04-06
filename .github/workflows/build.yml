@@ -277,7 +277,7 @@ jobs:
           export OMPROOT=$(brew --prefix libomp)
           echo ${OMPROOT}
           cmake --version
-          python -m pip install wheel delocate
+          python -m pip install wheel delocate==0.10.7
           python -m pip wheel . -w ./dist --no-deps
           export DYLD_LIBRARY_PATH=$(python -c "import site;print(':'.join(x+'/../..' for x in site.getsitepackages()))")
           # prevent delocating libomp
@@ -315,7 +315,7 @@ jobs:
           export OMPROOT=$(./arm-brew/bin/brew --prefix libomp)
           echo ${OMPROOT}
           cmake --version
-          python -m pip install wheel delocate
+          python -m pip install wheel delocate==0.10.7
           export _PYTHON_HOST_PLATFORM="macosx-12.0-arm64"
           export SDKROOT=/Applications/Xcode_13.2.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.1.sdk
           export CROSS_COMPILE=1
