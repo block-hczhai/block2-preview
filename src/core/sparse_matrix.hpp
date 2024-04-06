@@ -1037,6 +1037,20 @@ template <typename S, typename FL> struct SparseMatrix {
             r += this->operator[](i).trace();
         return r;
     }
+    virtual void conjugate() const {
+        if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
+            GMatrixFunctions<FL>::conjugate(
+                GMatrix<FL>(data, (MKL_INT)total_memory, 1));
+        else {
+            const size_t chunk_size = 1 << 30;
+            for (size_t offset = 0; offset < total_memory;
+                 offset += chunk_size) {
+                GMatrixFunctions<FL>::conjugate(GMatrix<FL>(
+                    data + offset,
+                    (MKL_INT)(min(chunk_size, total_memory - offset)), 1));
+            }
+        }
+    }
     virtual FP norm() const {
         if (total_memory <= (size_t)numeric_limits<MKL_INT>::max())
             return GMatrixFunctions<FL>::norm(

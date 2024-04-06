@@ -855,6 +855,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
              py::arg("length"))
         .def("trace", &SparseMatrix<S, FL>::trace)
         .def("norm", &SparseMatrix<S, FL>::norm)
+        .def("conjugate", &SparseMatrix<S, FL>::conjugate)
         .def("__getitem__",
              [](SparseMatrix<S, FL> *self, int idx) { return (*self)[idx]; })
         .def("__setitem__",

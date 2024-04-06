@@ -2337,6 +2337,16 @@ template <typename S, typename FL> struct MPS {
         shallow_copy_to(mps);
         return mps;
     }
+    virtual void conjugate() {
+        load_data();
+        load_mutable();
+        for (int i = 0; i < n_sites; i++)
+            if (tensors[i] != nullptr)
+                tensors[i]->conjugate();
+        save_mutable();
+        save_data();
+        deallocate();
+    }
     virtual shared_ptr<MPS> deep_copy(const string &xtag) const {
         shared_ptr<MPSInfo<S>> xinfo = info->deep_copy();
         xinfo->load_mutable();

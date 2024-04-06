@@ -427,6 +427,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("save_mutable", &MPS<S, FL>::save_mutable)
         .def("save_tensor", &MPS<S, FL>::save_tensor)
         .def("load_tensor", &MPS<S, FL>::load_tensor)
+        .def("conjugate", &MPS<S, FL>::conjugate)
         .def("unload_tensor", &MPS<S, FL>::unload_tensor)
         .def("deep_copy", &MPS<S, FL>::deep_copy, py::arg("tag"))
         .def("estimate_storage", &MPS<S, FL>::estimate_storage,
