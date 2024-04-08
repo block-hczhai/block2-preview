@@ -341,13 +341,13 @@ jobs:
 
       - name: release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
 
       - name: upload artifacts
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.parallel }}
           path: dist
@@ -378,7 +378,7 @@ jobs:
 
       - name: release (serial)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
 
@@ -396,7 +396,7 @@ jobs:
 
       - name: release (mpi)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*
 
@@ -410,13 +410,13 @@ jobs:
         uses: actions/configure-pages@v2
 
       - name: upload artifacts
-        uses: actions/upload-pages-artifact@v1
+        uses: actions/upload-pages-artifact@v3
         with:
           path: './idx-dist'
 
       - name: deploy to gitHub pages
         id: deployment
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
 
   publish:
     name: publish
@@ -439,16 +439,13 @@ jobs:
           python -m build --sdist
 
       - name: download wheels (serial)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist-serial
           path: dist
 
       - name: publish to pypi (serial)
-        uses: pypa/gh-action-pypi-publish@v1.4.2
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: build source dist (mpi)
         env:
@@ -462,13 +459,10 @@ jobs:
           python -m build --sdist
 
       - name: download wheels (mpi)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist-mpi
           path: dist
 
       - name: publish to pypi (mpi)
-        uses: pypa/gh-action-pypi-publish@v1.4.2
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_MPI_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
