@@ -407,7 +407,7 @@ jobs:
           python .github/workflows/build_pypi.py ${REPO} ./idx-dist/pypi
 
       - name: setup pages
-        uses: actions/configure-pages@v2
+        uses: actions/configure-pages@v5
 
       - name: upload artifacts
         uses: actions/upload-pages-artifact@v3

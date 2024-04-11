@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include "flow.hpp"
 #include "general_symm_permutation.hpp"
 #include "integral.hpp"
 #include "spin_permutation.hpp"
@@ -486,10 +487,12 @@ template <typename FL> struct GeneralFCIDUMP {
         vector<shared_ptr<SpinPermScheme>> psch = schemes;
         if (psch.size() < exprs.size()) {
             psch.resize(exprs.size(), nullptr);
-            for (size_t ix = 0; ix < exprs.size(); ix++)
+            for (size_t ix = 0; ix < exprs.size(); ix++) {
+                vector<uint16_t> mask = find_mask(ix);
                 psch[ix] = make_shared<SpinPermScheme>(
                     exprs[ix], elem_type == ElemOpTypes::SU2,
-                    elem_type != ElemOpTypes::SGB, false, is_drt);
+                    elem_type != ElemOpTypes::SGB, false, is_drt, mask);
+            }
         }
         return adjust_order_impl<SpinPermScheme, double>(psch, merge, is_drt,
                                                          cutoff);
@@ -502,12 +505,49 @@ template <typename FL> struct GeneralFCIDUMP {
         vector<shared_ptr<AnyCG<FL>>> cgs(1, make_shared<AnySO3RSHCG<FL>>());
         if (psch.size() < exprs.size()) {
             psch.resize(exprs.size(), nullptr);
-            for (size_t ix = 0; ix < exprs.size(); ix++)
+            for (size_t ix = 0; ix < exprs.size(); ix++) {
+                vector<uint16_t> mask = find_mask(ix);
                 psch[ix] = make_shared<GeneralSymmPermScheme<FL>>(
-                    exprs[ix], cgs, false, is_drt);
+                    exprs[ix], cgs, false, is_drt, mask);
+            }
         }
         return adjust_order_impl<GeneralSymmPermScheme<FL>, FL>(psch, merge,
                                                                 is_drt, cutoff);
+    }
+    vector<uint16_t> find_mask(size_t ix) const {
+        const int nn = SpinPermRecoupling::count_cds(exprs[ix]);
+        size_t nidx = indices[ix].size() / (nn == 0 ? 1 : nn);
+        int ntg = threading->activate_global();
+        const size_t pidx = nidx / ntg + !!(nidx % ntg);
+        vector<uint8_t> qq(nn * nn, 0);
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            vector<uint8_t> q(nn * nn, 0);
+            for (size_t im = pidx * tid; im < min(nidx, pidx * (tid + 1)); im++)
+                for (int ii = 0; ii < nn; ii++)
+                    for (int jj = ii + 1; jj < nn; jj++)
+                        if (indices[ix][im * nn + ii] !=
+                            indices[ix][im * nn + jj])
+                            q[ii * nn + jj] = 1;
+#pragma omp critial
+            {
+                for (int ii = 0; ii < nn; ii++)
+                    for (int jj = ii + 1; jj < nn; jj++)
+                        if (q[ii * nn + jj])
+                            qq[ii * nn + jj] = 1;
+            }
+        }
+        threading->activate_normal();
+        DSU dsu(nn);
+        for (int ii = 0; ii < nn; ii++)
+            for (int jj = ii + 1; jj < nn; jj++)
+                if (!qq[ii * nn + jj])
+                    dsu.unionx(ii, jj);
+        vector<uint16_t> rr(nn);
+        for (int ii = 0; ii < nn; ii++)
+            rr[ii] = dsu.findx(ii);
+        return rr;
     }
     void merge_terms(FP cutoff = (FP)0.0) {
         vector<size_t> idx;

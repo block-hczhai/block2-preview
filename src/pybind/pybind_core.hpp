@@ -2298,6 +2298,8 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<string, bool, bool>())
         .def(py::init<string, bool, bool, bool>())
         .def(py::init<string, bool, bool, bool, bool>())
+        .def(py::init<string, bool, bool, bool, bool,
+                      const vector<uint16_t> &>())
         .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
         .def_readwrite("data", &SpinPermScheme::data)
         .def_readwrite("is_su2", &SpinPermScheme::is_su2)
@@ -2531,6 +2533,8 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
         .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool>())
         .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool,
                       bool>())
+        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool,
+                      bool, const vector<uint16_t> &>())
         .def_readwrite("index_patterns",
                        &GeneralSymmPermScheme<FL>::index_patterns)
         .def_readwrite("data", &GeneralSymmPermScheme<FL>::data)
@@ -3696,6 +3700,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("merge_terms", &GeneralFCIDUMP<FL>::merge_terms,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
+        .def("find_mask", &GeneralFCIDUMP<FL>::find_mask)
         .def("twos", &GeneralFCIDUMP<FL>::twos)
         .def("n_sites", &GeneralFCIDUMP<FL>::n_sites)
         .def("n_elec", &GeneralFCIDUMP<FL>::n_elec)

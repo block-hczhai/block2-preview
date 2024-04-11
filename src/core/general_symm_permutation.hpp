@@ -1342,11 +1342,13 @@ template <typename FL> struct GeneralSymmPermScheme {
     GeneralSymmPermScheme() {}
     GeneralSymmPermScheme(string spin_str,
                           const vector<shared_ptr<AnyCG<FL>>> &cgs,
-                          bool is_npdm = false, bool is_drt = false) {
+                          bool is_npdm = false, bool is_drt = false,
+                          const vector<uint16_t> &mask = vector<uint16_t>()) {
         int nn = GeneralSymmTensor<FL>::count_cds(spin_str);
         GeneralSymmPermScheme r = GeneralSymmPermScheme::initialize(
-            nn, spin_str, cgs, is_npdm, is_drt);
+            nn, spin_str, cgs, is_npdm, is_drt, mask);
         index_patterns = r.index_patterns;
+        this->mask = r.mask;
         data = r.data;
         targets = r.targets;
         this->cgs = r.cgs;
