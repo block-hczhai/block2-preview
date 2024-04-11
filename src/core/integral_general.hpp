@@ -519,7 +519,7 @@ template <typename FL> struct GeneralFCIDUMP {
         size_t nidx = indices[ix].size() / (nn == 0 ? 1 : nn);
         int ntg = threading->activate_global();
         const size_t pidx = nidx / ntg + !!(nidx % ntg);
-        vector<uint8_t> qq(nn * nn, 0);
+        vector<uint8_t> qq(nn * nn * ntg, 0);
 #pragma omp parallel num_threads(ntg)
         {
             int tid = threading->get_thread_id();
@@ -530,15 +530,17 @@ template <typename FL> struct GeneralFCIDUMP {
                         if (indices[ix][im * nn + ii] !=
                             indices[ix][im * nn + jj])
                             q[ii * nn + jj] = 1;
-#pragma omp critial
-            {
-                for (int ii = 0; ii < nn; ii++)
-                    for (int jj = ii + 1; jj < nn; jj++)
-                        if (q[ii * nn + jj])
-                            qq[ii * nn + jj] = 1;
-            }
+            for (int ii = 0; ii < nn; ii++)
+                for (int jj = ii + 1; jj < nn; jj++)
+                    if (q[ii * nn + jj])
+                        qq[tid * nn * nn + ii * nn + jj] = 1;
         }
         threading->activate_normal();
+        for (int it = 1; it < ntg; it++)
+            for (int ii = 0; ii < nn; ii++)
+                for (int jj = ii + 1; jj < nn; jj++)
+                    if (qq[it * nn * nn + ii * nn + jj])
+                        qq[ii * nn + jj] = 1;
         DSU dsu(nn);
         for (int ii = 0; ii < nn; ii++)
             for (int jj = ii + 1; jj < nn; jj++)
