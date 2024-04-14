@@ -181,6 +181,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     bool save_partition_info = false;
     OpNamesSet delayed_contraction = OpNamesSet();
     int fuse_center;
+    // Set this to false for non-propagate expectation
+    bool save_environments = true;
     MovingEnvironment(const shared_ptr<MPO<S, FL>> &mpo,
                       const shared_ptr<MPS<S, FLS>> &bra,
                       const shared_ptr<MPS<S, FLS>> &ket,
@@ -343,11 +345,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (frame_<FP>()->use_main_stack)
             new_left->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
-        frame_<FP>()->save_data(1, get_left_partition_filename(i));
-        if (save_partition_info) {
-            frame_<FP>()->activate(1);
-            envs[i]->save_data(true, get_left_partition_filename(i, true));
-            frame_<FP>()->activate(0);
+        if (save_environments) {
+            frame_<FP>()->save_data(1, get_left_partition_filename(i));
+            if (save_partition_info) {
+                frame_<FP>()->activate(1);
+                envs[i]->save_data(true, get_left_partition_filename(i, true));
+                frame_<FP>()->activate(0);
+            }
         }
         return make_pair(blocking_mem, renormal_mem);
     }
@@ -493,11 +497,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (frame_<FP>()->use_main_stack)
             new_right->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
-        frame_<FP>()->save_data(1, get_right_partition_filename(i));
-        if (save_partition_info) {
-            frame_<FP>()->activate(1);
-            envs[i]->save_data(false, get_right_partition_filename(i, true));
-            frame_<FP>()->activate(0);
+        if (save_environments) {
+            frame_<FP>()->save_data(1, get_right_partition_filename(i));
+            if (save_partition_info) {
+                frame_<FP>()->activate(1);
+                envs[i]->save_data(false,
+                                   get_right_partition_filename(i, true));
+                frame_<FP>()->activate(0);
+            }
         }
         return make_pair(blocking_mem, renormal_mem);
     }
@@ -1203,7 +1210,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 cout << " | Tasync = " << frame_<FPS>()->tasync << endl << endl;
             }
         }
-        frame_<FP>()->reset(1);
+        if (save_environments)
+            frame_<FP>()->reset(1);
     }
     void partial_prepare(int a, int b) {
         assert(a >= 0 && b <= n_sites);
@@ -1541,7 +1549,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         vector<vector<pair<uint8_t, S>>> lsubsl =
             Partition<S, FL>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl, mpo->left_vacuum);
-        if (envs[iL]->left != nullptr && iL != 0)
+        if (envs[iL]->left != nullptr && iL != 0 && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         Partition<S, FL>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
@@ -1579,7 +1587,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     void delayed_left_contract(int iL,
                                shared_ptr<OperatorTensor<S, FL>> &new_left) {
-        if (envs[iL]->left != nullptr && iL != 0)
+        if (envs[iL]->left != nullptr && iL != 0 && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         frame_<FP>()->activate(0);
         mpo->load_left_operators(iL);
@@ -1612,7 +1620,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         vector<vector<pair<uint8_t, S>>> rsubsl =
             Partition<S, FL>::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[iR], rsl, ket->info->vacuum);
-        if (envs[iR - dot + 1]->right != nullptr)
+        if (envs[iR - dot + 1]->right != nullptr && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         Partition<S, FL>::init_right_op_infos_notrunc(
@@ -1642,7 +1650,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     }
     void delayed_right_contract(int iR,
                                 shared_ptr<OperatorTensor<S, FL>> &new_right) {
-        if (envs[iR - dot + 1]->right != nullptr)
+        if (envs[iR - dot + 1]->right != nullptr && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         frame_<FP>()->activate(0);
@@ -1662,7 +1670,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         int iL, vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         shared_ptr<OperatorTensor<S, FL>> &new_left, bool need_load = true) {
         assert(envs[iL]->left != nullptr);
-        if (iL != 0 && need_load)
+        if (iL != 0 && need_load && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         shared_ptr<Allocator<FP>> d_alloc =
             make_shared<TemporaryAllocator<FP>>(frame_<FP>()->dallocs[1]->used);
@@ -1687,7 +1695,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                shared_ptr<OperatorTensor<S, FL>> &new_right,
                bool need_load = true) {
         assert(envs[iR - dot + 1]->right != nullptr);
-        if (need_load)
+        if (need_load && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         shared_ptr<Allocator<FP>> d_alloc =

@@ -5904,25 +5904,31 @@ class DMRGDriver:
                 The expectation value.
         """
         bw = self.bw
-        mbra = bra.deep_copy("EXPE-BRA@TMP")
-        if bra != ket:
-            mket = ket.deep_copy("EXPE-KET@TMP")
+        prog = store_bra_spectra or store_ket_spectra
+        if not prog and bra.dot == 1 and ket.dot == 1 and bra.center == ket.center:
+            mbra, mket = bra, ket
         else:
-            mket = mbra
+            mbra = bra.deep_copy("EXPE-BRA@TMP")
+            if bra != ket:
+                mket = ket.deep_copy("EXPE-KET@TMP")
+            else:
+                mket = mbra
         bond_dim = max(mbra.info.bond_dim, mket.info.bond_dim)
         self.align_mps_center(mbra, mket)
         me = bw.bs.MovingEnvironment(mpo, mbra, mket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
+        if not prog:
+            me.save_environments = False
         me.init_environments(iprint >= 2)
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         if bra == ket:
-            store_bra_spectra = store_bra_spectra or store_ket_spectra
-            store_ket_spectra = store_bra_spectra or store_ket_spectra
+            store_bra_spectra = prog
+            store_ket_spectra = prog
         expect.store_bra_spectra = store_bra_spectra
         expect.store_ket_spectra = store_ket_spectra
         expect.iprint = iprint
-        if store_bra_spectra or store_ket_spectra:
+        if prog:
             ex = expect.solve(True, mket.center == 0)
             self._sweep_wfn_spectra = expect.sweep_wfn_spectra
         else:
