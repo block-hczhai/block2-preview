@@ -5917,9 +5917,12 @@ class DMRGDriver:
         self.align_mps_center(mbra, mket)
         me = bw.bs.MovingEnvironment(mpo, mbra, mket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
-        me.cached_contraction = True
         if not prog:
+            me.cached_contraction = False
+            me.fused_contraction_rotation = True
             me.save_environments = False
+        else:
+            me.cached_contraction = True
         me.init_environments(iprint >= 2)
         expect = bw.bs.Expect(me, bond_dim, bond_dim)
         if bra == ket:
