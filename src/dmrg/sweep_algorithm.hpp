@@ -2386,7 +2386,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 if (energies.size() >= 2)
                     cout << " | DE = " << setw(6) << setprecision(2)
                          << scientific << energy_difference;
-                cout << " | DW = " << setw(6) << setprecision(2) << scientific
+                cout << " | DW = " << setw(9) << setprecision(5) << scientific
                      << get<1>(sweep_results) << endl;
                 if (iprint >= 2) {
                     cout << fixed << setprecision(3);
@@ -4317,7 +4317,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 if (targets.size() >= 2)
                     cout << " | DF = " << setw(6) << setprecision(2)
                          << scientific << target_difference;
-                cout << " | DW = " << setw(6) << setprecision(2) << scientific
+                cout << " | DW = " << setw(9) << setprecision(5) << scientific
                      << get<1>(sweep_results) << endl;
                 if (iprint >= 2) {
                     cout << fixed << setprecision(3);

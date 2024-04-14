@@ -750,8 +750,8 @@ template <typename S, typename FL, typename FLS> struct TDDMRG {
                     cout << " | E = " << setw(15) << get<0>(sweep_results);
                     cout << " | Norm^2 = " << setw(15)
                          << sqrt(get<1>(sweep_results));
-                    cout << " | DW = " << scientific << setw(9)
-                         << setprecision(2) << get<2>(sweep_results);
+                    cout << " | DW = " << scientific << setw(12)
+                         << setprecision(5) << get<2>(sweep_results);
                     if (iprint >= 2) {
                         size_t dmain = frame_<FPS>()->peak_used_memory[0];
                         size_t dseco = frame_<FPS>()->peak_used_memory[1];
@@ -2090,7 +2090,7 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                     cout << fixed << setprecision(10);
                     cout << " | E = " << setw(18) << get<0>(r);
                     cout << " | Norm^2 = " << setw(18) << get<1>(r);
-                    cout << " | DW = " << setw(6) << setprecision(2)
+                    cout << " | DW = " << setw(9) << setprecision(5)
                          << scientific << get<2>(r) << endl;
                 }
                 if (iprint >= 2) {
