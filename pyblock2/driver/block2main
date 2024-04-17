@@ -3681,6 +3681,10 @@ if not pre_run:
                     bra_info.set_bond_dimension_fci(bra_left_vacuum[j], vacuum)
                 bra_info.set_bond_dimension(bond_dims[0])
                 bra_info.bond_dim = bond_dims[0]
+
+                if bra_info.get_max_bond_dimension() == 0:
+                    continue
+
                 bra = MPS(nevpt_ncas, ref_mps.center, ref_mps.dot)
                 bra.initialize(bra_info)
                 bra.random_canonicalize()
