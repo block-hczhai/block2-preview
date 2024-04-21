@@ -29,7 +29,7 @@ sed -i "/DPYTHON_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setu
 
 ls -l /opt/python
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
-/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.10.1
+/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2
 
 if [ "${PARALLEL}" = "mpi" ]; then
