@@ -1174,7 +1174,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
 #pragma omp parallel for schedule(static) num_threads(ntg)
         for (int i = 0; i < vals.size(); i++) {
             vector<uint8_t> det = (*this)[i];
-            vals[i] *= phase_change_orb_order(det, reorder);
+            if (reorder.size() != 0)
+                vals[i] *= phase_change_orb_order(det, reorder);
         }
         threading->activate_normal();
     }

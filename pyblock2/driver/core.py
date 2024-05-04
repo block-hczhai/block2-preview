@@ -5291,7 +5291,7 @@ class DMRGDriver:
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
 
     def get_csf_coefficients(
-        self, ket, cutoff=0.1, given_dets=None, max_print=200, iprint=1
+        self, ket, cutoff=0.1, given_dets=None, max_print=200, fci_conv=False, iprint=1
     ):
         """
         Find the dominant Configuration State Functions (CSFs, in SU2 mode)
@@ -5321,6 +5321,10 @@ class DMRGDriver:
                 When the number of computed CSF/DET is larger than this number, only the
                 dominant ones will be printed. When ``iprint == 0``, this argument has no
                 effect and nothing will be printed.
+            fci_conv : bool
+                If True, will set the DET coefficients to match the FCI convention,
+                by multiplying ``dvals`` by +1/-1. Only have effects in SZ/SGF modes.
+                Default is False.
             iprint : int
                 Verbosity. Default is 1.
 
@@ -5361,8 +5365,10 @@ class DMRGDriver:
                     uniq.add(tuple(ddet))
                 dtrie.append(bw.b.VectorUInt8(ddet))
         dtrie.evaluate(bw.bs.UnfusedMPS(ket), cutoff)
+        if fci_conv:
+            dtrie.convert_phase(bw.b.VectorInt(list(range(ket.n_sites))))
         if iprint:
-            print("dtrie finished", time.perf_counter() - tx)
+            print("DTRIE T = %10.3f" % (time.perf_counter() - tx))
         dname = "CSF" if SymmetryTypes.SU2 in bw.symm_type else "DET"
         if iprint:
             print("Number of %s = %10d (cutoff = %9.5g)" % (dname, len(dtrie), cutoff))
