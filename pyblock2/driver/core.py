@@ -3910,6 +3910,7 @@ class DMRGDriver:
         thrds=None,
         iprint=0,
         dav_type=None,
+        davidson_shift=0.0,
         cutoff=1e-20,
         twosite_to_onesite=None,
         dav_max_iter=4000,
@@ -3975,7 +3976,10 @@ class DMRGDriver:
                 and find all eigenvalues), "ExactNonHermitian", "DavidsonPrecond", and
                 "NoPrecond". "Normal" will use the Olsen preconditioning, "DavidsonPrecond"
                 will use the Davidson preconditioning, and "NoPrecond" will not use any
-                preconditioning. Default is None.
+                preconditioning. Multiple values can be combined using "|". Default is None.
+            davidson_shift : float
+                Target Davidson eigenvalue when dav_type has "GreaterThan", "LessThan", or
+                "CloseTo". Default is 0.
             cutoff : float
                 States with eigenvalue below this number will be discarded,
                 even when the bond dimension is large enough to keep this state.
@@ -4056,7 +4060,15 @@ class DMRGDriver:
                 dmrg.ext_mes.append(ext_me)
 
         if dav_type is not None:
-            dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
+            if '|' in dav_type:
+                dav_types = dav_type.split('|')
+                dtt = getattr(bw.b.DavidsonTypes, dav_types[0])
+                for dav_t in dav_types[1:]:
+                    dtt = dtt | getattr(bw.b.DavidsonTypes, dav_t)
+                dmrg.davidson_type = dtt
+            else:
+                dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
+        dmrg.davidson_shift = davidson_shift
         if lowmem_noise:
             dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollectedLowMem
         else:

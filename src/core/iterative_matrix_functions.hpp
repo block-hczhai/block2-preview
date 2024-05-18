@@ -106,11 +106,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         t.deallocate(x_alloc);
     }
     template <typename MatMul, typename PComm>
-    static vector<FP> exact_diagonalization(MatMul &op, vector<GMatrix<FL>> &vs,
-                                            DavidsonTypes davidson_type,
-                                            int &ndav, bool iprint = false,
-                                            const PComm &pcomm = nullptr,
-                                            FP imag_cutoff = (FP)1E-3) {
+    static vector<FP>
+    exact_diagonalization(MatMul &op, vector<GMatrix<FL>> &vs, FP shift,
+                          DavidsonTypes davidson_type, int &ndav,
+                          bool iprint = false, const PComm &pcomm = nullptr,
+                          FP imag_cutoff = (FP)1E-3) {
         int k = (int)vs.size();
         MKL_INT vm = vs[0].m, vn = vs[0].n, n = vm * vn;
         if (davidson_type & DavidsonTypes::LeftEigen) {
@@ -148,16 +148,43 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             } else
                 eigs(h, ld);
             threading->activate_normal();
-            sort(eigval_idxs.begin(), eigval_idxs.begin() + n,
-                 [&ld_imag](int i, int j) {
-                     return abs(ld_imag.data[i]) < abs(ld_imag.data[j]);
-                 });
-            int kk = k;
+            if (davidson_type & DavidsonTypes::NonHermitian)
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + n,
+                     [&ld_imag](int i, int j) {
+                         return abs(ld_imag.data[i]) < abs(ld_imag.data[j]);
+                     });
+            int kk = (davidson_type & DavidsonTypes::NonHermitian) ? k : n;
             for (; kk < n; kk++)
                 if (abs(ld_imag.data[eigval_idxs[kk]]) > imag_cutoff)
                     break;
             sort(eigval_idxs.begin(), eigval_idxs.begin() + kk,
                  [&ld](int i, int j) { return ld.data[i] < ld.data[j]; });
+            if (davidson_type & DavidsonTypes::CloseTo)
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + kk,
+                     [&ld, shift](int i, int j) {
+                         return abs(ld.data[i] - shift) <
+                                abs(ld.data[j] - shift);
+                     });
+            else if (davidson_type & DavidsonTypes::LessThan)
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + kk,
+                     [&ld, shift](int i, int j) {
+                         if ((shift >= ld.data[i]) != (shift >= ld.data[j]))
+                             return shift >= ld.data[i];
+                         else if (shift >= ld.data[i])
+                             return shift - ld.data[i] < shift - ld.data[j];
+                         else
+                             return ld.data[i] - shift > ld.data[j] - shift;
+                     });
+            else if (davidson_type & DavidsonTypes::GreaterThan)
+                sort(eigval_idxs.begin(), eigval_idxs.begin() + kk,
+                     [&ld, shift](int i, int j) {
+                         if ((shift > ld.data[i]) != (shift > ld.data[j]))
+                             return shift > ld.data[j];
+                         else if (shift > ld.data[i])
+                             return shift - ld.data[i] > shift - ld.data[j];
+                         else
+                             return ld.data[i] - shift < ld.data[j] - shift;
+                     });
             for (int i = 0; i < k; i++) {
                 eigvals[i] = ld.data[eigval_idxs[i]];
                 copy(vs[i], GMatrix<FL>(h.data + eigval_idxs[i] * n, vm, vn));
@@ -494,8 +521,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             make_shared<VectorAllocator<FP>>();
         int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
         if (davidson_type & DavidsonTypes::Exact)
-            return exact_diagonalization(op, vs, davidson_type, ndav, iprint,
-                                         pcomm, imag_cutoff);
+            return exact_diagonalization(op, vs, shift, davidson_type, ndav,
+                                         iprint, pcomm, imag_cutoff);
         if (davidson_type & DavidsonTypes::NonHermitian)
             return davidson_non_hermitian(op, aa, vs, davidson_type, ndav,
                                           iprint, pcomm, conv_thrd, max_iter,
