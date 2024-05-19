@@ -2533,8 +2533,8 @@ template <typename FL> void bind_fl_data(py::module &m, const string &name) {
         .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool>())
         .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool,
                       bool>())
-        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool,
-                      bool, const vector<uint16_t> &>())
+        .def(py::init<string, const vector<shared_ptr<AnyCG<FL>>> &, bool, bool,
+                      const vector<uint16_t> &>())
         .def_readwrite("index_patterns",
                        &GeneralSymmPermScheme<FL>::index_patterns)
         .def_readwrite("data", &GeneralSymmPermScheme<FL>::data)
@@ -2817,7 +2817,8 @@ template <typename FL> void bind_matrix(py::module &m) {
         .def_static(
             "davidson",
             [](py::object op, py::array_t<FL> &diag, py::list kets, bool iprint,
-               typename GMatrix<FL>::FP conv_thrd, int max_iter,
+               typename GMatrix<FL>::FP conv_thrd,
+               typename GMatrix<FL>::FP rel_conv_thrd, int max_iter,
                int soft_max_iter, int deflation_min_size,
                int deflation_max_size) {
                 auto f = [&op](const GMatrix<FL> &b, const GMatrix<FL> &c) {
@@ -2842,14 +2843,14 @@ template <typename FL> void bind_matrix(py::module &m) {
                         vs, (typename GMatrix<FL>::FP)0.0,
                         DavidsonTypes::Normal, ndav, iprint,
                         (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
-                        conv_thrd, max_iter, soft_max_iter, deflation_min_size,
-                        deflation_max_size),
+                        conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
+                        deflation_min_size, deflation_max_size),
                     ndav);
             },
             py::arg("op"), py::arg("diag"), py::arg("kets"),
             py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
-            py::arg("max_iter") = 5000, py::arg("soft_max_iter") = -1,
-            py::arg("deflation_min_size") = 2,
+            py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
+            py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,
             py::arg("deflation_max_size") = 50)
         .def_static(
             "conjugate_gradient",

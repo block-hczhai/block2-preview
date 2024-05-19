@@ -211,7 +211,7 @@ struct EffectiveFunctions<
                 auto evsmall = IterativeMatrixFunctions<FL>::davidson(
                     Hvec, adiag, uvv, 0.0, DavidsonTypes::Normal, ndav, false,
                     para_rule == nullptr ? nullptr : para_rule->comm, dav_tol,
-                    300);
+                    0.0, 300);
                 // largest: use CloseTop and huge shift
                 xnorm = 0;
                 for (MKL_INT i = 0; i < aa.size(); i++) {
@@ -227,7 +227,7 @@ struct EffectiveFunctions<
                 auto evlarge = IterativeMatrixFunctions<FL>::davidson(
                     Hvec, adiag, uvv, 1e9, DavidsonTypes::CloseTo, ndav, false,
                     para_rule == nullptr ? nullptr : para_rule->comm, dav_tol,
-                    300);
+                    0.0, 300);
                 eMin = evsmall[0];
                 eMax = evlarge[0];
                 uv.deallocate();
@@ -367,7 +367,7 @@ struct EffectiveFunctions<
                 op, aa, bs, 0.0,
                 DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond,
                 nmultx, iprint,
-                para_rule == nullptr ? nullptr : para_rule->comm, 1E-4,
+                para_rule == nullptr ? nullptr : para_rule->comm, 1E-4, 0.0,
                 max_iter, soft_max_iter, deflation_min_size,
                 deflation_max_size);
             nmultp = nmult;
@@ -466,8 +466,8 @@ struct EffectiveFunctions<
     eigs_mixed(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
-        bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1, int deflation_min_size = 2,
+        bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+        int max_iter = 5000, int soft_max_iter = -1, int deflation_min_size = 2,
         int deflation_max_size = 50,
         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
@@ -537,7 +537,8 @@ struct EffectiveFunctions<
         vector<FP> xeners = IterativeMatrixFunctions<FC>::harmonic_davidson(
             f, aa, bs, shift, davidson_type, ndav, iprint,
             para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            max_iter, soft_max_iter, deflation_min_size, deflation_max_size);
+            rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+            deflation_max_size);
         vector<typename const_fl_type<FP>::FL> eners(xeners.size());
         for (size_t i = 0; i < xeners.size(); i++)
             eners[i] = (typename const_fl_type<FP>::FL)xeners[i];
@@ -702,8 +703,8 @@ struct EffectiveFunctions<S, FL,
     eigs_mixed(
         const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &h_eff,
         const shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> &x_eff,
-        bool iprint = false, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1, int deflation_min_size = 2,
+        bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+        int max_iter = 5000, int soft_max_iter = -1, int deflation_min_size = 2,
         int deflation_max_size = 50,
         DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {

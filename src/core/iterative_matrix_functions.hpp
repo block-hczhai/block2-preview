@@ -211,9 +211,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     static vector<FP> davidson_non_hermitian(
         MatMul &op, const GDiagonalMatrix<FL> &aa, vector<GMatrix<FL>> &vs,
         DavidsonTypes davidson_type, int &ndav, bool iprint = false,
-        const PComm &pcomm = nullptr, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1, int deflation_min_size = 2,
-        int deflation_max_size = 50, FP imag_cutoff = (FP)1E-3) {
+        const PComm &pcomm = nullptr, FP conv_thrd = 5E-6,
+        FP rel_conv_thrd = 0.0, int max_iter = 5000, int soft_max_iter = -1,
+        int deflation_min_size = 2, int deflation_max_size = 50,
+        FP imag_cutoff = (FP)1E-3) {
         assert(!(davidson_type & DavidsonTypes::Harmonic));
         assert(davidson_type & DavidsonTypes::NonHermitian);
         shared_ptr<VectorAllocator<FL>> d_alloc =
@@ -355,7 +356,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 for (int i = 0; i < ck; i++) {
                     copy(qs[i], sigmaxs[i]);
                     iadd(qs[i], bxs[i], -ld(eigval_idxs[i], eigval_idxs[i]));
-                    if (abs(complex_dot(qs[i], qs[i])) >= conv_thrd) {
+                    if (abs(complex_dot(qs[i], qs[i])) >=
+                        conv_thrd +
+                            abs(ld(eigval_idxs[i], eigval_idxs[i])) *
+                                abs(ld(eigval_idxs[i], eigval_idxs[i])) *
+                                rel_conv_thrd * rel_conv_thrd) {
                         ck = i;
                         break;
                     }
@@ -394,7 +399,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&qq, 1, pcomm->root);
                 pcomm->broadcast(&ck, 1, pcomm->root);
             }
-            if (abs(qq) < conv_thrd) {
+            if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
+                                          rel_conv_thrd * rel_conv_thrd) {
                 ck++;
                 if (ck == k) {
                     if ((davidson_type & DavidsonTypes::LeftEigen) &&
@@ -509,8 +515,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     davidson(MatMul &op, const GDiagonalMatrix<FL> &aa, vector<GMatrix<FL>> &vs,
              FP shift, DavidsonTypes davidson_type, int &ndav,
              bool iprint = false, const PComm &pcomm = nullptr,
-             FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
-             int deflation_min_size = 2, int deflation_max_size = 50,
+             FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0, int max_iter = 5000,
+             int soft_max_iter = -1, int deflation_min_size = 2,
+             int deflation_max_size = 50,
              const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
              const vector<FP> &proj_weights = vector<FP>(),
              FP imag_cutoff = (FP)1E-3) {
@@ -524,10 +531,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             return exact_diagonalization(op, vs, shift, davidson_type, ndav,
                                          iprint, pcomm, imag_cutoff);
         if (davidson_type & DavidsonTypes::NonHermitian)
-            return davidson_non_hermitian(op, aa, vs, davidson_type, ndav,
-                                          iprint, pcomm, conv_thrd, max_iter,
-                                          soft_max_iter, deflation_min_size,
-                                          deflation_max_size, imag_cutoff);
+            return davidson_non_hermitian(
+                op, aa, vs, davidson_type, ndav, iprint, pcomm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, imag_cutoff);
         // if proj_weights is empty, then projection is done by (1 - |v><v|)
         // if proj_weights is not empty, projection is done by change H to (H +
         // w |v><v|)
@@ -692,7 +699,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     int ii = eigval_idxs[i];
                     copy(q, sigmas[ii]);
                     iadd(q, bs[ii], -ld(ii, ii));
-                    if (abs(complex_dot(q, q)) >= conv_thrd) {
+                    if (abs(complex_dot(q, q)) >=
+                        conv_thrd + abs(ld(ii, ii)) * abs(ld(ii, ii)) *
+                                        rel_conv_thrd * rel_conv_thrd) {
                         ck = i;
                         break;
                     }
@@ -724,7 +733,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&qq, 1, pcomm->root);
                 pcomm->broadcast(&ck, 1, pcomm->root);
             }
-            if (abs(qq) < conv_thrd) {
+            if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
+                                          rel_conv_thrd * rel_conv_thrd) {
                 ck++;
                 if (ck == k)
                     break;
@@ -808,17 +818,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     static vector<FP> harmonic_davidson(
         MatMul &op, const GDiagonalMatrix<FL> &aa, vector<GMatrix<FL>> &vs,
         FP shift, DavidsonTypes davidson_type, int &ndav, bool iprint = false,
-        const PComm &pcomm = nullptr, FP conv_thrd = 5E-6, int max_iter = 5000,
-        int soft_max_iter = -1, int deflation_min_size = 2,
-        int deflation_max_size = 50,
+        const PComm &pcomm = nullptr, FP conv_thrd = 5E-6,
+        FP rel_conv_thrd = 0.0, int max_iter = 5000, int soft_max_iter = -1,
+        int deflation_min_size = 2, int deflation_max_size = 50,
         const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
         const vector<FP> &proj_weights = vector<FP>()) {
         const FP eps = sizeof(FP) >= 8 ? 1E-14 : 1E-7;
         if (!(davidson_type & DavidsonTypes::Harmonic))
             return davidson(op, aa, vs, shift, davidson_type, ndav, iprint,
-                            pcomm, conv_thrd, max_iter, soft_max_iter,
-                            deflation_min_size, deflation_max_size, ors,
-                            proj_weights);
+                            pcomm, conv_thrd, rel_conv_thrd, max_iter,
+                            soft_max_iter, deflation_min_size,
+                            deflation_max_size, ors, proj_weights);
         shared_ptr<VectorAllocator<FL>> d_alloc =
             make_shared<VectorAllocator<FL>>();
         int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
@@ -975,7 +985,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     int ii = eigval_idxs[i];
                     copy(q, sigmas[ii]);
                     iadd(q, bs[ii], -ld(ii, ii));
-                    if (abs(complex_dot(q, q)) >= conv_thrd) {
+                    if (abs(complex_dot(q, q)) >=
+                        conv_thrd + abs(ld(ii, ii)) * abs(ld(ii, ii)) *
+                                        rel_conv_thrd * rel_conv_thrd) {
                         ck = i;
                         break;
                     }
@@ -1007,7 +1019,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&qq, 1, pcomm->root);
                 pcomm->broadcast(&ck, 1, pcomm->root);
             }
-            if (abs(qq) < conv_thrd) {
+            if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
+                                          rel_conv_thrd * rel_conv_thrd) {
                 ck++;
                 if (ck == k)
                     break;

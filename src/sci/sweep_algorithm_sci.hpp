@@ -287,6 +287,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
     using DMRGSCI<S>::ext_mes;
     using DMRGSCI<S>::davidson_soft_max_iter;
     using DMRGSCI<S>::davidson_max_iter;
+    using DMRGSCI<S>::davidson_rel_conv_thrd;
     using DMRGSCI<S>::noise_type;
     using DMRGSCI<S>::decomp_type;
     using DMRGSCI<S>::energies;
@@ -447,7 +448,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         teff += _t.get_time();
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
-        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd, davidson_max_iter,
                              davidson_soft_max_iter, DavidsonTypes::Normal, 0.0,
                              me->para_rule);
         teig += _t.get_time();
@@ -532,7 +533,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
                 const auto pdi2 =
-                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                    davidson_max_iter, davidson_soft_max_iter,
                                    DavidsonTypes::Normal, 0.0, me->para_rule);
                 const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
@@ -580,7 +581,7 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
             }
         } else {
             auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
-            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                  davidson_max_iter, davidson_soft_max_iter,
                                  DavidsonTypes::Normal, 0.0, me->para_rule);
             const auto energy = std::get<0>(pdi) + me->mpo->const_e;
@@ -611,6 +612,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
     using DMRGSCI<S>::me;
     using DMRGSCI<S>::davidson_soft_max_iter;
     using DMRGSCI<S>::davidson_max_iter;
+    using DMRGSCI<S>::davidson_rel_conv_thrd;
     using DMRGSCI<S>::noise_type;
     using DMRGSCI<S>::decomp_type;
     using DMRGSCI<S>::energies;
@@ -729,7 +731,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
                 const auto pdi2 =
-                    h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                    h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                 davidson_max_iter, davidson_soft_max_iter,
                                 DavidsonTypes::Normal, 0.0, me->para_rule);
                 const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
@@ -781,7 +783,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 cout.flush();
             }
         } else {
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                               davidson_max_iter, davidson_soft_max_iter,
                               DavidsonTypes::Normal, 0.0, me->para_rule);
         }

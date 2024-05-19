@@ -171,7 +171,7 @@ class MPSTools:
                 bmps.load_tensor(i)
                 if i == bmps.n_sites - 1 and i == bmps.center and bmps.dot == 1:
                     if bmps.tensors[i].info.n == 1 and \
-                            bmps.tensors[i].info.quanta[0].get_ket() == -bmps.target:
+                            bmps.tensors[i].info.quanta[0].get_ket() == -bmps.info.target:
                         tensors[i] = TensorTools.from_block2_fused(
                             bmps.tensors[i], l, m, lm, clm)
                     else:

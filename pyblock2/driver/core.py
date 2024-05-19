@@ -3915,6 +3915,7 @@ class DMRGDriver:
         twosite_to_onesite=None,
         dav_max_iter=4000,
         dav_def_max_size=50,
+        dav_rel_conv_thrd=0.0,
         proj_mpss=None,
         proj_weights=None,
         store_wfn_spectra=True,
@@ -3994,6 +3995,9 @@ class DMRGDriver:
                 Maximal size of the Davidson deflation space (Krylov space). Default is 50.
                 For very large MPS bond dimension and very small MPO bond dimension,
                 one may reduce this number to save memory.
+            dav_rel_conv_thrd : float
+                the relative convergence threshold (the residual divided by the absolute value of eigenvalue)
+                of the Davidson algorithms each sweep. Default is 0.0.
             proj_mpss : None or list[MPS]
                 If not None, the MPS given in ``proj_mpss`` will be projected out during sweeps.
                 Can be used for performing state-specific excited state DMRG. Default is None.
@@ -4074,6 +4078,7 @@ class DMRGDriver:
         else:
             dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollected
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
+        dmrg.davidson_rel_conv_thrd = dav_rel_conv_thrd
         dmrg.davidson_max_iter = dav_max_iter + 100
         dmrg.davidson_soft_max_iter = dav_max_iter
         dmrg.davidson_def_max_size = dav_def_max_size

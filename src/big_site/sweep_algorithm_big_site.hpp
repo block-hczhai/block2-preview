@@ -297,6 +297,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
     using DMRGBigSite<S, FL, FLS>::ext_mes;
     using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
     using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_rel_conv_thrd;
     using DMRGBigSite<S, FL, FLS>::davidson_def_min_size;
     using DMRGBigSite<S, FL, FLS>::davidson_def_max_size;
     using DMRGBigSite<S, FL, FLS>::noise_type;
@@ -465,8 +466,8 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         teff += _t.get_time();
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
-        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                             davidson_soft_max_iter, davidson_def_min_size,
+        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
+                             davidson_max_iter, davidson_soft_max_iter, davidson_def_min_size,
                              davidson_def_max_size, DavidsonTypes::Normal, 0.0,
                              me->para_rule);
         teig += _t.get_time();
@@ -550,7 +551,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
                 const auto pdi2 =
-                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                    davidson_max_iter, davidson_soft_max_iter,
                                    davidson_def_min_size, davidson_def_max_size,
                                    DavidsonTypes::Normal, 0.0, me->para_rule);
@@ -600,7 +601,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
             }
         } else {
             auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
-            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                  davidson_max_iter, davidson_soft_max_iter,
                                  davidson_def_min_size, davidson_def_max_size,
                                  DavidsonTypes::Normal, 0.0, me->para_rule);
@@ -635,6 +636,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
     using DMRGBigSite<S, FL, FLS>::me;
     using DMRGBigSite<S, FL, FLS>::davidson_soft_max_iter;
     using DMRGBigSite<S, FL, FLS>::davidson_max_iter;
+    using DMRGBigSite<S, FL, FLS>::davidson_rel_conv_thrd;
     using DMRGBigSite<S, FL, FLS>::davidson_def_min_size;
     using DMRGBigSite<S, FL, FLS>::davidson_def_max_size;
     using DMRGBigSite<S, FL, FLS>::noise_type;
@@ -755,7 +757,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
                 const auto pdi2 =
-                    h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                    h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                                 davidson_max_iter, davidson_soft_max_iter,
                                 davidson_def_min_size, davidson_def_max_size,
                                 DavidsonTypes::Normal, 0.0, me->para_rule);
@@ -809,7 +811,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 cout.flush();
             }
         } else {
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
                               davidson_max_iter, davidson_soft_max_iter,
                               davidson_def_min_size, davidson_def_max_size,
                               DavidsonTypes::Normal, 0.0, me->para_rule);

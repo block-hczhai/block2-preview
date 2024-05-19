@@ -89,6 +89,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<FPS> sweep_discarded_weights;
     vector<vector<vector<pair<S, FPS>>>> sweep_quanta;
     vector<FPS> davidson_conv_thrds;
+    FPS davidson_rel_conv_thrd;
     int isweep = 0;
     int davidson_max_iter = 5000;
     int davidson_soft_max_iter = -1;
@@ -594,7 +595,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_wfn_size =
             max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                          davidson_rel_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_def_min_size,
                           davidson_def_max_size, davidson_type,
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
@@ -896,7 +898,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         sweep_max_eff_wfn_size =
             max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
+        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                          davidson_rel_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_def_min_size,
                           davidson_def_max_size, davidson_type,
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
@@ -1376,17 +1379,18 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
-                davidson_max_iter, davidson_soft_max_iter,
-                davidson_def_min_size, davidson_def_max_size, davidson_type,
+                davidson_rel_conv_thrd, davidson_max_iter,
+                davidson_soft_max_iter, davidson_def_min_size,
+                davidson_def_max_size, davidson_type,
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
-            pdi =
-                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, davidson_def_min_size,
-                            davidson_def_max_size, davidson_type,
-                            davidson_shift - xreal<FL>((FL)me->mpo->const_e),
-                            me->para_rule, ortho_bra, projection_weights);
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_rel_conv_thrd, davidson_max_iter,
+                              davidson_soft_max_iter, davidson_def_min_size,
+                              davidson_def_max_size, davidson_type,
+                              davidson_shift - xreal<FL>((FL)me->mpo->const_e),
+                              me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(
@@ -1737,17 +1741,18 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
                 h_eff, x_eff, iprint >= 3, davidson_conv_thrd,
-                davidson_max_iter, davidson_soft_max_iter,
-                davidson_def_min_size, davidson_def_max_size, davidson_type,
+                davidson_rel_conv_thrd, davidson_max_iter,
+                davidson_soft_max_iter, davidson_def_min_size,
+                davidson_def_max_size, davidson_type,
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
-            pdi =
-                h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_max_iter,
-                            davidson_soft_max_iter, davidson_def_min_size,
-                            davidson_def_max_size, davidson_type,
-                            davidson_shift - xreal<FL>((FL)me->mpo->const_e),
-                            me->para_rule, ortho_bra, projection_weights);
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_rel_conv_thrd, davidson_max_iter,
+                              davidson_soft_max_iter, davidson_def_min_size,
+                              davidson_def_max_size, davidson_type,
+                              davidson_shift - xreal<FL>((FL)me->mpo->const_e),
+                              me->para_rule, ortho_bra, projection_weights);
         for (int i = 0; i < mket->nroots; i++) {
             mps_quanta[i] = h_eff->ket[i]->delta_quanta();
             mps_quanta[i].erase(

@@ -1195,6 +1195,8 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("noises", &DMRG<S, FL, FLS>::noises)
         .def_readwrite("davidson_conv_thrds",
                        &DMRG<S, FL, FLS>::davidson_conv_thrds)
+        .def_readwrite("davidson_rel_conv_thrd",
+                       &DMRG<S, FL, FLS>::davidson_rel_conv_thrd)
         .def_readwrite("davidson_max_iter",
                        &DMRG<S, FL, FLS>::davidson_max_iter)
         .def_readwrite("davidson_soft_max_iter",
