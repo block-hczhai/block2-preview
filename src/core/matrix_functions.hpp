@@ -258,6 +258,7 @@ enum struct DavidsonTypes : uint16_t {
     NonHermitian = 128,
     Exact = 256,
     LeftEigen = 512,
+    ElementProj = 1024,
     ExactNonHermitian = 128 | 256,
     ExactNonHermitianLeftEigen = 128 | 256 | 512,
     NonHermitianDavidsonPrecond = 128 | 32,

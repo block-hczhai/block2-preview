@@ -535,10 +535,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 op, aa, vs, davidson_type, ndav, iprint, pcomm, conv_thrd,
                 rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
                 deflation_max_size, imag_cutoff);
-        // if proj_weights is empty, then projection is done by (1 - |v><v|)
-        // if proj_weights is not empty, projection is done by change H to (H +
-        // w |v><v|)
-        if (proj_weights.size() != 0) {
+        // if proj_weights is empty or ElementProj, then projection is done by
+        // (1 - |v><v|). if proj_weights is not empty, projection is done by
+        // change H to (H + w |v><v|)
+        if (davidson_type & DavidsonTypes::ElementProj)
+            ;
+        else if (proj_weights.size() != 0) {
             assert(proj_weights.size() == ors.size());
             nwg = (int)ors.size(), nor = 0;
         }

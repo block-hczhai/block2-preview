@@ -284,6 +284,10 @@ class MPSTools:
             import block2.cpx.sgb as bs, block2.sgb as brs, block2.cpx as bx
         elif Q == b.SGB and DT == np.float64:
             import block2.sgb as bs, block2.sgb as brs, block2 as bx
+        elif Q == b.SAny and DT == np.complex128:
+            import block2.cpx.sany as bs, block2.sany as brs, block2.cpx as bx
+        elif Q == b.SAny and DT == np.float64:
+            import block2.sany as bs, block2.sany as brs, block2 as bx
         else:
             raise RuntimeError("Q = %s DT = %s not supported!" % (Q, DT))
         if b.Global.frame is None:
@@ -295,7 +299,15 @@ class MPSTools:
         qr = mps.tensors[-1].blocks[0].q_labels
         vacuum = (ql[1] - ql[0])[0]
         target = (qr[0] + qr[1])[0]
-        info = brs.MPSInfo(n_sites, vacuum, target, basis)
+        for ib, x in enumerate(basis):
+            p = brs.StateInfo()
+            p.allocate(len(x))
+            for ix, (k, v) in enumerate(x.items()):
+                p.quanta[ix] = k
+                p.n_states[ix] = v
+            basis[ib] = p
+            p.sort_states()
+        info = brs.MPSInfo(n_sites, vacuum, target, brs.VectorStateInfo(basis))
         info.tag = tag
         info.set_bond_dimension_full_fci(vacuum, vacuum)
         info.left_dims[0] = brs.StateInfo(vacuum)

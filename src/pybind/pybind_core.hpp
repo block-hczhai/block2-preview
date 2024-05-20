@@ -1723,6 +1723,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("NonHermitianDavidsonPrecond",
                DavidsonTypes::NonHermitianDavidsonPrecond)
         .value("LeftEigen", DavidsonTypes::LeftEigen)
+        .value("ElementProj", DavidsonTypes::ElementProj)
         .value("ExactNonHermitianLeftEigen",
                DavidsonTypes::ExactNonHermitianLeftEigen)
         .value("NonHermitianDavidsonPrecondLeftEigen",

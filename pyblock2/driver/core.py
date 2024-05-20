@@ -4055,6 +4055,8 @@ class DMRGDriver:
             dmrg.ext_mpss = bw.bs.VectorMPS(proj_mpss)
             impo = self.get_identity_mpo()
             for ext_mps in dmrg.ext_mpss:
+                if ext_mps.info.tag == ket.info.tag:
+                    raise RuntimeError("Same tag for proj_mps and ket!!")
                 self.align_mps_center(ext_mps, ket)
                 ext_me = bw.bs.MovingEnvironment(
                     impo, ket, ext_mps, "PJ" + ext_mps.info.tag
