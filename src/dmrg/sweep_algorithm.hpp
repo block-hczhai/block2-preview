@@ -89,7 +89,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<FPS> sweep_discarded_weights;
     vector<vector<vector<pair<S, FPS>>>> sweep_quanta;
     vector<FPS> davidson_conv_thrds;
-    FPS davidson_rel_conv_thrd;
+    FPS davidson_rel_conv_thrd = 0.0;
     int isweep = 0;
     int davidson_max_iter = 5000;
     int davidson_soft_max_iter = -1;
@@ -2556,7 +2556,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     vector<vector<FLS>> sweep_targets;
     vector<FPS> sweep_discarded_weights;
     vector<FPS> linear_conv_thrds;
-    FPS linear_rel_conv_thrd;
+    FPS linear_rel_conv_thrd = 0.0;
     int linear_max_iter = 5000;
     int linear_soft_max_iter = -1;
     int conv_required_sweeps = 3;
