@@ -3996,8 +3996,8 @@ class DMRGDriver:
                 For very large MPS bond dimension and very small MPO bond dimension,
                 one may reduce this number to save memory.
             dav_rel_conv_thrd : float
-                the relative convergence threshold (the residual divided by the absolute value of eigenvalue)
-                of the Davidson algorithms each sweep. Default is 0.0.
+                The relative convergence threshold (the residual divided by the absolute value of eigenvalue)
+                of the Davidson algorithm. Default is 0.0.
             proj_mpss : None or list[MPS]
                 If not None, the MPS given in ``proj_mpss`` will be projected out during sweeps.
                 Can be used for performing state-specific excited state DMRG. Default is None.
@@ -5630,6 +5630,11 @@ class DMRGDriver:
         left_mpo=None,
         cutoff=1e-24,
         linear_max_iter=4000,
+        linear_rel_conv_thrd=0.0,
+        proj_mpss=None,
+        proj_weights=None,
+        proj_bond_dim=-1,
+        solver_type=None,
         iprint=0,
     ):
         """
@@ -5691,6 +5696,20 @@ class DMRGDriver:
                 Default is 1E-24.
             linear_max_iter : int
                 Maximal number of iteration in the linear solver. Default is 4000.
+            solver_type : None or str.
+                The type of the linear solver. If None, this is set to "Automatic".
+                Possible options are "Automatic", "CG", "MinRes", "GCROT", "IDRS",
+                "LSQR", and "Cheby".
+            linear_rel_conv_thrd : float
+                The relative convergence threshold (the residual divided by the absolute value of overlap)
+                of the linear solver. Default is 0.0.
+            proj_mpss : None or list[MPS]
+                If not None, the MPS given in ``proj_mpss`` will be projected out during sweeps.
+                Default is None.
+            proj_weights : None or list[float]
+                The weights of the MPS projection.
+            proj_bond_dim : int
+                Bond dimensions for projection MPSs. Default is -1 (no truncations).
             iprint : int
                 Verbosity. Default is 0 (quiet).
 
@@ -5736,6 +5755,27 @@ class DMRGDriver:
                 bw.b.VectorUBond(bond_dims),
                 bw.VectorFP(noises),
             )
+
+        if proj_mpss is not None:
+            assert proj_weights is not None
+            assert len(proj_weights) == len(proj_mpss)
+            cps.projection_weights = bw.VectorFP(proj_weights)
+            cps.ext_mpss = bw.bs.VectorMPS(proj_mpss)
+            impo = self.get_identity_mpo()
+            for ext_mps in cps.ext_mpss:
+                if ext_mps.info.tag == bra.info.tag:
+                    raise RuntimeError("Same tag for proj_mps and bra!!")
+                elif ext_mps.info.tag == ket.info.tag:
+                    raise RuntimeError("Same tag for proj_mps and ket!!")
+                self.align_mps_center(ext_mps, bra)
+                ext_me = bw.bs.MovingEnvironment(
+                    impo, bra, ext_mps, "PJ" + ext_mps.info.tag
+                )
+                ext_me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+                ext_me.init_environments(iprint >= 2)
+                cps.ext_mes.append(ext_me)
+            cps.ext_mps_bond_dim = proj_bond_dim
+
         if noises is not None and noises[0] != 0:
             cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
             cps.decomp_type = bw.b.DecompositionTypes.SVD
@@ -5744,8 +5784,11 @@ class DMRGDriver:
         cps.iprint = iprint
         cps.cutoff = cutoff
         cps.linear_conv_thrds = bw.VectorFP(thrds)
+        cps.linear_rel_conv_thrd = linear_rel_conv_thrd
         cps.linear_max_iter = linear_max_iter + 100
         cps.linear_soft_max_iter = linear_max_iter
+        if solver_type is not None:
+            cps.solver_type = getattr(bw.b.LinearSolverTypes, solver_type)
         norm = cps.solve(n_sweeps, ket.center == 0, tol)
 
         if self.clean_scratch:

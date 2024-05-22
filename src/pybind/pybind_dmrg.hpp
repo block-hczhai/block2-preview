@@ -1452,7 +1452,12 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("rme", &Linear<S, FL, FLS>::rme)
         .def_readwrite("tme", &Linear<S, FL, FLS>::tme)
         .def_readwrite("ext_tmes", &Linear<S, FL, FLS>::ext_tmes)
+        .def_readwrite("ext_mes", &Linear<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &Linear<S, FL, FLS>::ext_mpss)
+        .def_readwrite("projection_weights",
+                       &Linear<S, FL, FLS>::projection_weights)
+        .def_readwrite("ext_mps_bond_dim",
+                       &Linear<S, FL, FLS>::ext_mps_bond_dim)
         .def_readwrite("ext_targets", &Linear<S, FL, FLS>::ext_targets)
         .def_readwrite("ext_target_at_site",
                        &Linear<S, FL, FLS>::ext_target_at_site)
@@ -1494,6 +1499,8 @@ void bind_fl_linear(py::module &m) {
                        &Linear<S, FL, FLS>::sweep_max_eff_ham_size)
         .def_readwrite("linear_conv_thrds",
                        &Linear<S, FL, FLS>::linear_conv_thrds)
+        .def_readwrite("linear_rel_conv_thrd",
+                       &Linear<S, FL, FLS>::linear_rel_conv_thrd)
         .def_readwrite("linear_max_iter", &Linear<S, FL, FLS>::linear_max_iter)
         .def_readwrite("linear_soft_max_iter",
                        &Linear<S, FL, FLS>::linear_soft_max_iter)

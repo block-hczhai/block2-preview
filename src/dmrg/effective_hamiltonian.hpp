@@ -458,14 +458,23 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     }
     // [bra] = [H_eff]^(-1) x [ket]
     // energy, nmult, nflop, tmult
-    tuple<FL, pair<int, int>, size_t, double> inverse_multiply(
-        typename const_fl_type<FL>::FL const_e, LinearSolverTypes solver_type,
-        pair<int, int> linear_solver_params, bool iprint = false,
-        FP conv_thrd = 5E-6, int max_iter = 5000, int soft_max_iter = -1,
-        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+    tuple<FL, pair<int, int>, size_t, double>
+    inverse_multiply(typename const_fl_type<FL>::FL const_e,
+                     LinearSolverTypes solver_type,
+                     pair<int, int> linear_solver_params, bool iprint = false,
+                     FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+                     int max_iter = 5000, int soft_max_iter = -1,
+                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+                     const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                         vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         if (solver_type == LinearSolverTypes::Automatic)
             solver_type = LinearSolverTypes::MinRes;
         int nmult = 0, niter = 0;
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
@@ -493,12 +502,13 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 ? IterativeMatrixFunctions<FL>::conjugate_gradient(
                       f, aa, mbra, mket, nmult, (FL)const_e, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, max_iter, soft_max_iter)
+                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter, ors)
                 : (solver_type == LinearSolverTypes::MinRes
                        ? IterativeMatrixFunctions<FL>::minres(
                              f, mbra, mket, nmult, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
-                             conv_thrd, max_iter, soft_max_iter)
+                             conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
+                             ors)
                        : IterativeMatrixFunctions<FL>::gcrotmk(
                              f, aa, mbra, mket, nmult, niter,
                              linear_solver_params.first,

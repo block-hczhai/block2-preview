@@ -1486,12 +1486,25 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     // aa should include the effect of consta
     // op should not include the effect of consta
     template <typename MatMul, typename PComm>
-    static FL conjugate_gradient(MatMul &op, const GDiagonalMatrix<FL> &aa,
-                                 GMatrix<FL> x, GMatrix<FL> b, int &nmult,
-                                 FL consta = 0.0, bool iprint = false,
-                                 const PComm &pcomm = nullptr,
-                                 FP conv_thrd = 5E-6, int max_iter = 5000,
-                                 int soft_max_iter = -1) {
+    static FL
+    conjugate_gradient(MatMul &op, const GDiagonalMatrix<FL> &aa, GMatrix<FL> x,
+                       GMatrix<FL> b, int &nmult, FL consta = 0.0,
+                       bool iprint = false, const PComm &pcomm = nullptr,
+                       FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+                       int max_iter = 5000, int soft_max_iter = -1,
+                       const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>()) {
+        const int nor = (int)ors.size();
+        vector<FL> or_normsqs(nor);
+        for (int i = 0; i < nor; i++) {
+            for (int j = 0; j < i; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(ors[i], ors[j],
+                         -complex_dot(ors[j], ors[i]) / or_normsqs[j]);
+            or_normsqs[i] = complex_dot(ors[i], ors[i]);
+        }
+        for (int j = 0; j < nor; j++)
+            if (abs(or_normsqs[j]) > 1E-14)
+                iadd(x, ors[j], -complex_dot(ors[j], x) / or_normsqs[j]);
         shared_ptr<VectorAllocator<FP>> x_alloc =
             make_shared<VectorAllocator<FP>>();
         GMatrix<FL> p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
@@ -1508,6 +1521,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iscale(r, -1);
             iadd(r, b, 1); // r = b - Ax
+            for (int j = 0; j < nor; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(r, ors[j], -complex_dot(ors[j], r) / or_normsqs[j]);
             cg_precondition(p, r, aa);
             beta = complex_dot(r, p);
             error = complex_dot(r, r);
@@ -1516,7 +1532,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             cout << endl;
         if (pcomm != nullptr)
             pcomm->broadcast(&error, 1, pcomm->root);
-        if (abs(error) < conv_thrd) {
+        if (abs(error) <
+            conv_thrd + abs(func) * abs(func) * rel_conv_thrd * rel_conv_thrd) {
             if (pcomm == nullptr || pcomm->root == pcomm->rank)
                 func = complex_dot(x, b);
             if (pcomm != nullptr)
@@ -1549,6 +1566,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 FL alpha = old_beta / complex_dot(p, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
+                for (int j = 0; j < nor; j++)
+                    if (abs(or_normsqs[j]) > 1E-14)
+                        iadd(r, ors[j],
+                             -complex_dot(ors[j], r) / or_normsqs[j]);
                 cg_precondition(z, r, aa);
                 error = complex_dot(r, r);
                 beta = complex_dot(r, z);
@@ -1560,7 +1581,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             }
             if (pcomm != nullptr)
                 pcomm->broadcast(&error, 2, pcomm->root);
-            if (abs(error) < conv_thrd)
+            if (abs(error) < conv_thrd + abs(func) * abs(func) * rel_conv_thrd *
+                                             rel_conv_thrd)
                 break;
             else {
                 if (pcomm == nullptr || pcomm->root == pcomm->rank) {
@@ -1568,12 +1590,18 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     old_beta = beta;
                     iadd(p, z, (FP)1.0 / gamma);
                     iscale(p, gamma);
+                    for (int j = 0; j < nor; j++)
+                        if (abs(or_normsqs[j]) > 1E-14)
+                            iadd(p, ors[j],
+                                 -complex_dot(ors[j], p) / or_normsqs[j]);
                 }
                 if (pcomm != nullptr)
                     pcomm->broadcast(p.data, p.size(), pcomm->root);
             }
         }
-        if (xiter == max_iter && abs(error) >= conv_thrd) {
+        if (xiter == max_iter &&
+            abs(error) >= conv_thrd + abs(func) * abs(func) * rel_conv_thrd *
+                                          rel_conv_thrd) {
             cout << "Error : linear solver (cg) not converged!" << endl;
             assert(false);
         }
@@ -1776,7 +1804,21 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     static FL minres(MatMul &op, GMatrix<FL> x, GMatrix<FL> b, int &nmult,
                      FL consta = 0.0, bool iprint = false,
                      const PComm &pcomm = nullptr, FP conv_thrd = 5E-6,
-                     int max_iter = 5000, int soft_max_iter = -1) {
+                     FP rel_conv_thrd = 0.0, int max_iter = 5000,
+                     int soft_max_iter = -1,
+                     const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>()) {
+        const int nor = (int)ors.size();
+        vector<FL> or_normsqs(nor);
+        for (int i = 0; i < nor; i++) {
+            for (int j = 0; j < i; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(ors[i], ors[j],
+                         -complex_dot(ors[j], ors[i]) / or_normsqs[j]);
+            or_normsqs[i] = complex_dot(ors[i], ors[i]);
+        }
+        for (int j = 0; j < nor; j++)
+            if (abs(or_normsqs[j]) > 1E-14)
+                iadd(x, ors[j], -complex_dot(ors[j], x) / or_normsqs[j]);
         GMatrix<FL> p(nullptr, x.m, x.n), r(nullptr, x.m, x.n);
         FL ff[2];
         FL &error = ff[0], &func = ff[1];
@@ -1788,6 +1830,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (pcomm == nullptr || pcomm->root == pcomm->rank) {
             iadd(r, b, -1);
             iscale(r, -1);
+            for (int j = 0; j < nor; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(r, ors[j], -complex_dot(ors[j], r) / or_normsqs[j]);
             p.allocate();
             copy(p, r);
             error = complex_dot(r, r);
@@ -1796,13 +1841,14 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             cout << endl;
         if (pcomm != nullptr)
             pcomm->broadcast(&error, 1, pcomm->root);
-        if (abs(error) < conv_thrd) {
-            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
-                func = complex_dot(x, b);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            func = complex_dot(x, b);
+        if (pcomm != nullptr)
+            pcomm->broadcast(&func, 1, pcomm->root);
+        if (abs(error) <
+            conv_thrd + abs(func) * abs(func) * rel_conv_thrd * rel_conv_thrd) {
+            if (pcomm == nullptr || pcomm->root == pcomm->rank)
                 p.deallocate();
-            }
-            if (pcomm != nullptr)
-                pcomm->broadcast(&func, 1, pcomm->root);
             if (iprint)
                 cout << setw(6) << 0 << fixed << setw(24) << setprecision(8)
                      << func << scientific << setw(13) << setprecision(2)
@@ -1835,6 +1881,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 FL alpha = complex_dot(r, hr) / complex_dot(hp, hp);
                 iadd(x, p, alpha);
                 iadd(r, hp, -alpha);
+                for (int j = 0; j < nor; j++)
+                    if (abs(or_normsqs[j]) > 1E-14)
+                        iadd(r, ors[j],
+                             -complex_dot(ors[j], r) / or_normsqs[j]);
                 error = complex_dot(r, r);
                 func = complex_dot(x, b);
                 if (iprint)
@@ -1846,7 +1896,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&error, 2, pcomm->root);
                 pcomm->broadcast(r.data, r.size(), pcomm->root);
             }
-            if (abs(error) < conv_thrd)
+            if (abs(error) < conv_thrd + abs(func) * abs(func) * rel_conv_thrd *
+                                             rel_conv_thrd)
                 break;
             else {
                 hr.clear();
@@ -1857,13 +1908,19 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     beta = complex_dot(r, hr);
                     iadd(p, r, prev_beta / beta);
                     iscale(p, beta / prev_beta);
+                    for (int j = 0; j < nor; j++)
+                        if (abs(or_normsqs[j]) > 1E-14)
+                            iadd(p, ors[j],
+                                 -complex_dot(ors[j], p) / or_normsqs[j]);
                     iadd(hp, hr, prev_beta / beta);
                     iscale(hp, beta / prev_beta);
                     prev_beta = beta;
                 }
             }
         }
-        if (xiter == max_iter && abs(error) >= conv_thrd) {
+        if (xiter == max_iter &&
+            abs(error) >= conv_thrd + abs(func) * abs(func) * rel_conv_thrd *
+                                          rel_conv_thrd) {
             cout << "Error : linear solver (minres) not converged!" << endl;
             assert(false);
         }

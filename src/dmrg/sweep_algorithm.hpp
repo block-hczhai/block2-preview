@@ -2542,7 +2542,11 @@ template <typename S, typename FL, typename FLS> struct Linear {
     shared_ptr<MovingEnvironment<S, FL, FLS>> lme, rme, tme;
     // ext mes for gf off-diagonals
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_tmes;
+    // ext mes for projection
+    vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
+    vector<FPS> projection_weights;
+    int ext_mps_bond_dim = -1;
     vector<vector<FLS>> ext_targets;
     int ext_target_at_site = -1;
     vector<ubond_t> bra_bond_dims, ket_bond_dims;
@@ -2552,6 +2556,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     vector<vector<FLS>> sweep_targets;
     vector<FPS> sweep_discarded_weights;
     vector<FPS> linear_conv_thrds;
+    FPS linear_rel_conv_thrd;
     int linear_max_iter = 5000;
     int linear_soft_max_iter = -1;
     int conv_required_sweeps = 3;
@@ -2574,7 +2579,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
     size_t sweep_max_eff_ham_size = 0;
     size_t sweep_max_eff_wfn_size = 0;
     double tprt = 0, tmult = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0,
-           tsplt = 0, tsvd = 0;
+           tsplt = 0, tsvd = 0, torth = 0;
     Timer _t, _t2;
     bool linear_use_precondition = true;
     // number of eigenvalues solved using harmonic Davidson
@@ -2744,6 +2749,61 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
         }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        for (auto &mps : ext_mpss) {
+            if (ext_mps_bond_dim != -1 &&
+                mps->info->bond_dim < ext_mps_bond_dim)
+                mps->info->bond_dim = ext_mps_bond_dim;
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else if (forward)
+                    mps->canonical_form[i] = 'K';
+                else
+                    mps->canonical_form[i] = 'S';
+            }
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
+        }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
+        _t.get_time();
+        if (projection_weights.size() != 0) {
+            shared_ptr<VectorAllocator<FPS>> d_alloc =
+                make_shared<VectorAllocator<FPS>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                    ext_mes[ist]->eff_ham(fuse_left ? FuseTypes::FuseL
+                                                    : FuseTypes::FuseR,
+                                          forward, false, ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
+        torth += _t.get_time();
         _t.get_time();
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
@@ -2807,8 +2867,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
                     lme->mpo->const_e, solver_type, linear_solver_params,
-                    iprint >= 3, linear_conv_thrd, linear_max_iter,
-                    linear_soft_max_iter, me->para_rule);
+                    iprint >= 3, linear_conv_thrd, linear_rel_conv_thrd,
+                    linear_max_iter, linear_soft_max_iter, me->para_rule,
+                    ortho_bra);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -2971,33 +3032,6 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 }
             tmult += _t.get_time();
             t_eff->deallocate();
-        }
-        for (auto &mps : ext_mpss) {
-            if (mps->canonical_form[i] == 'C') {
-                if (i == 0)
-                    mps->canonical_form[i] = 'K';
-                else if (i == me->n_sites - 1)
-                    mps->canonical_form[i] = 'S';
-                else if (forward)
-                    mps->canonical_form[i] = 'K';
-                else
-                    mps->canonical_form[i] = 'S';
-            }
-            mps->load_tensor(i);
-            if ((fuse_left && mps->canonical_form[i] == 'S') ||
-                (!fuse_left && mps->canonical_form[i] == 'K')) {
-                shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
-                if (fuse_left && mps->canonical_form[i] == 'S')
-                    mps->tensors[i] =
-                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
-                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
-                else if (!fuse_left && mps->canonical_form[i] == 'K')
-                    mps->tensors[i] =
-                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
-                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
-                prev_wfn->info->deallocate();
-                prev_wfn->deallocate();
-            }
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -3467,6 +3501,41 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 real_bra->allocate(me->bra->tensors[i]->info);
             }
         }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        for (auto &mps : ext_mpss) {
+            if (ext_mps_bond_dim != -1 &&
+                mps->info->bond_dim < ext_mps_bond_dim)
+                mps->info->bond_dim = ext_mps_bond_dim;
+            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S, FL, FLS>::contract_two_dot(i, mps);
+            else {
+                mps->load_tensor(i);
+                mps->tensors[i + 1] = nullptr;
+            }
+        }
+        if (me->para_rule != nullptr)
+            me->para_rule->comm->barrier();
+        vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
+        _t.get_time();
+        if (projection_weights.size() != 0) {
+            shared_ptr<VectorAllocator<FPS>> d_alloc =
+                make_shared<VectorAllocator<FPS>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                    ext_mes[ist]->eff_ham(FuseTypes::FuseLR, forward, false,
+                                          ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
+        torth += _t.get_time();
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, forward, false, right_bra, me->ket->tensors[i]);
@@ -3527,8 +3596,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 tuple<FLS, pair<int, int>, size_t, double> lpdi;
                 lpdi = l_eff->inverse_multiply(
                     lme->mpo->const_e, solver_type, linear_solver_params,
-                    iprint >= 3, linear_conv_thrd, linear_max_iter,
-                    linear_soft_max_iter, me->para_rule);
+                    iprint >= 3, linear_conv_thrd, linear_rel_conv_thrd,
+                    linear_max_iter, linear_soft_max_iter, me->para_rule,
+                    ortho_bra);
                 targets[0] = get<0>(lpdi);
                 get<1>(pdi).first += get<1>(lpdi).first;
                 get<1>(pdi).second += get<1>(lpdi).second;
@@ -3690,14 +3760,6 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 }
             tmult += _t.get_time();
             t_eff->deallocate();
-        }
-        for (auto &mps : ext_mpss) {
-            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
-                MovingEnvironment<S, FL, FLS>::contract_two_dot(i, mps);
-            else {
-                mps->load_tensor(i);
-                mps->tensors[i + 1] = nullptr;
-            }
         }
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -4007,6 +4069,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             tme->move_to(i);
         for (auto &xme : ext_tmes)
             xme->move_to(i);
+        for (auto &xme : ext_mes)
+            xme->move_to(i);
         tmve += _t2.get_time();
         Iteration it(vector<FLS>(), 0, 0, 0, 0);
         if (rme->dot == 2)
@@ -4046,6 +4110,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
         if (tme != nullptr)
             tme->prepare(sweep_start_site, sweep_end_site);
         for (auto &xme : ext_tmes)
+            xme->prepare(sweep_start_site, sweep_end_site);
+        for (auto &xme : ext_mes)
             xme->prepare(sweep_start_site, sweep_end_site);
         sweep_targets.clear();
         sweep_discarded_weights.clear();
@@ -4398,7 +4464,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                          << " | Tmult = " << tmult << " | Tblk = " << tblk
                          << " | Tmve = " << tmve << " | Tdm = " << tdm
                          << " | Tsplt = " << tsplt << " | Tsvd = " << tsvd
-                         << endl;
+                         << " | Torth = " << torth << endl;
                 }
                 cout << endl;
             }
