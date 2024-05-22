@@ -711,8 +711,8 @@ TYPED_TEST(TestMatrix, TestHarmonicDavidson) {
                 : DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond;
         vector<FL> vw = IterativeMatrixFunctions<FL>::harmonic_davidson(
             mop, aa, bs, shift, davidson_type, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 500,
-            n * k * 400, 2, sz2);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0,
+            n * k * 500, n * k * 400, 2, sz2);
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FL> w(&vw[0], k);
         GMatrixFunctions<FL>::eigs(a, ww);
@@ -794,7 +794,7 @@ TYPED_TEST(TestMatrix, TestDavidson) {
         MatMul mop(a);
         vector<FL> vw = IterativeMatrixFunctions<FL>::davidson(
             mop, aa, bs, 0, DavidsonTypes::Normal, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 5,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, n * k * 5,
             n * k * 4, k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FL> w(&vw[0], k);
@@ -872,7 +872,8 @@ TYPED_TEST(TestMatrix, TestCG) {
         MatMul mop(a);
         FL func = IterativeMatrixFunctions<FL>::conjugate_gradient(
             mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, 5000,
+            4000);
         ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
@@ -910,7 +911,8 @@ TYPED_TEST(TestMatrix, TestMinRes) {
         MatMul mop(a);
         FL func = IterativeMatrixFunctions<FL>::minres(
             mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, 5000,
+            4000);
         ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
@@ -1183,7 +1185,7 @@ TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetricExact) {
             DavidsonTypes::NonHermitian | DavidsonTypes::Exact |
                 DavidsonTypes::LeftEigen,
             ndav, true, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
-            n * k * 5, n * k * 4, k * 2, max((MKL_INT)5, k + 10));
+            0.0, n * k * 5, n * k * 4, k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FL> w(&vw[0], k);
         GMatrixFunctions<FL>::eig(a, ww, wi, ap);
@@ -1270,7 +1272,8 @@ TYPED_TEST(TestMatrix, TestDavidsonRealNonSymmetric) {
             DavidsonTypes::NonHermitian | DavidsonTypes::DavidsonPrecond |
                 DavidsonTypes::LeftEigen,
             ndav, false, (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv,
-            n * k * 50, n * k * 40, k * 2, min(max((MKL_INT)5, k * 5 + 10), n));
+            0.0, n * k * 50, n * k * 40, k * 2,
+            min(max((MKL_INT)5, k * 5 + 10), n));
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FL> w(&vw[0], k);
         GMatrixFunctions<FL>::eig(a, ww, wi, ap);

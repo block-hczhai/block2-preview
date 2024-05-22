@@ -783,8 +783,8 @@ TYPED_TEST(TestComplexMatrix, TestHarmonicDavidson) {
                 : DavidsonTypes::HarmonicGreaterThan | DavidsonTypes::NoPrecond;
         vector<FP> vw = IterativeMatrixFunctions<FL>::harmonic_davidson(
             mop, aa, bs, shift, davidson_type, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 500,
-            n * k * 400, 2, sz2);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0,
+            n * k * 500, n * k * 400, 2, sz2);
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FP> w(&vw[0], k);
         GMatrixFunctions<FL>::eigs(a, ww);
@@ -872,7 +872,7 @@ TYPED_TEST(TestComplexMatrix, TestDavidson) {
         MatMul mop(a);
         vector<FP> vw = IterativeMatrixFunctions<FL>::davidson(
             mop, aa, bs, 0, DavidsonTypes::Normal, ndav, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, n * k * 5,
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, n * k * 5,
             n * k * 4, k * 2, max((MKL_INT)5, k + 10));
         ASSERT_EQ((int)vw.size(), k);
         GDiagonalMatrix<FP> w(&vw[0], k);
@@ -959,7 +959,8 @@ TYPED_TEST(TestComplexMatrix, TestCG) {
         MatMul mop(a);
         FL func = IterativeMatrixFunctions<FL>::conjugate_gradient(
             mop, aa, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, 5000,
+            4000);
         ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
@@ -1002,7 +1003,8 @@ TYPED_TEST(TestComplexMatrix, TestMinRes) {
         MatMul mop(a);
         IterativeMatrixFunctions<FL>::minres(
             mop, xg.flip_dims(), b.flip_dims(), nmult, 0.0, false,
-            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 5000, 4000);
+            (shared_ptr<ParallelCommunicator<SZ>>)nullptr, conv, 0.0, 5000,
+            4000);
         ASSERT_TRUE(GMatrixFunctions<FL>::all_close(xg, x, thrd, thrd));
         xg.deallocate();
         x.deallocate();
