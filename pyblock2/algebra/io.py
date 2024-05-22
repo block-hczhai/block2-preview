@@ -328,6 +328,7 @@ class MPSTools:
                 p.n_states[ix] = v
             p.sort_states()
         info.right_dims[n_sites] = brs.StateInfo(vacuum)
+        info.bond_dim = info.get_max_bond_dimension()
         info.save_mutable()
         info.save_data("%s/%s-mps_info.bin" % (save_dir, tag))
         tensors = [bs.SparseTensor() for _ in range(n_sites)]

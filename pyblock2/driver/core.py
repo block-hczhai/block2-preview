@@ -2296,7 +2296,7 @@ class DMRGDriver:
                             assert info is not None
                             mat.allocate(info)
                             for q, mx in blocks:
-                                mat[info.find_state(q)] = mx
+                                mat[info.find_state(q)] = np.ascontiguousarray(mx)
                             self.site_norm_ops[m][name] = mat
 
                 def get_site_string_ops(self, m, ops):

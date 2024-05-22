@@ -32,9 +32,6 @@ from block2 import SZ, Global
 from block2 import init_memory, release_memory, set_mkl_num_threads
 from block2 import VectorUInt8, VectorUBond, VectorDouble, PointGroup
 from block2 import Random, FCIDUMP, QCTypes, SeqTypes, NoiseTypes
-from block2.sz import HamiltonianQC, MPS, MPSInfo, AncillaMPSInfo
-from block2.sz import PDM1MPOQC, AncillaMPO, SimplifiedMPO, Rule, RuleQC, MPOQC
-from block2.sz import DMRG, MovingEnvironment, NoTransposeRule
 
 class HamilTools:
     """
@@ -62,6 +59,7 @@ class HamilTools:
     @staticmethod
     @contextlib.contextmanager
     def _from_fcidump(fcidump, pg='d2h'):
+        from block2.sz import HamiltonianQC
         swap_pg = getattr(PointGroup, "swap_" + pg)
         vacuum = SZ(0, 0, 0)
         target = SZ(fcidump.n_elec, fcidump.twos, swap_pg(fcidump.isym))
@@ -193,6 +191,7 @@ class HamilTools:
                 yield hamil
 
     def get_mpo(self, mode="NC", mu=0.0, ancilla=False):
+        from block2.sz import AncillaMPO, MPOQC
         self.hamil.mu = mu
         bmpo = MPOQC(self.hamil, QCTypes.NC if mode == "NC" else QCTypes.CN)
         self.hamil.mu = 0.0
@@ -204,6 +203,7 @@ class HamilTools:
     
     @contextlib.contextmanager
     def get_thermal_limit_mps_block2(self, dot=2):
+        from block2.sz import MPS, AncillaMPSInfo
         hamil = self.hamil
         vacuum = hamil.vacuum
         target = SZ(hamil.n_sites * 2, hamil.fcidump.twos, 0)
@@ -225,7 +225,7 @@ class HamilTools:
     
     @contextlib.contextmanager
     def get_init_mps_block2(self, bond_dim=250, dot=2):
-
+        from block2.sz import MPS, MPSInfo
         hamil = self.hamil
         vacuum = hamil.vacuum
         target = SZ(hamil.fcidump.n_elec, hamil.fcidump.twos, 0)
@@ -290,6 +290,7 @@ class HamilTools:
     def get_ground_state_mps_block2(self, bond_dim=250, n_sweeps=20):
         hamil = self.hamil
         with self.get_init_mps_block2(bond_dim=bond_dim, dot=2) as mps:
+            from block2.sz import MovingEnvironment, SimplifiedMPO, DMRG, RuleQC, MPOQC
             mpo = MPOQC(hamil, QCTypes.Conventional)
             mpo = SimplifiedMPO(mpo, RuleQC(), True)
 
