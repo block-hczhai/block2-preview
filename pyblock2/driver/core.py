@@ -729,6 +729,11 @@ class DMRGDriver:
         """
         self.bw.set_symmetry_groups(*args)
 
+    @property
+    def basis(self):
+        """Site basis for MPS."""
+        return [{bz.quanta[ix]: bz.n_states[ix] for ix in range(bz.n)} for bz in self.ghamil.basis]
+
     def initialize_system(
         self,
         n_sites,
@@ -2801,7 +2806,7 @@ class DMRGDriver:
             mpo = bw.bs.ParallelMPO(mpo, self.prule)
         return mpo
 
-    def get_identity_mpo(self, ancilla=False):
+    def get_identity_mpo(self, ancilla=False, add_ident=True):
         """
         Construct MPO for the identity operator.
 
@@ -2809,13 +2814,16 @@ class DMRGDriver:
             ancilla : bool
                 If True, will generate identity MPO including ancilla sites
                 (used in finite temperature DMRG). Default is False.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO.
 
         Returns:
             mpo : MPO
                 The block2 MPO object.
         """
         return self.get_mpo(
-            self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla
+            self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla,
+            add_ident=add_ident
         )
 
     def unpack_g2e(self, g2e, n_sites=None):
@@ -5635,6 +5643,7 @@ class DMRGDriver:
         proj_weights=None,
         proj_bond_dim=-1,
         solver_type=None,
+        right_weight=0.0,
         iprint=0,
     ):
         """
@@ -5700,6 +5709,8 @@ class DMRGDriver:
                 The type of the linear solver. If None, this is set to "Automatic".
                 Possible options are "Automatic", "CG", "MinRes", "GCROT", "IDRS",
                 "LSQR", and "Cheby".
+            right_weight : float
+                Weight (0~1) for mixing rhs wavefunction in density matrix/svd. Default is 0.
             linear_rel_conv_thrd : float
                 The relative convergence threshold (the residual divided by the absolute value of overlap)
                 of the linear solver. Default is 0.0.
@@ -5787,6 +5798,7 @@ class DMRGDriver:
         cps.linear_rel_conv_thrd = linear_rel_conv_thrd
         cps.linear_max_iter = linear_max_iter + 100
         cps.linear_soft_max_iter = linear_max_iter
+        cps.right_weight = right_weight
         if solver_type is not None:
             cps.solver_type = getattr(bw.b.LinearSolverTypes, solver_type)
         norm = cps.solve(n_sweeps, ket.center == 0, tol)

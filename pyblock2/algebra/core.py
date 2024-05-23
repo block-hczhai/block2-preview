@@ -55,7 +55,23 @@ class SubTensor:
     def build_zero(self):
         """Set reduced matrix to zero."""
         self.reduced = np.zeros(self.reduced.shape)
-    
+
+    def diag(self, expand):
+        """Make/take diagonal of physical indices."""
+        if self.rank == 3:
+            shape = self.reduced.shape
+            new_data = np.zeros((shape[0], shape[1], shape[1], shape[2]))
+            new_data[:, np.mgrid[:shape[1]], np.mgrid[:shape[1]], :] = self.reduced
+            return SubTensor(q_labels=(self.q_labels[0], self.q_labels[1], self.q_labels[1],
+                self.q_labels[2]), reduced=new_data)
+        elif self.rank == 4:
+            shape = self.reduced.shape
+            new_data = self.reduced[:, np.mgrid[:shape[1]], np.mgrid[:shape[2]], :]
+            return SubTensor(q_labels=(self.q_labels[0], self.q_labels[1], self.q_labels[3]),
+                reduced=new_data)
+        else:
+            assert False
+
     def copy(self):
         """Shallow copy."""
         return SubTensor(q_labels=self.q_labels, reduced=self.reduced)
@@ -112,6 +128,10 @@ class Tensor:
         blocks = [SubTensor(q_labels=b.q_labels, reduced=np.zeros_like(b.reduced))
                   for b in self.blocks]
         return Tensor(blocks=blocks)
+
+    def diag(self):
+        """Make/take diagonal of physical indices."""
+        return Tensor(blocks=[b.diag() for b in self.blocks])
 
     @property
     def rank(self):
@@ -503,6 +523,29 @@ class MPS:
         """Number of sites."""
         return len(self.tensors)
 
+    def diag(self):
+        """Make/take diagonal of physical indices."""
+        tensors = []
+        for i, ts in enumerate(self.tensors):
+            blocks = []
+            for b in ts.blocks:
+                shape = b.reduced.shape
+                if i == 0:
+                    new_data = np.zeros((shape[0], shape[0], shape[1]))
+                    new_data[np.mgrid[:shape[0]], np.mgrid[:shape[0]], :] = b.reduced
+                    new_qs = (b.q_labels[0], b.q_labels[0], b.q_labels[1])
+                elif i == self.n_sites - 1:
+                    new_data = np.zeros((shape[0], shape[1], shape[1]))
+                    new_data[:, np.mgrid[:shape[1]], np.mgrid[:shape[1]]] = b.reduced
+                    new_qs = (b.q_labels[0], b.q_labels[1], b.q_labels[1])
+                else:
+                    new_data = np.zeros((shape[0], shape[1], shape[1], shape[2]))
+                    new_data[:, np.mgrid[:shape[1]], np.mgrid[:shape[1]], :] = b.reduced
+                    new_qs = (b.q_labels[0], b.q_labels[1], b.q_labels[1], b.q_labels[2])
+                blocks.append(SubTensor(q_labels=new_qs, reduced=new_data))
+            tensors.append(Tensor(blocks=blocks))
+        return MPO(tensors=tensors)
+
     def deep_copy(self):
         """Deep copy."""
         return MPS(tensors=[ts.deep_copy() if ts is not None else None for ts in self.tensors])
@@ -864,6 +907,26 @@ class MPO(MPS):
     def __init__(self, tensors=None, const_e=0.0):
         self.const_e = const_e
         super().__init__(tensors=tensors)
+
+    def diag(self):
+        """Make/take diagonal of physical indices."""
+        tensors = []
+        for i, ts in enumerate(self.tensors):
+            blocks = []
+            for b in ts.blocks:
+                shape = b.reduced.shape
+                if i == 0:
+                    new_data = b.reduced[np.mgrid[:shape[0]], np.mgrid[:shape[1]], :]
+                    new_qs = (b.q_labels[0], b.q_labels[2])
+                elif i == self.n_sites - 1:
+                    new_data = b.reduced[:, np.mgrid[:shape[1]], np.mgrid[:shape[2]]]
+                    new_qs = (b.q_labels[0], b.q_labels[1])
+                else:
+                    new_data = b.reduced[:, np.mgrid[:shape[1]], np.mgrid[:shape[2]], :]
+                    new_qs = (b.q_labels[0], b.q_labels[1], b.q_labels[3])
+                blocks.append(SubTensor(q_labels=new_qs, reduced=new_data))
+            tensors.append(Tensor(blocks=blocks))
+        return MPS(tensors=tensors)
 
     def deep_copy(self):
         """Deep copy."""

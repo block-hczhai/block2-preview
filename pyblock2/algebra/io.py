@@ -140,6 +140,33 @@ class TensorTools:
             assert ipl == pmat.shape[0]
         return Tensor(blocks=blocks)
 
+def init_block2_types(Q, DT):
+    import block2 as b
+    if Q == b.SZ and DT == np.complex128:
+        import block2.cpx.sz as bs, block2.sz as brs, block2.cpx as bx
+    elif Q == b.SZ and DT == np.float64:
+        import block2.sz as bs, block2.sz as brs, block2 as bx
+    elif Q == b.SU2 and DT == np.complex128:
+        import block2.cpx.su2 as bs, block2.su2 as brs, block2.cpx as bx
+    elif Q == b.SU2 and DT == np.float64:
+        import block2.su2 as bs, block2.su2 as brs, block2 as bx
+    elif Q == b.SGF and DT == np.complex128:
+        import block2.cpx.sgf as bs, block2.sgf as brs, block2.cpx as bx
+    elif Q == b.SGF and DT == np.float64:
+        import block2.sgf as bs, block2.sgf as brs, block2 as bx
+    elif Q == b.SGB and DT == np.complex128:
+        import block2.cpx.sgb as bs, block2.sgb as brs, block2.cpx as bx
+    elif Q == b.SGB and DT == np.float64:
+        import block2.sgb as bs, block2.sgb as brs, block2 as bx
+    elif Q == b.SAny and DT == np.complex128:
+        import block2.cpx.sany as bs, block2.sany as brs, block2.cpx as bx
+    elif Q == b.SAny and DT == np.float64:
+        import block2.sany as bs, block2.sany as brs, block2 as bx
+    else:
+        raise RuntimeError("Q = %s DT = %s not supported!" % (Q, DT))
+    if b.Global.frame is None:
+        raise RuntimeError("block2 is not initialized!")
+    return b, bs, brs, bx
 
 class MPSTools:
     @staticmethod
@@ -265,33 +292,9 @@ class MPSTools:
                 To inspect this MPS, please make sure that the block2 global
                 scratch folder and stack memory are properly initialized.
         """
-        import block2 as b
         Q = mps.tensors[0].blocks[0].q_labels[0].__class__
         DT = mps.tensors[0].blocks[0].reduced.dtype
-        if Q == b.SZ and DT == np.complex128:
-            import block2.cpx.sz as bs, block2.sz as brs, block2.cpx as bx
-        elif Q == b.SZ and DT == np.float64:
-            import block2.sz as bs, block2.sz as brs, block2 as bx
-        elif Q == b.SU2 and DT == np.complex128:
-            import block2.cpx.su2 as bs, block2.su2 as brs, block2.cpx as bx
-        elif Q == b.SU2 and DT == np.float64:
-            import block2.su2 as bs, block2.su2 as brs, block2 as bx
-        elif Q == b.SGF and DT == np.complex128:
-            import block2.cpx.sgf as bs, block2.sgf as brs, block2.cpx as bx
-        elif Q == b.SGF and DT == np.float64:
-            import block2.sgf as bs, block2.sgf as brs, block2 as bx
-        elif Q == b.SGB and DT == np.complex128:
-            import block2.cpx.sgb as bs, block2.sgb as brs, block2.cpx as bx
-        elif Q == b.SGB and DT == np.float64:
-            import block2.sgb as bs, block2.sgb as brs, block2 as bx
-        elif Q == b.SAny and DT == np.complex128:
-            import block2.cpx.sany as bs, block2.sany as brs, block2.cpx as bx
-        elif Q == b.SAny and DT == np.float64:
-            import block2.sany as bs, block2.sany as brs, block2 as bx
-        else:
-            raise RuntimeError("Q = %s DT = %s not supported!" % (Q, DT))
-        if b.Global.frame is None:
-            raise RuntimeError("block2 is not initialized!")
+        b, bs, brs, bx = init_block2_types(Q, DT)
         save_dir = b.Global.frame.save_dir
         mps.canonicalize(center)
         n_sites = len(mps.tensors)
@@ -496,3 +499,170 @@ class MPOTools:
                         assert False
             tensors[i] = Tensor(blocks=list(map_blocks.values()))
         return MPO(tensors=tensors, const_e=bmpo.const_e)
+
+    @staticmethod
+    def to_block2(mpo, basis, tag='PYMPO', add_ident=True):
+        """
+        Translate pyblock2 MPO to block2 MPO.
+        """
+        from collections import Counter
+        Q = mpo.tensors[0].blocks[0].q_labels[0].__class__
+        DT = mpo.tensors[0].blocks[0].reduced.dtype
+        b, bs, brs, _ = init_block2_types(Q, DT)
+        n_sites = len(mpo.tensors)
+        bmpo = bs.MPO(n_sites, tag)
+        tensors, lops, rops, site_op_infos = [], [], [], []
+        site_basis = [None] * n_sites
+        for ib, x in enumerate(basis):
+            p = brs.StateInfo()
+            p.allocate(len(x))
+            for ix, (k, v) in enumerate(x.items()):
+                p.quanta[ix] = k
+                p.n_states[ix] = v
+            site_basis[ib] = p
+            p.sort_states()
+        vacuum = (mpo.tensors[0].blocks[0].q_labels[0] - mpo.tensors[0].blocks[0].q_labels[0])[0]
+        mid_dims = mpo.get_bond_dims()
+        left_dims = [Counter({vacuum: 1})] + mid_dims
+        right_dims = mid_dims + [Counter({vacuum: 1})]
+        for i in range(n_sites):
+            ts = mpo.tensors[i]
+            tensors.append(bs.OperatorTensor())
+            site_op_infos.append({})
+            dalloc = b.DoubleVectorAllocator()
+            ialloc = b.IntVectorAllocator()
+            n_rows = sum([v for v in left_dims[i].values()])
+            n_cols = sum([v for v in right_dims[i].values()])
+            left_qs = [k for k, v in sorted(left_dims[i].items()) for _ in range(v)]
+            right_qs = [k for k, v in sorted(right_dims[i].items()) for _ in range(v)]
+            left_acc = Counter()
+            right_acc = Counter()
+            iv = 0
+            for k, nv in sorted(left_dims[i].items()):
+                left_acc[k] = iv
+                iv += nv
+            iv = 0
+            for k, nv in sorted(right_dims[i].items()):
+                right_acc[k] = iv
+                iv += nv
+            data_dict = {}
+            for block in ts.blocks:
+                xqq, xmm = block.q_labels, block.reduced
+                qnr, qnc = vacuum, vacuum
+                if i != n_sites - 1:
+                    qnc, xqq = block.q_labels[-1], xqq[:-1]
+                else:
+                    xmm = xmm[..., None]
+                if i != 0:
+                    qnr, xqq = block.q_labels[0], xqq[1:]
+                else:
+                    xmm = xmm[None, ...]
+                nnr, nnc = left_dims[i][qnr], right_dims[i][qnc]
+                inr, inc = left_acc[qnr], right_acc[qnc]
+                for iir in range(inr, inr + nnr):
+                    for iic in range(inc, inc + nnc):
+                        zmm = xmm[iir - inr, ..., iic - inc]
+                        if np.linalg.norm(zmm) < 1E-12:
+                            continue
+                        if (iir, iic) not in data_dict:
+                            data_dict[(iir, iic)] = []
+                        data_dict[(iir, iic)].append((xqq, zmm))
+            for kk, (k, v) in enumerate(sorted(data_dict.items())):
+                dq = (v[0][0][0] - v[0][0][1])[0]
+                if i == 0:
+                    xexpr = brs.OpElement(b.OpNames.XL, b.SiteIndex((k[1], ), ()), dq, 1.0)
+                elif i == n_sites - 1:
+                    xexpr = brs.OpElement(b.OpNames.XR, b.SiteIndex((k[0], ), ()), dq, 1.0)
+                else:
+                    xexpr = brs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()), dq, 1.0)
+                if dq not in site_op_infos[i]:
+                    site_op_infos[i][dq] = brs.SparseMatrixInfo(ialloc)
+                    site_op_infos[i][dq].initialize(site_basis[i], site_basis[i], dq, dq.is_fermion)
+                minfo = site_op_infos[i][dq]
+                xmat = bs.SparseMatrix(dalloc)
+                xmat.allocate(minfo)
+                for (ql, qr), mm in v:
+                    iq = xmat.info.find_state(dq.combine(ql, qr))
+                    xmat[iq] = np.asarray(mm).ravel()
+                tensors[i].ops[xexpr] = xmat
+            idq = vacuum
+            iop = brs.OpElement(b.OpNames.I, b.SiteIndex(), idq, 1.0)
+            if iop not in tensors[i].ops and add_ident:
+                if idq not in site_op_infos[i]:
+                    site_op_infos[i][idq] = brs.SparseMatrixInfo(ialloc)
+                    site_op_infos[i][idq].initialize(site_basis[i], site_basis[i], idq, idq.is_fermion)
+                minfo = site_op_infos[i][idq]
+                xmat = bs.SparseMatrix(dalloc)
+                xmat.allocate(minfo)
+                for ix in range(minfo.n):
+                    xmat[ix] = np.identity(minfo.n_states_ket[ix]).ravel()
+                tensors[i].ops[iop] = xmat
+            lopd = [brs.OpElement(b.OpNames.XL, b.SiteIndex((k, ), ()), q, 1.0) for k, q in enumerate(right_qs)]
+            ropd = [brs.OpElement(b.OpNames.XR, b.SiteIndex((k, ), ()), -q, 1.0) for k, q in enumerate(left_qs)]
+            if i != n_sites - 1 and add_ident:
+                lopd += [iop]
+                n_cols += 1
+            if i != 0 and add_ident:
+                ropd += [iop]
+                n_rows += 1
+            if i == 0:
+                tensors[i].lmat = brs.SymbolicRowVector(n_cols)
+                tensors[i].lmat.data = brs.VectorOpExpr(lopd)
+                for iz, zz in enumerate(lopd):
+                    if zz not in tensors[i].ops:
+                        tensors[i].lmat.data[iz] = brs.OpExpr()
+            elif i == n_sites - 1:
+                tensors[i].lmat = brs.SymbolicColumnVector(n_rows)
+                tensors[i].lmat.data = brs.VectorOpExpr(ropd)
+                for iz, zz in enumerate(ropd):
+                    if zz not in tensors[i].ops:
+                        tensors[i].lmat.data[iz] = brs.OpExpr()
+            else:
+                matx = [brs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()),
+                    (v[0][0][0] - v[0][0][1])[0], 1.0) for kk, (_, v) in enumerate(sorted(data_dict.items()))]
+                tensors[i].lmat = brs.SymbolicMatrix(n_rows, n_cols)
+                tensors[i].lmat.indices = b.VectorPIntInt([k for k in sorted(data_dict)]
+                    + ([(n_rows - 1, n_cols - 1)] if add_ident else []))
+                tensors[i].lmat.data = brs.VectorOpExpr(matx + ([iop] if add_ident else []))
+            tensors[i].rmat = tensors[i].lmat
+            rops.append(brs.SymbolicColumnVector(len(ropd)))
+            lops.append(brs.SymbolicRowVector(len(lopd)))
+            rops[i].data = brs.VectorOpExpr(ropd)
+            lops[i].data = brs.VectorOpExpr(lopd)
+            site_op_infos[i] = brs.VectorPLMatInfo(sorted(site_op_infos[i].items()))
+        bmpo.const_e = mpo.const_e
+        bmpo.tf = bs.TensorFunctions(bs.OperatorFunctions(brs.CG()))
+        bmpo.site_op_infos = brs.VectorVectorPLMatInfo(site_op_infos)
+        bmpo.basis = brs.VectorStateInfo(site_basis)
+        bmpo.sparse_form = "N" * n_sites
+        bmpo.op = brs.OpElement(b.OpNames.H, b.SiteIndex(), rops[-1][0].q_label, 1.0)
+        bmpo.right_operator_names = brs.VectorSymbolic(rops)
+        bmpo.left_operator_names = brs.VectorSymbolic(lops)
+        bmpo.tensors = bs.VectorOpTensor(tensors)
+        # sanity check
+        for ii in range(0, bmpo.n_sites):
+            for k, v in bmpo.tensors[ii].ops.items():
+                assert k.q_label == v.info.delta_quantum
+            mat = bmpo.tensors[ii].lmat
+            lop = bmpo.left_operator_names[ii].data
+            rop = bmpo.right_operator_names[ii].data
+            if ii == 0:
+                for iop in range(len(lop)):
+                    if mat.data[iop].get_type() != b.OpTypes.Zero:
+                        assert mat.data[iop].q_label == lop[iop].q_label
+            elif ii == bmpo.n_sites - 1:
+                for iop in range(len(rop)):
+                    if mat.data[iop].get_type() != b.OpTypes.Zero:
+                        assert mat.data[iop].q_label == rop[iop].q_label
+            else:
+                llop = bmpo.left_operator_names[ii - 1].data
+                rrop = bmpo.right_operator_names[ii + 1].data
+                assert len(lop) == len(rrop)
+                for iop in range(len(lop)):
+                    assert lop[iop].q_label == -rrop[iop].q_label
+                for ig in range(len(mat.data)):
+                    sl = llop[mat.indices[ig][0]].q_label
+                    sr = lop[mat.indices[ig][1]].q_label
+                    sm = mat.data[ig].q_label
+                    assert sl + sm == sr
+        return bs.SimplifiedMPO(bmpo, bs.Rule(), False, False)
