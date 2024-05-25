@@ -56,22 +56,6 @@ class SubTensor:
         """Set reduced matrix to zero."""
         self.reduced = np.zeros(self.reduced.shape)
 
-    def diag(self, expand):
-        """Make/take diagonal of physical indices."""
-        if self.rank == 3:
-            shape = self.reduced.shape
-            new_data = np.zeros((shape[0], shape[1], shape[1], shape[2]))
-            new_data[:, np.mgrid[:shape[1]], np.mgrid[:shape[1]], :] = self.reduced
-            return SubTensor(q_labels=(self.q_labels[0], self.q_labels[1], self.q_labels[1],
-                self.q_labels[2]), reduced=new_data)
-        elif self.rank == 4:
-            shape = self.reduced.shape
-            new_data = self.reduced[:, np.mgrid[:shape[1]], np.mgrid[:shape[2]], :]
-            return SubTensor(q_labels=(self.q_labels[0], self.q_labels[1], self.q_labels[3]),
-                reduced=new_data)
-        else:
-            assert False
-
     def copy(self):
         """Shallow copy."""
         return SubTensor(q_labels=self.q_labels, reduced=self.reduced)
@@ -128,10 +112,6 @@ class Tensor:
         blocks = [SubTensor(q_labels=b.q_labels, reduced=np.zeros_like(b.reduced))
                   for b in self.blocks]
         return Tensor(blocks=blocks)
-
-    def diag(self):
-        """Make/take diagonal of physical indices."""
-        return Tensor(blocks=[b.diag() for b in self.blocks])
 
     @property
     def rank(self):
