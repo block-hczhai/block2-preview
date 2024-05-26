@@ -570,11 +570,11 @@ class MPOTools:
             for kk, (k, v) in enumerate(sorted(data_dict.items())):
                 dq = (v[0][0][0] - v[0][0][1])[0]
                 if i == 0:
-                    xexpr = brs.OpElement(b.OpNames.XL, b.SiteIndex((k[1], ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.XL, b.SiteIndex((k[1], ), ()), dq, 1.0)
                 elif i == n_sites - 1:
-                    xexpr = brs.OpElement(b.OpNames.XR, b.SiteIndex((k[0], ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.XR, b.SiteIndex((k[0], ), ()), dq, 1.0)
                 else:
-                    xexpr = brs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()), dq, 1.0)
                 if dq not in site_op_infos[i]:
                     site_op_infos[i][dq] = brs.SparseMatrixInfo(ialloc)
                     site_op_infos[i][dq].initialize(site_basis[i], site_basis[i], dq, dq.is_fermion)
@@ -586,7 +586,7 @@ class MPOTools:
                     xmat[iq] = np.asarray(mm).ravel()
                 tensors[i].ops[xexpr] = xmat
             idq = vacuum
-            iop = brs.OpElement(b.OpNames.I, b.SiteIndex(), idq, 1.0)
+            iop = bs.OpElement(b.OpNames.I, b.SiteIndex(), idq, 1.0)
             if iop not in tensors[i].ops and add_ident:
                 if idq not in site_op_infos[i]:
                     site_op_infos[i][idq] = brs.SparseMatrixInfo(ialloc)
@@ -597,14 +597,8 @@ class MPOTools:
                 for ix in range(minfo.n):
                     xmat[ix] = np.identity(minfo.n_states_ket[ix]).ravel()
                 tensors[i].ops[iop] = xmat
-            lopd = [brs.OpElement(b.OpNames.XL, b.SiteIndex((k, ), ()), q, 1.0) for k, q in enumerate(right_qs)]
-            ropd = [brs.OpElement(b.OpNames.XR, b.SiteIndex((k, ), ()), -q, 1.0) for k, q in enumerate(left_qs)]
-            if i != n_sites - 1 and add_ident:
-                lopd += [iop]
-                n_cols += 1
-            if i != 0 and add_ident:
-                ropd += [iop]
-                n_rows += 1
+            lopd = [bs.OpElement(b.OpNames.XL, b.SiteIndex((k, ), ()), q, 1.0) for k, q in enumerate(right_qs)]
+            ropd = [bs.OpElement(b.OpNames.XR, b.SiteIndex((k, ), ()), -q, 1.0) for k, q in enumerate(left_qs)]
             if i == 0:
                 tensors[i].lmat = brs.SymbolicRowVector(n_cols)
                 tensors[i].lmat.data = brs.VectorOpExpr(lopd)
@@ -618,12 +612,11 @@ class MPOTools:
                     if zz not in tensors[i].ops:
                         tensors[i].lmat.data[iz] = brs.OpExpr()
             else:
-                matx = [brs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()),
+                matx = [bs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()),
                     (v[0][0][0] - v[0][0][1])[0], 1.0) for kk, (_, v) in enumerate(sorted(data_dict.items()))]
                 tensors[i].lmat = brs.SymbolicMatrix(n_rows, n_cols)
-                tensors[i].lmat.indices = b.VectorPIntInt([k for k in sorted(data_dict)]
-                    + ([(n_rows - 1, n_cols - 1)] if add_ident else []))
-                tensors[i].lmat.data = brs.VectorOpExpr(matx + ([iop] if add_ident else []))
+                tensors[i].lmat.indices = b.VectorPIntInt([k for k in sorted(data_dict)])
+                tensors[i].lmat.data = brs.VectorOpExpr(matx)
             tensors[i].rmat = tensors[i].lmat
             rops.append(brs.SymbolicColumnVector(len(ropd)))
             lops.append(brs.SymbolicRowVector(len(lopd)))
@@ -635,7 +628,7 @@ class MPOTools:
         bmpo.site_op_infos = brs.VectorVectorPLMatInfo(site_op_infos)
         bmpo.basis = brs.VectorStateInfo(site_basis)
         bmpo.sparse_form = "N" * n_sites
-        bmpo.op = brs.OpElement(b.OpNames.H, b.SiteIndex(), rops[-1][0].q_label, 1.0)
+        bmpo.op = bs.OpElement(b.OpNames.H, b.SiteIndex(), rops[-1][0].q_label, 1.0)
         bmpo.right_operator_names = brs.VectorSymbolic(rops)
         bmpo.left_operator_names = brs.VectorSymbolic(lops)
         bmpo.tensors = bs.VectorOpTensor(tensors)
@@ -665,4 +658,7 @@ class MPOTools:
                     sr = lop[mat.indices[ig][1]].q_label
                     sm = mat.data[ig].q_label
                     assert sl + sm == sr
-        return bs.SimplifiedMPO(bmpo, bs.Rule(), False, False)
+        bmpo = bs.SimplifiedMPO(bmpo, bs.Rule(), False, False)
+        if add_ident:
+            bmpo = bs.IdentityAddedMPO(bmpo)
+        return bmpo
