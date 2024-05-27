@@ -517,6 +517,8 @@ template <typename S, typename FL> struct DMRGDriver {
                  ExpectationAlgorithmTypes::Compressed,
              int iprint = 0, FP cutoff = (FP)1E-24,
              bool fused_contraction_rotation = true) const {
+        if (prule != nullptr)
+            prule->comm->barrier();
         shared_ptr<MPS<S, FL>> mket = ket->deep_copy("PDM-KET@TMP"), mbra;
         vector<shared_ptr<MPS<S, FL>>> mpss =
             vector<shared_ptr<MPS<S, FL>>>(1, mket);
@@ -536,6 +538,8 @@ template <typename S, typename FL> struct DMRGDriver {
                 else
                     assert(false);
                 mps->save_data();
+                if (prule != nullptr)
+                    prule->comm->barrier();
             }
             mps->load_mutable();
             mps->info->bond_dim =
@@ -579,6 +583,16 @@ template <typename S, typename FL> struct DMRGDriver {
                 algo_type & ExpectationAlgorithmTypes::SymbolFree);
         ppmpo->iprint = iprint >= 4 ? 2 : (iprint >= 2 ? 1 : 0);
         ppmpo->delta_quantum = (mbra->info->target - mket->info->target)[0];
+        if (is_same<S, SU2>::value) {
+            const int twos = SpinPermRecoupling::get_target_twos(exprs[0]);
+            for (const string &op_str : exprs) {
+                const int xtwos = SpinPermRecoupling::get_target_twos(exprs[0]);
+                if (xtwos != twos)
+                    throw runtime_error("NPDM expr target 2S mismatch.");
+            }
+            ppmpo->delta_quantum =
+                S(ppmpo->delta_quantum.n(), twos, ppmpo->delta_quantum.pg());
+        }
         if (prule != nullptr)
             ppmpo->parallel_rule = prule;
         ppmpo->build();
@@ -613,6 +627,9 @@ template <typename S, typename FL> struct DMRGDriver {
             pme->remove_partition_files();
 
         vector<shared_ptr<GTensor<FL>>> npdms = dx->get_npdm();
+
+        if (prule != nullptr)
+            prule->comm->barrier();
 
         if (is_same<S, SU2>::value)
             for (size_t i = 0; i < exprs.size(); i++) {

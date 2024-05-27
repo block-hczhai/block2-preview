@@ -223,9 +223,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         const shared_ptr<SparseMatrix<S, FL>> &vmat, bool cache_left,
         bool compressed, bool low_mem, FL accu_factor) const override {
         vector<pair<shared_ptr<OpExpr<S>>, FL>> expectations(1);
-        if (center == n_sites - 1 ||
-            main_opdq.combine(vmat->info->delta_quantum,
-                              cmat->info->delta_quantum) == S(S::invalid)) {
+        if (center == n_sites - 1) {
             expectations[0] = make_pair(make_shared<OpCounter<S>>(0), (FL)0.0);
             return expectations;
         }
@@ -249,6 +247,11 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         int middle_base_count = middle_count;
         if (center == n_sites - 2)
             middle_count += (int)scheme->last_middle_blocking.size();
+        if (main_opdq.combine(vmat->info->delta_quantum,
+                              cmat->info->delta_quantum) == S(S::invalid)) {
+            expectations[0] = make_pair(make_shared<OpCounter<S>>(0), (FL)0.0);
+            middle_count = 0;
+        }
         map<pair<uint32_t, bool>, vector<pair<int, int>>> cache_to_middle;
         for (int ii = 0; ii < middle_count; ii++) {
             bool is_last = ii >= middle_base_count;

@@ -5101,6 +5101,8 @@ class DMRGDriver:
 
             scheme = bw.b.NPDMScheme(perms)
             opdq = (mbra.info.target - mket.info.target)[0]
+            if SymmetryTypes.SU2 in bw.symm_type:
+                opdq.twos = opdq.twos_low = bw.b.SpinPermRecoupling.get_target_twos(op_str)
             if iprint >= 4:
                 print("NPDM dq =", opdq)
                 print(scheme.to_str())
