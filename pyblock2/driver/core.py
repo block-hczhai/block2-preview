@@ -5097,7 +5097,7 @@ class DMRGDriver:
                     mps.info.bond_dim = max_bond_dim
                 mps.info.deallocate_mutable()
 
-            self.align_mps_center(mbra, mket)
+            self.align_mps_center(mbra, mket, max_bond_dim=max_bond_dim)
 
             scheme = bw.b.NPDMScheme(perms)
             opdq = (mbra.info.target - mket.info.target)[0]

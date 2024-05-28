@@ -463,12 +463,15 @@ template <typename S, typename FL> struct DMRGDriver {
         return energies;
     }
     FL expectation(shared_ptr<MPS<S, FL>> bra, shared_ptr<MPO<S, FL>> mpo,
-                   shared_ptr<MPS<S, FL>> ket, bool iprint = 0) const {
+                   shared_ptr<MPS<S, FL>> ket, bool iprint = 0,
+                   int max_bond_dim = -1) const {
         shared_ptr<MPS<S, FL>> mbra = bra->deep_copy("EXPE-BRA@TMP"),
                                mket = mbra;
         if (bra != ket)
             mket = ket->deep_copy("EXPE-KET@TMP");
         ubond_t bond_dim = max(mbra->info->bond_dim, mket->info->bond_dim);
+        if (max_bond_dim != -1)
+            bond_dim = (ubond_t)max_bond_dim;
         align_mps_center(mbra, mket);
         shared_ptr<MovingEnvironment<S, FL, FL>> me =
             make_shared<MovingEnvironment<S, FL, FL>>(mpo, mbra, mket, "EXPT");
@@ -486,9 +489,12 @@ template <typename S, typename FL> struct DMRGDriver {
         return ex;
     }
     void align_mps_center(shared_ptr<MPS<S, FL>> ket,
-                          shared_ptr<MPS<S, FL>> ref) const {
+                          shared_ptr<MPS<S, FL>> ref,
+                          int max_bond_dim = -1) const {
         ket->info->bond_dim =
             max(ket->info->bond_dim, ket->info->get_max_bond_dimension());
+        if (max_bond_dim != -1)
+            ket->info->bond_dim = (ubond_t)max_bond_dim;
         if (ket->center != ref->center) {
             if (ref->center == 0) {
                 if (ket->dot == 2) {
@@ -516,7 +522,8 @@ template <typename S, typename FL> struct DMRGDriver {
                  ExpectationAlgorithmTypes::SymbolFree |
                  ExpectationAlgorithmTypes::Compressed,
              int iprint = 0, FP cutoff = (FP)1E-24,
-             bool fused_contraction_rotation = true) const {
+             bool fused_contraction_rotation = true,
+             int max_bond_dim = -1) const {
         if (prule != nullptr)
             prule->comm->barrier();
         shared_ptr<MPS<S, FL>> mket = ket->deep_copy("PDM-KET@TMP"), mbra;
@@ -544,8 +551,10 @@ template <typename S, typename FL> struct DMRGDriver {
             mps->load_mutable();
             mps->info->bond_dim =
                 max(mps->info->bond_dim, mps->info->get_max_bond_dimension());
+            if (max_bond_dim != -1)
+                mps->info->bond_dim = (ubond_t)max_bond_dim;
         }
-        align_mps_center(mbra, mket);
+        align_mps_center(mbra, mket, max_bond_dim);
 
         if (iprint >= 1)
             cout << endl;
