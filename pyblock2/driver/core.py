@@ -555,9 +555,14 @@ class DMRGDriver:
         mpi=None,
         stack_mem_ratio=0.4,
         fp_codec_cutoff=1e-16,
+        fp_codec_chunk=1024,
+        compressed_mps_storage=False,
     ):
         """
         Initialize :class:`DMRGDriver`.
+
+        Note: When creating a new instance of ``DMRGDriver``, any other previous ``DMRGDriver``
+            instances must be deleted (or not used).
 
         Args:
             symm_type : :class:`SymmetryTypes`
@@ -590,6 +595,11 @@ class DMRGDriver:
             fp_codec_cutoff : float
                 Floating-point number (absolute) precision for compressed storage of renormalized operators.
                 Default is 1E-16.
+            fp_codec_chunk : int
+                Chunk size for compressed storage of renormalized operators. Default is 1024.
+            compressed_mps_storage : bool
+                Whether block-sparse tensor should be stored in compressed form to save storage (mainly for MPS).
+                Default is False.
         """
         if mpi is not None and mpi:
             self.mpi = True
@@ -602,6 +612,8 @@ class DMRGDriver:
         self.stack_mem = stack_mem
         self.stack_mem_ratio = stack_mem_ratio
         self.fp_codec_cutoff = fp_codec_cutoff
+        self.fp_codec_chunk = fp_codec_chunk
+        self.compressed_mps_storage = compressed_mps_storage
         self.symm_type = symm_type
         self.clean_scratch = clean_scratch
         bw = self.bw
@@ -680,7 +692,7 @@ class DMRGDriver:
                 )
                 if self.fp_codec_cutoff != -1:
                     bw.b.Global.frame.fp_codec = bw.b.DoubleFPCodec(
-                        self.fp_codec_cutoff, 1024
+                        self.fp_codec_cutoff, self.fp_codec_chunk
                     )
                 bw.b.Global.frame_float = None
                 self.frame = bw.b.Global.frame
@@ -694,12 +706,13 @@ class DMRGDriver:
                 )
                 if self.fp_codec_cutoff != -1:
                     bw.b.Global.frame_float.fp_codec = bw.b.FloatFPCodec(
-                        self.fp_codec_cutoff, 1024
+                        self.fp_codec_cutoff, self.fp_codec_chunk
                     )
                 bw.b.Global.frame = None
                 self.frame = bw.b.Global.frame_float
         self.frame.minimal_disk_usage = True
         self.frame.use_main_stack = False
+        self.frame.compressed_sparse_tensor_storage = self.compressed_mps_storage
 
         if self.mpi:
             self.mpi = bw.brs.MPICommunicator()

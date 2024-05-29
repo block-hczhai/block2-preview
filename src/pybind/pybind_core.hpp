@@ -2715,6 +2715,8 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
         .def_readwrite("minimal_disk_usage", &DataFrame<FL>::minimal_disk_usage)
         .def_readwrite("minimal_memory_usage",
                        &DataFrame<FL>::minimal_memory_usage)
+        .def_readwrite("compressed_sparse_tensor_storage",
+                       &DataFrame<FL>::compressed_sparse_tensor_storage)
         .def_readwrite("fp_codec", &DataFrame<FL>::fp_codec)
         .def("update_peak_used_memory", &DataFrame<FL>::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame<FL>::reset_peak_used_memory)
