@@ -21,6 +21,7 @@
 #pragma once
 
 #include "matrix_functions.hpp"
+#include "threading.hpp"
 #include "utils.hpp"
 #include <complex>
 
@@ -661,6 +662,53 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         const FP scale = -1.0;
         MKL_INT n = a.m * a.n;
         xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
+    }
+    static void elementwise(const string &f, FL alpha, const GMatrix<FL> &a,
+                            FL beta, const GMatrix<FL> &b, const GMatrix<FL> &c,
+                            FL cfactor = (FL)1.0) {
+        MKL_INT nn = a.m * a.n;
+        int ntg = threading->activate_global();
+        MKL_INT pt = (nn + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            MKL_INT ni = tid * pt, nf = min(nn, (MKL_INT)((tid + 1) * pt));
+            if (beta == (FL)0.0) {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + cfactor * c.data[i];
+            } else if (f == "+") {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i] +
+                                    cfactor * c.data[i];
+            } else if (f == "*") {
+                alpha *= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] * b.data[i] + cfactor * c.data[i];
+            } else if (f == "/") {
+                alpha /= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] / b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] / b.data[i] + cfactor * c.data[i];
+            }
+        }
+        threading->activate_normal();
     }
     // a = a + scale * op(b)
     // conj means conj trans

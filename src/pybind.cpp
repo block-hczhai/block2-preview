@@ -243,6 +243,7 @@ PYBIND11_MODULE(block2, m) {
     bind_dmrg_types<>(m);
     bind_dmrg_io<>(m);
     bind_partition_weights<double>(m);
+    bind_fl_dmrg<double>(m);
 #ifdef _USE_SU2SZ
     bind_dmrg<SU2, double>(m_su2, "SU2");
     bind_dmrg<SZ, double>(m_sz, "SZ");
@@ -251,6 +252,7 @@ PYBIND11_MODULE(block2, m) {
     bind_fl_trans_mps_spin_specific<SU2, SZ, double>(m_su2, "sz");
 #endif
 #ifdef _USE_COMPLEX
+    bind_fl_dmrg<complex<double>>(m_cpx);
 #ifdef _USE_SU2SZ
     bind_dmrg<SU2, complex<double>>(m_su2_cpx, "SU2");
     bind_dmrg<SZ, complex<double>>(m_sz_cpx, "SZ");
@@ -308,6 +310,10 @@ PYBIND11_MODULE(block2, m) {
 
 #ifdef _USE_SINGLE_PREC
     bind_partition_weights<float>(m_sp);
+    bind_fl_dmrg<float>(m_sp);
+#ifdef _USE_COMPLEX
+    bind_fl_dmrg<complex<float>>(m_cpx_sp);
+#endif
 #ifdef _USE_SU2SZ
     bind_dmrg<SU2, float>(m_su2_sp, "SU2");
     bind_dmrg<SZ, float>(m_sz_sp, "SZ");

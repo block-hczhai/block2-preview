@@ -611,6 +611,7 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("npdm_n_sites",
                        &EffectiveHamiltonian<S, FL>::npdm_n_sites)
         .def_readwrite("npdm_center", &EffectiveHamiltonian<S, FL>::npdm_center)
+        .def_readwrite("eff_kernel", &EffectiveHamiltonian<S, FL>::eff_kernel)
         .def("__call__", &EffectiveHamiltonian<S, FL>::operator(), py::arg("b"),
              py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0,
              py::arg("all_reduce") = true)
@@ -620,12 +621,14 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def("expect", &EffectiveHamiltonian<S, FL>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S, FL>::rk4_apply,
              py::arg("beta"), py::arg("const_e"),
-             py::arg("eval_energy") = false, py::arg("para_rule") = nullptr)
+             py::arg("eval_energy") = false, py::arg("para_rule") = nullptr,
+             py::arg("ortho_bra") = vector<shared_ptr<SparseMatrix<S, FL>>>())
         .def("expo_apply", &EffectiveHamiltonian<S, FL>::expo_apply,
              py::arg("beta"), py::arg("const_e"), py::arg("symmetric"),
              py::arg("iprint") = false, py::arg("para_rule") = nullptr,
              py::arg("conv_thrd") = (typename GMatrix<FL>::FP)5E-6,
-             py::arg("deflation_max_size") = 20)
+             py::arg("deflation_max_size") = 20,
+             py::arg("ortho_bra") = vector<shared_ptr<SparseMatrix<S, FL>>>())
         .def("deallocate", &EffectiveHamiltonian<S, FL>::deallocate);
 
     py::class_<EffectiveFunctions<S, FL>,
@@ -1046,6 +1049,61 @@ template <typename S, typename FL> void bind_fl_qc_hamiltonian(py::module &m) {
         .def("get_site_ops", &HamiltonianQC<S, FL>::get_site_ops);
 }
 
+template <typename FL> void bind_fl_dmrg(py::module &m) {
+
+    struct PyEffectiveKernel : EffectiveKernel<FL> {
+        typedef EffectiveKernel<FL> super_t;
+        void compute(FL beta,
+                     const function<void(const GMatrix<FL> &,
+                                         const GMatrix<FL> &, FL)> &f,
+                     const GMatrix<FL> &a, const GMatrix<FL> &b,
+                     const vector<GMatrix<FL>> &xs) const override {
+            py::gil_scoped_acquire gil;
+            py::function py_method = py::get_override(this, "compute");
+            if (py_method) {
+                const function<void(py::array_t<FL> &, py::array_t<FL> &, FL)> &
+                    g = [&f](py::array_t<FL> &a, py::array_t<FL> &b, FL scale) {
+                        py::gil_scoped_release gil;
+                        f(GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1),
+                          GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                          scale);
+                    };
+                py::array_t<FL> aa(a.size(), a.data);
+                py::array_t<FL> bb(b.size(), b.data);
+                py::list zs;
+                for (size_t i = 0; i < xs.size(); i++)
+                    zs.append(py::array_t<FL>(xs[i].size(), xs[i].data));
+                py_method(beta, g, aa, bb, zs);
+            } else
+                super_t::compute(beta, f, a, b, xs);
+        }
+    };
+
+    py::class_<EffectiveKernel<FL>, shared_ptr<EffectiveKernel<FL>>,
+               PyEffectiveKernel>(m, "EffectiveKernel")
+        .def(py::init<>())
+        .def("compute", [](EffectiveKernel<FL> *self, FL beta, py::object &f,
+                           py::array_t<FL> &a, py::array_t<FL> &b,
+                           py::list xs) {
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &
+                g = [&f](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                    py::gil_scoped_acquire gil;
+                    py::array_t<FL> aa(a.size(), a.data);
+                    py::array_t<FL> bb(b.size(), b.data);
+                    f(aa, bb, scale);
+                };
+            vector<GMatrix<FL>> zs;
+            for (size_t i = 0; i < xs.size(); i++) {
+                py::array_t<FL> x = xs[i].cast<py::array_t<FL>>();
+                zs.push_back(
+                    GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1));
+            }
+            self->compute(
+                beta, g, GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1),
+                GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1), zs);
+        });
+}
+
 template <typename FL> void bind_partition_weights(py::module &m) {
 
     py::class_<PartitionWeights<FL>, shared_ptr<PartitionWeights<FL>>>(
@@ -1188,6 +1246,7 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("cpx_me", &DMRG<S, FL, FLS>::cpx_me)
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)
+        .def_readwrite("eff_kernel", &DMRG<S, FL, FLS>::eff_kernel)
         .def_readwrite("state_specific", &DMRG<S, FL, FLS>::state_specific)
         .def_readwrite("projection_weights",
                        &DMRG<S, FL, FLS>::projection_weights)
@@ -1357,6 +1416,9 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("iprint", &TimeEvolution<S, FL, FLS>::iprint)
         .def_readwrite("cutoff", &TimeEvolution<S, FL, FLS>::cutoff)
         .def_readwrite("me", &TimeEvolution<S, FL, FLS>::me)
+        .def_readwrite("ext_mes", &TimeEvolution<S, FL, FLS>::ext_mes)
+        .def_readwrite("ext_mpss", &TimeEvolution<S, FL, FLS>::ext_mpss)
+        .def_readwrite("eff_kernel", &TimeEvolution<S, FL, FLS>::eff_kernel)
         .def_readwrite("bond_dims", &TimeEvolution<S, FL, FLS>::bond_dims)
         .def_readwrite("noises", &TimeEvolution<S, FL, FLS>::noises)
         .def_readwrite("energies", &TimeEvolution<S, FL, FLS>::energies)
@@ -1454,6 +1516,8 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("ext_tmes", &Linear<S, FL, FLS>::ext_tmes)
         .def_readwrite("ext_mes", &Linear<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &Linear<S, FL, FLS>::ext_mpss)
+        .def_readwrite("leff_kernel", &Linear<S, FL, FLS>::leff_kernel)
+        .def_readwrite("reff_kernel", &Linear<S, FL, FLS>::reff_kernel)
         .def_readwrite("projection_weights",
                        &Linear<S, FL, FLS>::projection_weights)
         .def_readwrite("ext_mps_bond_dim",

@@ -2792,6 +2792,20 @@ template <typename FL> void bind_matrix(py::module &m) {
              py::arg("alloc") = nullptr);
 
     py::class_<GMatrixFunctions<FL>>(m, "MatrixFunctions")
+        .def_static(
+            "elementwise",
+            [](const string &f, FL alpha, py::array_t<FL> &a, FL beta,
+               py::array_t<FL> &b, py::array_t<FL> &c, FL cfactor) {
+                MKL_INT n = (MKL_INT)a.size();
+                GMatrixFunctions<FL>::elementwise(
+                    f, alpha,
+                    GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1), beta,
+                    GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                    GMatrix<FL>(c.mutable_data(), (MKL_INT)c.size(), 1),
+                    cfactor);
+            },
+            py::arg("f"), py::arg("alpha"), py::arg("a"), py::arg("beta"),
+            py::arg("b"), py::arg("c"), py::arg("cfactor") = (FL)1.0)
         .def_static("det",
                     [](py::array_t<FL> &a) {
                         MKL_INT n = (MKL_INT)Prime::sqrt((Prime::LL)a.size());
@@ -2814,7 +2828,26 @@ template <typename FL> void bind_matrix(py::module &m) {
                 GDiagonalMatrix<FL>(w.mutable_data(), n), x);
         });
 
-    py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions");
+    py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions")
+        .def_static(
+            "elementwise",
+            [](const string &f, complex<FL> alpha, py::array_t<complex<FL>> &a,
+               complex<FL> beta, py::array_t<complex<FL>> &b,
+               py::array_t<complex<FL>> &c, complex<FL> cfactor) {
+                MKL_INT n = (MKL_INT)a.size();
+                GMatrixFunctions<complex<FL>>::elementwise(
+                    f, alpha,
+                    GMatrix<complex<FL>>(a.mutable_data(), (MKL_INT)a.size(),
+                                         1),
+                    beta,
+                    GMatrix<complex<FL>>(b.mutable_data(), (MKL_INT)b.size(),
+                                         1),
+                    GMatrix<complex<FL>>(c.mutable_data(), (MKL_INT)c.size(),
+                                         1),
+                    cfactor);
+            },
+            py::arg("f"), py::arg("alpha"), py::arg("a"), py::arg("beta"),
+            py::arg("b"), py::arg("c"), py::arg("cfactor") = (complex<FL>)1.0);
 
     py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions")
         .def_static(

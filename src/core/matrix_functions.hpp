@@ -22,6 +22,7 @@
 
 #include "allocator.hpp"
 #include "matrix.hpp"
+#include "threading.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -717,6 +718,53 @@ struct GMatrixFunctions<
     }
     static void keep_real(const GMatrix<FL> &a) {}
     static void conjugate(const GMatrix<FL> &a) {}
+    static void elementwise(const string &f, FL alpha, const GMatrix<FL> &a,
+                            FL beta, const GMatrix<FL> &b, const GMatrix<FL> &c,
+                            FL cfactor = (FL)1.0) {
+        MKL_INT nn = a.m * a.n;
+        int ntg = threading->activate_global();
+        MKL_INT pt = (nn + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            MKL_INT ni = tid * pt, nf = min(nn, (MKL_INT)((tid + 1) * pt));
+            if (beta == (FL)0.0) {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + cfactor * c.data[i];
+            } else if (f == "+") {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i] +
+                                    cfactor * c.data[i];
+            } else if (f == "*") {
+                alpha *= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] * b.data[i] + cfactor * c.data[i];
+            } else if (f == "/") {
+                alpha /= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] / b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] / b.data[i] + cfactor * c.data[i];
+            }
+        }
+        threading->activate_normal();
+    }
     // a = a + scale * op(b)
     static void iadd(const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale,
                      bool conj = false, FL cfactor = 1.0) {

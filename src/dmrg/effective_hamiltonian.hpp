@@ -78,6 +78,18 @@ enum struct LinearSolverTypes : uint8_t {
     Cheby
 };
 
+template <typename FL> struct EffectiveKernel {
+    EffectiveKernel() {}
+    virtual ~EffectiveKernel() = default;
+    virtual void compute(
+        FL beta,
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f,
+        const GMatrix<FL> &a, const GMatrix<FL> &b,
+        const vector<GMatrix<FL>> &xs) const {
+        f(a, b, beta);
+    }
+};
+
 template <typename S, typename FL, typename = MPS<S, FL>>
 struct EffectiveHamiltonian;
 
@@ -106,6 +118,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     shared_ptr<NPDMScheme> npdm_scheme = nullptr;
     string npdm_fragment_filename = "";
     int npdm_n_sites = 0, npdm_center = -1, npdm_parallel_center = -1;
+    shared_ptr<EffectiveKernel<FL>> eff_kernel = nullptr;
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -432,21 +445,27 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<FP> eners =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights)
-                : IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *this, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b,
+                                              vector<GMatrix<FL>>());
+            };
+        vector<FP> eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
+            g, aa, bs, shift, davidson_type, ndav, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+            deflation_max_size, ors, projection_weights);
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -489,28 +508,36 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 aa.data[i] = diag->data[i] + (FL)const_e;
         }
         precompute();
-        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
-            [this](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
-                    return this->tf->operator()(a, b);
+                    return this->tf->operator()(a, b, scale);
                 else
-                    return (*this)(a, b);
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b,
+                                              vector<GMatrix<FL>>());
             };
         FL r =
             solver_type == LinearSolverTypes::CG
                 ? IterativeMatrixFunctions<FL>::conjugate_gradient(
-                      f, aa, mbra, mket, nmult, (FL)const_e, iprint,
+                      g, aa, mbra, mket, nmult, (FL)const_e, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, rel_conv_thrd, max_iter, soft_max_iter, ors)
                 : (solver_type == LinearSolverTypes::MinRes
                        ? IterativeMatrixFunctions<FL>::minres(
-                             f, mbra, mket, nmult, (FL)const_e, iprint,
+                             g, mbra, mket, nmult, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
                              ors)
                        : IterativeMatrixFunctions<FL>::gcrotmk(
-                             f, aa, mbra, mket, nmult, niter,
+                             g, aa, mbra, mket, nmult, niter,
                              linear_solver_params.first,
                              linear_solver_params.second, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
@@ -582,8 +609,19 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
-        (*this)(GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
-                GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
+        if (this->eff_kernel == nullptr)
+            (*this)(GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
+                    GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
+        else {
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)>
+                &f = [this](const GMatrix<FL> &a, const GMatrix<FL> &b,
+                            FL scale) { return (*this)(a, b, 0, scale); };
+            this->eff_kernel->compute(
+                (FL)1.0, f,
+                GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
+                GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1),
+                vector<GMatrix<FL>>());
+        }
         op->mat->data[0] = expr;
         FP norm = GMatrixFunctions<FL>::norm(
             GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
@@ -832,7 +870,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
     rk4_apply(FL beta, typename const_fl_type<FL>::FL const_e,
               bool eval_energy = false,
-              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+              const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+              const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                  vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
         vector<GMatrix<FL>> k, r;
         Timer t;
@@ -842,6 +882,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             r[i].allocate();
         }
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame_<FP>()->activate(0);
         for (int i = 0; i < 4; i++) {
             k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
@@ -862,14 +907,22 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 else
                     return (*this)(a, b, 0, scale);
             };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &g =
+            [this, &f, &ors](const GMatrix<FL> &a, const GMatrix<FL> &b,
+                             FL scale) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, scale);
+                else
+                    this->eff_kernel->compute(scale, f, a, b, ors);
+            };
         // k0 ~ k3
         for (int i = 0; i < 4; i++) {
             if (i == 0)
-                f(v, k[i], beta);
+                g(v, k[i], beta);
             else {
                 GMatrixFunctions<FL>::copy(r[0], v);
                 GMatrixFunctions<FL>::iadd(r[0], k[i - 1], ks[i]);
-                f(r[0], k[i], beta);
+                g(r[0], k[i], beta);
             }
         }
         // r0 ~ r2
@@ -884,7 +937,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         FL energy = -(FL)const_e;
         if (eval_energy) {
             k[0].clear();
-            f(r[2], k[0], 1.0);
+            g(r[2], k[0], 1.0);
             energy =
                 GMatrixFunctions<FL>::complex_dot(r[2], k[0]) / (norm * norm);
         }
@@ -905,35 +958,46 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     expo_apply(FL beta, typename const_fl_type<FL>::FL const_e, bool symmetric,
                bool iprint = false,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
-               FP conv_thrd = 5E-6, int deflation_max_size = 20) {
+               FP conv_thrd = 5E-6, int deflation_max_size = 20,
+               const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                   vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         assert(compute_diag);
         FP anorm = GMatrixFunctions<FL>::norm(
             GMatrix<FL>(diag->data, (MKL_INT)diag->total_memory, 1));
         GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        int nexpo =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::expo_apply(
-                      *tf, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, deflation_max_size)
-                : IterativeMatrixFunctions<FL>::expo_apply(
-                      *this, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, deflation_max_size);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f, &ors](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b, ors);
+            };
+        int nexpo = IterativeMatrixFunctions<FL>::expo_apply(
+            g, beta, anorm, v, (FL)const_e, symmetric, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            deflation_max_size);
         FP norm = GMatrixFunctions<FL>::norm(v);
         GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
         tmp.allocate();
         tmp.clear();
-        if (tf->opf->seq->mode == SeqTypes::Auto ||
-            (tf->opf->seq->mode & SeqTypes::Tasked))
-            (*tf)(v, tmp);
-        else
-            (*this)(v, tmp);
+        g(v, tmp);
         FL energy = GMatrixFunctions<FL>::complex_dot(v, tmp) / (norm * norm);
         tmp.deallocate();
         post_precompute();

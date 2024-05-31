@@ -801,6 +801,9 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     vector<FLLS> energies;
     vector<FPS> normsqs;
     vector<FPS> discarded_weights;
+    vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
+    vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
+    shared_ptr<EffectiveKernel<FLS>> eff_kernel = nullptr;
     NoiseTypes noise_type = NoiseTypes::DensityMatrix;
     TruncationTypes trunc_type = TruncationTypes::Physical;
     TruncPatternTypes trunc_pattern = TruncPatternTypes::None;
@@ -852,32 +855,39 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                              ubond_t bond_dim, FPS noise) {
         frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
-        if (me->ket->canonical_form[i] == 'C') {
-            if (i == 0)
-                me->ket->canonical_form[i] = 'K';
-            else if (i == me->n_sites - 1)
-                me->ket->canonical_form[i] = 'S';
-            else
-                assert(false);
-        }
-        // guess wavefunction
-        // change to fused form for super-block hamiltonian
-        // note that this switch exactly matches two-site conventional mpo
-        // middle-site switch, so two-site conventional mpo can work
-        me->ket->load_tensor(i);
-        if ((fuse_left && me->ket->canonical_form[i] == 'S') ||
-            (!fuse_left && me->ket->canonical_form[i] == 'K')) {
-            shared_ptr<SparseMatrix<S, FLS>> prev_wfn = me->ket->tensors[i];
-            if (fuse_left && me->ket->canonical_form[i] == 'S')
-                me->ket->tensors[i] =
-                    MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
-                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
-            else if (!fuse_left && me->ket->canonical_form[i] == 'K')
-                me->ket->tensors[i] =
-                    MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
-                        i, me->ket->info, prev_wfn, me->mpo->tf->opf->cg);
-            prev_wfn->info->deallocate();
-            prev_wfn->deallocate();
+        vector<shared_ptr<MPS<S, FLS>>> mpss = {me->ket};
+        if (ext_mpss.size() != 0)
+            mpss.insert(mpss.end(), ext_mpss.begin(), ext_mpss.end());
+        for (auto &mps : mpss) {
+            if (mps->canonical_form[i] == 'C') {
+                if (i == 0)
+                    mps->canonical_form[i] = 'K';
+                else if (i == me->n_sites - 1)
+                    mps->canonical_form[i] = 'S';
+                else if (forward)
+                    mps->canonical_form[i] = 'K';
+                else
+                    mps->canonical_form[i] = 'S';
+            }
+            // guess wavefunction
+            // change to fused form for super-block hamiltonian
+            // note that this switch exactly matches two-site conventional mpo
+            // middle-site switch, so two-site conventional mpo can work
+            mps->load_tensor(i);
+            if ((fuse_left && mps->canonical_form[i] == 'S') ||
+                (!fuse_left && mps->canonical_form[i] == 'K')) {
+                shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
+                if (fuse_left && mps->canonical_form[i] == 'S')
+                    mps->tensors[i] =
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_left(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                else if (!fuse_left && mps->canonical_form[i] == 'K')
+                    mps->tensors[i] =
+                        MovingEnvironment<S, FL, FLS>::swap_wfn_to_fused_right(
+                            i, mps->info, prev_wfn, me->mpo->tf->opf->cg);
+                prev_wfn->info->deallocate();
+                prev_wfn->deallocate();
+            }
         }
         TETypes effective_mode = mode;
         if (mode == TETypes::RK4 &&
@@ -885,10 +895,30 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             effective_mode = TETypes::TangentSpace;
         vector<GMatrix<FL>> pdpf;
         tuple<FLS, FPS, int, size_t, double> pdi;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
+        if (ext_mpss.size() != 0) {
+            shared_ptr<VectorAllocator<FPS>> d_alloc =
+                make_shared<VectorAllocator<FPS>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                    ext_mes[ist]->eff_ham(fuse_left ? FuseTypes::FuseL
+                                                    : FuseTypes::FuseR,
+                                          forward, false, ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
         // effective hamiltonian
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
+        h_eff->eff_kernel = eff_kernel;
         if (!advance &&
             ((forward && i == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -899,22 +929,22 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule,
-                                    krylov_conv_thrd, krylov_subspace_size);
+            pdi = h_eff->expo_apply(
+                -beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
-            auto pdp =
-                h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false,
+                                        me->para_rule, ortho_bra);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule,
-                                    krylov_conv_thrd, krylov_subspace_size);
+            pdi = h_eff->expo_apply(
+                -beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
         else if (effective_mode == TETypes::RK4) {
-            auto pdp =
-                h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false,
+                                        me->para_rule, ortho_bra);
             pdpf = pdp.first;
             pdi = pdp.second;
         }
@@ -962,6 +992,39 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
                 prev_wfn->info->deallocate();
                 prev_wfn->deallocate();
             }
+        }
+        for (auto &mps : ext_mpss) {
+            if (me->para_rule == nullptr || me->para_rule->is_root()) {
+                if (fuse_left != forward) {
+                    // change to fused form for splitting
+                    shared_ptr<SparseMatrix<S, FLS>> prev_wfn = mps->tensors[i];
+                    if (!fuse_left && forward)
+                        mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                            swap_wfn_to_fused_left(i, mps->info, prev_wfn,
+                                                   me->mpo->tf->opf->cg);
+                    else if (fuse_left && !forward)
+                        mps->tensors[i] = MovingEnvironment<S, FL, FLS>::
+                            swap_wfn_to_fused_right(i, mps->info, prev_wfn,
+                                                    me->mpo->tf->opf->cg);
+                    prev_wfn->info->deallocate();
+                    prev_wfn->deallocate();
+                }
+            }
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
+            if (mode != TETypes::TangentSpace) {
+                mps->canonical_form[i] = forward ? 'K' : 'S';
+                if (forward && i != me->n_sites - 1)
+                    mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+                else if (!forward && i != 0)
+                    mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+            } else
+                throw runtime_error(
+                    "TDVP 1-dot with ext_mpss not implemented!");
+        }
+        if (me->para_rule == nullptr || me->para_rule->is_root()) {
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             if (pdpf.size() != 0) {
                 dm = MovingEnvironment<S, FL, FLS>::density_matrix(
@@ -1048,11 +1111,15 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             if (forward) {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i + 1, true);
+                for (auto &xme : ext_mes)
+                    xme->move_to(i + 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff = me->eff_ham(
                     FuseTypes::NoFuseL, forward, true, right, right);
-                auto pdk = k_eff->expo_apply(
-                    beta, me->mpo->const_e, hermitian, iprint >= 3,
-                    me->para_rule, krylov_conv_thrd, krylov_subspace_size);
+                k_eff->eff_kernel = eff_kernel;
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                             iprint >= 3, me->para_rule,
+                                             krylov_conv_thrd,
+                                             krylov_subspace_size, ortho_bra);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1067,11 +1134,15 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             } else {
                 me->ket->tensors[i] = make_shared<SparseMatrix<S, FLS>>();
                 me->move_to(i - 1, true);
+                for (auto &xme : ext_mes)
+                    xme->move_to(i - 1, true);
                 shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                     me->eff_ham(FuseTypes::NoFuseR, forward, true, left, left);
-                auto pdk = k_eff->expo_apply(
-                    beta, me->mpo->const_e, hermitian, iprint >= 3,
-                    me->para_rule, krylov_conv_thrd, krylov_subspace_size);
+                k_eff->eff_kernel = eff_kernel;
+                auto pdk = k_eff->expo_apply(beta, me->mpo->const_e, hermitian,
+                                             iprint >= 3, me->para_rule,
+                                             krylov_conv_thrd,
+                                             krylov_subspace_size, ortho_bra);
                 k_eff->deallocate();
                 if (me->para_rule == nullptr || me->para_rule->is_root()) {
                     if (normalize_mps)
@@ -1156,12 +1227,16 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     Iteration update_two_dot(int i, bool forward, bool advance, FLS beta,
                              ubond_t bond_dim, FPS noise) {
         frame_<FPS>()->activate(0);
-        if (me->ket->tensors[i] != nullptr &&
-            me->ket->tensors[i + 1] != nullptr)
-            MovingEnvironment<S, FL, FLS>::contract_two_dot(i, me->ket);
-        else {
-            me->ket->load_tensor(i);
-            me->ket->tensors[i + 1] = nullptr;
+        vector<shared_ptr<MPS<S, FLS>>> mpss = {me->ket};
+        if (ext_mpss.size() != 0)
+            mpss.insert(mpss.end(), ext_mpss.begin(), ext_mpss.end());
+        for (auto &mps : mpss) {
+            if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
+                MovingEnvironment<S, FL, FLS>::contract_two_dot(i, mps);
+            else {
+                mps->load_tensor(i);
+                mps->tensors[i + 1] = nullptr;
+            }
         }
         tuple<FLS, FPS, int, size_t, double> pdi;
         shared_ptr<SparseMatrix<S, FLS>> old_wfn = me->ket->tensors[i];
@@ -1170,9 +1245,28 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0)))
             effective_mode = TETypes::TangentSpace;
         vector<GMatrix<FL>> pdpf;
+        vector<shared_ptr<SparseMatrix<S, FLS>>> ortho_bra;
+        if (ext_mpss.size() != 0) {
+            shared_ptr<VectorAllocator<FPS>> d_alloc =
+                make_shared<VectorAllocator<FPS>>();
+            ortho_bra.resize(ext_mpss.size());
+            assert(ext_mes.size() == ext_mpss.size());
+            for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                    ext_mes[ist]->eff_ham(FuseTypes::FuseLR, forward, false,
+                                          ortho_bra[ist],
+                                          ext_mpss[ist]->tensors[i]);
+                auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                            ext_mes[ist]->para_rule);
+                i_eff->deallocate();
+            }
+        }
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
+        h_eff->eff_kernel = eff_kernel;
         if (!advance &&
             ((forward && i + 1 == me->n_sites - 1) || (!forward && i == 0))) {
             assert(effective_mode == TETypes::TangentSpace);
@@ -1183,26 +1277,45 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
             tmp.allocate();
             memcpy(tmp.data, h_eff->ket->data,
                    h_eff->ket->total_memory * sizeof(FLS));
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule,
-                                    krylov_conv_thrd, krylov_subspace_size);
+            pdi = h_eff->expo_apply(
+                -beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
             memcpy(h_eff->ket->data, tmp.data,
                    h_eff->ket->total_memory * sizeof(FLS));
             tmp.deallocate();
-            auto pdp =
-                h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false,
+                                        me->para_rule, ortho_bra);
             pdpf = pdp.first;
         } else if (effective_mode == TETypes::TangentSpace)
-            pdi = h_eff->expo_apply(-beta, me->mpo->const_e, hermitian,
-                                    iprint >= 3, me->para_rule,
-                                    krylov_conv_thrd, krylov_subspace_size);
+            pdi = h_eff->expo_apply(
+                -beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
         else if (effective_mode == TETypes::RK4) {
-            auto pdp =
-                h_eff->rk4_apply(-beta, me->mpo->const_e, false, me->para_rule);
+            auto pdp = h_eff->rk4_apply(-beta, me->mpo->const_e, false,
+                                        me->para_rule, ortho_bra);
             pdpf = pdp.first;
             pdi = pdp.second;
         }
         h_eff->deallocate();
+        vector<shared_ptr<MPS<S, FLS>>> rev_ext_mpss(ext_mpss.rbegin(),
+                                                     ext_mpss.rend());
+        for (auto &mps : rev_ext_mpss) {
+            mps->save_tensor(i);
+            mps->unload_tensor(i);
+            if (me->para_rule != nullptr)
+                me->para_rule->comm->barrier();
+            if (forward) {
+                mps->canonical_form[i] = 'C';
+                mps->move_right(me->mpo->tf->opf->cg, me->para_rule);
+                mps->canonical_form[i + 1] = 'C';
+                if (mps->center == mps->n_sites - 1)
+                    mps->center = mps->n_sites - 2;
+            } else {
+                mps->canonical_form[i] = 'C';
+                mps->move_left(me->mpo->tf->opf->cg, me->para_rule);
+                mps->canonical_form[i] = 'C';
+            }
+        }
         int bdim = bond_dim, mmps = 0;
         FPS error = 0.0;
         shared_ptr<SparseMatrix<S, FLS>> dm;
@@ -1292,44 +1405,93 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         if (mode == TETypes::TangentSpace && forward &&
             i + 1 != me->n_sites - 1) {
             me->move_to(i + 1, true);
+            for (auto &xme : ext_mes)
+                xme->move_to(i + 1, true);
             me->ket->load_tensor(i + 1);
+            for (auto &mps : ext_mpss)
+                mps->load_tensor(i + 1);
+            if (ext_mpss.size() != 0) {
+                shared_ptr<VectorAllocator<FPS>> d_alloc =
+                    make_shared<VectorAllocator<FPS>>();
+                for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                    ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                    ortho_bra[ist]->allocate(me->bra->tensors[i + 1]->info);
+                    shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                        ext_mes[ist]->eff_ham(FuseTypes::FuseR, forward, true,
+                                              ortho_bra[ist],
+                                              ext_mpss[ist]->tensors[i + 1]);
+                    auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                                ext_mes[ist]->para_rule);
+                    i_eff->deallocate();
+                }
+            }
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseR, forward, true,
                             me->bra->tensors[i + 1], me->ket->tensors[i + 1]);
+            k_eff->eff_kernel = eff_kernel;
             auto pdk = k_eff->expo_apply(
                 beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
-                krylov_conv_thrd, krylov_subspace_size);
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
                     me->ket->tensors[i + 1]->normalize();
                 me->ket->save_tensor(i + 1);
+                for (auto &mps : ext_mpss)
+                    mps->save_tensor(i + 1);
             }
+            for (auto &mps : rev_ext_mpss)
+                mps->unload_tensor(i + 1);
             me->ket->unload_tensor(i + 1);
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
         } else if (mode == TETypes::TangentSpace && !forward && i != 0) {
             me->move_to(i - 1, true);
+            for (auto &xme : ext_mes)
+                xme->move_to(i - 1, true);
             me->ket->load_tensor(i);
+            for (auto &mps : ext_mpss)
+                mps->load_tensor(i);
+            if (ext_mpss.size() != 0) {
+                shared_ptr<VectorAllocator<FPS>> d_alloc =
+                    make_shared<VectorAllocator<FPS>>();
+                for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                    ortho_bra[ist] = make_shared<SparseMatrix<S, FLS>>(d_alloc);
+                    ortho_bra[ist]->allocate(me->bra->tensors[i]->info);
+                    shared_ptr<EffectiveHamiltonian<S, FL>> i_eff =
+                        ext_mes[ist]->eff_ham(FuseTypes::FuseL, forward, true,
+                                              ortho_bra[ist],
+                                              ext_mpss[ist]->tensors[i]);
+                    auto ipdi = i_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                                ext_mes[ist]->para_rule);
+                    i_eff->deallocate();
+                }
+            }
             shared_ptr<EffectiveHamiltonian<S, FL>> k_eff =
                 me->eff_ham(FuseTypes::FuseL, forward, true,
                             me->bra->tensors[i], me->ket->tensors[i]);
+            k_eff->eff_kernel = eff_kernel;
             auto pdk = k_eff->expo_apply(
                 beta, me->mpo->const_e, hermitian, iprint >= 3, me->para_rule,
-                krylov_conv_thrd, krylov_subspace_size);
+                krylov_conv_thrd, krylov_subspace_size, ortho_bra);
             k_eff->deallocate();
             if (me->para_rule == nullptr || me->para_rule->is_root()) {
                 if (normalize_mps)
                     me->ket->tensors[i]->normalize();
                 me->ket->save_tensor(i);
+                for (auto &mps : ext_mpss)
+                    mps->save_tensor(i);
             }
+            for (auto &mps : rev_ext_mpss)
+                mps->unload_tensor(i);
             me->ket->unload_tensor(i);
             get<3>(pdi) += get<3>(pdk), get<4>(pdi) += get<4>(pdk);
             expok = get<2>(pdk);
         }
         if (me->para_rule == nullptr || me->para_rule->is_root())
-            MovingEnvironment<S, FL, FLS>::propagate_wfn(
-                i, 0, me->n_sites, me->ket, forward, me->mpo->tf->opf->cg);
+            for (auto &mps : mpss)
+                MovingEnvironment<S, FL, FLS>::propagate_wfn(
+                    i, 0, me->n_sites, mps, forward, me->mpo->tf->opf->cg);
         me->ket->save_data();
         if (me->para_rule != nullptr)
             me->para_rule->comm->barrier();
@@ -1933,6 +2095,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
     Iteration blocking(int i, bool forward, bool advance, FCS beta,
                        ubond_t bond_dim, FPS noise) {
         me->move_to(i);
+        for (auto &xme : ext_mes)
+            xme->move_to(i);
         assert(me->dot == 2 || me->dot == 1);
         Iteration it(0, 0, 0, 0, 0, 0);
         if (me->dot == 2) {
@@ -1982,6 +2146,8 @@ template <typename S, typename FL, typename FLS> struct TimeEvolution {
         if (frame_<FPS>()->fp_codec != nullptr)
             frame_<FPS>()->fp_codec->ndata = frame_<FPS>()->fp_codec->ncpsd = 0;
         me->prepare();
+        for (auto &xme : ext_mes)
+            xme->prepare();
         vector<FLLS> energies;
         vector<FPS> normsqs;
         sweep_cumulative_nflop = 0;

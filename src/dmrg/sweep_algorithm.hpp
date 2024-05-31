@@ -78,6 +78,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
     shared_ptr<MovingEnvironment<S, FC, FLS>> cpx_me;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
+    shared_ptr<EffectiveKernel<FLS>> eff_kernel = nullptr;
     vector<ubond_t> bond_dims;
     vector<vector<ubond_t>> site_dependent_bond_dims;
     vector<FPS> noises;
@@ -590,6 +591,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
+        h_eff->eff_kernel = eff_kernel;
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         sweep_max_eff_wfn_size =
@@ -893,6 +895,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
+        h_eff->eff_kernel = eff_kernel;
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
         sweep_max_eff_wfn_size =
@@ -2545,6 +2548,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
     // ext mes for projection
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
+    shared_ptr<EffectiveKernel<FLS>> leff_kernel = nullptr;
+    shared_ptr<EffectiveKernel<FLS>> reff_kernel = nullptr;
     vector<FPS> projection_weights;
     int ext_mps_bond_dim = -1;
     vector<vector<FLS>> ext_targets;
@@ -2809,6 +2814,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR,
                         forward, false, right_bra, me->ket->tensors[i]);
+        h_eff->eff_kernel = reff_kernel;
         teff += _t.get_time();
         tuple<FLS, pair<int, int>, size_t, double> pdi;
         auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
@@ -2845,6 +2851,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
                     false, lme->bra->tensors[i], lme->ket->tensors[i]);
+                l_eff->eff_kernel = leff_kernel;
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
@@ -2858,6 +2865,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
                 linear_use_precondition, me->bra->tensors[i], right_bra);
+            l_eff->eff_kernel = leff_kernel;
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             sweep_max_eff_wfn_size =
@@ -3539,6 +3547,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             FuseTypes::FuseLR, forward, false, right_bra, me->ket->tensors[i]);
+        h_eff->eff_kernel = reff_kernel;
         teff += _t.get_time();
         tuple<FLS, pair<int, int>, size_t, double> pdi;
         auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
@@ -3575,6 +3584,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
                     lme->eff_ham(FuseTypes::FuseLR, forward, false,
                                  lme->bra->tensors[i], lme->ket->tensors[i]);
+                l_eff->eff_kernel = leff_kernel;
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
@@ -3587,6 +3597,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
             shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
                 FuseTypes::FuseLR, forward, linear_use_precondition,
                 me->bra->tensors[i], right_bra);
+            l_eff->eff_kernel = leff_kernel;
             sweep_max_eff_ham_size =
                 max(sweep_max_eff_ham_size, l_eff->op->get_total_memory());
             sweep_max_eff_wfn_size =
