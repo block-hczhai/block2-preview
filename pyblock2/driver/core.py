@@ -3920,6 +3920,16 @@ class DMRGDriver:
 
         return np.array(idx, dtype=int)
 
+    def make_kernel(self, kernel=None):
+        EK = self.bw.bx.EffectiveKernel
+        class Kernel(EK):
+            def __init__(self, kernel):
+                EK.__init__(self)
+                self.kernel = kernel
+            def compute(self, beta, f, a, b, xs):
+                self.kernel(beta, f, a, b, xs)
+        return Kernel(kernel)
+
     def dmrg(
         self,
         mpo,
@@ -3944,6 +3954,7 @@ class DMRGDriver:
         lowmem_noise=False,
         sweep_start=0,
         forward=None,
+        kernel=None,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4044,6 +4055,8 @@ class DMRGDriver:
                 left-to-right direction). If None, will use the canonical center of MPS
                 to determine the direction. Default is None.
                 This may be useful in restarting.
+            kernel : None or function
+                Kernel operation for the local problem.
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4109,6 +4122,10 @@ class DMRGDriver:
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
+        if kernel is not None:
+            # need to keep Python derived class in memory (stored in self)
+            self.dmrg_kernel = self.make_kernel(kernel=kernel)
+            dmrg.eff_kernel = self.dmrg_kernel
         if spectra_with_multiplicity:
             dmrg.trunc_type = (
                 dmrg.trunc_type | bw.b.TruncationTypes.SpectraWithMultiplicity
@@ -4167,6 +4184,8 @@ class DMRGDriver:
         cutoff=1e-20,
         krylov_conv_thrd=5e-6,
         krylov_subspace_size=20,
+        ext_mpss=None,
+        kernel=None,
     ):
         """
         Perform the time-dependent DMRG algorithm, which computes:
@@ -4227,7 +4246,11 @@ class DMRGDriver:
                 Maximal size of the Krylov space of the Matrix
                 exponentiation algorithm. Default is 20.
                 Only have effects when ``te_type = "tdvp"``.
-
+            ext_mpss : None or list[MPS]
+                If not None, the MPS given in ``ext_mpss`` will be canonicalized during sweeps.
+                Can be used in custom kernel. Default is None.
+            kernel : None or function
+                Kernel operation for the local problem.
         Returns:
             final_mps : MPS
                 The time evolved MPS.
@@ -4271,6 +4294,26 @@ class DMRGDriver:
             bw.b.VectorUBond(bond_dims),
             bw.b.TETypes.RK4 if te_type == "rk4" else bw.b.TETypes.TangentSpace,
         )
+
+        if ext_mpss is not None:
+            te.ext_mpss = bw.bs.VectorMPS(ext_mpss)
+            impo = self.get_identity_mpo()
+            for ext_mps in te.ext_mpss:
+                if ext_mps.info.tag == ket.info.tag:
+                    raise RuntimeError("Same tag for ext_mps and ket!!")
+                self.align_mps_center(ext_mps, mket)
+                ext_me = bw.bs.MovingEnvironment(
+                    impo, mket, ext_mps, "EXT" + ext_mps.info.tag
+                )
+                ext_me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+                ext_me.init_environments(iprint >= 2)
+                te.ext_mes.append(ext_me)
+
+        if kernel is not None:
+            # need to keep Python derived class in memory (stored in self)
+            self.te_kernel = self.make_kernel(kernel=kernel)
+            te.eff_kernel = self.te_kernel
+
         te.hermitian = hermitian
         te.iprint = iprint
         te.n_sub_sweeps = 1
@@ -5660,6 +5703,7 @@ class DMRGDriver:
         solver_type=None,
         right_weight=0.0,
         iprint=0,
+        kernel=None,
     ):
         """
         Apply the MPO to the MPS to get a new MPS (when ``left_mpo is None``),
@@ -5738,6 +5782,8 @@ class DMRGDriver:
                 Bond dimensions for projection MPSs. Default is -1 (no truncations).
             iprint : int
                 Verbosity. Default is 0 (quiet).
+            kernel : None or function
+                Kernel operation for the local problem.
 
         Returns:
             norm : float|complex
@@ -5807,6 +5853,10 @@ class DMRGDriver:
             cps.decomp_type = bw.b.DecompositionTypes.SVD
         if noises is not None and noises[0] != 0 and left_mpo is None:
             cps.eq_type = bw.b.EquationTypes.PerturbativeCompression
+        if kernel is not None:
+            # need to keep Python derived class in memory (stored in self)
+            self.cps_kernel = self.make_kernel(kernel=kernel)
+            cps.eff_kernel = self.cps_kernel
         cps.iprint = iprint
         cps.cutoff = cutoff
         cps.linear_conv_thrds = bw.VectorFP(thrds)

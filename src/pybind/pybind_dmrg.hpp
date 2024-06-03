@@ -1052,6 +1052,7 @@ template <typename S, typename FL> void bind_fl_qc_hamiltonian(py::module &m) {
 template <typename FL> void bind_fl_dmrg(py::module &m) {
 
     struct PyEffectiveKernel : EffectiveKernel<FL> {
+        using EffectiveKernel<FL>::EffectiveKernel;
         typedef EffectiveKernel<FL> super_t;
         void compute(FL beta,
                      const function<void(const GMatrix<FL> &,
@@ -1068,12 +1069,16 @@ template <typename FL> void bind_fl_dmrg(py::module &m) {
                           GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
                           scale);
                     };
-                py::array_t<FL> aa(a.size(), a.data);
-                py::array_t<FL> bb(b.size(), b.data);
+                py::array_t<FL> aa(a.size(), a.data,
+                                   py::capsule(a.data, [](void *f) {}));
+                py::array_t<FL> bb(b.size(), b.data,
+                                   py::capsule(b.data, [](void *f) {}));
                 py::list zs;
                 for (size_t i = 0; i < xs.size(); i++)
-                    zs.append(py::array_t<FL>(xs[i].size(), xs[i].data));
-                py_method(beta, g, aa, bb, zs);
+                    zs.append(py::array_t<FL>(
+                        xs[i].size(), xs[i].data,
+                        py::capsule(xs[i].data, [](void *f) {})));
+                py_method(beta, py::cpp_function(g), aa, bb, zs);
             } else
                 super_t::compute(beta, f, a, b, xs);
         }
@@ -1088,8 +1093,10 @@ template <typename FL> void bind_fl_dmrg(py::module &m) {
             const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &
                 g = [&f](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                     py::gil_scoped_acquire gil;
-                    py::array_t<FL> aa(a.size(), a.data);
-                    py::array_t<FL> bb(b.size(), b.data);
+                    py::array_t<FL> aa(a.size(), a.data,
+                                       py::capsule(a.data, [](void *f) {}));
+                    py::array_t<FL> bb(b.size(), b.data,
+                                       py::capsule(b.data, [](void *f) {}));
                     f(aa, bb, scale);
                 };
             vector<GMatrix<FL>> zs;
