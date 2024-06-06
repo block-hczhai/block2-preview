@@ -76,7 +76,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     typedef typename GMatrix<FL>::FC FC;
     shared_ptr<MovingEnvironment<S, FL, FLS>> me;
     vector<shared_ptr<MovingEnvironment<S, FL, FLS>>> ext_mes;
-    shared_ptr<MovingEnvironment<S, FC, FLS>> cpx_me;
+    shared_ptr<MovingEnvironment<S, FL, FLS>> metric_me = nullptr;
+    shared_ptr<MovingEnvironment<S, FC, FLS>> cpx_me = nullptr;
     vector<shared_ptr<MPS<S, FLS>>> ext_mpss;
     shared_ptr<EffectiveKernel<FLS>> eff_kernel = nullptr;
     vector<ubond_t> bond_dims;
@@ -588,16 +589,26 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
         }
         torth += _t.get_time();
+        shared_ptr<EffectiveHamiltonian<S, FL>> m_eff =
+            metric_me == nullptr
+                ? nullptr
+                : metric_me->eff_ham(fuse_left ? FuseTypes::FuseL
+                                               : FuseTypes::FuseR,
+                                     forward, false, metric_me->bra->tensors[i],
+                                     metric_me->ket->tensors[i]);
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
         h_eff->eff_kernel = eff_kernel;
         sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            max(sweep_max_eff_ham_size,
+                metric_me == nullptr ? h_eff->op->get_total_memory()
+                                     : m_eff->op->get_total_memory() +
+                                           h_eff->op->get_total_memory());
         sweep_max_eff_wfn_size =
             max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+        pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                           davidson_rel_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_def_min_size,
                           davidson_def_max_size, davidson_type,
@@ -613,6 +624,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 me->ket->info, noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (m_eff != nullptr)
+            m_eff->deallocate();
         return pdi;
     }
     // two-site single-state dmrg algorithm
@@ -892,16 +905,25 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
         }
         torth += _t.get_time();
+        shared_ptr<EffectiveHamiltonian<S, FL>> m_eff =
+            metric_me == nullptr
+                ? nullptr
+                : metric_me->eff_ham(FuseTypes::FuseLR, forward, false,
+                                     metric_me->bra->tensors[i],
+                                     metric_me->ket->tensors[i]);
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff =
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
         h_eff->eff_kernel = eff_kernel;
         sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+            max(sweep_max_eff_ham_size,
+                metric_me == nullptr ? h_eff->op->get_total_memory()
+                                     : m_eff->op->get_total_memory() +
+                                           h_eff->op->get_total_memory());
         sweep_max_eff_wfn_size =
             max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
         teff += _t.get_time();
-        pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+        pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                           davidson_rel_conv_thrd, davidson_max_iter,
                           davidson_soft_max_iter, davidson_def_min_size,
                           davidson_def_max_size, davidson_type,
@@ -917,6 +939,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                                              noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (m_eff != nullptr)
+            m_eff->deallocate();
         return pdi;
     }
     // State-averaged one-site algorithm
@@ -1341,6 +1365,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         torth += _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             nullptr;
+        shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> m_eff =
+            nullptr;
         shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> x_eff =
             nullptr;
         // complex correction me
@@ -1366,10 +1392,17 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                             return x + y->total_memory;
                         }));
         } else {
+            if (metric_me != nullptr)
+                m_eff = metric_me->multi_eff_ham(fuse_left ? FuseTypes::FuseL
+                                                           : FuseTypes::FuseR,
+                                                 forward, false);
             h_eff = me->multi_eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+                max(sweep_max_eff_ham_size,
+                    metric_me == nullptr ? h_eff->op->get_total_memory()
+                                         : m_eff->op->get_total_memory() +
+                                               h_eff->op->get_total_memory());
             sweep_max_eff_wfn_size =
                 max(sweep_max_eff_wfn_size,
                     accumulate(
@@ -1388,7 +1421,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                               davidson_rel_conv_thrd, davidson_max_iter,
                               davidson_soft_max_iter, davidson_def_min_size,
                               davidson_def_max_size, davidson_type,
@@ -1417,6 +1450,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mket->info, mket->weights, noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (m_eff != nullptr)
+            m_eff->deallocate();
         if (x_eff != nullptr)
             x_eff->deallocate();
         return pdi;
@@ -1707,6 +1742,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         torth += _t.get_time();
         shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> h_eff =
             nullptr;
+        shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> m_eff =
+            nullptr;
         shared_ptr<EffectiveHamiltonian<S, FC, MultiMPS<S, FC>>> x_eff =
             nullptr;
         // complex correction me
@@ -1729,9 +1766,15 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                             return x + y->total_memory;
                         }));
         } else {
+            if (metric_me != nullptr)
+                m_eff =
+                    metric_me->multi_eff_ham(FuseTypes::FuseLR, forward, false);
             h_eff = me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory());
+                max(sweep_max_eff_ham_size,
+                    metric_me == nullptr ? h_eff->op->get_total_memory()
+                                         : m_eff->op->get_total_memory() +
+                                               h_eff->op->get_total_memory());
             sweep_max_eff_wfn_size =
                 max(sweep_max_eff_wfn_size,
                     accumulate(
@@ -1750,7 +1793,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                 me->para_rule);
         else
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                               davidson_rel_conv_thrd, davidson_max_iter,
                               davidson_soft_max_iter, davidson_def_min_size,
                               davidson_def_max_size, davidson_type,
@@ -1779,6 +1822,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 noise_type, me->para_rule);
         tprt += _t.get_time();
         h_eff->deallocate();
+        if (m_eff != nullptr)
+            m_eff->deallocate();
         if (x_eff != nullptr)
             x_eff->deallocate();
         return pdi;
@@ -1791,6 +1836,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             xme->move_to(i);
         if (cpx_me != nullptr)
             cpx_me->move_to(i);
+        if (metric_me != nullptr)
+            metric_me->move_to(i);
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<FPLS>(), 0, 0, 0);
@@ -1857,6 +1904,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             xme->prepare(sweep_start_site, sweep_end_site);
         if (cpx_me != nullptr)
             cpx_me->prepare(sweep_start_site, sweep_end_site);
+        if (metric_me != nullptr)
+            metric_me->prepare(sweep_start_site, sweep_end_site);
         sweep_energies.clear();
         sweep_discarded_weights.clear();
         sweep_quanta.clear();

@@ -420,7 +420,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
     tuple<typename const_fl_type<FP>::FL, int, size_t, double>
-    eigs(bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+    eigs(const shared_ptr<EffectiveHamiltonian<S, FL, MPS<S, FL>>> &metric,
+         bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
          int max_iter = 5000, int soft_max_iter = -1,
          int deflation_min_size = 2, int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -461,11 +462,30 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     this->eff_kernel->compute((FL)1.0, f, a, b,
                                               vector<GMatrix<FL>>());
             };
-        vector<FP> eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
-            g, aa, bs, shift, davidson_type, ndav, iprint,
-            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
-            rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
-            deflation_max_size, ors, projection_weights);
+        vector<FP> eners;
+        if (metric == nullptr)
+            eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
+                g, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+        else {
+            metric->precompute();
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &mg =
+                [metric](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                    if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
+                        (metric->tf->opf->seq->mode & SeqTypes::Tasked))
+                        return metric->tf->operator()(a, b, (FL)1.0);
+                    else
+                        return (*metric)(a, b, 0, (FL)1.0);
+                };
+            eners = IterativeMatrixFunctions<FL>::davidson_generalized(
+                g, mg, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+            metric->post_precompute();
+        }
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -1536,7 +1556,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
     tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
-    eigs(bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+    eigs(const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &metric,
+         bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
          int max_iter = 5000, int soft_max_iter = -1,
          int deflation_min_size = 2, int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -1566,21 +1587,38 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<FP> xeners =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights)
-                : IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *this, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, (FL)1.0);
+                else
+                    return (*this)(a, b, 0, (FL)1.0);
+            };
+        vector<FP> xeners;
+        if (metric == nullptr)
+            xeners = IterativeMatrixFunctions<FL>::harmonic_davidson(
+                f, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+        else {
+            metric->precompute();
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &mf =
+                [metric](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                    if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
+                        (metric->tf->opf->seq->mode & SeqTypes::Tasked))
+                        return metric->tf->operator()(a, b, (FL)1.0);
+                    else
+                        return (*metric)(a, b, 0, (FL)1.0);
+                };
+            xeners = IterativeMatrixFunctions<FL>::davidson_generalized(
+                f, mf, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+            metric->post_precompute();
+        }
         vector<typename const_fl_type<FP>::FL> eners(xeners.size());
         for (size_t i = 0; i < xeners.size(); i++)
             eners[i] = (typename const_fl_type<FP>::FL)xeners[i];

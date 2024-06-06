@@ -92,6 +92,12 @@ extern void LFNAME(cgeev)(const char *jobvl, const char *jobvr,
                           complex<float> *work, const MKL_INT *lwork,
                           float *rwork, MKL_INT *info);
 
+extern void LFNAME(chegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, complex<float> *a,
+                          const MKL_INT *lda, complex<float> *b,
+                          const MKL_INT *ldb, float *w, complex<float> *work,
+                          const MKL_INT *lwork, float *rwork, MKL_INT *info);
+
 // matrix-vector multiplication
 // vec [y] = complex [alpha] * mat [a] * vec [x] + complex [beta] * vec [y]
 extern void FNAME(cgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
@@ -210,6 +216,13 @@ extern void LFNAME(zgeev)(const char *jobvl, const char *jobvr,
                           const MKL_INT *lda, complex<double> *w,
                           complex<double> *vl, const MKL_INT *ldvl,
                           complex<double> *vr, const MKL_INT *ldvr,
+                          complex<double> *work, const MKL_INT *lwork,
+                          double *rwork, MKL_INT *info);
+
+extern void LFNAME(zhegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n,
+                          complex<double> *a, const MKL_INT *lda,
+                          complex<double> *b, const MKL_INT *ldb, double *w,
                           complex<double> *work, const MKL_INT *lwork,
                           double *rwork, MKL_INT *info);
 
@@ -586,12 +599,33 @@ inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   MKL_INT *info) {
     LFNAME(cheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
 }
+
 template <>
 inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   complex<double> *a, const MKL_INT *lda, double *w,
                   complex<double> *work, const MKL_INT *lwork, double *rwork,
                   MKL_INT *info) {
     LFNAME(zheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+}
+
+template <>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, complex<float> *a, const MKL_INT *lda,
+                  complex<float> *b, const MKL_INT *ldb, float *w,
+                  complex<float> *work, const MKL_INT *lwork, float *rwork,
+                  MKL_INT *info) {
+    LFNAME(chegv)
+    (itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, rwork, info);
+}
+
+template <>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                  complex<double> *b, const MKL_INT *ldb, double *w,
+                  complex<double> *work, const MKL_INT *lwork, double *rwork,
+                  MKL_INT *info) {
+    LFNAME(zhegv)
+    (itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, rwork, info);
 }
 
 template <>
@@ -1581,6 +1615,31 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             }
     }
     // eigenvectors are row right vectors
+    // U A^T = W S U
+    static void geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                      const GDiagonalMatrix<FP> &w) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        const FP scale = -1.0;
+        MKL_INT lwork = -1, n = a.m * a.n, incx = 2, info, itype = 1;
+        FL twork;
+        FP *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
+        xhegv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  &twork, &lwork, rwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)xreal<FL>(twork);
+        FL *work = d_alloc->complex_allocate(lwork);
+        xhegv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  work, &lwork, rwork, &info);
+        assert((size_t)a.m * a.n == n);
+        xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
+        if (info != 0)
+            cout << "ATTENTION: xhegv info = " << info << endl;
+        d_alloc->complex_deallocate(work, lwork);
+        d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
+    }
+    // eigenvectors are row right vectors
     // U A^T = W U
     static void eigs(const GMatrix<FL> &a, const GDiagonalMatrix<FP> &w) {
         shared_ptr<VectorAllocator<FP>> d_alloc =
@@ -1599,7 +1658,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                   &info);
         assert((size_t)a.m * a.n == n);
         xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
-        assert(info == 0);
+        if (info != 0)
+            cout << "ATTENTION: xheev info = " << info << endl;
         d_alloc->complex_deallocate(work, lwork);
         d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
     }

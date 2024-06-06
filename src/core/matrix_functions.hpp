@@ -118,6 +118,12 @@ extern void LFNAME(sgeev)(const char *jobvl, const char *jobvr,
                           float *vr, const MKL_INT *ldvr, float *work,
                           const MKL_INT *lwork, MKL_INT *info);
 
+extern void LFNAME(sgegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, float *a,
+                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                          float *w, float *work, const MKL_INT *lwork,
+                          MKL_INT *info);
+
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
 extern void LFNAME(sgesvd)(const char *jobu, const char *jobvt,
@@ -221,6 +227,12 @@ extern void LFNAME(dgeev)(const char *jobvl, const char *jobvr,
                           double *wr, double *wi, double *vl,
                           const MKL_INT *ldvl, double *vr, const MKL_INT *ldvr,
                           double *work, const MKL_INT *lwork, MKL_INT *info);
+
+extern void LFNAME(dsygv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, double *a,
+                          const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                          double *w, double *work, const MKL_INT *lwork,
+                          MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
@@ -643,6 +655,30 @@ inline void xsyev<float>(const char *jobz, const char *uplo, const MKL_INT *n,
 }
 
 template <typename FL>
+inline void xsygv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, FL *a, const MKL_INT *lda, FL *b,
+                  const MKL_INT *ldb, FL *w, FL *work, const MKL_INT *lwork,
+                  MKL_INT *info);
+
+template <>
+inline void xsygv<double>(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, double *a,
+                          const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                          double *w, double *work, const MKL_INT *lwork,
+                          MKL_INT *info) {
+    LFNAME(dsygv)(itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, info);
+}
+
+template <>
+inline void xsygv<float>(const MKL_INT *itype, const char *jobz,
+                         const char *uplo, const MKL_INT *n, float *a,
+                         const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                         float *w, float *work, const MKL_INT *lwork,
+                         MKL_INT *info) {
+    LFNAME(ssygv)(itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, info);
+}
+
+template <typename FL>
 inline void xgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   const MKL_INT *nrhs, FL *a, const MKL_INT *lda, FL *b,
                   const MKL_INT *ldb, FL *work, const MKL_INT *lwork,
@@ -667,6 +703,13 @@ inline void xgels<float>(const char *trans, const MKL_INT *m, const MKL_INT *n,
 template <typename FL>
 inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n, FL *a,
                   const MKL_INT *lda, typename GMatrix<FL>::FP *w, FL *work,
+                  const MKL_INT *lwork, typename GMatrix<FL>::FP *rwork,
+                  MKL_INT *info);
+
+template <typename FL>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, FL *a, const MKL_INT *lda, FL *b,
+                  const MKL_INT *ldb, typename GMatrix<FL>::FP *w, FL *work,
                   const MKL_INT *lwork, typename GMatrix<FL>::FP *rwork,
                   MKL_INT *info);
 
@@ -1448,6 +1491,25 @@ struct GMatrixFunctions<
                 d_alloc->deallocate(wwork, mp[i].size());
                 d_alloc->deallocate(work, mp[i].size() * mp[i].size());
             }
+    }
+    // generalized eigenproblem Ax = wBx
+    static void geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                      const GDiagonalMatrix<FL> &w) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        MKL_INT lwork = -1, info, itype = 1;
+        FL twork;
+        xsygv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  &twork, &lwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)twork;
+        FL *work = d_alloc->allocate(lwork);
+        xsygv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  work, &lwork, &info);
+        if (info != 0)
+            cout << "ATTENTION: xsygv info = " << info << endl;
+        d_alloc->deallocate(work, lwork);
     }
     // eigenvectors are row vectors
     static void eigs(const GMatrix<FL> &a, const GDiagonalMatrix<FL> &w) {

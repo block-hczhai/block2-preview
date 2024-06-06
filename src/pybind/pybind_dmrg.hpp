@@ -1250,6 +1250,7 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("cutoff", &DMRG<S, FL, FLS>::cutoff)
         .def_readwrite("quanta_cutoff", &DMRG<S, FL, FLS>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S, FL, FLS>::me)
+        .def_readwrite("metric_me", &DMRG<S, FL, FLS>::metric_me)
         .def_readwrite("cpx_me", &DMRG<S, FL, FLS>::cpx_me)
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)

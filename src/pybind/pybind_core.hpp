@@ -2820,6 +2820,15 @@ template <typename FL> void bind_matrix(py::module &m) {
                             GMatrix<FL>(a.mutable_data(), n, n),
                             GDiagonalMatrix<FL>(w.mutable_data(), n));
                     })
+        .def_static(
+            "geigs",
+            [](py::array_t<FL> &a, py::array_t<FL> &b, py::array_t<FL> &w) {
+                MKL_INT n = (MKL_INT)w.size();
+                GMatrixFunctions<FL>::geigs(
+                    GMatrix<FL>(a.mutable_data(), n, n),
+                    GMatrix<FL>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n));
+            })
         .def_static("block_eigs", [](py::array_t<FL> &a, py::array_t<FL> &w,
                                      const vector<uint8_t> &x) {
             MKL_INT n = (MKL_INT)w.size();
@@ -2847,7 +2856,23 @@ template <typename FL> void bind_matrix(py::module &m) {
                     cfactor);
             },
             py::arg("f"), py::arg("alpha"), py::arg("a"), py::arg("beta"),
-            py::arg("b"), py::arg("c"), py::arg("cfactor") = (complex<FL>)1.0);
+            py::arg("b"), py::arg("c"), py::arg("cfactor") = (complex<FL>)1.0)
+        .def_static("eigs",
+                    [](py::array_t<complex<FL>> &a, py::array_t<FL> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        GMatrixFunctions<complex<FL>>::eigs(
+                            GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                            GDiagonalMatrix<FL>(w.mutable_data(), n));
+                    })
+        .def_static("geigs",
+                    [](py::array_t<complex<FL>> &a, py::array_t<complex<FL>> &b,
+                       py::array_t<FL> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        GMatrixFunctions<complex<FL>>::geigs(
+                            GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                            GMatrix<complex<FL>>(b.mutable_data(), n, n),
+                            GDiagonalMatrix<FL>(w.mutable_data(), n));
+                    });
 
     py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions")
         .def_static(
@@ -2884,6 +2909,55 @@ template <typename FL> void bind_matrix(py::module &m) {
                     ndav);
             },
             py::arg("op"), py::arg("diag"), py::arg("kets"),
+            py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
+            py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
+            py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,
+            py::arg("deflation_max_size") = 50)
+        .def_static(
+            "davidson_generalized",
+            [](py::object op, py::object sop, py::array_t<FL> &diag,
+               py::list kets, bool iprint, typename GMatrix<FL>::FP conv_thrd,
+               typename GMatrix<FL>::FP rel_conv_thrd, int max_iter,
+               int soft_max_iter, int deflation_min_size,
+               int deflation_max_size) {
+                const function<void(const GMatrix<FL> &, const GMatrix<FL> &)>
+                    &f = [&op](const GMatrix<FL> &b, const GMatrix<FL> &c) {
+                        py::array_t<FL> x = (py::array_t<FL>)op(
+                            py::array_t<FL>(b.size(), b.data));
+                        GMatrixFunctions<FL>::iadd(
+                            c,
+                            GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                            (FL)1.0);
+                    };
+                const function<void(const GMatrix<FL> &, const GMatrix<FL> &)>
+                    &g = [&sop](const GMatrix<FL> &b, const GMatrix<FL> &c) {
+                        py::array_t<FL> x = (py::array_t<FL>)sop(
+                            py::array_t<FL>(b.size(), b.data));
+                        GMatrixFunctions<FL>::iadd(
+                            c,
+                            GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                            (FL)1.0);
+                    };
+                vector<GMatrix<FL>> vs;
+                for (size_t i = 0; i < kets.size(); i++) {
+                    py::array_t<FL> ket = kets[i].cast<py::array_t<FL>>();
+                    vs.push_back(GMatrix<FL>(ket.mutable_data(),
+                                             (MKL_INT)ket.size(), 1));
+                }
+                int ndav = 0;
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::davidson_generalized(
+                        f, g,
+                        GDiagonalMatrix<FL>(diag.mutable_data(),
+                                            (MKL_INT)diag.size()),
+                        vs, (typename GMatrix<FL>::FP)0.0,
+                        DavidsonTypes::Normal, ndav, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
+                        deflation_min_size, deflation_max_size),
+                    ndav);
+            },
+            py::arg("op"), py::arg("sop"), py::arg("diag"), py::arg("kets"),
             py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
             py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
             py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,

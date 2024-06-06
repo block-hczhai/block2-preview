@@ -2910,6 +2910,7 @@ class DMRGDriver:
         ancilla=False,
         reorder_imat=None,
         gaopt_opts=None,
+        simple_const=False,
         iprint=1,
     ):
         """
@@ -3081,6 +3082,8 @@ class DMRGDriver:
                 Custom options for the genetic orbital ordering algorithm.
                 Possible keys are ``n_tasks``, ``n_generations``, ``n_configs``,
                 ``n_elite``, ``clone_rate``, and ``mutate_rate``.
+            simple_const : bool
+                If True, will absorb constant term into MPO. Default is False.
             iprint : int
                 Verbosity. Default is 1.
 
@@ -3253,6 +3256,7 @@ class DMRGDriver:
             h1e, g2e, ecore = self.parallelize_integrals(para_type, h1e, g2e, ecore)
 
         if algo_type is not None and MPOAlgorithmTypes.Conventional in algo_type:
+            assert simple_const is False
             fd = self.write_fcidump(h1e, g2e, ecore=ecore)
             return self.get_conventional_qc_mpo(fd, algo_type=algo_type, iprint=iprint)
 
@@ -3380,7 +3384,10 @@ class DMRGDriver:
             if iprint:
                 print("normal ordered ecore = ", ecore)
 
-        b.add_const(ecore)
+        if simple_const:
+            b.add_term("", [], ecore)
+        else:
+            b.add_const(ecore)
         bx = b.finalize(adjust_order=SymmetryTypes.SGB not in bw.symm_type)
 
         if iprint:
@@ -3955,6 +3962,7 @@ class DMRGDriver:
         sweep_start=0,
         forward=None,
         kernel=None,
+        metric_mpo=None,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4057,6 +4065,8 @@ class DMRGDriver:
                 This may be useful in restarting.
             kernel : None or function
                 Kernel operation for the local problem.
+            metric_mpo : None or MPO
+                The block2 MPO object for the metric. Default is None (identity metric).
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4081,6 +4091,14 @@ class DMRGDriver:
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         me.cached_contraction = True
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
+        metric_me = None
+        if metric_mpo is not None:
+            metric_me = bw.bs.MovingEnvironment(metric_mpo, bra, ket, "METRIC")
+            metric_me.delayed_contraction = bw.b.OpNamesSet()
+            metric_me.cached_contraction = False
+            me.delayed_contraction = bw.b.OpNamesSet()
+            me.cached_contraction = False
+            dmrg.metric_me = metric_me
 
         if proj_mpss is not None:
             assert proj_weights is not None
@@ -4134,6 +4152,8 @@ class DMRGDriver:
         if n_sweeps == -1:
             return None
         me.init_environments(iprint >= 2)
+        if metric_me is not None:
+            metric_me.init_environments(iprint >= 2)
         if forward is None:
             forward = ket.center == 0
         if twosite_to_onesite is None:
