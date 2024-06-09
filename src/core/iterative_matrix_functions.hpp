@@ -40,7 +40,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::iscale;
     using GMatrixFunctions<FL>::eig;
     using GMatrixFunctions<FL>::eigs;
-    using GMatrixFunctions<FL>::geigs;
+    using GMatrixFunctions<FL>::accurate_geigs;
     using GMatrixFunctions<FL>::linear;
     using GMatrixFunctions<FL>::multiply;
     using GMatrixFunctions<FL>::inverse;
@@ -595,7 +595,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.allocate(x_alloc);
-        int ck = 0, msig = 0, m = k, xiter = 0;
+        int ck = 0, msig = 0, m = k, xiter = 0, xm = 0;
         FL qq;
         if (iprint)
             cout << endl;
@@ -645,16 +645,17 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         }
                     }
 #pragma omp single
-                    geigs(alpha, gamma, ld);
+                    xm = accurate_geigs(alpha, gamma, ld);
                     // note alpha row/column is diff from python
 #pragma omp for schedule(static)
                     // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
                     for (int j = 0; j < m; j++) {
                         copy(tmp[j], sigmas[j]);
-                        iscale(sigmas[j], alpha(j, j));
+                        if (j < xm)
+                            iscale(sigmas[j], alpha(j, j));
                     }
 #pragma omp for schedule(static)
-                    for (int j = 0; j < m; j++)
+                    for (int j = 0; j < xm; j++)
                         for (int i = 0; i < m; i++)
                             if (i != j)
                                 iadd(sigmas[j], tmp[i], alpha(j, i));
@@ -662,10 +663,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     // tau[1:m] = np.dot(tau[:], alpha[:, 1:m])
                     for (int j = 0; j < m; j++) {
                         copy(tmp[j], taus[j]);
-                        iscale(taus[j], alpha(j, j));
+                        if (j < xm)
+                            iscale(taus[j], alpha(j, j));
                     }
 #pragma omp for schedule(static)
-                    for (int j = 0; j < m; j++)
+                    for (int j = 0; j < xm; j++)
                         for (int i = 0; i < m; i++)
                             if (i != j)
                                 iadd(taus[j], tmp[i], alpha(j, i));
@@ -673,10 +675,11 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     // b[1:m] = np.dot(b[:], alpha[:, 1:m])
                     for (int j = 0; j < m; j++) {
                         copy(tmp[j], bs[j]);
-                        iscale(bs[j], alpha(j, j));
+                        if (j < xm)
+                            iscale(bs[j], alpha(j, j));
                     }
 #pragma omp for schedule(static)
-                    for (int j = 0; j < m; j++)
+                    for (int j = 0; j < xm; j++)
                         for (int i = 0; i < m; i++)
                             if (i != j)
                                 iadd(bs[j], tmp[i], alpha(j, i));
@@ -686,16 +689,16 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     tmp[i].deallocate(x_alloc);
                 gamma.deallocate(x_alloc);
                 alpha.deallocate(x_alloc);
-                for (int i = 0; i < m; i++)
+                for (int i = 0; i < xm; i++)
                     eigval_idxs[i] = i;
                 if (davidson_type & DavidsonTypes::CloseTo)
-                    sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
                          [&ld, shift](int i, int j) {
                              return abs(ld.data[i] - shift) <
                                     abs(ld.data[j] - shift);
                          });
                 else if (davidson_type & DavidsonTypes::LessThan)
-                    sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
                          [&ld, shift](int i, int j) {
                              if ((shift >= ld.data[i]) != (shift >= ld.data[j]))
                                  return shift >= ld.data[i];
@@ -705,7 +708,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                  return ld.data[i] - shift > ld.data[j] - shift;
                          });
                 else if (davidson_type & DavidsonTypes::GreaterThan)
-                    sort(eigval_idxs.begin(), eigval_idxs.begin() + m,
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
                          [&ld, shift](int i, int j) {
                              if ((shift > ld.data[i]) != (shift > ld.data[j]))
                                  return shift > ld.data[j];
@@ -734,10 +737,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                              -complex_dot(ors[j], q) / or_normsqs[j]);
                 qq = complex_dot(q, q);
                 if (iprint)
-                    cout << setw(6) << xiter << setw(6) << m << setw(6) << ck
-                         << fixed << setw(15) << setprecision(8) << ld.data[ick]
-                         << scientific << setw(13) << setprecision(2) << abs(qq)
-                         << endl;
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << xm
+                         << setw(6) << ck << fixed << setw(15)
+                         << setprecision(8) << ld.data[ick] << scientific
+                         << setw(13) << setprecision(2) << abs(qq) << endl;
                 if (davidson_type & DavidsonTypes::DavidsonPrecond)
                     davidson_precondition(q, ld.data[ick], aa);
                 else if (!(davidson_type & DavidsonTypes::NoPrecond))
@@ -751,7 +754,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             if (pcomm != nullptr) {
                 pcomm->broadcast(&qq, 1, pcomm->root);
                 pcomm->broadcast(&ck, 1, pcomm->root);
+                pcomm->broadcast(&xm, 1, pcomm->root);
             }
+            if (xm != m)
+                msig = m = xm;
             if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
                                           rel_conv_thrd * rel_conv_thrd) {
                 ck++;
@@ -799,7 +805,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                             tmp[i].deallocate(x_alloc);
                     }
                     for (int j = 0; j < m; j++)
-                        iadd(q, bs[j], -complex_dot(bs[j], q));
+                        iadd(q, bs[j],
+                             -complex_dot(bs[j], q) /
+                                 complex_dot(bs[j], bs[j]));
                     for (int j = 0; j < nor; j++)
                         if (abs(or_normsqs[j]) > 1E-14)
                             iadd(q, ors[j],

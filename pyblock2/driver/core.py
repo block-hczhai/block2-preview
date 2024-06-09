@@ -6803,6 +6803,80 @@ class DMRGDriver:
         mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
 
+    def get_spin_projection_mpo(self, twos, twosz, max_twosz=None, npts=10, cutoff=1E-14, add_ident=False, iprint=0):
+        """
+        Construct the spin projection MPO.
+
+        Args:
+            twos : int
+                Two times total spin.
+            twosz : int
+                Two times projected spin.
+            max_twosz : None or int.
+                If not None, the maximal allowed virtual twosz. Default is None.
+            npts : int
+                The number of Gauss-Legendre quadrature points. Default is 10.
+            cutoff : float
+                MPO SVD cutoff. Default is 1E-14.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO. Default is False.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            mpo : MPO
+                The output MPO.
+        """
+        import numpy as np
+        from pyblock2.algebra.core import SubTensor, Tensor, MPO
+        from pyblock2.algebra.io import MPOTools
+        bw = self.bw
+        n_sites = self.n_sites
+        cg = bw.b.SU2CG()
+        xts, wts = np.polynomial.legendre.leggauss(npts)
+        xts = np.arccos(xts)
+        wts *= (twos + 1) / 2 * np.array([cg.wigner_d(twos, twosz, twosz, x) for x in xts])
+        it = np.ones((1, 1, 1, 1))
+        pympo = None
+        for xt, wt in zip(xts, wts):
+            ct = np.cos(xt / 2) * it
+            st, mt = np.sin(xt / 2) * it, -np.sin(xt / 2) * it
+            lqs, tensors = [bw.SX()], []
+            for k, bz in enumerate(self.basis):
+                rqsd = set(lqs)
+                for q in lqs:
+                    rqsd.add(q + bw.SX(0, 2, 0))
+                    rqsd.add(q + bw.SX(0, -2, 0))
+                rqs = sorted([q for q in rqsd if max_twosz is None or abs(q.twos) <= max_twosz])
+                rqs = [bw.SX()] if k == n_sites - 1 else rqs
+                blocks = []
+                for lq, rq in [(lq, rq) for lq in lqs for rq in rqs]:
+                    for xq, yq in [(xq, yq) for xq in bz for yq in bz]:
+                        rt = None
+                        if xq == yq and lq == rq and xq.n == 1:
+                            rt = ct
+                        elif xq == yq and lq == rq and xq.n != 1:
+                            rt = it
+                        elif lq + bw.SX(0, 2, 0) == rq and xq - bw.SX(0, 2, 0) == yq:
+                            rt = st
+                        elif lq + bw.SX(0, -2, 0) == rq and xq - bw.SX(0, -2, 0) == yq:
+                            rt = mt
+                        if rt is not None:
+                            blocks.append(SubTensor(reduced=rt, q_labels=(lq, xq, yq, rq)))
+                if k == 0:
+                    blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
+                elif k == n_sites - 1:
+                    blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
+                tensors.append(Tensor(blocks=blocks))
+                lqs = rqs
+            xmpo = MPO(tensors=tensors)
+            pympo = pympo + xmpo if pympo is not None else xmpo
+        if cutoff is not None:
+            pympo.compress(cutoff=cutoff)
+        if iprint == 1:
+            print(pympo.show_bond_dims())
+        return MPOTools.to_block2(pympo, self.basis, add_ident=add_ident)
+
     def expr_builder(self):
         """
         Get the ExprBuilder object for setting terms in second quantized operators.

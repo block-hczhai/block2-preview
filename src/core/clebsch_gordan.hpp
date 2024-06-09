@@ -177,6 +177,25 @@ struct SU2CG {
     long double phase(int ta, int tb, int tc) const {
         return (1 - ((ta + tb - tc) & 2));
     }
+    long double wigner_d(int tj, int tmp, int tms, long double beta) const {
+        if (((tj + tmp) & 1) || ((tj + tms) & 1) ||
+            !(tmp >= -tj && tmp <= tj) || !(tms >= -tj && tms <= tj))
+            return 0;
+        const int jpp = (tj + tmp) >> 1, jmp = (tj - tmp) >> 1;
+        const int jps = (tj + tms) >> 1, jms = (tj - tms) >> 1;
+        const int min_s = max(0, jps - jpp), max_s = min(jps, jmp);
+        long double rr = -tanl(beta * 0.5) * tanl(beta * 0.5), rst;
+        long double r = 0, factor = (1 - ((tmp - tms + min_s + min_s) & 2));
+        factor *= powl(cosl(beta * 0.5), jps + jmp - min_s - min_s);
+        factor *= powl(sinl(beta * 0.5), jpp - jps + min_s + min_s);
+        for (int s = min_s; s <= max_s; ++s, factor *= rr) {
+            rst = sqrt_fact[jps - s] * sqrt_fact[s] * sqrt_fact[jpp - jps + s] *
+                  sqrt_fact[jmp - s];
+            r += factor / (rst * rst);
+        }
+        return r * sqrt_fact[jpp] * sqrt_fact[jmp] * sqrt_fact[jps] *
+               sqrt_fact[jms];
+    }
 };
 
 // CG factors for SO(3) symmetry in real spherical harmonics

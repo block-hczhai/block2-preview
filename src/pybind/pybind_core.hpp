@@ -2125,7 +2125,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("transpose_cg", &SU2CG::transpose_cg, py::arg("td"), py::arg("tl"),
              py::arg("tr"))
         .def("phase", &SU2CG::phase, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"));
+             py::arg("tc"))
+        .def("wigner_d", &SU2CG::wigner_d, py::arg("tj"), py::arg("tmp"),
+             py::arg("tms"), py::arg("beta"));
 
     py::class_<SO3RSHCG, shared_ptr<SO3RSHCG>, SU2CG>(m, "SO3RSHCG")
         .def(py::init<>())
@@ -2829,6 +2831,18 @@ template <typename FL> void bind_matrix(py::module &m) {
                     GMatrix<FL>(b.mutable_data(), n, n),
                     GDiagonalMatrix<FL>(w.mutable_data(), n));
             })
+        .def_static(
+            "accurate_geigs",
+            [](py::array_t<FL> &a, py::array_t<FL> &b, py::array_t<FL> &w,
+               FL eps) {
+                MKL_INT n = (MKL_INT)w.size();
+                return GMatrixFunctions<FL>::accurate_geigs(
+                    GMatrix<FL>(a.mutable_data(), n, n),
+                    GMatrix<FL>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n), eps);
+            },
+            py::arg("a"), py::arg("b"), py::arg("w"),
+            py::arg("eps") = (FL)1E-12)
         .def_static("block_eigs", [](py::array_t<FL> &a, py::array_t<FL> &w,
                                      const vector<uint8_t> &x) {
             MKL_INT n = (MKL_INT)w.size();
@@ -2872,7 +2886,19 @@ template <typename FL> void bind_matrix(py::module &m) {
                             GMatrix<complex<FL>>(a.mutable_data(), n, n),
                             GMatrix<complex<FL>>(b.mutable_data(), n, n),
                             GDiagonalMatrix<FL>(w.mutable_data(), n));
-                    });
+                    })
+        .def_static(
+            "accurate_geigs",
+            [](py::array_t<complex<FL>> &a, py::array_t<complex<FL>> &b,
+               py::array_t<FL> &w, FL eps) {
+                MKL_INT n = (MKL_INT)w.size();
+                return GMatrixFunctions<complex<FL>>::accurate_geigs(
+                    GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                    GMatrix<complex<FL>>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n), eps);
+            },
+            py::arg("a"), py::arg("b"), py::arg("w"),
+            py::arg("eps") = (FL)1E-12);
 
     py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions")
         .def_static(

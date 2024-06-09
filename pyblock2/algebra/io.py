@@ -570,11 +570,11 @@ class MPOTools:
             for kk, (k, v) in enumerate(sorted(data_dict.items())):
                 dq = (v[0][0][0] - v[0][0][1])[0]
                 if i == 0:
-                    xexpr = bs.OpElement(b.OpNames.XL, b.SiteIndex((k[1], ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.XL, b.SiteIndex((k[1] // 1000, k[1] % 1000), ()), dq, 1.0)
                 elif i == n_sites - 1:
-                    xexpr = bs.OpElement(b.OpNames.XR, b.SiteIndex((k[0], ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.XR, b.SiteIndex((k[0] // 1000, k[0] % 1000), ()), dq, 1.0)
                 else:
-                    xexpr = bs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()), dq, 1.0)
+                    xexpr = bs.OpElement(b.OpNames.X, b.SiteIndex((kk // 1000, kk % 1000), ()), dq, 1.0)
                 if dq not in site_op_infos[i]:
                     site_op_infos[i][dq] = brs.SparseMatrixInfo(ialloc)
                     site_op_infos[i][dq].initialize(site_basis[i], site_basis[i], dq, dq.is_fermion)
@@ -597,8 +597,8 @@ class MPOTools:
                 for ix in range(minfo.n):
                     xmat[ix] = np.identity(minfo.n_states_ket[ix]).ravel()
                 tensors[i].ops[iop] = xmat
-            lopd = [bs.OpElement(b.OpNames.XL, b.SiteIndex((k, ), ()), q, 1.0) for k, q in enumerate(right_qs)]
-            ropd = [bs.OpElement(b.OpNames.XR, b.SiteIndex((k, ), ()), -q, 1.0) for k, q in enumerate(left_qs)]
+            lopd = [bs.OpElement(b.OpNames.XL, b.SiteIndex((k // 1000, k % 1000), ()), q, 1.0) for k, q in enumerate(right_qs)]
+            ropd = [bs.OpElement(b.OpNames.XR, b.SiteIndex((k // 1000, k % 1000), ()), -q, 1.0) for k, q in enumerate(left_qs)]
             if i == 0:
                 tensors[i].lmat = brs.SymbolicRowVector(n_cols)
                 tensors[i].lmat.data = brs.VectorOpExpr(lopd)
@@ -612,7 +612,7 @@ class MPOTools:
                     if zz not in tensors[i].ops:
                         tensors[i].lmat.data[iz] = brs.OpExpr()
             else:
-                matx = [bs.OpElement(b.OpNames.X, b.SiteIndex((kk, ), ()),
+                matx = [bs.OpElement(b.OpNames.X, b.SiteIndex((kk // 1000, kk % 1000), ()),
                     (v[0][0][0] - v[0][0][1])[0], 1.0) for kk, (_, v) in enumerate(sorted(data_dict.items()))]
                 tensors[i].lmat = brs.SymbolicMatrix(n_rows, n_cols)
                 tensors[i].lmat.indices = b.VectorPIntInt([k for k in sorted(data_dict)])

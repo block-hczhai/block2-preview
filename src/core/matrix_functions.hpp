@@ -1492,6 +1492,40 @@ struct GMatrixFunctions<
                 d_alloc->deallocate(work, mp[i].size() * mp[i].size());
             }
     }
+    static MKL_INT accurate_geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                                  const GDiagonalMatrix<FL> &w,
+                                  FL eps = (FL)1E-12) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        eigs(b, w);
+        vector<MKL_INT> idx;
+        idx.reserve(a.m);
+        for (MKL_INT i = 0; i < a.m; i++)
+            if (abs(w.data[i]) > eps)
+                idx.push_back(i);
+        MKL_INT xn = (MKL_INT)idx.size();
+        GMatrix<FL> g(nullptr, xn, a.m);
+        g.data = d_alloc->allocate(g.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < xn; j++)
+                g(j, i) = b(idx[j], i) / sqrt(w.data[idx[j]]);
+        GMatrix<FL> tmp(b.data, a.m, xn);
+        GMatrix<FL> tmpa(a.data, xn, a.n);
+        GMatrix<FL> h(nullptr, xn, xn);
+        GDiagonalMatrix<FL> tmpw(w.data, xn);
+        h.data = d_alloc->allocate(h.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = i + 1; j < a.n; j++)
+                a(i, j) = a(j, i);
+        multiply(a, 0, g, 3, tmp, (FL)1.0, (FL)0.0);
+        multiply(g, 0, tmp, 0, h, (FL)1.0, (FL)0.0);
+        eigs(h, tmpw);
+        multiply(h, 0, g, 0, tmpa, (FL)1.0, (FL)0.0);
+        d_alloc->deallocate(h.data, h.size());
+        d_alloc->deallocate(g.data, g.size());
+        return xn;
+    }
     // generalized eigenproblem Ax = wBx
     static void geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
                       const GDiagonalMatrix<FL> &w) {
@@ -1508,7 +1542,7 @@ struct GMatrixFunctions<
         xsygv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
                   work, &lwork, &info);
         if (info != 0)
-            cout << "ATTENTION: xsygv info = " << info << endl;
+            cout << "ATTENTION: xsygv info = " << a.n << " " << info << "\n";
         d_alloc->deallocate(work, lwork);
     }
     // eigenvectors are row vectors
@@ -1525,7 +1559,7 @@ struct GMatrixFunctions<
         FL *work = d_alloc->allocate(lwork);
         xsyev<FL>("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
         if (info != 0)
-            cout << "ATTENTION: xsyev info = " << info << endl;
+            cout << "ATTENTION: xsyev info = " << info << "\n";
         // assert(info == 0);
         d_alloc->deallocate(work, lwork);
     }
