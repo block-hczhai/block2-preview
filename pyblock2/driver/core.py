@@ -3958,6 +3958,7 @@ class DMRGDriver:
         proj_weights=None,
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
+        store_seq_data=False,
         lowmem_noise=False,
         sweep_start=0,
         forward=None,
@@ -4052,6 +4053,9 @@ class DMRGDriver:
             spectra_with_multiplicity : bool
                 If True, in SU2 mode, the MPS singular value will be multiplied by the multiplicity
                 of the spin quantum number. Default is False.
+            store_seq_data : bool
+                If True, will store dense matrix multiplication parameters in text files.
+                Only useful for developers. Default is False.
             lowmem_noise : bool
                 If True, the noise step will cost less memory. Default is False.
             sweep_start : int
@@ -4137,6 +4141,7 @@ class DMRGDriver:
         dmrg.davidson_soft_max_iter = dav_max_iter
         dmrg.davidson_def_max_size = dav_def_max_size
         dmrg.store_wfn_spectra = store_wfn_spectra
+        dmrg.store_seq_data = store_seq_data
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix

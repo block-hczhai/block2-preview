@@ -1507,6 +1507,43 @@ template <typename FL> struct BatchGEMMSeq {
 #endif
         GMatrixFunctions<FL>::iadd(mats[i], mats[m], 1.0);
     }
+    void save_data(ostream &ofs) const {
+        if (batch[0]->acidxs.size() != 0) {
+            batch[0]->build_acc_gp();
+            batch[1]->build_acc_gp();
+        }
+        ofs << (int)(batch[0]->acidxs.size() == 0) << endl;
+        if (batch[0]->acidxs.size() == 0) {
+            ofs << (int)batch[0]->c.size() << endl;
+            for (int i = 0; i < (int)batch[0]->c.size(); i++) {
+                ofs << batch[0]->m[i] << " " << batch[0]->n[i] << " "
+                    << batch[0]->k[i] << " " << batch[1]->m[i] << " "
+                    << batch[1]->n[i] << " " << batch[1]->k[i] << endl;
+            }
+        } else {
+            ofs << (int)batch[0]->gp.size() << endl;
+            for (int i = 0; i < (int)batch[0]->gp.size(); i++) {
+                const int k0z = batch[0]->acc_gp[i], k1z = batch[1]->acc_gp[i];
+                ofs << "--0-- " << k0z << " " << batch[0]->gp[i] << " :: ";
+                ofs << batch[0]->m[i] << " " << batch[0]->n[i] << " "
+                    << batch[0]->k[i] << endl;
+                ofs << "--1-- " << k1z << " " << batch[1]->gp[i] << " :: ";
+                ofs << batch[1]->m[i] << " " << batch[1]->n[i] << " "
+                    << batch[1]->k[i] << endl;
+            }
+        }
+    }
+    void save_data(const string &filename) const {
+        ofstream ofs(filename.c_str(), ios::out);
+        if (!ofs.good())
+            throw runtime_error("BatchGEMMSeq:save_data on '" + filename +
+                                "' failed.");
+        save_data(ofs);
+        if (!ofs.good())
+            throw runtime_error("BatchGEMMSeq:save_data on '" + filename +
+                                "' failed.");
+        ofs.close();
+    }
     // Matrix multiply vector (c) => vector (v)
     // (in automatic mode)
     void operator()(const GMatrix<FL> &c, const GMatrix<FL> &v,

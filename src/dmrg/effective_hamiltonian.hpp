@@ -119,6 +119,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     string npdm_fragment_filename = "";
     int npdm_n_sites = 0, npdm_center = -1, npdm_parallel_center = -1;
     shared_ptr<EffectiveKernel<FL>> eff_kernel = nullptr;
+    string seq_filename = "";
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -218,6 +219,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             cmat->factor = 1.0;
             tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
                                         cmat, vmat, opdq, false);
+            if (seq_filename != "")
+                tf->opf->seq->save_data(seq_filename);
         }
     }
     void post_precompute() const {
@@ -1221,6 +1224,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     shared_ptr<NPDMScheme> npdm_scheme = nullptr;
     string npdm_fragment_filename = "";
     int npdm_n_sites = 0, npdm_center = -1, npdm_parallel_center = -1;
+    string seq_filename = "";
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -1338,6 +1342,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
                                               op->ropt, cmat, vmat,
                                               wfn_infos[0], opdq, 1.0, false);
+            if (seq_filename != "")
+                tf->opf->seq->save_data(seq_filename);
         }
     }
     void post_precompute() const {

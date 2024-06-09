@@ -1296,6 +1296,7 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::sweep_max_eff_ham_size)
         .def_readwrite("store_wfn_spectra",
                        &DMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("store_seq_data", &DMRG<S, FL, FLS>::store_seq_data)
         .def_readwrite("wfn_spectra", &DMRG<S, FL, FLS>::wfn_spectra)
         .def_readwrite("sweep_wfn_spectra",
                        &DMRG<S, FL, FLS>::sweep_wfn_spectra)

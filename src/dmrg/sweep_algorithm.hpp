@@ -120,6 +120,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     bool print_connection_time = false;
     // store all wfn singular values (for analysis) at each site
     bool store_wfn_spectra = false;
+    bool store_seq_data = false;
     vector<vector<FPS>> sweep_wfn_spectra;
     vector<FPS> wfn_spectra;
     int sweep_start_site = 0;
@@ -600,6 +601,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i], me->ket->tensors[i]);
         h_eff->eff_kernel = eff_kernel;
+        if (store_seq_data) {
+            stringstream ss;
+            ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+               << ".SEQ." << me->tag << (forward ? ".FORW." : ".BACKW.")
+               << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
+            h_eff->seq_filename = ss.str();
+        }
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size,
                 metric_me == nullptr ? h_eff->op->get_total_memory()
@@ -915,6 +923,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->eff_ham(FuseTypes::FuseLR, forward, true, me->bra->tensors[i],
                         me->ket->tensors[i]);
         h_eff->eff_kernel = eff_kernel;
+        if (store_seq_data) {
+            stringstream ss;
+            ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
+               << ".SEQ." << me->tag << (forward ? ".FORW." : ".BACKW.")
+               << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
+            h_eff->seq_filename = ss.str();
+        }
         sweep_max_eff_ham_size =
             max(sweep_max_eff_ham_size,
                 metric_me == nullptr ? h_eff->op->get_total_memory()
