@@ -48,7 +48,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
     using MPO<S, FL>::basis;
     AncillaTypes ancilla_type;
     StackedMPO(const shared_ptr<MPO<S, FL>> &mpoa,
-               const shared_ptr<MPO<S, FL>> &mpob, const string &tag = "")
+               const shared_ptr<MPO<S, FL>> &mpob, int iprint = 1,
+               const string &tag = "")
         : MPO<S, FL>(mpoa->n_sites,
                      tag == "" ? mpoa->tag + "+" + mpob->tag : tag) {
         assert(mpoa->n_sites == mpob->n_sites);
@@ -107,7 +108,23 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
         left_operator_names.resize(n_sites);
         right_operator_names.resize(n_sites);
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        SeqTypes seqt = MPO<S, FL>::tf->opf->seq->mode;
+        MPO<S, FL>::tf->opf->seq->mode = SeqTypes::None;
+        if (iprint) {
+            cout << endl;
+            cout << "Stack MPO | Nsites = " << setw(5) << n_sites << endl;
+        }
+        int ntg = threading->activate_global();
+        Timer _t;
+        double ttotal = 0;
+        int bond_max = 0;
         for (uint16_t m = 0; m < n_sites; m++) {
+            _t.get_time();
+            if (iprint) {
+                cout << " Site = " << setw(5) << m << " / " << setw(5)
+                     << n_sites << " .. ";
+                cout.flush();
+            }
             shared_ptr<OperatorTensor<S, FL>> opt =
                 make_shared<OperatorTensor<S, FL>>();
             const int xm =
@@ -286,14 +303,34 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                         mpob->tensors[m]->lmat);
                 shared_ptr<SymbolicMatrix<S>> pmat =
                     make_shared<SymbolicMatrix<S>>(xm, xn);
-                for (size_t ima = 0; ima < pmata->indices.size(); ima++)
-                    for (size_t imb = 0; imb < pmatb->indices.size(); imb++) {
-                        const int64_t imx =
-                            (int64_t)ima * pmatb->indices.size() + imb;
-                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                pmat->indices.resize(pmata->indices.size() *
+                                     pmatb->indices.size());
+                pmat->data.resize(pmata->indices.size() *
+                                  pmatb->indices.size());
+                vector<shared_ptr<SparseMatrix<S, FL>>> mats(
+                    pmata->indices.size() * pmatb->indices.size());
+                const size_t nimx = pmat->data.size(),
+                             nimx_pt = (nimx + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+                {
+                    shared_ptr<VectorAllocator<FP>> xd_alloc =
+                        make_shared<VectorAllocator<FP>>();
+                    const int tid = threading->get_thread_id();
+                    const size_t imx_st = tid * nimx_pt,
+                                 imx_ed = min(nimx, (tid + 1) * nimx_pt);
+                    for (size_t imx = imx_st; imx < imx_ed; imx++) {
+                        const size_t ima = imx / pmatb->indices.size(),
+                                     imb = imx % pmatb->indices.size();
+                        pmat->indices[imx] =
+                            make_pair(pmata->indices[ima].first * pmatb->m +
+                                          pmatb->indices[imb].first,
+                                      pmata->indices[ima].second * pmatb->n +
+                                          pmatb->indices[imb].second);
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero ||
+                            pmatb->data[imb]->get_type() == OpTypes::Zero) {
+                            pmat->data[imx] = zero;
                             continue;
-                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
-                            continue;
+                        }
                         shared_ptr<OpElement<S, FL>> opel =
                             make_shared<OpElement<S, FL>>(
                                 OpNames::X,
@@ -315,7 +352,7 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                             mpob->tensors[m]->ops.at(
                                 abs_value(pmatb->data[imb]));
                         shared_ptr<SparseMatrix<S, FL>> xmat =
-                            make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            make_shared<SparseMatrix<S, FL>>(xd_alloc);
                         const S q = mata->info->delta_quantum +
                                     matb->info->delta_quantum;
                         const FL phase =
@@ -329,23 +366,37 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                         xmat->allocate(site_op_infos_mp[m].at(q));
                         MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
                                                      phase);
-                        (*pmat)[{pmata->indices[ima].first * pmatb->m +
-                                     pmatb->indices[imb].first,
-                                 pmata->indices[ima].second * pmatb->n +
-                                     pmatb->indices[imb].second}] =
-                            opel->scalar_multiply(
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    pmata->data[ima])
-                                    ->factor *
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    pmatb->data[imb])
-                                    ->factor);
-                        opt->ops[opel] = xmat;
+                        pmat->data[imx] = opel->scalar_multiply(
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                pmata->data[ima])
+                                ->factor *
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                pmatb->data[imb])
+                                ->factor);
+                        mats[imx] = xmat;
                     }
+                }
+                opt->ops.reserve(nimx);
+                for (size_t imx = 0; imx < nimx; imx++)
+                    opt->ops[abs_value(pmat->data[imx])] = mats[imx];
                 opt->lmat = opt->rmat = pmat;
             }
             tensors[m] = opt;
+            double tsite = _t.get_time();
+            bond_max = max(xn, bond_max);
+            ttotal += tsite;
+            if (iprint)
+                cout << "Mmpo = " << setw(10) << xn << " T = " << fixed
+                     << setprecision(3) << tsite << endl;
         }
+        if (iprint) {
+            cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
+                 << ttotal;
+            cout << " MPO bond dimension = " << setw(10) << bond_max;
+            cout << endl << endl;
+        }
+        MPO<S, FL>::tf->opf->seq->mode = seqt;
+        threading->activate_normal();
     }
     AncillaTypes get_ancilla_type() const override { return ancilla_type; }
     void deallocate() override {

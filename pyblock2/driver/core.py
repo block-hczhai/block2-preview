@@ -6253,6 +6253,33 @@ class DMRGDriver:
             self.mpi.barrier()
         return rgf + 1j * igf
 
+    def stack_mpo(self, mpoa, mpob, add_ident=False, iprint=0):
+        """
+        Stack two MPOs.
+        
+        Args:
+            mpoa : MPO
+                The first MPO.
+            mpob : MPO
+                The second MPO.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO. Default is False.
+            iprint : int
+                Verbosity. Default is 0 (quiet).
+
+        Returns:
+            mpo : MPO
+                The output MPO.
+        """
+        bw = self.bw
+        mpo = bw.bs.StackedMPO(mpoa.prim_mpo, mpob.prim_mpo, iprint)
+        mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
+        if add_ident:
+            mpo = bw.bs.IdentityAddedMPO(mpo)
+        if self.mpi:
+            mpo = bw.bs.ParallelMPO(mpo, self.prule)
+        return mpo
+
     def fix_restarting_mps(self, mps):
         """
         Internal method for fixing the canonical form of MPS loaded from disk

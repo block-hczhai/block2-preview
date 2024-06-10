@@ -1863,7 +1863,9 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
                       const shared_ptr<MPO<S, FL>> &>())
         .def(py::init<const shared_ptr<MPO<S, FL>> &,
-                      const shared_ptr<MPO<S, FL>> &, const string &>());
+                      const shared_ptr<MPO<S, FL>> &, int>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<MPO<S, FL>> &, int, const string &>());
 
     py::class_<CondensedMPO<S, FL>, shared_ptr<CondensedMPO<S, FL>>,
                MPO<S, FL>>(m, "CondensedMPO")
