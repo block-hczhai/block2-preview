@@ -57,7 +57,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
         assert(mpoa->right_operator_exprs.size() == 0);
         assert(mpob->left_operator_exprs.size() == 0);
         assert(mpob->right_operator_exprs.size() == 0);
-        assert(mpoa->const_e == 0.0 || mpob->const_e == 0.0);
+        assert(mpoa->const_e == (typename const_fl_type<FL>::FL)0.0 ||
+               mpob->const_e == (typename const_fl_type<FL>::FL)0.0);
         assert(mpoa->schemer == nullptr && mpob->schemer == nullptr);
         MPO<S, FL>::const_e = mpoa->const_e + mpob->const_e;
         MPO<S, FL>::op = mpoa->op;
