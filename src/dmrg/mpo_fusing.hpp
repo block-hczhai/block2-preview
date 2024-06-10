@@ -35,6 +35,326 @@ using namespace std;
 
 namespace block2 {
 
+// Stack two MPOs vertically, not working for SU(2)
+template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::tensors;
+    using MPO<S, FL>::site_op_infos;
+    using MPO<S, FL>::left_operator_names;
+    using MPO<S, FL>::right_operator_names;
+    using MPO<S, FL>::middle_operator_names;
+    using MPO<S, FL>::middle_operator_exprs;
+    using MPO<S, FL>::basis;
+    AncillaTypes ancilla_type;
+    StackedMPO(const shared_ptr<MPO<S, FL>> &mpoa,
+               const shared_ptr<MPO<S, FL>> &mpob, const string &tag = "")
+        : MPO<S, FL>(mpoa->n_sites,
+                     tag == "" ? mpoa->tag + "+" + mpob->tag : tag) {
+        assert(mpoa->n_sites == mpob->n_sites);
+        assert(mpoa->left_operator_exprs.size() == 0);
+        assert(mpoa->right_operator_exprs.size() == 0);
+        assert(mpob->left_operator_exprs.size() == 0);
+        assert(mpob->right_operator_exprs.size() == 0);
+        assert(mpoa->const_e == 0.0 || mpob->const_e == 0.0);
+        assert(mpoa->schemer == nullptr && mpob->schemer == nullptr);
+        MPO<S, FL>::const_e = mpoa->const_e + mpob->const_e;
+        MPO<S, FL>::op = mpoa->op;
+        MPO<S, FL>::left_vacuum = mpoa->left_vacuum + mpob->left_vacuum;
+        MPO<S, FL>::tf = mpoa->tf;
+        assert(mpoa->get_ancilla_type() == mpob->get_ancilla_type());
+        assert(mpoa->sparse_form == mpob->sparse_form);
+        ancilla_type = mpoa->get_ancilla_type();
+        MPO<S, FL>::sparse_form = mpoa->sparse_form;
+        basis = mpoa->basis;
+        if (mpoa->hamil == nullptr)
+            MPO<S, FL>::hamil = mpob->hamil;
+        else if (mpob->hamil == nullptr)
+            MPO<S, FL>::hamil = mpoa->hamil;
+        else if (mpoa->hamil == mpob->hamil)
+            MPO<S, FL>::hamil = mpoa->hamil;
+        else
+            assert(false);
+        tensors = vector<shared_ptr<OperatorTensor<S, FL>>>(n_sites);
+        site_op_infos =
+            vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<map<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_infos_mp =
+            vector<map<S, shared_ptr<SparseMatrixInfo<S>>>>(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++) {
+            const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> infoa =
+                mpoa->site_op_infos[m];
+            const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> infob =
+                mpob->site_op_infos[m];
+            map<S, shared_ptr<SparseMatrixInfo<S>>> &info = site_op_infos_mp[m];
+            for (const auto &xa : infoa)
+                for (const auto &xb : infob) {
+                    S q = xa.first + xb.first;
+                    for (int iq = 0; iq < q.count(); iq++)
+                        info[q[iq]] = nullptr;
+                }
+            for (auto &p : info) {
+                p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                p.second->initialize(*basis[m], *basis[m], p.first,
+                                     p.first.is_fermion());
+            }
+            site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                info.begin(), info.end());
+        }
+        left_operator_names.resize(n_sites);
+        right_operator_names.resize(n_sites);
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        for (uint16_t m = 0; m < n_sites; m++) {
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
+            const int xm =
+                mpoa->tensors[m]->lmat->m * mpob->tensors[m]->lmat->m;
+            const int xn =
+                mpoa->tensors[m]->lmat->n * mpob->tensors[m]->lmat->n;
+            left_operator_names[m] = make_shared<SymbolicRowVector<S>>(xn);
+            right_operator_names[m] = make_shared<SymbolicColumnVector<S>>(xm);
+            for (int ima = 0; ima < mpoa->left_operator_names[m]->n; ima++)
+                for (int imb = 0; imb < mpob->left_operator_names[m]->n;
+                     imb++) {
+                    const int imx = ima * mpob->left_operator_names[m]->n + imb;
+                    left_operator_names[m]->data[imx] =
+                        make_shared<OpElement<S, FL>>(
+                            OpNames::XL,
+                            SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                       (uint16_t)(imx / 1000 % 1000),
+                                       (uint16_t)(imx % 1000)},
+                                      {}),
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                mpoa->left_operator_names[m]->data[ima])
+                                    ->q_label +
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    mpob->left_operator_names[m]->data[imb])
+                                    ->q_label);
+                }
+            for (int ima = 0; ima < mpoa->right_operator_names[m]->m; ima++)
+                for (int imb = 0; imb < mpob->right_operator_names[m]->m;
+                     imb++) {
+                    const int imx =
+                        ima * mpob->right_operator_names[m]->m + imb;
+                    right_operator_names[m]->data[imx] =
+                        make_shared<OpElement<S, FL>>(
+                            OpNames::XR,
+                            SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                       (uint16_t)(imx / 1000 % 1000),
+                                       (uint16_t)(imx % 1000)},
+                                      {}),
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                mpoa->right_operator_names[m]->data[ima])
+                                    ->q_label +
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    mpob->right_operator_names[m]->data[imb])
+                                    ->q_label);
+                }
+            if (m == 0) {
+                shared_ptr<SymbolicRowVector<S>> pmata =
+                    dynamic_pointer_cast<SymbolicRowVector<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicRowVector<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicRowVector<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicRowVector<S>> pmat =
+                    make_shared<SymbolicRowVector<S>>(xn);
+                for (int ima = 0; ima < pmata->n; ima++)
+                    for (int imb = 0; imb < pmatb->n; imb++) {
+                        const int imx = ima * pmatb->n + imb;
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else {
+                            shared_ptr<OpElement<S, FL>> opel =
+                                make_shared<OpElement<S, FL>>(
+                                    OpNames::XL,
+                                    SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                               (uint16_t)(imx / 1000 % 1000),
+                                               (uint16_t)(imx % 1000)},
+                                              {}),
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        pmata->data[ima])
+                                            ->q_label +
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            pmatb->data[imb])
+                                            ->q_label);
+                            shared_ptr<SparseMatrix<S, FL>> mata =
+                                mpoa->tensors[m]->ops.at(
+                                    abs_value(pmata->data[ima]));
+                            shared_ptr<SparseMatrix<S, FL>> matb =
+                                mpob->tensors[m]->ops.at(
+                                    abs_value(pmatb->data[imb]));
+                            shared_ptr<SparseMatrix<S, FL>> xmat =
+                                make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            const S q = mata->info->delta_quantum +
+                                        matb->info->delta_quantum;
+                            const FL phase =
+                                mata->info->delta_quantum.is_fermion() &&
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            mpob->right_operator_names[m]
+                                                ->data[0])
+                                            ->q_label.is_fermion()
+                                    ? -1
+                                    : 1;
+                            xmat->allocate(site_op_infos_mp[m].at(q));
+                            MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
+                                                         phase);
+                            pmat->data[imx] = opel->scalar_multiply(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                    ->factor *
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb])
+                                    ->factor);
+                            opt->ops[opel] = xmat;
+                        }
+                    }
+                opt->lmat = opt->rmat = pmat;
+            } else if (m == n_sites - 1) {
+                shared_ptr<SymbolicColumnVector<S>> pmata =
+                    dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicColumnVector<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicColumnVector<S>> pmat =
+                    make_shared<SymbolicColumnVector<S>>(xm);
+                for (int ima = 0; ima < pmata->m; ima++)
+                    for (int imb = 0; imb < pmatb->m; imb++) {
+                        const int imx = ima * pmatb->m + imb;
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else {
+                            shared_ptr<OpElement<S, FL>> opel =
+                                make_shared<OpElement<S, FL>>(
+                                    OpNames::XR,
+                                    SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                               (uint16_t)(imx / 1000 % 1000),
+                                               (uint16_t)(imx % 1000)},
+                                              {}),
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        pmata->data[ima])
+                                            ->q_label +
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            pmatb->data[imb])
+                                            ->q_label);
+                            shared_ptr<SparseMatrix<S, FL>> mata =
+                                mpoa->tensors[m]->ops.at(
+                                    abs_value(pmata->data[ima]));
+                            shared_ptr<SparseMatrix<S, FL>> matb =
+                                mpob->tensors[m]->ops.at(
+                                    abs_value(pmatb->data[imb]));
+                            shared_ptr<SparseMatrix<S, FL>> xmat =
+                                make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            const S q = mata->info->delta_quantum +
+                                        matb->info->delta_quantum;
+                            const FL phase =
+                                mata->info->delta_quantum.is_fermion() &&
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            mpob->right_operator_names[m]
+                                                ->data[imb])
+                                            ->q_label.is_fermion()
+                                    ? -1
+                                    : 1;
+                            xmat->allocate(site_op_infos_mp[m].at(q));
+                            MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
+                                                         phase);
+                            pmat->data[imx] = opel->scalar_multiply(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                    ->factor *
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb])
+                                    ->factor);
+                            opt->ops[opel] = xmat;
+                        }
+                    }
+                opt->lmat = opt->rmat = pmat;
+            } else {
+                shared_ptr<SymbolicMatrix<S>> pmata =
+                    dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicMatrix<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicMatrix<S>> pmat =
+                    make_shared<SymbolicMatrix<S>>(xm, xn);
+                for (size_t ima = 0; ima < pmata->indices.size(); ima++)
+                    for (size_t imb = 0; imb < pmatb->indices.size(); imb++) {
+                        const int64_t imx =
+                            (int64_t)ima * pmatb->indices.size() + imb;
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                            continue;
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
+                            continue;
+                        shared_ptr<OpElement<S, FL>> opel =
+                            make_shared<OpElement<S, FL>>(
+                                OpNames::X,
+                                SiteIndex({(uint16_t)(imx / 1000 / 1000 / 1000),
+                                           (uint16_t)(imx / 1000 / 1000 % 1000),
+                                           (uint16_t)(imx / 1000 % 1000),
+                                           (uint16_t)(imx % 1000)},
+                                          {}),
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                        ->q_label +
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        pmatb->data[imb])
+                                        ->q_label);
+                        shared_ptr<SparseMatrix<S, FL>> mata =
+                            mpoa->tensors[m]->ops.at(
+                                abs_value(pmata->data[ima]));
+                        shared_ptr<SparseMatrix<S, FL>> matb =
+                            mpob->tensors[m]->ops.at(
+                                abs_value(pmatb->data[imb]));
+                        shared_ptr<SparseMatrix<S, FL>> xmat =
+                            make_shared<SparseMatrix<S, FL>>(d_alloc);
+                        const S q = mata->info->delta_quantum +
+                                    matb->info->delta_quantum;
+                        const FL phase =
+                            mata->info->delta_quantum.is_fermion() &&
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        mpob->right_operator_names[m]
+                                            ->data[pmatb->indices[imb].first])
+                                        ->q_label.is_fermion()
+                                ? -1
+                                : 1;
+                        xmat->allocate(site_op_infos_mp[m].at(q));
+                        MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
+                                                     phase);
+                        (*pmat)[{pmata->indices[ima].first * pmatb->m +
+                                     pmatb->indices[imb].first,
+                                 pmata->indices[ima].second * pmatb->n +
+                                     pmatb->indices[imb].second}] =
+                            opel->scalar_multiply(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                    ->factor *
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb])
+                                    ->factor);
+                        opt->ops[opel] = xmat;
+                    }
+                opt->lmat = opt->rmat = pmat;
+            }
+            tensors[m] = opt;
+        }
+    }
+    AncillaTypes get_ancilla_type() const override { return ancilla_type; }
+    void deallocate() override {
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
+    }
+};
+
 // Merge every two adjacent sites into one site
 // Not working for SU(2)
 template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {

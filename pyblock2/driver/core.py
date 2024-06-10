@@ -6831,6 +6831,7 @@ class DMRGDriver:
         from pyblock2.algebra.core import SubTensor, Tensor, MPO
         from pyblock2.algebra.io import MPOTools
         bw = self.bw
+        assert SymmetryTypes.SZ in self.symm_type
         n_sites = self.n_sites
         cg = bw.b.SU2CG()
         xts, wts = np.polynomial.legendre.leggauss(npts)
