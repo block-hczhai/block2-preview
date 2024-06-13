@@ -6272,7 +6272,10 @@ class DMRGDriver:
                 The output MPO.
         """
         bw = self.bw
-        mpo = bw.bs.StackedMPO(mpoa.prim_mpo, mpob.prim_mpo, iprint)
+        if self.mpi:
+            mpo = bw.bs.StackedMPO(mpoa.prim_mpo.prim_mpo, mpob.prim_mpo.prim_mpo, iprint)
+        else:
+            mpo = bw.bs.StackedMPO(mpoa.prim_mpo, mpob.prim_mpo, iprint)
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
         if add_ident:
             mpo = bw.bs.IdentityAddedMPO(mpo)
