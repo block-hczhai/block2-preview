@@ -1008,6 +1008,19 @@ struct WickString {
             r.insert(ts.indices.begin(), ts.indices.end());
         return r;
     }
+    set<string> used_index_names() const {
+        set<string> r;
+        for (auto &ts : tensors)
+            for (auto &idx : ts.indices)
+                r.insert(idx.name);
+        return r;
+    }
+    set<string> ctr_index_names() const {
+        set<string> r;
+        for (auto &idx : ctr_indices)
+            r.insert(idx.name);
+        return r;
+    }
     map<int, int> used_spin_tags() const {
         map<int, int> r;
         for (auto &ts : tensors) {
@@ -1024,35 +1037,37 @@ struct WickString {
         set<WickIndex> xctr_indices = ctr_indices;
         xctr_indices.insert(other.ctr_indices.begin(), other.ctr_indices.end());
         // resolve conflicts in summation indices
-        set<WickIndex> a_idxs = used_indices(), b_idxs = other.used_indices();
-        vector<WickIndex> used_idxs_v(a_idxs.size() + b_idxs.size());
+        set<string> a_idxs = used_index_names(),
+                    b_idxs = other.used_index_names();
+        vector<string> used_idxs_v(a_idxs.size() + b_idxs.size());
         auto it = set_union(a_idxs.begin(), a_idxs.end(), b_idxs.begin(),
                             b_idxs.end(), used_idxs_v.begin());
-        set<WickIndex> used_idxs(used_idxs_v.begin(), it);
-        vector<WickIndex> a_rep(ctr_indices.size()),
+        set<string> used_idxs(used_idxs_v.begin(), it);
+        vector<string> a_rep(ctr_indices.size()),
             b_rep(other.ctr_indices.size()), c_rep(ctr_indices.size());
-        it = set_intersection(ctr_indices.begin(), ctr_indices.end(),
+        set<string> ctr_names = ctr_index_names();
+        it = set_intersection(ctr_names.begin(), ctr_names.end(),
                               b_idxs.begin(), b_idxs.end(), a_rep.begin());
         a_rep.resize(it - a_rep.begin());
-        it =
-            set_intersection(other.ctr_indices.begin(), other.ctr_indices.end(),
-                             a_idxs.begin(), a_idxs.end(), b_rep.begin());
+        set<string> other_ctr_names = other.ctr_index_names();
+        it = set_intersection(other_ctr_names.begin(), other_ctr_names.end(),
+                              a_idxs.begin(), a_idxs.end(), b_rep.begin());
         b_rep.resize(it - b_rep.begin());
-        it = set_intersection(ctr_indices.begin(), ctr_indices.end(),
-                              other.ctr_indices.begin(),
-                              other.ctr_indices.end(), c_rep.begin());
+        it = set_intersection(ctr_names.begin(), ctr_names.end(),
+                              other_ctr_names.begin(), other_ctr_names.end(),
+                              c_rep.begin());
         c_rep.resize(it - c_rep.begin());
-        set<WickIndex> xa_rep(a_rep.begin(), a_rep.end()),
+        set<string> xa_rep(a_rep.begin(), a_rep.end()),
             xb_rep(b_rep.begin(), b_rep.end()),
             xc_rep(c_rep.begin(), c_rep.end());
-        map<WickIndex, WickIndex> mp_idxs;
+        map<string, string> mp_idxs;
         for (auto &idx : used_idxs)
             if (xa_rep.count(idx) || xb_rep.count(idx))
                 for (int i = 1; i < 100; i++) {
-                    WickIndex g = idx;
-                    g.name[0] += i;
-                    if ((int)(g.name[0]) >= 123)
-                        g.name[0] -= 58;
+                    string g = idx;
+                    g[0] += i;
+                    if ((int)(g[0]) >= 123)
+                        g[0] -= 58;
                     if (!used_idxs.count(g)) {
                         used_idxs.insert(g);
                         mp_idxs[idx] = g;
@@ -1062,14 +1077,15 @@ struct WickString {
         // change contraction index in a, if it is also free index in b
         for (int i = 0; i < tensors.size(); i++)
             for (auto &wi : xtensors[i].indices)
-                if (mp_idxs.count(wi) && xa_rep.count(wi) && !xc_rep.count(wi))
-                    wi = mp_idxs[wi];
+                if (mp_idxs.count(wi.name) && xa_rep.count(wi.name) &&
+                    !xc_rep.count(wi.name))
+                    wi.name = mp_idxs[wi.name];
         // change contraction index in b,
         // if it is also free index or contraction index in a
         for (int i = tensors.size(); i < (int)xtensors.size(); i++)
             for (auto &wi : xtensors[i].indices)
-                if (mp_idxs.count(wi) && xb_rep.count(wi))
-                    wi = mp_idxs[wi];
+                if (mp_idxs.count(wi.name) && xb_rep.count(wi.name))
+                    wi.name = mp_idxs[wi.name];
         // resolve conflicts in spin tags
         map<int, int> a_tags = used_spin_tags(),
                       b_tags = other.used_spin_tags();
@@ -1104,13 +1120,14 @@ struct WickString {
             }
         xctr_indices.clear();
         for (auto &wi : ctr_indices)
-            if (mp_idxs.count(wi) && xa_rep.count(wi) && !xc_rep.count(wi))
-                xctr_indices.insert(mp_idxs[wi]);
+            if (mp_idxs.count(wi.name) && xa_rep.count(wi.name) &&
+                !xc_rep.count(wi.name))
+                xctr_indices.insert(WickIndex(mp_idxs[wi.name], wi.types));
             else
                 xctr_indices.insert(wi);
         for (auto &wi : other.ctr_indices)
-            if (mp_idxs.count(wi) && xb_rep.count(wi))
-                xctr_indices.insert(mp_idxs[wi]);
+            if (mp_idxs.count(wi.name) && xb_rep.count(wi.name))
+                xctr_indices.insert(WickIndex(mp_idxs[wi.name], wi.types));
             else
                 xctr_indices.insert(wi);
         return WickString(xtensors, xctr_indices, factor * other.factor);
