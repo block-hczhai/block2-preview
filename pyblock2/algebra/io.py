@@ -300,8 +300,9 @@ class MPSTools:
         n_sites = len(mps.tensors)
         ql = mps.tensors[0].blocks[0].q_labels
         qr = mps.tensors[-1].blocks[0].q_labels
-        vacuum = (ql[1] - ql[0])[0]
+        left_vacuum = (ql[1] - ql[0])[0]
         target = (qr[0] + qr[1])[0]
+        vacuum = (target - target)[0]
         for ib, x in enumerate(basis):
             p = brs.StateInfo()
             p.allocate(len(x))
@@ -312,8 +313,8 @@ class MPSTools:
             p.sort_states()
         info = brs.MPSInfo(n_sites, vacuum, target, brs.VectorStateInfo(basis))
         info.tag = tag
-        info.set_bond_dimension_full_fci(vacuum, vacuum)
-        info.left_dims[0] = brs.StateInfo(vacuum)
+        info.set_bond_dimension_full_fci(left_vacuum, vacuum)
+        info.left_dims[0] = brs.StateInfo(left_vacuum)
         for i, xinfo in enumerate(mps.get_left_dims()):
             p = info.left_dims[i + 1]
             p.allocate(len(xinfo))
@@ -339,7 +340,7 @@ class MPSTools:
             tensors[i].data = bs.VectorVectorPSSTensor([bs.VectorPSSTensor() for _ in range(bb.n)])
             for block in mps[i].blocks:
                 if i == 0:
-                    ql = vacuum
+                    ql = left_vacuum
                     qm, qr = block.q_labels
                     blk = block.reduced.reshape((1, *block.reduced.shape))
                 elif i == n_sites - 1:
