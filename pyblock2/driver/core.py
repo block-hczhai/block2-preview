@@ -3603,7 +3603,7 @@ class DMRGDriver:
         bx = b.finalize()
         return self.get_mpo(bx, iprint, left_vacuum=mpo_lq)
 
-    def get_spin_square_mpo(self, iprint=1):
+    def get_spin_square_mpo(self, iprint=1, add_ident=True):
         """
         Construct MPO for the S^2 operator where S is the total spin operator.
         Supports SU2, SZ, and SGF modes.
@@ -3611,6 +3611,9 @@ class DMRGDriver:
         Args:
             iprint : int
                 Verbosity. Default is 1.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO.
+                Default is True.
 
         Returns:
             mpo : MPO
@@ -3730,7 +3733,7 @@ class DMRGDriver:
             b.iscale(1.0 / self.mpi.size)
 
         bx = b.finalize()
-        return self.get_mpo(bx, iprint)
+        return self.get_mpo(bx, iprint, add_ident=add_ident)
 
     def get_mpo_any_fermionic(self, op_list, ecore=None, **kwargs):
         """

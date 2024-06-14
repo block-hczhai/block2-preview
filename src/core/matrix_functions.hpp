@@ -124,6 +124,12 @@ extern void LFNAME(sgegv)(const MKL_INT *itype, const char *jobz,
                           float *w, float *work, const MKL_INT *lwork,
                           MKL_INT *info);
 
+extern void LFNAME(ssygv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, float *a,
+                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                          float *w, float *work, const MKL_INT *lwork,
+                          MKL_INT *info);
+
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
 extern void LFNAME(sgesvd)(const char *jobu, const char *jobvt,
@@ -1502,14 +1508,14 @@ struct GMatrixFunctions<
         vector<MKL_INT> idx;
         idx.reserve(a.m);
         for (MKL_INT i = 0; i < a.m; i++)
-            if (abs(w.data[i]) > eps)
+            if (w.data[i] > eps)
                 idx.push_back(i);
         MKL_INT xn = (MKL_INT)idx.size();
         GMatrix<FL> g(nullptr, xn, a.m);
         g.data = d_alloc->allocate(g.size());
         for (MKL_INT i = 0; i < a.m; i++)
             for (MKL_INT j = 0; j < xn; j++)
-                g(j, i) = b(idx[j], i) / sqrt(w.data[idx[j]]);
+                g(j, i) = b(idx[j], i) / sqrt(abs(w.data[idx[j]]));
         GMatrix<FL> tmp(b.data, a.m, xn);
         GMatrix<FL> tmpa(a.data, xn, a.n);
         GMatrix<FL> h(nullptr, xn, xn);
