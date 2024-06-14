@@ -506,7 +506,8 @@ template <typename S, typename FL> struct UnfusedMPS {
             tensors[i] = forward_mps_tensor(i, mps);
     }
     // Transform from Unfused MPS to normal MPS
-    shared_ptr<MPS<S, FL>> finalize() const {
+    shared_ptr<MPS<S, FL>>
+    finalize(const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
         info->load_mutable();
         shared_ptr<MPS<S, FL>> xmps = make_shared<MPS<S, FL>>(info);
         xmps->canonical_form = canonical_form;
@@ -516,9 +517,15 @@ template <typename S, typename FL> struct UnfusedMPS {
         xmps->tensors.resize(n_sites);
         for (int i = 0; i < xmps->n_sites; i++)
             xmps->tensors[i] = backward_mps_tensor(i, xmps, tensors[i]);
-        info->save_mutable();
-        xmps->save_mutable();
-        xmps->save_data();
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
+        if (para_rule == nullptr || para_rule->is_root()) {
+            info->save_mutable();
+            xmps->save_mutable();
+            xmps->save_data();
+        }
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         xmps->deallocate();
         info->deallocate_mutable();
         return xmps;

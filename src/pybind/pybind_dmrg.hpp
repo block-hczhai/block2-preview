@@ -499,7 +499,8 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
                     &UnfusedMPS<S, FL>::backward_mps_tensor, py::arg("i"),
                     py::arg("mps"), py::arg("spt"))
         .def("initialize", &UnfusedMPS<S, FL>::initialize)
-        .def("finalize", &UnfusedMPS<S, FL>::finalize)
+        .def("finalize", &UnfusedMPS<S, FL>::finalize,
+             py::arg("para_rule") = nullptr)
         .def("resolve_singlet_embedding",
              &UnfusedMPS<S, FL>::resolve_singlet_embedding);
 
@@ -525,7 +526,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("get_state_occupation",
              &DeterminantTRIE<S, FL>::get_state_occupation)
         .def("construct_mps", &DeterminantTRIE<S, FL>::construct_mps,
-             py::arg("info"))
+             py::arg("info"), py::arg("para_rule") = nullptr)
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0, py::arg("max_rank") = -1,
              py::arg("ref") = vector<uint8_t>())

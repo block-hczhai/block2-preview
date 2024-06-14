@@ -182,8 +182,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
     using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
-    shared_ptr<UnfusedMPS<S, FL>>
-    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+    shared_ptr<UnfusedMPS<S, FL>> construct_mps(
+        const shared_ptr<MPSInfo<S>> &info,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
         shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
         r->info = info;
         r->canonical_form = string(n_sites - 1, 'L') + "K";
@@ -303,7 +304,10 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 info->right_dims[i]->n_states_total = new_total;
             }
         info->check_bond_dimensions();
-        info->save_mutable();
+        if (para_rule == nullptr || para_rule->is_root())
+            info->save_mutable();
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         return r;
     }
     // set the value for each determinant to the overlap between mps
@@ -551,8 +555,9 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
     using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
-    shared_ptr<UnfusedMPS<S, FL>>
-    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+    shared_ptr<UnfusedMPS<S, FL>> construct_mps(
+        const shared_ptr<MPSInfo<S>> &info,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
         shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
         r->info = info;
         r->canonical_form = string(n_sites - 1, 'L') + "K";
@@ -672,7 +677,10 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                 info->right_dims[i]->n_states_total = new_total;
             }
         info->check_bond_dimensions();
-        info->save_mutable();
+        if (para_rule == nullptr || para_rule->is_root())
+            info->save_mutable();
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         return r;
     }
     // set the value for each CSF to the overlap between mps
@@ -855,8 +863,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
     using TRIE<DeterminantTRIE<S, FL>, FL, 2>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
-    shared_ptr<UnfusedMPS<S, FL>>
-    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+    shared_ptr<UnfusedMPS<S, FL>> construct_mps(
+        const shared_ptr<MPSInfo<S>> &info,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
         shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
         r->info = info;
         r->canonical_form = string(n_sites - 1, 'L') + "K";
@@ -972,7 +981,10 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 info->right_dims[i]->n_states_total = new_total;
             }
         info->check_bond_dimensions();
-        info->save_mutable();
+        if (para_rule == nullptr || para_rule->is_root())
+            info->save_mutable();
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
         return r;
     }
     // set the value for each CSF to the overlap between mps
@@ -1188,8 +1200,9 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
     typedef typename GMatrix<FL>::FP FP;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
         : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
-    shared_ptr<UnfusedMPS<S, FL>>
-    construct_mps(const shared_ptr<MPSInfo<S>> &info) const {
+    shared_ptr<UnfusedMPS<S, FL>> construct_mps(
+        const shared_ptr<MPSInfo<S>> &info,
+        const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
         throw runtime_error("Not implemented for arbitrary symmetry!");
     }
     // set the value for each CSF to the overlap between mps
