@@ -3429,6 +3429,14 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("deallocate", &FCIDUMP<FL>::deallocate)
         .def("truncate_small", &FCIDUMP<FL>::truncate_small)
         .def("symmetrize",
+             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(const vector<int> &)) &
+                 FCIDUMP<FL>::symmetrize,
+             py::arg("orbsym"),
+             "Remove integral elements that violate point group symmetry. "
+             "Returns summed error in symmetrization\n\n"
+             "    Args:\n"
+             "        orbsym : in XOR convention")
+        .def("symmetrize",
              (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
                  const vector<uint8_t> &)) &
                  FCIDUMP<FL>::symmetrize,
@@ -3936,6 +3944,9 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_combine", &SAny::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
         .def_static("pg_equal", &SAny::pg_equal)
+        .def("symm_len", &SAny::symm_len)
+        .def("su2_indices", &SAny::su2_indices)
+        .def("u1_indices", &SAny::u1_indices)
         .def("combine", &SAny::combine)
         .def("__getitem__", &SAny::operator[])
         .def(py::self == py::self)

@@ -617,6 +617,8 @@ extern template struct block2::SparseMatrixGroup<block2::SAny, double>;
 extern template struct block2::StateInfo<block2::SAny>;
 extern template struct block2::StateProbability<block2::SAny>;
 
+extern template struct block2::TransStateInfo<block2::SAny, block2::SAny>;
+
 // symbolic.hpp
 extern template struct block2::Symbolic<block2::SAny>;
 extern template struct block2::SymbolicRowVector<block2::SAny>;

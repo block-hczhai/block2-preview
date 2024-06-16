@@ -134,7 +134,7 @@ TEST_F(TestDMRG, Test) {
 
     shared_ptr<UnfusedMPS<SU2>> umps = make_shared<UnfusedMPS<SU2>>(mps);
 
-    shared_ptr<MPS<SZ>> gmps = TransUnfusedMPS<SU2, SZ>::forward(umps, "ZKET", mpo->tf->opf->cg)->finalize();
+    shared_ptr<MPS<SZ>> gmps = TransUnfusedMPS<SU2, SZ>::forward(umps, "ZKET", mpo->tf->opf->cg, targetz)->finalize();
 
     // deallocate persistent stack memory
     mps_info->deallocate();

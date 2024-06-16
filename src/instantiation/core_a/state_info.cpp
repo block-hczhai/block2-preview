@@ -22,3 +22,5 @@
 
 template struct block2::StateInfo<block2::SAny>;
 template struct block2::StateProbability<block2::SAny>;
+
+template struct block2::TransStateInfo<block2::SAny, block2::SAny>;

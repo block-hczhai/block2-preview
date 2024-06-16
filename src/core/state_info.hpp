@@ -618,4 +618,85 @@ struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
     }
 };
 
+// Translation between SAny
+template <typename S>
+struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
+    static shared_ptr<StateInfo<S>> forward(const shared_ptr<StateInfo<S>> &si,
+                                            S ref) {
+        using SAnySymmTypes = typename S::symm_t;
+        map<S, ubond_t> mp;
+        for (int i = 0; i < si->n; i++) {
+            S q = si->quanta[i];
+            S z = ref;
+            if (q.symm_len() == 3 && q.types[0] == SAnySymmTypes::U1Fermi &&
+                q.types[1] == SAnySymmTypes::U1 &&
+                q.types[2] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 2 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::AbelianPG) {
+                    z.values[0] = q.values[0];
+                    z.values[1] = q.values[2];
+                    mp[z] += si->n_states[i];
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type.");
+            } else if (q.symm_len() == 2 &&
+                       q.types[0] == SAnySymmTypes::U1Fermi &&
+                       q.types[1] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 3 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::U1 &&
+                    ref.types[2] == SAnySymmTypes::AbelianPG) {
+                    z.values[0] = q.values[0];
+                    z.values[2] = q.values[1];
+                    for (int j = -q.values[0]; j <= q.values[0]; j += 2) {
+                        z.values[1] = j;
+                        mp[z] += si->n_states[i];
+                    }
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type.");
+            } else
+                throw runtime_error(
+                    "TransStateInfo::forward: Unsupported source symm type.");
+        }
+        shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
+        so->allocate((int)mp.size());
+        int i = 0;
+        for (auto m : mp) {
+            so->quanta[i] = m.first, so->n_states[i] = m.second;
+            i++;
+        }
+        so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S>> backward(const shared_ptr<StateInfo<S>> &si,
+                                             S ref) {
+        return forward(si, ref);
+    }
+    static shared_ptr<StateInfo<S>>
+    backward_connection(const shared_ptr<StateInfo<S>> &si,
+                        const shared_ptr<StateInfo<S>> &bsi) {
+        shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
+        const S ref = bsi->quanta[0];
+        map<S, vector<S>> mp;
+        int ii = 0;
+        for (int i = 0; i < si->n; i++) {
+            S q = si->quanta[i];
+            S z = forward(make_shared<StateInfo<S>>(q), ref)->quanta[0];
+            mp[z].push_back(q);
+        }
+        so->allocate(si->n);
+        for (int ib = 0; ib < bsi->n; ib++) {
+            vector<S> &v = mp.at(bsi->quanta[ib]);
+            so->n_states[ib] = ii;
+            memcpy(so->quanta + ii, v.data(), v.size() * sizeof(S));
+            ii += (int)v.size();
+        }
+        so->reallocate(ii);
+        so->n_states_total = bsi->n;
+        return so;
+    }
+};
+
 } // namespace block2

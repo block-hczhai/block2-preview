@@ -516,6 +516,8 @@ class Block2Wrapper:
 
         def init_sany(*qargs):
             q = self.SXT()
+            if len(qargs) == 0:
+                qargs = [0] * len(args)
             assert len(qargs) == len(args)
             for ix, (ta, qa) in enumerate(zip(args, qargs)):
                 if ta.startswith("Z") and ta.endswith("Fermi"):
@@ -527,6 +529,7 @@ class Block2Wrapper:
                 q.values[ix] = qa
             return q
 
+        self.qargs = args
         self.SX = init_sany
 
 
@@ -2240,7 +2243,7 @@ class DMRGDriver:
                     i_alloc = super_self.bw.b.IntVectorAllocator()
                     d_alloc = super_self.bw.b.DoubleVectorAllocator()
                     # site op infos
-                    if SymmetryTypes.SZ in super_self.symm_type:
+                    if SymmetryTypes.SZ in super_self.symm_type and SymmetryTypes.SAny not in super_self.symm_type:
                         max_n, max_s = 10, 10
                         max_n_odd, max_s_odd = max_n | 1, max_s | 1
                         max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
@@ -3091,9 +3094,8 @@ class DMRGDriver:
             mpo : MPO
                 The block2 MPO object.
         """
-        import numpy as np
-
         bw = self.bw
+        import numpy as np
 
         if unpack_g2e:
             if isinstance(g2e, np.ndarray):
@@ -6545,6 +6547,35 @@ class DMRGDriver:
         r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return r
 
+    def mps_change_symm(self, mps, tag, target):
+        """
+        Change symmetry type of MPS.
+        Only works in SAny mode. The resulting MPS should be used in SAny mode.
+
+        Args:
+            mps : MPS
+                The input MPS.
+            tag : str
+                The tag of the output MPS.
+            target : SX
+                The target global symmetry.
+
+        Returns:
+            mps : MPS
+                The output MPS.
+        """
+        bw = self.bw
+        assert SymmetryTypes.SAny in bw.symm_type
+        assert tag != mps.info.tag
+        mps.info.load_mutable()
+        mps.load_mutable()
+        umps = bw.bs.trans_unfused_mps_to_sany(bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, target)
+        zmps = umps.finalize()
+
+        zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
+        zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
+        return zmps
+
     def mps_change_to_sz(self, mps, tag, sz=None):
         """
         Change MPS from spin-adapted to non-spin-adapted.
@@ -6570,8 +6601,9 @@ class DMRGDriver:
         assert tag != mps.info.tag
         mps.info.load_mutable()
         mps.load_mutable()
+        targetz = bw.b.SZ(mps.info.target.n, mps.info.target.twos, mps.info.target.pg)
         umps = bw.bs.trans_unfused_mps_to_sz(
-            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg
+            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, targetz
         )
         if sz is not None:
             umps.resolve_singlet_embedding(sz)
@@ -6836,7 +6868,8 @@ class DMRGDriver:
         mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
 
-    def get_spin_projection_mpo(self, twos, twosz, max_twosz=None, npts=10, cutoff=1E-14, add_ident=False, mpi_split=False, iprint=0):
+    def get_spin_projection_mpo(self, twos, twosz, max_twosz=None, npts=10, cutoff=1E-14,
+                                add_ident=False, mpi_split=False, use_sz_symm=True, iprint=0):
         """
         Construct the spin projection MPO.
 
@@ -6855,6 +6888,8 @@ class DMRGDriver:
                 If True, the hidden identity operator will be added into the MPO. Default is False.
             mpi_split : bool
                 If True, will split the MPO along npts. Default is False.
+            use_sz_symm : bool
+                If True, will use SZ symmetry in the MPO. Default is True.
             iprint : int
                 Verbosity. Default is 0 (quiet).
 
@@ -6866,7 +6901,6 @@ class DMRGDriver:
         from pyblock2.algebra.core import SubTensor, Tensor, MPO
         from pyblock2.algebra.io import MPOTools
         bw = self.bw
-        assert SymmetryTypes.SZ in self.symm_type
         n_sites = self.n_sites
         cg = bw.b.SU2CG()
         xts, wts = np.polynomial.legendre.leggauss(npts)
@@ -6878,34 +6912,53 @@ class DMRGDriver:
             if not mpi_split or (mpi_split and self.mpi.rank == ixw % self.mpi.size):
                 ct = np.cos(xt / 2) * it
                 st, mt = np.sin(xt / 2) * it, -np.sin(xt / 2) * it
-                lqs, tensors = [bw.SX()], []
-                for k, bz in enumerate(self.basis):
-                    rqsd = set(lqs)
-                    for q in lqs:
-                        rqsd.add(q + bw.SX(0, 2, 0))
-                        rqsd.add(q + bw.SX(0, -2, 0))
-                    rqs = sorted([q for q in rqsd if max_twosz is None or abs(q.twos) <= max_twosz])
-                    rqs = [bw.SX()] if k == n_sites - 1 else rqs
-                    blocks = []
-                    for lq, rq in [(lq, rq) for lq in lqs for rq in rqs]:
-                        for xq, yq in [(xq, yq) for xq in bz for yq in bz]:
-                            rt = None
-                            if xq == yq and lq == rq and xq.n == 1:
-                                rt = ct
-                            elif xq == yq and lq == rq and xq.n != 1:
-                                rt = it
-                            elif lq + bw.SX(0, 2, 0) == rq and xq - bw.SX(0, 2, 0) == yq:
-                                rt = st
-                            elif lq + bw.SX(0, -2, 0) == rq and xq - bw.SX(0, -2, 0) == yq:
-                                rt = mt
-                            if rt is not None:
-                                blocks.append(SubTensor(reduced=rt, q_labels=(lq, xq, yq, rq)))
-                    if k == 0:
-                        blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
-                    elif k == n_sites - 1:
-                        blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
-                    tensors.append(Tensor(blocks=blocks))
-                    lqs = rqs
+                if SymmetryTypes.SZ in self.symm_type and use_sz_symm:
+                    lqs, tensors = [bw.SX()], []
+                    for k, bz in enumerate(self.basis):
+                        rqsd = set(lqs)
+                        for q in lqs:
+                            rqsd.add(q + bw.SX(0, 2, 0))
+                            rqsd.add(q + bw.SX(0, -2, 0))
+                        rqs = sorted([q for q in rqsd if max_twosz is None or abs(q.twos) <= max_twosz])
+                        rqs = [bw.SX()] if k == n_sites - 1 else rqs
+                        blocks = []
+                        for lq, rq in [(lq, rq) for lq in lqs for rq in rqs]:
+                            for xq, yq in [(xq, yq) for xq in bz for yq in bz]:
+                                rt = None
+                                if xq == yq and lq == rq and xq.n == 1:
+                                    rt = ct
+                                elif xq == yq and lq == rq and xq.n != 1:
+                                    rt = it
+                                elif lq + bw.SX(0, 2, 0) == rq and xq - bw.SX(0, 2, 0) == yq:
+                                    rt = st
+                                elif lq + bw.SX(0, -2, 0) == rq and xq - bw.SX(0, -2, 0) == yq:
+                                    rt = mt
+                                if rt is not None:
+                                    blocks.append(SubTensor(reduced=rt, q_labels=(lq, xq, yq, rq)))
+                        if k == 0:
+                            blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
+                        elif k == n_sites - 1:
+                            blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
+                        tensors.append(Tensor(blocks=blocks))
+                        lqs = rqs
+                elif SymmetryTypes.SAny in self.symm_type:
+                    rt = np.array([[np.cos(xt / 2), np.sin(xt / 2)], [-np.sin(xt / 2), np.cos(xt / 2)]])
+                    rt = rt.reshape((1, 2, 2, 1))
+                    q, qs, tensors = bw.SX(), [bw.SX()], []
+                    for k, bz in enumerate(self.basis):
+                        blocks = []
+                        for xq in bz:
+                            if xq.n == 1:
+                                blocks.append(SubTensor(reduced=rt, q_labels=(q, xq, xq, q)))
+                            else:
+                                blocks.append(SubTensor(reduced=it, q_labels=(q, xq, xq, q)))
+                        if k == 0:
+                            blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
+                        elif k == n_sites - 1:
+                            blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
+                        tensors.append(Tensor(blocks=blocks))
+                else:
+                    assert False
                 xmpo = MPO(tensors=tensors)
                 pympo = pympo + xmpo if pympo is not None else xmpo
         if cutoff is not None:

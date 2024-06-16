@@ -59,6 +59,7 @@ template <int8_t L = 6> struct SAnyT {
     const static int8_t ll = L;
     typedef void is_sany_t;
     typedef int pg_t;
+    typedef SAnySymmTypes symm_t;
     array<SAnySymmTypes, L> types;
     array<int32_t, L> values;
     static array<int32_t, L> invalid_init() {
@@ -88,11 +89,17 @@ template <int8_t L = 6> struct SAnyT {
     SAnyT(SAnySymmTypes t) : types(empty_types_init()), values(invalid_init()) {
         types[0] = t;
     }
+    int8_t symm_len() const {
+        for (int8_t i = 0; i < L; i++)
+            if (types[i] == SAnySymmTypes::None)
+                return i;
+        return L;
+    }
     static SAnyT init_su2(int n = 0, int twos = 0, int pg = 0) {
         SAnyT r;
         r.types[0] = SAnySymmTypes::U1Fermi;
-        r.types[1] = SAnySymmTypes::SU2Fermi;
-        r.types[2] = SAnySymmTypes::SU2Fermi;
+        r.types[1] = SAnySymmTypes::SU2;
+        r.types[2] = SAnySymmTypes::SU2;
         r.types[3] = SAnySymmTypes::AbelianPG;
         r.values[0] = n, r.values[1] = r.values[2] = twos, r.values[3] = pg;
         return r;
@@ -100,8 +107,8 @@ template <int8_t L = 6> struct SAnyT {
     static SAnyT init_su2(int n, int twos_low, int twos, int pg) {
         SAnyT r;
         r.types[0] = SAnySymmTypes::U1Fermi;
-        r.types[1] = SAnySymmTypes::SU2Fermi;
-        r.types[2] = SAnySymmTypes::SU2Fermi;
+        r.types[1] = SAnySymmTypes::SU2;
+        r.types[2] = SAnySymmTypes::SU2;
         r.types[3] = SAnySymmTypes::AbelianPG;
         r.values[0] = n, r.values[1] = twos_low, r.values[2] = twos,
         r.values[3] = pg;
@@ -110,7 +117,7 @@ template <int8_t L = 6> struct SAnyT {
     static SAnyT init_sz(int n = 0, int twos = 0, int pg = 0) {
         SAnyT r;
         r.types[0] = SAnySymmTypes::U1Fermi;
-        r.types[1] = SAnySymmTypes::U1Fermi;
+        r.types[1] = SAnySymmTypes::U1;
         r.types[2] = SAnySymmTypes::AbelianPG;
         r.values[0] = n, r.values[1] = twos, r.values[2] = pg;
         return r;
@@ -190,6 +197,13 @@ template <int8_t L = 6> struct SAnyT {
                 values[k] = n;
                 break;
             }
+    }
+    vector<int> u1_indices() const {
+        vector<int> r;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::U1)
+                r.push_back(k);
+        return r;
     }
     vector<int> su2_indices() const {
         vector<int> r;

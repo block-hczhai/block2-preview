@@ -1111,6 +1111,68 @@ struct TransMPSInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t>
     }
 };
 
+template <typename S> struct TransMPSInfoAnyBase {
+    static shared_ptr<MPSInfo<S>> transform(const shared_ptr<MPSInfo<S>> &si,
+                                            S target) {
+        int n_sites = si->n_sites;
+        S vacuum = TransStateInfo<S, S>::forward(
+                       make_shared<StateInfo<S>>(si->vacuum), target)
+                       ->quanta[0];
+        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
+        for (int i = 0; i < n_sites; i++)
+            basis[i] = TransStateInfo<S, S>::forward(si->basis[i], vacuum);
+        shared_ptr<MPSInfo<S>> so =
+            make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis);
+        // handle the singlet embedding case
+        so->left_dims_fci[0] =
+            TransStateInfo<S, S>::forward(si->left_dims_fci[0], vacuum);
+        for (int i = 0; i < n_sites; i++)
+            so->left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *so->left_dims_fci[i], *basis[i], S(S::invalid)));
+        so->right_dims_fci[n_sites] =
+            TransStateInfo<S, S>::forward(si->right_dims_fci[n_sites], vacuum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            so->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[i], *so->right_dims_fci[i + 1], S(S::invalid)));
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*so->left_dims_fci[i], *so->right_dims_fci[i],
+                                 target);
+            StateInfo<S>::filter(*so->right_dims_fci[i], *so->left_dims_fci[i],
+                                 target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims_fci[i]->collect();
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims[i] =
+                TransStateInfo<S, S>::forward(si->left_dims[i], vacuum);
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims[i] =
+                TransStateInfo<S, S>::forward(si->right_dims[i], vacuum);
+        so->check_bond_dimensions();
+        so->bond_dim = so->get_max_bond_dimension();
+        so->tag = si->tag;
+        return so;
+    }
+};
+
+// Translation between SAny MPSInfo
+template <typename S>
+struct TransMPSInfo<S, S, typename S::is_sany_t, typename S::is_sany_t>
+    : TransMPSInfoAnyBase<S> {
+    static shared_ptr<MPSInfo<S>> forward(const shared_ptr<MPSInfo<S>> &si,
+                                          S target) {
+        return TransMPSInfoAnyBase<S>::transform(si, target);
+    }
+    static shared_ptr<MPSInfo<S>> backward(const shared_ptr<MPSInfo<S>> &si,
+                                           S target) {
+        return TransMPSInfoAnyBase<S>::transform(si, target);
+    }
+};
+
 // Quantum number infomation in a MPS
 // Used for warm-up sweep
 template <typename S> struct DynamicMPSInfo : MPSInfo<S> {

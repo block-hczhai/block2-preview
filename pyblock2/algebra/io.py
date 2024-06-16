@@ -629,10 +629,11 @@ class MPOTools:
         bmpo.site_op_infos = brs.VectorVectorPLMatInfo(site_op_infos)
         bmpo.basis = brs.VectorStateInfo(site_basis)
         bmpo.sparse_form = "N" * n_sites
-        bmpo.op = bs.OpElement(b.OpNames.H, b.SiteIndex(), rops[-1][0].q_label, 1.0)
+        bmpo.op = bs.OpElement(b.OpNames.H, b.SiteIndex(), lops[-1][0].q_label, 1.0)
         bmpo.right_operator_names = brs.VectorSymbolic(rops)
         bmpo.left_operator_names = brs.VectorSymbolic(lops)
         bmpo.tensors = bs.VectorOpTensor(tensors)
+        bmpo.left_vacuum = vacuum
         # sanity check
         for ii in range(0, bmpo.n_sites):
             for k, v in bmpo.tensors[ii].ops.items():

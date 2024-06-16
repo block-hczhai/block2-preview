@@ -2875,6 +2875,13 @@ bind_fl_expect<SAny, double, double, complex<double>>(py::module &m,
 extern template auto bind_fl_spin_specific<SAny, double>(py::module &m)
     -> decltype(typename SAny::is_sany_t());
 
+extern template void bind_trans_mps<SAny, SAny>(py::module &m,
+                                                const string &aux_name);
+extern template auto
+bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
+                                                    const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+
 #ifdef _USE_COMPLEX
 extern template void bind_fl_general<SAny, complex<double>>(py::module &m);
 
@@ -2903,6 +2910,11 @@ bind_fl_expect<SAny, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
 extern template auto bind_fl_spin_specific<SAny, complex<double>>(py::module &m)
     -> decltype(typename SAny::is_sany_t());
+
+extern template auto
+bind_fl_trans_mps_spin_specific<SAny, SAny, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
 #endif
 
 #endif

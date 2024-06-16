@@ -730,6 +730,8 @@ extern template struct block2::NEVPTMPSInfo<block2::SAny>;
 extern template struct block2::AncillaMPSInfo<block2::SAny>;
 extern template struct block2::MPS<block2::SAny, double>;
 
+extern template struct block2::TransMPSInfo<block2::SAny, block2::SAny>;
+
 // mps_unfused.hpp
 extern template struct block2::SparseTensor<block2::SAny, double>;
 extern template struct block2::UnfusedMPS<block2::SAny, double>;

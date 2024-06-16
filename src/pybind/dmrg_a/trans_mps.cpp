@@ -1,7 +1,7 @@
 
 /*
  * block2: Efficient MPO implementation of quantum chemistry DMRG
- * Copyright (C) 2020-2021 Huanchen Zhai <hczhai@caltech.edu>
+ * Copyright (C) 2024 Huanchen Zhai <hczhai@caltech.edu>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,14 +18,10 @@
  *
  */
 
-#include "../block2_dmrg.hpp"
+#include "../pybind_dmrg.hpp"
 
-template struct block2::MPSInfo<block2::SAny>;
-template struct block2::DynamicMPSInfo<block2::SAny>;
-template struct block2::CASCIMPSInfo<block2::SAny>;
-template struct block2::MRCIMPSInfo<block2::SAny>;
-template struct block2::NEVPTMPSInfo<block2::SAny>;
-template struct block2::AncillaMPSInfo<block2::SAny>;
-template struct block2::MPS<block2::SAny, double>;
-
-template struct block2::TransMPSInfo<block2::SAny, block2::SAny>;
+template void bind_trans_mps<SAny, SAny>(py::module &m, const string &aux_name);
+template auto
+bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
+                                                    const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));

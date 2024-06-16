@@ -381,6 +381,17 @@ template <typename S> struct CG<S, typename S::is_sany_t> : SU2CG {
             r *= SU2CG::phase(a.values[k], b.values[k], c.values[k]);
         return r;
     }
+    long double cg(S a, S b, S c, S ma, S mb, S mc) const {
+        const vector<int> aix = a.su2_indices();
+        const vector<int> mix = ma.u1_indices();
+        const size_t jx = mix.size() - aix.size();
+        long double r = 1.0L;
+        for (size_t ix = 0; ix < aix.size(); ix++)
+            r *= SU2CG::cg(a.values[aix[ix]], b.values[aix[ix]],
+                           c.values[aix[ix]], ma.values[mix[ix + jx]],
+                           mb.values[mix[ix + jx]], mc.values[mix[ix + jx]]);
+        return r;
+    }
 };
 
 template <typename S> struct CG<S, typename S::is_sz_t> : TrivialCG {

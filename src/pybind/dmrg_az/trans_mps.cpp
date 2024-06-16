@@ -18,14 +18,8 @@
  *
  */
 
-#include "../block2_dmrg.hpp"
+#include "../pybind_dmrg.hpp"
 
-template struct block2::MPSInfo<block2::SAny>;
-template struct block2::DynamicMPSInfo<block2::SAny>;
-template struct block2::CASCIMPSInfo<block2::SAny>;
-template struct block2::MRCIMPSInfo<block2::SAny>;
-template struct block2::NEVPTMPSInfo<block2::SAny>;
-template struct block2::AncillaMPSInfo<block2::SAny>;
-template struct block2::MPS<block2::SAny, double>;
-
-template struct block2::TransMPSInfo<block2::SAny, block2::SAny>;
+template auto bind_fl_trans_mps_spin_specific<SAny, SAny, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
