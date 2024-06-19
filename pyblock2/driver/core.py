@@ -3961,6 +3961,7 @@ class DMRGDriver:
         dav_rel_conv_thrd=0.0,
         proj_mpss=None,
         proj_weights=None,
+        decomp_type=None,
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
         store_seq_data=False,
@@ -3969,6 +3970,7 @@ class DMRGDriver:
         forward=None,
         kernel=None,
         metric_mpo=None,
+        context_ket=None,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4051,6 +4053,9 @@ class DMRGDriver:
                 The weights of the MPS projection. This should be larger than the energy gap between
                 the targeted state and the projected state. But if this is too large,
                 the error in the projected state will affect the quality of the targeted state.
+            decomp_type : None or str
+                The method for MPS tensor decomposition. Can be 'SVD', 'PureSVD', or 'DensityMatrix'.
+                Default is None (DensityMatrix).
             store_wfn_spectra : bool
                 If True, the MPS singular value spectra will be stored as ``self._sweep_wfn_spectra``
                 which can be later used to compute the bipartite entropy.
@@ -4076,6 +4081,8 @@ class DMRGDriver:
                 Kernel operation for the local problem.
             metric_mpo : None or MPO
                 The block2 MPO object for the metric. Default is None (identity metric).
+            context_ket : None or MPS
+                The block2 MPS object for the symmetry constraint. Default is None (no constraint).
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4108,6 +4115,9 @@ class DMRGDriver:
             me.delayed_contraction = bw.b.OpNamesSet()
             me.cached_contraction = False
             dmrg.metric_me = metric_me
+        if context_ket is not None:
+            assert context_ket.info.tag != ket.info.tag
+            dmrg.context_ket = context_ket
 
         if proj_mpss is not None:
             assert proj_weights is not None
@@ -4140,6 +4150,8 @@ class DMRGDriver:
             dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollectedLowMem
         else:
             dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollected
+        if decomp_type is not None:
+            dmrg.decomp_type = getattr(bw.b.DecompositionTypes, decomp_type)
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
         dmrg.davidson_rel_conv_thrd = dav_rel_conv_thrd
         dmrg.davidson_max_iter = dav_max_iter + 100

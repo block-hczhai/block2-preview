@@ -460,12 +460,21 @@ struct StateProbability<
 template <typename S1, typename S2, typename = void, typename = void>
 struct TransStateInfo {
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
-        return TransStateInfo<S2, S1>::backward(si);
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
+        throw runtime_error("TransStateInfo::forward: not implemented");
+        return nullptr;
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
-        return TransStateInfo<S2, S1>::forward(si);
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
+        throw runtime_error("TransStateInfo::backward: not implemented");
+        return nullptr;
+    }
+    static shared_ptr<StateInfo<S2>>
+    backward_connection(const shared_ptr<StateInfo<S2>> &si,
+                        const shared_ptr<StateInfo<S1>> &bsi) {
+        throw runtime_error(
+            "TransStateInfo::backward_connection: not implemented");
+        return nullptr;
     }
 };
 
@@ -474,7 +483,7 @@ template <typename S1, typename S2>
 struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
     // from sz to su2 is not exact
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
         vector<pair<S2, ubond_t>> vso;
         map<pair<int, int>, vector<S1>> mp;
         for (int i = 0; i < si->n; i++) {
@@ -515,7 +524,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
         return so;
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
         map<S1, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S2 q = si->quanta[i];
@@ -561,7 +570,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
 template <typename S1, typename S2>
 struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
         map<S2, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S1 q = si->quanta[i];
@@ -579,7 +588,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
         return so;
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
         map<S1, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S2 q = si->quanta[i];
@@ -639,7 +648,9 @@ struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
                     mp[z] += si->n_states[i];
                 } else
                     throw runtime_error("TransStateInfo::forward: Unsupported "
-                                        "target symm type.");
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
             } else if (q.symm_len() == 2 &&
                        q.types[0] == SAnySymmTypes::U1Fermi &&
                        q.types[1] == SAnySymmTypes::AbelianPG) {
@@ -655,10 +666,13 @@ struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
                     }
                 } else
                     throw runtime_error("TransStateInfo::forward: Unsupported "
-                                        "target symm type.");
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
             } else
                 throw runtime_error(
-                    "TransStateInfo::forward: Unsupported source symm type.");
+                    "TransStateInfo::forward: Unsupported source symm type: " +
+                    Parsing::to_string(q));
         }
         shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
         so->allocate((int)mp.size());

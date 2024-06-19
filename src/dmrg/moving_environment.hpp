@@ -2031,6 +2031,143 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         frame_<FP>()->activate(0);
         mps->tensors[i] = old_wfn;
     }
+    // forward = proj to high symmetry
+    static shared_ptr<SparseMatrix<S, FLS>>
+    symm_context_convert(int i, const shared_ptr<MPS<S, FLS>> &mps,
+                         const shared_ptr<MPS<S, FLS>> &cmps, int dot,
+                         bool fuse_left, bool mask, bool forward, bool is_wfn,
+                         bool infer_info) {
+        if (is_wfn || fuse_left)
+            mps->info->load_left_dims(i), cmps->info->load_left_dims(i);
+        else
+            mps->info->load_right_dims(i), cmps->info->load_right_dims(i);
+        if (is_wfn || !fuse_left)
+            mps->info->load_right_dims(i + dot),
+                cmps->info->load_right_dims(i + dot);
+        else
+            mps->info->load_left_dims(i + dot),
+                cmps->info->load_left_dims(i + dot);
+        StateInfo<S> l = is_wfn || fuse_left ? *mps->info->left_dims[i]
+                                             : *mps->info->right_dims[i],
+                     ml = *mps->info->basis[i],
+                     mr = *mps->info->basis[i + dot - 1],
+                     r = is_wfn || !fuse_left ? *mps->info->right_dims[i + dot]
+                                              : *mps->info->left_dims[i + dot];
+        shared_ptr<StateInfo<S>> ll =
+            dot == 2 || fuse_left
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      l, ml, *mps->info->left_dims_fci[i + 1]))
+                : make_shared<StateInfo<S>>(l);
+        shared_ptr<StateInfo<S>> rr =
+            dot == 2 || !fuse_left
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      mr, r, *mps->info->right_dims_fci[i + dot - 1]))
+                : make_shared<StateInfo<S>>(r);
+        StateInfo<S> lu = is_wfn || fuse_left ? *cmps->info->left_dims[i]
+                                              : *cmps->info->right_dims[i],
+                     mlu = *cmps->info->basis[i],
+                     mru = *cmps->info->basis[i + dot - 1],
+                     ru = is_wfn || !fuse_left
+                              ? *cmps->info->right_dims[i + dot]
+                              : *cmps->info->left_dims[i + dot];
+        shared_ptr<StateInfo<S>> llu =
+            dot == 2 || fuse_left
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      lu, mlu, *cmps->info->left_dims_fci[i + 1]))
+                : make_shared<StateInfo<S>>(lu);
+        shared_ptr<StateInfo<S>> rru =
+            dot == 2 || !fuse_left
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      mru, ru, *cmps->info->right_dims_fci[i + dot - 1]))
+                : make_shared<StateInfo<S>>(ru);
+        shared_ptr<VectorAllocator<FPS>> d_alloc =
+            make_shared<VectorAllocator<FPS>>();
+        shared_ptr<SparseMatrix<S, FLS>> mask_wfn =
+            make_shared<SparseMatrix<S, FLS>>(d_alloc);
+        S ref = mps->info->vacuum;
+        S refu = cmps->info->vacuum;
+        if (infer_info) {
+            shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+                make_shared<VectorAllocator<uint32_t>>();
+            shared_ptr<SparseMatrixInfo<S>> xinfo =
+                make_shared<SparseMatrixInfo<S>>(i_alloc);
+            shared_ptr<StateInfo<S>> xll = forward ? llu : ll;
+            shared_ptr<StateInfo<S>> xrr = forward ? rru : rr;
+            S xdq = is_wfn ? (forward ? cmps->info->target : mps->info->target)
+                           : (forward ? cmps->info->vacuum : mps->info->vacuum);
+            if (fuse_left)
+                xrr = forward ? TransStateInfo<S, S>::forward(rr, refu)
+                              : TransStateInfo<S, S>::forward(rru, ref);
+            else
+                xll = forward ? TransStateInfo<S, S>::forward(ll, refu)
+                              : TransStateInfo<S, S>::forward(llu, ref);
+            xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
+            mask_wfn->allocate(xinfo);
+        } else
+            mask_wfn->allocate(forward ? cmps->tensors[i]->info
+                                       : mps->tensors[i]->info);
+        mask_wfn->clear();
+        shared_ptr<StateInfo<S>> conn_ll =
+            TransStateInfo<S, S>::backward_connection(llu, ll);
+        shared_ptr<StateInfo<S>> conn_rr =
+            TransStateInfo<S, S>::backward_connection(rru, rr);
+        for (int k = 0; k < cmps->tensors[i]->info->n; k++) {
+            S plu = cmps->tensors[i]->info->quanta[k].get_bra(
+                cmps->tensors[i]->info->delta_quantum);
+            S pru = is_wfn ? -cmps->tensors[i]->info->quanta[k].get_ket()
+                           : cmps->tensors[i]->info->quanta[k].get_ket();
+            shared_ptr<StateInfo<S>> mls = TransStateInfo<S, S>::forward(
+                make_shared<StateInfo<S>>(plu), ref);
+            shared_ptr<StateInfo<S>> mrs = TransStateInfo<S, S>::forward(
+                make_shared<StateInfo<S>>(pru), ref);
+            GMatrix<FLS> x = forward ? (*mask_wfn)[k] : (*cmps->tensors[i])[k];
+            shared_ptr<SparseMatrix<S, FLS>> xwfn =
+                forward ? mps->tensors[i] : mask_wfn;
+            for (int iln = 0; iln < mls->n; iln++)
+                for (int irn = 0; irn < mrs->n; irn++) {
+                    S lqn = mls->quanta[iln], rqn = mrs->quanta[irn];
+                    S wdq = xwfn->info->delta_quantum.combine(
+                        lqn, is_wfn ? -rqn : rqn);
+                    if (wdq == S(S::invalid))
+                        continue;
+                    int ip = xwfn->info->find_state(wdq);
+                    GMatrix<FLS> r = (*xwfn)[ip];
+                    int il = ll->find_state(lqn);
+                    int ir = rr->find_state(rqn);
+                    int klst = conn_ll->n_states[il];
+                    int krst = conn_rr->n_states[ir];
+                    int kled = il == ll->n - 1 ? conn_ll->n
+                                               : conn_ll->n_states[il + 1];
+                    int kred = ir == ll->n - 1 ? conn_rr->n
+                                               : conn_rr->n_states[ir + 1];
+                    MKL_INT lsh = 0, rsh = 0;
+                    for (int ilp = klst;
+                         ilp < kled && conn_ll->quanta[ilp] != plu; ilp++)
+                        lsh += llu->n_states[llu->find_state(
+                            conn_ll->quanta[ilp])];
+                    for (int irp = krst;
+                         irp < kred && conn_rr->quanta[irp] != pru; irp++)
+                        rsh += rru->n_states[rru->find_state(
+                            conn_rr->quanta[irp])];
+                    MKL_INT kl = (MKL_INT)llu->n_states[llu->find_state(plu)];
+                    MKL_INT kr = (MKL_INT)rru->n_states[rru->find_state(pru)];
+                    if (mask) {
+                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                r(ikl + lsh, ikr + rsh) = 1.0;
+                    } else if (forward) {
+                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                x(ikl, ikr) += r(ikl + lsh, ikr + rsh);
+                    } else {
+                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                r(ikl + lsh, ikr + rsh) = x(ikl, ikr);
+                    }
+                }
+        }
+        return mask_wfn;
+    }
     // Contract two adjcent MPS tensors to one two-site MPS tensor
     static void contract_two_dot(int i, const shared_ptr<MPS<S, FLS>> &mps,
                                  bool reduced = false) {

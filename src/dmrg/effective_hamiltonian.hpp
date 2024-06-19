@@ -105,6 +105,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // Symbolic expression of effective H
     shared_ptr<DelayedOperatorTensor<S, FL>> op;
     shared_ptr<SparseMatrix<S, FL>> bra, ket, diag, cmat, vmat;
+    shared_ptr<SparseMatrix<S, FL>> context_mask = nullptr;
     shared_ptr<TensorFunctions<S, FL>> tf;
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
@@ -435,6 +436,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         int ndav = 0;
         assert(compute_diag);
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
+        GMatrix<FL> cmask(nullptr, (MKL_INT)ket->total_memory, 1);
+        if (this->context_mask != nullptr)
+            cmask.data = this->context_mask->data;
         vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{
             GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1)};
         if (davidson_type & DavidsonTypes::LeftEigen)
@@ -458,12 +462,15 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     return (*this)(a, b, 0, scale);
             };
         const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
-            [this, &f](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+            [this, &f, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
                 if (this->eff_kernel == nullptr)
                     f(a, b, (FL)1.0);
                 else
                     this->eff_kernel->compute((FL)1.0, f, a, b,
                                               vector<GMatrix<FL>>());
+                if (cmask.data != nullptr)
+                    GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask,
+                                                     (FL)1.0, b, b, (FL)0.0);
             };
         vector<FP> eners;
         if (metric == nullptr)
@@ -475,12 +482,15 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         else {
             metric->precompute();
             const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &mg =
-                [metric](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                [metric, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
                     if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
                         (metric->tf->opf->seq->mode & SeqTypes::Tasked))
                         return metric->tf->operator()(a, b, (FL)1.0);
                     else
                         return (*metric)(a, b, 0, (FL)1.0);
+                    if (cmask.data != nullptr)
+                        GMatrixFunctions<FL>::elementwise(
+                            "*", (FL)1.0, cmask, (FL)1.0, b, b, (FL)0.0);
                 };
             eners = IterativeMatrixFunctions<FL>::davidson_generalized(
                 g, mg, aa, bs, shift, davidson_type, ndav, iprint,

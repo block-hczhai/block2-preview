@@ -594,6 +594,8 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("diag", &EffectiveHamiltonian<S, FL>::diag)
         .def_readwrite("cmat", &EffectiveHamiltonian<S, FL>::cmat)
         .def_readwrite("vmat", &EffectiveHamiltonian<S, FL>::vmat)
+        .def_readwrite("context_mask",
+                       &EffectiveHamiltonian<S, FL>::context_mask)
         .def_readwrite("tf", &EffectiveHamiltonian<S, FL>::tf)
         .def_readwrite("hop_mat", &EffectiveHamiltonian<S, FL>::hop_mat)
         .def_readwrite("opdq", &EffectiveHamiltonian<S, FL>::opdq)
@@ -1026,7 +1028,13 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def_static("propagate_multi_wfn",
                     &MovingEnvironment<S, FL, FLS>::propagate_multi_wfn,
                     py::arg("i"), py::arg("start_site"), py::arg("end_site"),
-                    py::arg("mps"), py::arg("forward"), py::arg("cg"));
+                    py::arg("mps"), py::arg("forward"), py::arg("cg"))
+        .def_static("symm_context_convert",
+                    &MovingEnvironment<S, FL, FLS>::symm_context_convert,
+                    py::arg("i"), py::arg("mps"), py::arg("cmps"),
+                    py::arg("dot"), py::arg("fuse_left"), py::arg("mask"),
+                    py::arg("forward"), py::arg("is_wfn"),
+                    py::arg("infer_info"));
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S, FL, FLS>>>>(
         m, ("Vector" + name).c_str());
@@ -1255,6 +1263,7 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("cpx_me", &DMRG<S, FL, FLS>::cpx_me)
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)
+        .def_readwrite("context_ket", &DMRG<S, FL, FLS>::context_ket)
         .def_readwrite("eff_kernel", &DMRG<S, FL, FLS>::eff_kernel)
         .def_readwrite("state_specific", &DMRG<S, FL, FLS>::state_specific)
         .def_readwrite("projection_weights",

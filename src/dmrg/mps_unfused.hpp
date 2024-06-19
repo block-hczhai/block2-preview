@@ -72,11 +72,11 @@ struct TransSparseTensor<S1, S2, FL, typename S1::is_su2_t,
             const shared_ptr<CG<S1>> &cg, bool left, S2 ref) {
         assert(basis->n == (int)spt->data.size());
         shared_ptr<StateInfo<S2>> tr_basis =
-            TransStateInfo<S2, S1>::backward(basis);
+            TransStateInfo<S2, S1>::backward(basis, ref);
         shared_ptr<StateInfo<S2>> tr_left_dim =
-            TransStateInfo<S2, S1>::backward(left_dim);
+            TransStateInfo<S2, S1>::backward(left_dim, ref);
         shared_ptr<StateInfo<S2>> tr_right_dim =
-            TransStateInfo<S2, S1>::backward(right_dim);
+            TransStateInfo<S2, S1>::backward(right_dim, ref);
         shared_ptr<StateInfo<S1>> conn_left_dim =
             TransStateInfo<S2, S1>::backward_connection(left_dim, tr_left_dim);
         shared_ptr<StateInfo<S1>> conn_right_dim =
@@ -174,11 +174,11 @@ struct TransSparseTensor<S1, S2, FL, typename S1::is_sz_t,
             const shared_ptr<CG<S1>> &cg, bool left, S2 ref) {
         assert(basis->n == (int)spt->data.size());
         shared_ptr<StateInfo<S2>> tr_basis =
-            TransStateInfo<S2, S1>::backward(basis);
+            TransStateInfo<S2, S1>::backward(basis, ref);
         shared_ptr<StateInfo<S2>> tr_left_dim =
-            TransStateInfo<S2, S1>::backward(left_dim);
+            TransStateInfo<S2, S1>::backward(left_dim, ref);
         shared_ptr<StateInfo<S2>> tr_right_dim =
-            TransStateInfo<S2, S1>::backward(right_dim);
+            TransStateInfo<S2, S1>::backward(right_dim, ref);
         shared_ptr<StateInfo<S1>> conn_left_dim =
             TransStateInfo<S2, S1>::backward_connection(left_dim, tr_left_dim);
         shared_ptr<StateInfo<S1>> conn_right_dim =

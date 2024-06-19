@@ -1032,18 +1032,18 @@ template <typename S1, typename S2> struct TransMPSInfoBase {
         SY vacuum(si->vacuum.n(), abs(si->vacuum.twos()), si->vacuum.pg());
         vector<shared_ptr<StateInfo<SY>>> basis(n_sites);
         for (int i = 0; i < n_sites; i++)
-            basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i]);
+            basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i], target);
         shared_ptr<MPSInfo<SY>> so =
             make_shared<MPSInfo<SY>>(n_sites, vacuum, target, basis);
         // handle the singlet embedding case
         so->left_dims_fci[0] =
-            TransStateInfo<SX, SY>::forward(si->left_dims_fci[0]);
+            TransStateInfo<SX, SY>::forward(si->left_dims_fci[0], target);
         for (int i = 0; i < n_sites; i++)
             so->left_dims_fci[i + 1] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
                     *so->left_dims_fci[i], *basis[i], SY(SY::invalid)));
-        so->right_dims_fci[n_sites] =
-            TransStateInfo<SX, SY>::forward(si->right_dims_fci[n_sites]);
+        so->right_dims_fci[n_sites] = TransStateInfo<SX, SY>::forward(
+            si->right_dims_fci[n_sites], target);
         for (int i = n_sites - 1; i >= 0; i--)
             so->right_dims_fci[i] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
@@ -1060,10 +1060,10 @@ template <typename S1, typename S2> struct TransMPSInfoBase {
             so->right_dims_fci[i]->collect();
         for (int i = 0; i <= n_sites; i++)
             so->left_dims[i] =
-                TransStateInfo<SX, SY>::forward(si->left_dims[i]);
+                TransStateInfo<SX, SY>::forward(si->left_dims[i], target);
         for (int i = n_sites; i >= 0; i--)
             so->right_dims[i] =
-                TransStateInfo<SX, SY>::forward(si->right_dims[i]);
+                TransStateInfo<SX, SY>::forward(si->right_dims[i], target);
         so->check_bond_dimensions();
         so->bond_dim = so->get_max_bond_dimension();
         so->tag = si->tag;
