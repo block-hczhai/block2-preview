@@ -2147,7 +2147,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 info->initialize(*llu, *rru, pket_dqs[j], false, true);
                 infos.push_back(info);
             }
-            cpket = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
+            cpket = make_shared<SparseMatrixGroup<S, FLS>>(d_alloc);
             cpket->allocate(infos);
             cpket->clear();
         } else if (infer_info) {
