@@ -470,7 +470,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                                               vector<GMatrix<FL>>());
                 if (cmask.data != nullptr)
                     GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask,
-                                                     (FL)1.0, b, b, (FL)0.0);
+                                                      (FL)1.0, b, b, (FL)0.0);
             };
         vector<FP> eners;
         if (metric == nullptr)
@@ -485,9 +485,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 [metric, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
                     if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
                         (metric->tf->opf->seq->mode & SeqTypes::Tasked))
-                        return metric->tf->operator()(a, b, (FL)1.0);
+                        metric->tf->operator()(a, b, (FL)1.0);
                     else
-                        return (*metric)(a, b, 0, (FL)1.0);
+                        (*metric)(a, b, 0, (FL)1.0);
                     if (cmask.data != nullptr)
                         GMatrixFunctions<FL>::elementwise(
                             "*", (FL)1.0, cmask, (FL)1.0, b, b, (FL)0.0);

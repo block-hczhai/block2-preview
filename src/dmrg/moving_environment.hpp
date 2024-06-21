@@ -2058,11 +2058,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                       l, ml, *mps->info->left_dims_fci[i + 1]))
                 : make_shared<StateInfo<S>>(l);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
+            dot == 2 || fuse_left
+                ? StateInfo<S>::get_connection_info(l, ml, *ll)
+                : nullptr;
         shared_ptr<StateInfo<S>> rr =
             dot == 2 || !fuse_left
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                       mr, r, *mps->info->right_dims_fci[i + dot - 1]))
                 : make_shared<StateInfo<S>>(r);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
+            dot == 2 || !fuse_left
+                ? StateInfo<S>::get_connection_info(mr, r, *rr)
+                : nullptr;
         StateInfo<S> lu = is_wfn || fuse_left ? *cmps->info->left_dims[i]
                                               : *cmps->info->right_dims[i],
                      mlu = *cmps->info->basis[i],
@@ -2075,11 +2083,19 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                       lu, mlu, *cmps->info->left_dims_fci[i + 1]))
                 : make_shared<StateInfo<S>>(lu);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clmu =
+            dot == 2 || fuse_left
+                ? StateInfo<S>::get_connection_info(lu, mlu, *llu)
+                : nullptr;
         shared_ptr<StateInfo<S>> rru =
             dot == 2 || !fuse_left
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                       mru, ru, *cmps->info->right_dims_fci[i + dot - 1]))
                 : make_shared<StateInfo<S>>(ru);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmru =
+            dot == 2 || !fuse_left
+                ? StateInfo<S>::get_connection_info(mru, ru, *rru)
+                : nullptr;
         shared_ptr<VectorAllocator<FPS>> d_alloc =
             make_shared<VectorAllocator<FPS>>();
         shared_ptr<SparseMatrix<S, FLS>> mask_wfn =
@@ -2095,76 +2111,573 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             shared_ptr<StateInfo<S>> xrr = forward ? rru : rr;
             S xdq = is_wfn ? (forward ? cmps->info->target : mps->info->target)
                            : (forward ? cmps->info->vacuum : mps->info->vacuum);
-            if (fuse_left)
+            if (fuse_left) {
                 xrr = forward ? TransStateInfo<S, S>::forward(rr, refu)
                               : TransStateInfo<S, S>::forward(rru, ref);
-            else
+                if (forward)
+                    rru = xrr, ru = *xrr;
+                else
+                    rr = xrr, r = *xrr;
+            } else {
                 xll = forward ? TransStateInfo<S, S>::forward(ll, refu)
                               : TransStateInfo<S, S>::forward(llu, ref);
+                if (forward)
+                    llu = xll, lu = *xll;
+                else
+                    ll = xll, l = *xll;
+            }
             xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
             mask_wfn->allocate(xinfo);
         } else
             mask_wfn->allocate(forward ? cmps->tensors[i]->info
                                        : mps->tensors[i]->info);
         mask_wfn->clear();
-        shared_ptr<StateInfo<S>> conn_ll =
-            TransStateInfo<S, S>::backward_connection(llu, ll);
-        shared_ptr<StateInfo<S>> conn_rr =
-            TransStateInfo<S, S>::backward_connection(rru, rr);
-        for (int k = 0; k < cmps->tensors[i]->info->n; k++) {
-            S plu = cmps->tensors[i]->info->quanta[k].get_bra(
-                cmps->tensors[i]->info->delta_quantum);
-            S pru = is_wfn ? -cmps->tensors[i]->info->quanta[k].get_ket()
-                           : cmps->tensors[i]->info->quanta[k].get_ket();
-            shared_ptr<StateInfo<S>> mls = TransStateInfo<S, S>::forward(
-                make_shared<StateInfo<S>>(plu), ref);
-            shared_ptr<StateInfo<S>> mrs = TransStateInfo<S, S>::forward(
-                make_shared<StateInfo<S>>(pru), ref);
-            GMatrix<FLS> x = forward ? (*mask_wfn)[k] : (*cmps->tensors[i])[k];
-            shared_ptr<SparseMatrix<S, FLS>> xwfn =
-                forward ? mps->tensors[i] : mask_wfn;
-            for (int iln = 0; iln < mls->n; iln++)
-                for (int irn = 0; irn < mrs->n; irn++) {
-                    S lqn = mls->quanta[iln], rqn = mrs->quanta[irn];
-                    S wdq = xwfn->info->delta_quantum.combine(
-                        lqn, is_wfn ? -rqn : rqn);
-                    if (wdq == S(S::invalid))
-                        continue;
-                    int ip = xwfn->info->find_state(wdq);
-                    GMatrix<FLS> r = (*xwfn)[ip];
-                    int il = ll->find_state(lqn);
-                    int ir = rr->find_state(rqn);
-                    int klst = conn_ll->n_states[il];
-                    int krst = conn_rr->n_states[ir];
-                    int kled = il == ll->n - 1 ? conn_ll->n
-                                               : conn_ll->n_states[il + 1];
-                    int kred = ir == ll->n - 1 ? conn_rr->n
-                                               : conn_rr->n_states[ir + 1];
-                    MKL_INT lsh = 0, rsh = 0;
-                    for (int ilp = klst;
-                         ilp < kled && conn_ll->quanta[ilp] != plu; ilp++)
-                        lsh += llu->n_states[llu->find_state(
-                            conn_ll->quanta[ilp])];
-                    for (int irp = krst;
-                         irp < kred && conn_rr->quanta[irp] != pru; irp++)
-                        rsh += rru->n_states[rru->find_state(
-                            conn_rr->quanta[irp])];
-                    MKL_INT kl = (MKL_INT)llu->n_states[llu->find_state(plu)];
-                    MKL_INT kr = (MKL_INT)rru->n_states[rru->find_state(pru)];
-                    if (mask) {
-                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
-                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
-                                r(ikl + lsh, ikr + rsh) = 1.0;
-                    } else if (forward) {
-                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
-                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
-                                x(ikl, ikr) += r(ikl + lsh, ikr + rsh);
-                    } else {
-                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
-                            for (MKL_INT ikr = 0; ikr < kr; ikr++)
-                                r(ikl + lsh, ikr + rsh) = x(ikl, ikr);
-                    }
+        S cptu = cmps->info->target, cpt = mps->info->target;
+        shared_ptr<StateInfo<S>> cplu =
+            is_wfn || fuse_left ? make_shared<StateInfo<S>>(lu)
+                                : make_shared<StateInfo<S>>(
+                                      StateInfo<S>::complementary(lu, cptu));
+        shared_ptr<StateInfo<S>> cpl =
+            is_wfn || fuse_left ? make_shared<StateInfo<S>>(l)
+                                : make_shared<StateInfo<S>>(
+                                      StateInfo<S>::complementary(l, cpt));
+        shared_ptr<StateInfo<S>> cpru =
+            is_wfn || !fuse_left ? make_shared<StateInfo<S>>(
+                                       StateInfo<S>::complementary(ru, cptu))
+                                 : make_shared<StateInfo<S>>(ru);
+        shared_ptr<StateInfo<S>> cpr =
+            is_wfn || !fuse_left
+                ? make_shared<StateInfo<S>>(StateInfo<S>::complementary(r, cpt))
+                : make_shared<StateInfo<S>>(r);
+        shared_ptr<StateInfo<S>> conn_l =
+            TransStateInfo<S, S>::backward_connection(cplu, cpl);
+        shared_ptr<StateInfo<S>> conn_lm =
+            dot == 2 || fuse_left ? TransStateInfo<S, S>::backward_connection(
+                                        make_shared<StateInfo<S>>(mlu),
+                                        make_shared<StateInfo<S>>(ml))
+                                  : nullptr;
+        shared_ptr<StateInfo<S>> conn_mr =
+            dot == 2 || !fuse_left ? TransStateInfo<S, S>::backward_connection(
+                                         make_shared<StateInfo<S>>(mru),
+                                         make_shared<StateInfo<S>>(mr))
+                                   : nullptr;
+        shared_ptr<StateInfo<S>> conn_r =
+            TransStateInfo<S, S>::backward_connection(cpru, cpr);
+        shared_ptr<SparseMatrix<S, FLS>> cwfn = cmps->tensors[i];
+        shared_ptr<SparseMatrix<S, FLS>> xwfn =
+            forward ? mps->tensors[i] : mask_wfn;
+        map<array<S, 3>, pair<FLS *, size_t>> mp;
+        map<array<S, 4>, pair<FLS *, size_t>> mp2;
+        for (int k = 0; k < xwfn->info->n; k++) {
+            S pln = xwfn->info->quanta[k].get_bra(xwfn->info->delta_quantum);
+            S prn = xwfn->info->quanta[k].get_ket();
+            prn = is_wfn ? -prn : prn;
+            if (dot == 1 && fuse_left) {
+                int ib = ll->find_state(pln);
+                int bbed = clm->acc_n_states[ib + 1];
+                size_t p = xwfn->info->n_states_total[k];
+                for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                    uint32_t ibba = clm->ij_indices[bb].first,
+                             ibbb = clm->ij_indices[bb].second;
+                    size_t lp = (size_t)l.n_states[ibba] * ml.n_states[ibbb] *
+                                xwfn->info->n_states_ket[k];
+                    S ppl = l.quanta[ibba], ppm = ml.quanta[ibbb], ppr = prn;
+                    mp[array<S, 3>{ppl, ppm, ppr}] =
+                        make_pair(xwfn->data + p, 0);
+                    p += lp;
                 }
+                assert(p == (k != xwfn->info->n - 1
+                                 ? xwfn->info->n_states_total[k + 1]
+                                 : xwfn->total_memory));
+            } else if (dot == 1 && !fuse_left) {
+                int ik = rr->find_state(prn);
+                int kked = cmr->acc_n_states[ik + 1];
+                size_t p = xwfn->info->n_states_total[k];
+                for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                    uint32_t ikka = cmr->ij_indices[kk].first,
+                             ikkb = cmr->ij_indices[kk].second;
+                    size_t lp = (size_t)mr.n_states[ikka] * r.n_states[ikkb];
+                    S ppl = pln, ppm = mr.quanta[ikka], ppr = r.quanta[ikkb];
+                    mp[array<S, 3>{ppl, ppm, ppr}] =
+                        make_pair(xwfn->data + p, xwfn->info->n_states_ket[k]);
+                    p += lp;
+                }
+                assert(p - xwfn->info->n_states_total[k] ==
+                       xwfn->info->n_states_ket[k]);
+            } else if (dot == 2) {
+                int ib = ll->find_state(pln), ik = rr->find_state(prn);
+                int bbed = clm->acc_n_states[ib + 1],
+                    kked = cmr->acc_n_states[ik + 1];
+                size_t p = xwfn->info->n_states_total[k];
+                size_t ipl = 0;
+                for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                    uint32_t ibba = clm->ij_indices[bb].first,
+                             ibbb = clm->ij_indices[bb].second;
+                    S ppl = l.quanta[ibba], ppml = ml.quanta[ibbb];
+                    size_t npl = l.n_states[ibba], npml = ml.n_states[ibbb];
+                    size_t ipr = 0;
+                    for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                        uint32_t ikka = cmr->ij_indices[kk].first,
+                                 ikkb = cmr->ij_indices[kk].second;
+                        S ppmr = mr.quanta[ikka], ppr = r.quanta[ikkb];
+                        size_t npmr = mr.n_states[ikka], npr = r.n_states[ikkb];
+                        mp2[array<S, 4>{ppl, ppml, ppmr, ppr}] =
+                            make_pair(xwfn->data + p + ipl + ipr,
+                                      xwfn->info->n_states_ket[k]);
+                        ipr += (size_t)npmr * npr;
+                    }
+                    assert(ipr == xwfn->info->n_states_ket[k]);
+                    ipl += (size_t)npl * npml * xwfn->info->n_states_ket[k];
+                }
+                assert(p + ipl == (k != xwfn->info->n - 1
+                                       ? xwfn->info->n_states_total[k + 1]
+                                       : xwfn->total_memory));
+            } else
+                assert(false);
+        }
+        for (int k = 0; k < cwfn->info->n; k++) {
+            S plu = cwfn->info->quanta[k].get_bra(cwfn->info->delta_quantum);
+            S pru = cwfn->info->quanta[k].get_ket();
+            pru = is_wfn ? -pru : pru;
+            GMatrix<FLS> x = forward ? (*mask_wfn)[k] : (*cmps->tensors[i])[k];
+            if (dot == 1 && fuse_left) {
+                int ibu = llu->find_state(plu);
+                int bbedu = clmu->acc_n_states[ibu + 1];
+                size_t pu = cwfn->info->n_states_total[k];
+                for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu; bbu++) {
+                    uint32_t ibbau = clmu->ij_indices[bbu].first,
+                             ibbbu = clmu->ij_indices[bbu].second;
+                    size_t lpu = (size_t)lu.n_states[ibbau] *
+                                 mlu.n_states[ibbbu] *
+                                 cwfn->info->n_states_ket[k];
+                    S pplu = lu.quanta[ibbau], ppmu = mlu.quanta[ibbbu],
+                      ppru = pru;
+                    FLS *x = forward ? mask_wfn->data + pu : cwfn->data + pu;
+                    pu += lpu;
+                    shared_ptr<StateInfo<S>> mls =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(pplu), ref);
+                    shared_ptr<StateInfo<S>> mms =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppmu), ref);
+                    shared_ptr<StateInfo<S>> mrs =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppru), ref);
+                    S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                    S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                    for (int iln = 0; iln < mls->n; iln++)
+                        for (int imn = 0; imn < mms->n; imn++)
+                            for (int irn = 0; irn < mrs->n; irn++) {
+                                S lqn = mls->quanta[iln],
+                                  mqn = mms->quanta[imn],
+                                  rqn = mrs->quanta[irn];
+                                if (!mp.count(array<S, 3>{lqn, mqn, rqn}))
+                                    continue;
+                                FLS *xr =
+                                    mp.at(array<S, 3>{lqn, mqn, rqn}).first;
+                                lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                                rqn = is_wfn || !fuse_left ? cpt - rqn : rqn;
+                                int il = cpl->find_state(lqn);
+                                int im = ml.find_state(mqn);
+                                int ir = cpr->find_state(rqn);
+                                MKL_INT zl = cpl->n_states[il],
+                                        zm = ml.n_states[im],
+                                        zr = cpr->n_states[ir];
+                                int klst = conn_l->n_states[il];
+                                int kmst = conn_lm->n_states[im];
+                                int krst = conn_r->n_states[ir];
+                                int kled = il == cpl->n - 1
+                                               ? conn_l->n
+                                               : conn_l->n_states[il + 1];
+                                int kmed = im == ml.n - 1
+                                               ? conn_lm->n
+                                               : conn_lm->n_states[im + 1];
+                                int kred = ir == cpr->n - 1
+                                               ? conn_r->n
+                                               : conn_r->n_states[ir + 1];
+                                size_t lsh = 0, msh = 0, rsh = 0;
+                                for (int ilp = klst;
+                                     ilp < kled && conn_l->quanta[ilp] != xpplu;
+                                     ilp++)
+                                    lsh += cplu->n_states[cplu->find_state(
+                                        conn_l->quanta[ilp])];
+                                for (int imp = kmst;
+                                     imp < kmed && conn_lm->quanta[imp] != ppmu;
+                                     imp++)
+                                    msh += mlu.n_states[mlu.find_state(
+                                        conn_lm->quanta[imp])];
+                                for (int irp = krst;
+                                     irp < kred && conn_r->quanta[irp] != xppru;
+                                     irp++)
+                                    rsh += cpru->n_states[cpru->find_state(
+                                        conn_r->quanta[irp])];
+                                MKL_INT kl =
+                                    (MKL_INT)
+                                        cplu->n_states[cplu->find_state(xpplu)];
+                                MKL_INT km =
+                                    (MKL_INT)mlu.n_states[mlu.find_state(ppmu)];
+                                MKL_INT kr =
+                                    (MKL_INT)
+                                        cpru->n_states[cpru->find_state(xppru)];
+                                if (mask) {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                xr[(ikl + lsh) * zm * zr +
+                                                   (ikm + msh) * zr +
+                                                   (ikr + rsh)] = 1.0;
+                                } else if (forward) {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                x[(size_t)ikl * km * kr +
+                                                  (size_t)ikm * kr +
+                                                  (size_t)ikr] +=
+                                                    xr[(ikl + lsh) * zm * zr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)];
+                                } else {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                xr[(ikl + lsh) * zm * zr +
+                                                   (ikm + msh) * zr +
+                                                   (ikr + rsh)] =
+                                                    x[(size_t)ikl * km * kr +
+                                                      (size_t)ikm * kr +
+                                                      (size_t)ikr];
+                                }
+                            }
+                }
+                assert(pu == (k != cwfn->info->n - 1
+                                  ? cwfn->info->n_states_total[k + 1]
+                                  : cwfn->total_memory));
+            } else if (dot == 1 && !fuse_left) {
+                int iku = rru->find_state(pru);
+                int kkedu = cmru->acc_n_states[iku + 1];
+                size_t pu = cwfn->info->n_states_total[k];
+                for (int kku = cmru->acc_n_states[iku]; kku < kkedu; kku++) {
+                    uint32_t ikkau = cmru->ij_indices[kku].first,
+                             ikkbu = cmru->ij_indices[kku].second;
+                    size_t lpu =
+                        (size_t)mru.n_states[ikkau] * ru.n_states[ikkbu];
+                    S pplu = plu, ppmu = mru.quanta[ikkau],
+                      ppru = ru.quanta[ikkbu];
+                    FLS *x = forward ? mask_wfn->data + pu : cwfn->data + pu;
+                    size_t xstr = cwfn->info->n_states_ket[k];
+                    pu += lpu;
+                    shared_ptr<StateInfo<S>> mls =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(pplu), ref);
+                    shared_ptr<StateInfo<S>> mms =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppmu), ref);
+                    shared_ptr<StateInfo<S>> mrs =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppru), ref);
+                    S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                    S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                    for (int iln = 0; iln < mls->n; iln++)
+                        for (int imn = 0; imn < mms->n; imn++)
+                            for (int irn = 0; irn < mrs->n; irn++) {
+                                S lqn = mls->quanta[iln],
+                                  mqn = mms->quanta[imn],
+                                  rqn = mrs->quanta[irn];
+                                if (!mp.count(array<S, 3>{lqn, mqn, rqn}))
+                                    continue;
+                                FLS *xr =
+                                    mp.at(array<S, 3>{lqn, mqn, rqn}).first;
+                                size_t rstr =
+                                    mp.at(array<S, 3>{lqn, mqn, rqn}).second;
+                                lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                                rqn = is_wfn || !fuse_left ? cpt - rqn : rqn;
+                                int il = cpl->find_state(lqn);
+                                int im = mr.find_state(mqn);
+                                int ir = cpr->find_state(rqn);
+                                MKL_INT zl = cpl->n_states[il],
+                                        zm = mr.n_states[im],
+                                        zr = cpr->n_states[ir];
+                                int klst = conn_l->n_states[il];
+                                int kmst = conn_mr->n_states[im];
+                                int krst = conn_r->n_states[ir];
+                                int kled = il == cpl->n - 1
+                                               ? conn_l->n
+                                               : conn_l->n_states[il + 1];
+                                int kmed = im == mr.n - 1
+                                               ? conn_mr->n
+                                               : conn_mr->n_states[im + 1];
+                                int kred = ir == cpr->n - 1
+                                               ? conn_r->n
+                                               : conn_r->n_states[ir + 1];
+                                size_t lsh = 0, msh = 0, rsh = 0;
+                                for (int ilp = klst;
+                                     ilp < kled && conn_l->quanta[ilp] != xpplu;
+                                     ilp++)
+                                    lsh += cplu->n_states[cplu->find_state(
+                                        conn_l->quanta[ilp])];
+                                for (int imp = kmst;
+                                     imp < kmed && conn_mr->quanta[imp] != ppmu;
+                                     imp++)
+                                    msh += mru.n_states[mru.find_state(
+                                        conn_mr->quanta[imp])];
+                                for (int irp = krst;
+                                     irp < kred && conn_r->quanta[irp] != xppru;
+                                     irp++)
+                                    rsh += cpru->n_states[cpru->find_state(
+                                        conn_r->quanta[irp])];
+                                MKL_INT kl =
+                                    (MKL_INT)
+                                        cplu->n_states[cplu->find_state(xpplu)];
+                                MKL_INT km =
+                                    (MKL_INT)mru.n_states[mru.find_state(ppmu)];
+                                MKL_INT kr =
+                                    (MKL_INT)
+                                        cpru->n_states[cpru->find_state(xppru)];
+                                if (mask) {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                xr[(ikl + lsh) * rstr +
+                                                   (ikm + msh) * zr +
+                                                   (ikr + rsh)] = 1.0;
+                                } else if (forward) {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                x[(size_t)ikl * xstr +
+                                                  (size_t)ikm * kr +
+                                                  (size_t)ikr] +=
+                                                    xr[(ikl + lsh) * rstr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)];
+                                } else {
+                                    for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                        for (MKL_INT ikm = 0; ikm < km; ikm++)
+                                            for (MKL_INT ikr = 0; ikr < kr;
+                                                 ikr++)
+                                                xr[(ikl + lsh) * rstr +
+                                                   (ikm + msh) * zr +
+                                                   (ikr + rsh)] =
+                                                    x[(size_t)ikl * xstr +
+                                                      (size_t)ikm * kr +
+                                                      (size_t)ikr];
+                                }
+                            }
+                }
+                assert(pu - cwfn->info->n_states_total[k] ==
+                       cwfn->info->n_states_ket[k]);
+            } else if (dot == 2) {
+                int ibu = llu->find_state(plu), iku = rru->find_state(pru);
+                int bbedu = clmu->acc_n_states[ibu + 1],
+                    kkedu = cmru->acc_n_states[iku + 1];
+                size_t pu = cwfn->info->n_states_total[k];
+                size_t iplu = 0;
+                for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu; bbu++) {
+                    uint32_t ibbau = clmu->ij_indices[bbu].first,
+                             ibbbu = clmu->ij_indices[bbu].second;
+                    S pplu = lu.quanta[ibbau], ppmlu = mlu.quanta[ibbbu];
+                    size_t nplu = lu.n_states[ibbau],
+                           npmlu = mlu.n_states[ibbbu];
+                    size_t ipru = 0;
+                    S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                    for (int kku = cmru->acc_n_states[iku]; kku < kkedu;
+                         kku++) {
+                        uint32_t ikkau = cmru->ij_indices[kku].first,
+                                 ikkbu = cmru->ij_indices[kku].second;
+                        S ppmru = mru.quanta[ikkau], ppru = ru.quanta[ikkbu];
+                        size_t npmru = mru.n_states[ikkau],
+                               npru = ru.n_states[ikkbu];
+                        FLS *x = forward ? mask_wfn->data + pu + iplu + ipru
+                                         : cwfn->data + pu + iplu + ipru;
+                        size_t xstr = cwfn->info->n_states_ket[k];
+                        ipru += (size_t)npmru * npru;
+                        S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                        shared_ptr<StateInfo<S>> mls =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(pplu), ref);
+                        shared_ptr<StateInfo<S>> mmls =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppmlu), ref);
+                        shared_ptr<StateInfo<S>> mmrs =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppmru), ref);
+                        shared_ptr<StateInfo<S>> mrs =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppru), ref);
+                        for (int iln = 0; iln < mls->n; iln++)
+                            for (int imln = 0; imln < mmls->n; imln++)
+                                for (int imrn = 0; imrn < mmrs->n; imrn++)
+                                    for (int irn = 0; irn < mrs->n; irn++) {
+                                        S lqn = mls->quanta[iln],
+                                          mlqn = mmls->quanta[imln],
+                                          mrqn = mmrs->quanta[imrn],
+                                          rqn = mrs->quanta[irn];
+                                        if (!mp2.count(array<S, 4>{lqn, mlqn,
+                                                                   mrqn, rqn}))
+                                            continue;
+                                        FLS *xr = mp2.at(array<S, 4>{lqn, mlqn,
+                                                                     mrqn, rqn})
+                                                      .first;
+                                        size_t rstr =
+                                            mp2.at(array<S, 4>{lqn, mlqn, mrqn,
+                                                               rqn})
+                                                .second;
+                                        lqn = is_wfn || fuse_left ? lqn
+                                                                  : cpt - lqn;
+                                        rqn = is_wfn || !fuse_left ? cpt - rqn
+                                                                   : rqn;
+                                        int il = cpl->find_state(lqn);
+                                        int iml = ml.find_state(mlqn);
+                                        int imr = mr.find_state(mrqn);
+                                        int ir = cpr->find_state(rqn);
+                                        MKL_INT zl = cpl->n_states[il],
+                                                zml = ml.n_states[iml],
+                                                zmr = mr.n_states[imr],
+                                                zr = cpr->n_states[ir];
+                                        int klst = conn_l->n_states[il];
+                                        int kmlst = conn_lm->n_states[iml];
+                                        int kmrst = conn_mr->n_states[imr];
+                                        int krst = conn_r->n_states[ir];
+                                        int kled =
+                                            il == cpl->n - 1
+                                                ? conn_l->n
+                                                : conn_l->n_states[il + 1];
+                                        int kmled =
+                                            iml == ml.n - 1
+                                                ? conn_lm->n
+                                                : conn_lm->n_states[iml + 1];
+                                        int kmred =
+                                            imr == mr.n - 1
+                                                ? conn_mr->n
+                                                : conn_mr->n_states[imr + 1];
+                                        int kred =
+                                            ir == cpr->n - 1
+                                                ? conn_r->n
+                                                : conn_r->n_states[ir + 1];
+                                        size_t lsh = 0, mlsh = 0, mrsh = 0,
+                                               rsh = 0;
+                                        for (int ilp = klst;
+                                             ilp < kled &&
+                                             conn_l->quanta[ilp] != xpplu;
+                                             ilp++)
+                                            lsh +=
+                                                cplu->n_states[cplu->find_state(
+                                                    conn_l->quanta[ilp])];
+                                        for (int imp = kmlst;
+                                             imp < kmled &&
+                                             conn_lm->quanta[imp] != ppmlu;
+                                             imp++)
+                                            mlsh += mlu.n_states[mlu.find_state(
+                                                conn_lm->quanta[imp])];
+                                        for (int imp = kmrst;
+                                             imp < kmred &&
+                                             conn_mr->quanta[imp] != ppmru;
+                                             imp++)
+                                            mrsh += mru.n_states[mru.find_state(
+                                                conn_mr->quanta[imp])];
+                                        for (int irp = krst;
+                                             irp < kred &&
+                                             conn_r->quanta[irp] != xppru;
+                                             irp++)
+                                            rsh +=
+                                                cpru->n_states[cpru->find_state(
+                                                    conn_r->quanta[irp])];
+                                        MKL_INT kl =
+                                            (MKL_INT)
+                                                cplu->n_states[cplu->find_state(
+                                                    pplu)];
+                                        MKL_INT kml =
+                                            (MKL_INT)
+                                                mlu.n_states[mlu.find_state(
+                                                    ppmlu)];
+                                        MKL_INT kmr =
+                                            (MKL_INT)
+                                                mru.n_states[mru.find_state(
+                                                    ppmru)];
+                                        MKL_INT kr =
+                                            (MKL_INT)
+                                                cpru->n_states[cpru->find_state(
+                                                    ppru)];
+                                        if (mask) {
+                                            for (MKL_INT ikl = 0; ikl < kl;
+                                                 ikl++)
+                                                for (MKL_INT ikml = 0;
+                                                     ikml < kml; ikml++)
+                                                    for (MKL_INT ikmr = 0;
+                                                         ikmr < kmr; ikmr++)
+                                                        for (MKL_INT ikr = 0;
+                                                             ikr < kr; ikr++)
+                                                            xr[(ikl + lsh) *
+                                                                   zml * rstr +
+                                                               (ikml + mlsh) *
+                                                                   rstr +
+                                                               (ikmr + mrsh) *
+                                                                   zr +
+                                                               (ikr + rsh)] =
+                                                                1.0;
+                                        } else if (forward) {
+                                            for (MKL_INT ikl = 0; ikl < kl;
+                                                 ikl++)
+                                                for (MKL_INT ikml = 0;
+                                                     ikml < kml; ikml++)
+                                                    for (MKL_INT ikmr = 0;
+                                                         ikmr < kmr; ikmr++)
+                                                        for (MKL_INT ikr = 0;
+                                                             ikr < kr; ikr++)
+                                                            x[(size_t)ikl *
+                                                                  kml * xstr +
+                                                              (size_t)ikml *
+                                                                  xstr +
+                                                              (size_t)ikmr *
+                                                                  kr +
+                                                              (size_t)ikr] += xr
+                                                                [(ikl + lsh) *
+                                                                     zml *
+                                                                     rstr +
+                                                                 (ikml + mlsh) *
+                                                                     rstr +
+                                                                 (ikmr + mrsh) *
+                                                                     zr +
+                                                                 (ikr + rsh)];
+                                        } else {
+                                            for (MKL_INT ikl = 0; ikl < kl;
+                                                 ikl++)
+                                                for (MKL_INT ikml = 0;
+                                                     ikml < kml; ikml++)
+                                                    for (MKL_INT ikmr = 0;
+                                                         ikmr < kmr; ikmr++)
+                                                        for (MKL_INT ikr = 0;
+                                                             ikr < kr; ikr++)
+                                                            xr[(ikl + lsh) *
+                                                                   zml * rstr +
+                                                               (ikml + mlsh) *
+                                                                   rstr +
+                                                               (ikmr + mrsh) *
+                                                                   zr +
+                                                               (ikr + rsh)] =
+                                                                x[(size_t)ikl *
+                                                                      kml *
+                                                                      xstr +
+                                                                  (size_t)ikml *
+                                                                      xstr +
+                                                                  (size_t)ikmr *
+                                                                      kr +
+                                                                  (size_t)ikr];
+                                        }
+                                    }
+                    }
+                    assert(ipru == cwfn->info->n_states_ket[k]);
+                    iplu += (size_t)nplu * npmlu * cwfn->info->n_states_ket[k];
+                }
+                assert(pu + iplu == (k != cwfn->info->n - 1
+                                         ? cwfn->info->n_states_total[k + 1]
+                                         : cwfn->total_memory));
+            }
         }
         return mask_wfn;
     }

@@ -5557,8 +5557,6 @@ class DMRGDriver:
                 If this is MPS, will change the canonical center of ``ket`` so that
                 its center is the same as that of ``ref``.
                 If this is int, will set the canonical center of ``ket`` to the given number.
-                Only the left/right canonical forms are allowed, namely, ``ref`` cannot
-                correspond to a canonical center in the middle of MPS.
             max_bond_dim : None or int
                 If not None, will restrict the maximal bond dimension of the resulting
                 MPS to the given number. Default is None.
@@ -5570,18 +5568,18 @@ class DMRGDriver:
         if max_bond_dim is not None:
             ket.info.bond_dim = max_bond_dim
         if ket.center != refc:
-            if refc == 0:
+            if refc < ket.center:
                 if ket.dot == 2:
                     ket.center += 1
                     if ket.canonical_form[-1] == "C":
                         ket.canonical_form = ket.canonical_form[:-1] + "S"
                     else:
                         ket.canonical_form = ket.canonical_form[:-1] + "T"
-                while ket.center != 0:
+                while ket.center != refc:
                     ket.move_left(self.ghamil.opf.cg, self.prule)
             else:
                 ket.canonical_form = "K" + ket.canonical_form[1:]
-                while ket.center != ket.n_sites - 1:
+                while ket.center != ket.n_sites - 1 and ket.center != refc + ket.dot - 1:
                     ket.move_right(self.ghamil.opf.cg, self.prule)
                 if ket.dot == 2:
                     ket.center -= 1

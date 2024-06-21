@@ -188,7 +188,7 @@ class MPSTools:
             elif i < bmps.center or (
                     i == bmps.center and i == bmps.n_sites - 2 and
                     bmps.dot == 2) or (
-                    i == bmps.center and bmps.dot == 1):
+                    i == bmps.center and bmps.dot == 1 and bmps.canonical_form[i] != 'S'):
                 bmps.info.load_left_dims(i)
                 l = bmps.info.left_dims[i]
                 m = bmps.info.basis[i]
@@ -211,8 +211,8 @@ class MPSTools:
                 lm.deallocate()
                 l.deallocate()
             elif i >= bmps.center + bmps.dot or (
-                    i == bmps.center and i == 0 and bmps.dot == 2):
-                if i >= bmps.center + bmps.dot:
+                    i == bmps.center and i == 0 and bmps.dot == 2) or bmps.canonical_form[i] == 'S':
+                if i >= bmps.center + bmps.dot or bmps.canonical_form[i] == 'S':
                     bmps.info.load_right_dims(i + 1)
                     m = bmps.info.basis[i]
                     r = bmps.info.right_dims[i + 1]
