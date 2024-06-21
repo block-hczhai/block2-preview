@@ -3067,7 +3067,8 @@ class DMRGDriver:
                 This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
                 will be invoked using this MPO. Default is True.
                 One needs to set this to False to allow the MPO to be transformed into the
-                Python format.
+                Python format. Setting to False will also make perturbative noise not to work
+                during the DMRG sweeps.
             esptein_nesbet_partition : bool
                 If True, will only keep the "diagonal" part of the integrals for building MPO.
                 This can be used to build the MPO for the zeroth-order Hamiltonian
@@ -3499,7 +3500,8 @@ class DMRGDriver:
                 This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
                 will be invoked using this MPO. Default is True.
                 One needs to set this to False to allow the MPO to be transformed into the
-                Python format.
+                Python format. Setting to False will also make perturbative noise not to work
+                during the DMRG sweeps.
             ancilla : bool
                 If True, will insert ancilla sites in the MPO, which can then be used
                 for finite-temperature DMRG. Default is False.
@@ -6268,7 +6270,7 @@ class DMRGDriver:
             self.mpi.barrier()
         return rgf + 1j * igf
 
-    def stack_mpo(self, mpoa, mpob, add_ident=False, iprint=0):
+    def stack_mpo(self, mpoa, mpob, add_ident=True, iprint=0):
         """
         Stack two MPOs.
         
@@ -6278,7 +6280,7 @@ class DMRGDriver:
             mpob : MPO
                 The second MPO.
             add_ident : bool
-                If True, the hidden identity operator will be added into the MPO. Default is False.
+                If True, the hidden identity operator will be added into the MPO. Default is True.
             iprint : int
                 Verbosity. Default is 0 (quiet).
 

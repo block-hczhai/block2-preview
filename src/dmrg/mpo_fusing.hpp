@@ -62,7 +62,7 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
         assert(mpoa->schemer == nullptr && mpob->schemer == nullptr);
         MPO<S, FL>::const_e = mpoa->const_e + mpob->const_e;
         MPO<S, FL>::op = mpoa->op;
-        MPO<S, FL>::left_vacuum = mpoa->left_vacuum + mpob->left_vacuum;
+        MPO<S, FL>::left_vacuum = (mpoa->left_vacuum + mpob->left_vacuum)[0];
         MPO<S, FL>::tf = mpoa->tf;
         assert(mpoa->get_ancilla_type() == mpob->get_ancilla_type());
         assert(mpoa->sparse_form == mpob->sparse_form);
@@ -109,6 +109,9 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
         left_operator_names.resize(n_sites);
         right_operator_names.resize(n_sites);
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        const shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(),
+            (MPO<S, FL>::left_vacuum - MPO<S, FL>::left_vacuum)[0]);
         SeqTypes seqt = MPO<S, FL>::tf->opf->seq->mode;
         MPO<S, FL>::tf->opf->seq->mode = SeqTypes::None;
         if (iprint) {
@@ -209,8 +212,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                     abs_value(pmatb->data[imb]));
                             shared_ptr<SparseMatrix<S, FL>> xmat =
                                 make_shared<SparseMatrix<S, FL>>(d_alloc);
-                            const S q = mata->info->delta_quantum +
-                                        matb->info->delta_quantum;
+                            const S q = (mata->info->delta_quantum +
+                                         matb->info->delta_quantum)[0];
                             const FL phase =
                                 mata->info->delta_quantum.is_fermion() &&
                                         dynamic_pointer_cast<OpElement<S, FL>>(
@@ -271,8 +274,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                     abs_value(pmatb->data[imb]));
                             shared_ptr<SparseMatrix<S, FL>> xmat =
                                 make_shared<SparseMatrix<S, FL>>(d_alloc);
-                            const S q = mata->info->delta_quantum +
-                                        matb->info->delta_quantum;
+                            const S q = (mata->info->delta_quantum +
+                                         matb->info->delta_quantum)[0];
                             const FL phase =
                                 mata->info->delta_quantum.is_fermion() &&
                                         dynamic_pointer_cast<OpElement<S, FL>>(
@@ -354,8 +357,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                 abs_value(pmatb->data[imb]));
                         shared_ptr<SparseMatrix<S, FL>> xmat =
                             make_shared<SparseMatrix<S, FL>>(xd_alloc);
-                        const S q = mata->info->delta_quantum +
-                                    matb->info->delta_quantum;
+                        const S q = (mata->info->delta_quantum +
+                                     matb->info->delta_quantum)[0];
                         const FL phase =
                             mata->info->delta_quantum.is_fermion() &&
                                     dynamic_pointer_cast<OpElement<S, FL>>(
@@ -381,6 +384,20 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                 for (size_t imx = 0; imx < nimx; imx++)
                     opt->ops[abs_value(pmat->data[imx])] = mats[imx];
                 opt->lmat = opt->rmat = pmat;
+            }
+            if (mpoa->tensors[m]->ops.count(i_op) &&
+                mpob->tensors[m]->ops.count(i_op)) {
+                shared_ptr<SparseMatrix<S, FL>> mata =
+                    mpoa->tensors[m]->ops.at(i_op);
+                shared_ptr<SparseMatrix<S, FL>> matb =
+                    mpob->tensors[m]->ops.at(i_op);
+                shared_ptr<SparseMatrix<S, FL>> xmat =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
+                const S q =
+                    (mata->info->delta_quantum + matb->info->delta_quantum)[0];
+                xmat->allocate(site_op_infos_mp[m].at(q));
+                MPO<S, FL>::tf->opf->product(0, mata, matb, xmat, (FL)1.0);
+                opt->ops[i_op] = xmat;
             }
             tensors[m] = opt;
             double tsite = _t.get_time();

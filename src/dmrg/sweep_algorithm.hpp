@@ -671,11 +671,11 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         shared_ptr<SparseMatrix<S, FLS>> old_ket = me->ket->tensors[i],
                                          old_bra = nullptr,
-                                         context_old_ket = nullptr;
+                                         old_context_ket = nullptr;
         if (me->bra != me->ket)
             old_bra = me->bra->tensors[i];
         if (context_ket != nullptr) {
-            context_old_ket = context_ket->tensors[i];
+            old_context_ket = context_ket->tensors[i];
             me->ket->tensors[i] =
                 MovingEnvironment<S, FL, FLS>::symm_context_convert(
                     i, me->ket, context_ket, 2, true, false, false, true,
@@ -684,7 +684,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         int mmps = 0;
         FPS error = 0.0;
         tuple<FPS, int, size_t, double> pdi;
-        shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr;
+        shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr,
+                                              context_pket = nullptr;
+        shared_ptr<SparseMatrix<S, FLS>> context_old_ket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         // effective hamiltonian
@@ -695,6 +697,23 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             me->para_rule->comm->barrier();
         if (pket != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pket->total_memory);
+        shared_ptr<SparseMatrixGroup<S, FLS>> xpket = pket;
+        shared_ptr<SparseMatrix<S, FLS>> xold_ket = old_ket;
+        shared_ptr<MPS<S, FLS>> xket = me->ket;
+        if (context_ket != nullptr) {
+            context_old_ket =
+                MovingEnvironment<S, FL, FLS>::symm_context_convert(
+                    i, me->ket, context_ket, 2, true, false, true, true, false);
+            xold_ket = context_old_ket;
+            xket = context_ket;
+            if (pket != nullptr) {
+                context_pket =
+                    MovingEnvironment<S, FL, FLS>::symm_context_convert_group(
+                        i, me->ket, context_ket, 2, true, false, true, true,
+                        false, pket);
+                xpket = context_pket;
+            }
+        }
         // state specific
         vector<shared_ptr<MPS<S, FLS>>> rev_ext_mpss(ext_mpss.rbegin(),
                                                      ext_mpss.rend());
@@ -725,10 +744,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             _t.get_time();
             assert(decomp_type == DecompositionTypes::DensityMatrix);
             pdm = MovingEnvironment<S, FL, FLS>::density_matrix(
-                me->ket->info->vacuum, old_ket, forward,
+                xket->info->vacuum, xold_ket, forward,
                 me->para_rule != nullptr ? noise / me->para_rule->comm->size
                                          : noise,
-                noise_type, 0.0, pket);
+                noise_type, 0.0, xpket);
             if (me->para_rule != nullptr)
                 me->para_rule->comm->reduce_sum(pdm, me->para_rule->comm->root);
             tdm += _t.get_time();
@@ -740,8 +759,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 _t.get_time();
                 const FPS factor = me->bra != me->ket ? (FPS)0.5 : (FPS)1.0;
                 dm = MovingEnvironment<S, FL, FLS>::density_matrix(
-                    me->ket->info->vacuum, old_ket, forward,
-                    build_pdm ? 0.0 : noise, noise_type, factor, pket);
+                    xket->info->vacuum, xold_ket, forward,
+                    build_pdm ? 0.0 : noise, noise_type, factor, xpket);
                 if (me->bra != me->ket)
                     MovingEnvironment<S, FL, FLS>::density_matrix_add_wfn(
                         dm, old_bra, forward, 0.5);
@@ -754,8 +773,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 if (me->bra != me->ket)
                     dm_b = dm->deep_copy(make_shared<VectorAllocator<FPS>>());
                 error = MovingEnvironment<S, FL, FLS>::split_density_matrix(
-                    dm, old_ket, (int)bond_dim, forward, true,
-                    me->ket->tensors[i], me->ket->tensors[i + 1], cutoff,
+                    dm, xold_ket, (int)bond_dim, forward, true,
+                    xket->tensors[i], xket->tensors[i + 1], cutoff,
                     store_wfn_spectra, wfn_spectra, trunc_type);
                 // TODO: this may have some problem if small numerical
                 // instability happens when truncating same dm twice
@@ -777,63 +796,28 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 if (noise != 0) {
                     if (noise_type & NoiseTypes::Wavefunction)
                         MovingEnvironment<S, FL, FLS>::wavefunction_add_noise(
-                            old_ket, noise);
+                            xold_ket, noise);
                     else if (noise_type & NoiseTypes::Perturbative)
                         MovingEnvironment<S, FL, FLS>::scale_perturbative_noise(
-                            noise, noise_type, pket);
+                            noise, noise_type, xpket);
                 }
                 _t.get_time();
                 if (me->bra == me->ket) {
-                    if (context_ket == nullptr) {
-                        error = MovingEnvironment<S, FL, FLS>::
-                            split_wavefunction_svd(
-                                me->ket->info->vacuum, old_ket, (int)bond_dim,
-                                forward, true, me->ket->tensors[i],
-                                me->ket->tensors[i + 1], cutoff,
-                                store_wfn_spectra, wfn_spectra, trunc_type,
-                                decomp_type, pket);
-                    } else {
-                        shared_ptr<SparseMatrix<S, FLS>> fwd_old_ket =
-                            MovingEnvironment<S, FL, FLS>::symm_context_convert(
-                                i, me->ket, context_ket, 2, true, false, true,
-                                true, false);
-                        error = MovingEnvironment<S, FL, FLS>::
-                            split_wavefunction_svd(
-                                context_ket->info->vacuum, fwd_old_ket,
-                                (int)bond_dim, forward, true,
-                                context_ket->tensors[i],
-                                context_ket->tensors[i + 1], cutoff,
-                                store_wfn_spectra, wfn_spectra, trunc_type,
-                                decomp_type, pket);
-                        if (forward) {
-                            context_ket->info->left_dims[i + 1] =
-                                context_ket->tensors[i]
-                                    ->info->extract_state_info(forward);
-                            context_ket->info->save_left_dims(i + 1);
-                        } else {
-                            context_ket->info->right_dims[i + 1] =
-                                context_ket->tensors[i + 1]
-                                    ->info->extract_state_info(forward);
-                            context_ket->info->save_right_dims(i + 1);
-                        }
-                        me->ket->tensors[i] =
-                            MovingEnvironment<S, FL, FLS>::symm_context_convert(
-                                i, me->ket, context_ket, 1, true, false, false,
-                                !forward, true);
-                        me->ket->tensors[i + 1] =
-                            MovingEnvironment<S, FL, FLS>::symm_context_convert(
-                                i + 1, me->ket, context_ket, 1, false, false,
-                                false, forward, true);
-                    }
+                    error =
+                        MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
+                            xket->info->vacuum, xold_ket, (int)bond_dim,
+                            forward, true, xket->tensors[i],
+                            xket->tensors[i + 1], cutoff, store_wfn_spectra,
+                            wfn_spectra, trunc_type, decomp_type, xpket);
                 } else {
                     vector<FPS> weights = {(FPS)0.5, (FPS)0.5};
                     vector<shared_ptr<SparseMatrix<S, FLS>>> xwfns = {old_bra};
                     error =
                         MovingEnvironment<S, FL, FLS>::split_wavefunction_svd(
-                            me->ket->info->vacuum, old_ket, (int)bond_dim,
-                            forward, true, me->ket->tensors[i],
-                            me->ket->tensors[i + 1], cutoff, store_wfn_spectra,
-                            wfn_spectra, trunc_type, decomp_type, pket, xwfns,
+                            xket->info->vacuum, xold_ket, (int)bond_dim,
+                            forward, true, xket->tensors[i],
+                            xket->tensors[i + 1], cutoff, store_wfn_spectra,
+                            wfn_spectra, trunc_type, decomp_type, xpket, xwfns,
                             weights);
                     xwfns[0] = old_ket;
                     error +=
@@ -847,6 +831,27 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 tsvd += _t.get_time();
             } else
                 assert(false);
+            if (context_ket != nullptr) {
+                if (forward) {
+                    context_ket->info->left_dims[i + 1] =
+                        context_ket->tensors[i]->info->extract_state_info(
+                            forward);
+                    context_ket->info->save_left_dims(i + 1);
+                } else {
+                    context_ket->info->right_dims[i + 1] =
+                        context_ket->tensors[i + 1]->info->extract_state_info(
+                            forward);
+                    context_ket->info->save_right_dims(i + 1);
+                }
+                me->ket->tensors[i] =
+                    MovingEnvironment<S, FL, FLS>::symm_context_convert(
+                        i, me->ket, context_ket, 1, true, false, false,
+                        !forward, true);
+                me->ket->tensors[i + 1] =
+                    MovingEnvironment<S, FL, FLS>::symm_context_convert(
+                        i + 1, me->ket, context_ket, 1, false, false, false,
+                        forward, true);
+            }
             shared_ptr<StateInfo<S>> info = nullptr;
             // propagation
             if (context_ket != nullptr) {
@@ -922,9 +927,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             }
             old_ket->info->deallocate();
             old_ket->deallocate();
-            if (context_old_ket != nullptr) {
-                context_old_ket->info->deallocate();
-                context_old_ket->deallocate();
+            if (old_context_ket != nullptr) {
+                old_context_ket->info->deallocate();
+                old_context_ket->deallocate();
             }
             MovingEnvironment<S, FL, FLS>::propagate_wfn(
                 i, sweep_start_site, sweep_end_site, me->ket, forward,
@@ -947,9 +952,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 pdm->info->deallocate();
                 pdm->deallocate();
             }
-            if (context_old_ket != nullptr) {
-                context_old_ket->info->deallocate();
-                context_old_ket->deallocate();
+            if (old_context_ket != nullptr) {
+                old_context_ket->info->deallocate();
+                old_context_ket->deallocate();
             }
             if (old_bra != nullptr) {
                 old_bra->info->deallocate();

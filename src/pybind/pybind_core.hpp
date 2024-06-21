@@ -1047,6 +1047,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         .def("randomize", &SparseMatrixGroup<S, FL>::randomize,
              py::arg("a") = 0.0, py::arg("b") = 1.0)
         .def("norm", &SparseMatrixGroup<S, FL>::norm)
+        .def("clear", &SparseMatrixGroup<S, FL>::clear)
         .def("iscale", &SparseMatrixGroup<S, FL>::iscale, py::arg("d"))
         .def("normalize", &SparseMatrixGroup<S, FL>::normalize)
         .def_static("normalize_all", &SparseMatrixGroup<S, FL>::normalize_all)

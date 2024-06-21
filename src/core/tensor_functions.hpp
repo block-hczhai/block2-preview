@@ -205,6 +205,7 @@ template <typename S, typename FL> struct TensorFunctions {
                         c->ops[pc]->alloc = make_shared<VectorAllocator<FP>>();
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     }
+                    assert(a->ops.count(pa));
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                         c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else
@@ -237,6 +238,7 @@ template <typename S, typename FL> struct TensorFunctions {
                         c->ops[pc]->alloc = make_shared<VectorAllocator<FP>>();
                         c->ops[pc]->allocate(c->ops[pc]->info);
                     }
+                    assert(a->ops.count(pa));
                     if (c->ops[pc]->info->n == a->ops[pa]->info->n)
                         c->ops[pc]->copy_data_from(a->ops[pa], true);
                     else

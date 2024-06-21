@@ -2010,6 +2010,7 @@ template <typename S, typename FL> struct SparseMatrixGroup {
                                 "' failed.");
         ofs.close();
     }
+    virtual void clear() { memset(data, 0, sizeof(FL) * total_memory); }
     void allocate_like(const shared_ptr<SparseMatrixGroup> &mat) {
         allocate(mat->infos);
     }

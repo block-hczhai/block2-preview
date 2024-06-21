@@ -588,7 +588,7 @@ class MPOTools:
                 tensors[i].ops[xexpr] = xmat
             idq = vacuum
             iop = bs.OpElement(b.OpNames.I, b.SiteIndex(), idq, 1.0)
-            if iop not in tensors[i].ops and add_ident:
+            if iop not in tensors[i].ops:
                 if idq not in site_op_infos[i]:
                     site_op_infos[i][idq] = brs.SparseMatrixInfo(ialloc)
                     site_op_infos[i][idq].initialize(site_basis[i], site_basis[i], idq, idq.is_fermion)
