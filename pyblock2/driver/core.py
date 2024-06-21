@@ -332,6 +332,7 @@ class Block2Wrapper:
 
         self.b = b
         self.symm_type = symm_type
+        self.qargs = None
         has_cpx = hasattr(b, "cpx")
         has_sp = hasattr(b, "sp")
         has_spcpx = has_sp and hasattr(b.sp, "cpx")
@@ -825,16 +826,28 @@ class DMRGDriver:
         bw = self.bw
         import numpy as np
 
-        if target is None:
+        if pg_irrep is None:
+            if hasattr(self, "pg_irrep"):
+                pg_irrep = self.pg_irrep
+            else:
+                pg_irrep = 0
+
+        if target is None and bw.qargs is not None:
+            if bw.qargs == ("U1Fermi", "AbelianPG"):
+                self.vacuum = bw.SX(0, 0)
+                self.target = bw.SX(n_elec, pg_irrep)
+                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
+                self.vacuum = bw.SX(0, 0, 0)
+                self.target = bw.SX(n_elec, spin, pg_irrep)
+                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+            else:
+                raise RuntimeError("target argument required for custom symmetry.")
+        elif target is None:
             if heis_twos != -1 and bw.SX == bw.b.SU2 and n_elec == 0:
                 n_elec = n_sites * heis_twos
             elif heis_twos == 1 and SymmetryTypes.SGB in bw.symm_type and n_elec != 0:
                 n_elec = 2 * n_elec - n_sites
-            if pg_irrep is None:
-                if hasattr(self, "pg_irrep"):
-                    pg_irrep = self.pg_irrep
-                else:
-                    pg_irrep = 0
             if (
                 SymmetryTypes.SU2 not in bw.symm_type
                 and SymmetryTypes.PHSU2 not in bw.symm_type
@@ -899,7 +912,31 @@ class DMRGDriver:
             else:
                 self.orb_sym = bw.VectorPG(orb_sym)
         if hamil_init:
-            if SymmetryTypes.SO4 in bw.symm_type:
+            std_ops = {
+                "": np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),   # identity
+                "c": np.array([[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]),  # alpha+
+                "d": np.array([[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]),  # alpha
+                "C": np.array([[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, -1, 0, 0]]), # beta+
+                "D": np.array([[0, 0, 1, 0], [0, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0]]), # beta
+            }
+            if bw.qargs == ("U1Fermi", "AbelianPG"):
+                site_basis, site_ops = [], []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [(self.bw.SX(0, 0), 1), (self.bw.SX(1, ipg), 2), (self.bw.SX(2, 0), 1)] # [0ab2]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops)
+                self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
+            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
+                site_basis, site_ops = [], []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [(self.bw.SX(0, 0, 0), 1), (self.bw.SX(1, 1, ipg), 1),
+                        (self.bw.SX(1, -1, ipg), 1), (self.bw.SX(2, 0, 0), 1)] # [0ab2]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops)
+                self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
+            elif SymmetryTypes.SO4 in bw.symm_type:
                 self.ghamil = self.get_so4_hamiltonian()
             elif SymmetryTypes.PHSU2 in bw.symm_type:
                 self.ghamil = self.get_phsu2_hamiltonian()
