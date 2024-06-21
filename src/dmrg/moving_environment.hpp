@@ -2590,7 +2590,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                         MKL_INT kl =
                                             (MKL_INT)
                                                 cplu->n_states[cplu->find_state(
-                                                    pplu)];
+                                                    xpplu)];
                                         MKL_INT kml =
                                             (MKL_INT)
                                                 mlu.n_states[mlu.find_state(
@@ -2602,7 +2602,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                         MKL_INT kr =
                                             (MKL_INT)
                                                 cpru->n_states[cpru->find_state(
-                                                    ppru)];
+                                                    xppru)];
                                         if (mask) {
                                             for (MKL_INT ikl = 0; ikl < kl;
                                                  ikl++)
