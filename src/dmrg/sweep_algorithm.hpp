@@ -2136,6 +2136,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 me->bra->info->copy_mutable(frame_<FPS>()->restart_dir);
                 me->bra->copy_data(frame_<FPS>()->restart_dir);
             }
+            if (context_ket != nullptr) {
+                context_ket->info->copy_mutable(frame_<FPS>()->restart_dir);
+                context_ket->copy_data(frame_<FPS>()->restart_dir);
+            }
         }
         if (frame_<FPS>()->restart_dir_per_sweep != "" &&
             (me->para_rule == nullptr || me->para_rule->is_root())) {
@@ -2148,6 +2152,10 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             if (me->bra != me->ket) {
                 me->bra->info->copy_mutable(rdps);
                 me->bra->copy_data(rdps);
+            }
+            if (context_ket != nullptr) {
+                context_ket->info->copy_mutable(rdps);
+                context_ket->copy_data(rdps);
             }
         }
         FPS max_dw = *max_element(sweep_discarded_weights.begin(),
