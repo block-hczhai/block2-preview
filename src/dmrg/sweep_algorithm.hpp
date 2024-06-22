@@ -952,16 +952,16 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 pdm->info->deallocate();
                 pdm->deallocate();
             }
-            if (old_context_ket != nullptr) {
-                old_context_ket->info->deallocate();
-                old_context_ket->deallocate();
-            }
             if (old_bra != nullptr) {
                 old_bra->info->deallocate();
                 old_bra->deallocate();
             }
             old_ket->info->deallocate();
             old_ket->deallocate();
+            if (old_context_ket != nullptr) {
+                old_context_ket->info->deallocate();
+                old_context_ket->deallocate();
+            }
             if (context_ket != nullptr) {
                 context_ket->tensors[i + 1] =
                     make_shared<SparseMatrix<S, FLS>>();
