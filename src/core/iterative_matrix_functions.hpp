@@ -572,7 +572,16 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
-            iscale(bs[i], (FP)1.0 / norm(bs[i]));
+            FL normx = norm(bs[i]);
+            if (abs(normx * normx) < 1E-14) {
+                stringstream ss;
+                ss << "Cannot generate initial guess " << i
+                   << " for Davidson unitary to all given states (you are "
+                      "possibly targeting a global symmetry sector with no "
+                      "states or MPS has zero norm)!";
+                throw runtime_error(ss.str());
+            }
+            iscale(bs[i], (FP)1.0 / normx);
         }
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < nor; j++)
@@ -585,7 +594,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 ss << "Cannot generate initial guess " << i
                    << " for Davidson unitary to all given states (you are "
                       "possibly targeting a global symmetry sector with no "
-                      "states)!";
+                      "states or MPS has zero norm)!";
                 throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);
@@ -925,7 +934,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 ss << "Cannot generate initial guess " << i
                    << " for Davidson unitary to all given states (you are "
                       "possibly targeting a global symmetry sector with no "
-                      "states)!";
+                      "states or MPS has zero norm)!";
                 throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);

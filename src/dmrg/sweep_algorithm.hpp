@@ -1969,6 +1969,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             cpx_me->move_to(i);
         if (metric_me != nullptr)
             metric_me->move_to(i);
+        if (context_ket != nullptr)
+            context_ket->center = me->ket->center;
         tmve += _t2.get_time();
         assert(me->dot == 1 || me->dot == 2);
         Iteration it(vector<FPLS>(), 0, 0, 0);

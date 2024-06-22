@@ -939,25 +939,27 @@ struct GMatrixFunctions<
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
-                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+                         const GMatrix<FL> &c, FL scale, FL cfactor,
+                         MKL_INT ldb = 0) {
+        ldb = ldb ? ldb : b.n;
         // if assertion fails here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
         if (!(conja & 1) && !(conjb & 1)) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
-            xgemm<FL>("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else if (!(conja & 1) && (conjb & 1)) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
-            xgemm<FL>("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && !(conjb & 1)) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
-            xgemm<FL>("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
-            xgemm<FL>("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         }
     }

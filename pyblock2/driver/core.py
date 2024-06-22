@@ -5546,6 +5546,18 @@ class DMRGDriver:
             if iprint:
                 print("mps center changed (temporarily)")
 
+        if iprint and SymmetryTypes.SAny in bw.symm_type:
+            print("basis mapping:")
+            kk = 0
+            for j in range(ket.info.basis[0].n):
+                for jm in range(ket.info.basis[0].quanta[j].multiplicity):
+                    for jj in range(ket.info.basis[0].n_states[j]):
+                        print(
+                            "  [%2d] %24s : m=%2d state=%2d"
+                            % (kk, ket.info.basis[0].quanta[j], jm, jj)
+                        )
+                        kk += 1
+
         tx = time.perf_counter()
         dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
         ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
@@ -5575,11 +5587,14 @@ class DMRGDriver:
                 "Sum of weights of included %s = %20.15f\n" % (dname, (dvals**2).sum())
             )
             for ii, idx in enumerate(gidx):
+                arr = np.array(dtrie[idx])
                 if self.reorder_idx is not None:
                     rev_idx = np.argsort(self.reorder_idx)
-                    det = "".join([ddstr[x] for x in np.array(dtrie[idx])[rev_idx]])
+                    arr = arr[rev_idx]
+                if SymmetryTypes.SAny in bw.symm_type:
+                    det = "".join(["%s" % x for x in arr])
                 else:
-                    det = "".join([ddstr[x] for x in np.array(dtrie[idx])])
+                    det = "".join([ddstr[x] for x in arr])
                 val = dvals[idx]
                 print(dname, "%10d" % ii, det, " = %20.15f" % val)
             if len(dvals) > max_print:
@@ -6935,7 +6950,7 @@ class DMRGDriver:
         dtrie = bw.bs.DeterminantTRIE(self.n_sites, True)
         ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
 
-        if iprint:
+        if iprint and SymmetryTypes.SAny in bw.symm_type:
             print("basis mapping:")
             kk = 0
             for j in range(self.ghamil.basis[0].n):

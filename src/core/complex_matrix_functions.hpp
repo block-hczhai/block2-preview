@@ -942,7 +942,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     // conj can be 0 (no conj no trans), 1 (trans), 3 (conj trans)
     static void multiply(const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
-                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+                         const GMatrix<FL> &c, FL scale, FL cfactor,
+                         MKL_INT ldb = 0) {
+        ldb = ldb ? ldb : b.n;
         static const char ntxc[5] = "ntxc";
         // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
@@ -951,48 +953,48 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         if (!(conja & 1) && !(conjb & 1)) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (!(conja & 1) && (conjb & 1)) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && !(conjb & 1)) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && (conjb & 1)) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         }
 #else
         if (!conja && !conjb) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (!conja && conjb != 2) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && !conjb) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && conjb != 2) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja == 2 && conjb != 2) {
             const MKL_INT one = 1;
             for (MKL_INT k = 0; k < c.m; k++)
                 xgemm<FL>(ntxc + conjb, "c", (conjb & 1) ? &b.m : &b.n, &one,
-                          (conjb & 1) ? &b.n : &b.m, &scale, b.data, &b.n,
+                          (conjb & 1) ? &b.n : &b.m, &scale, b.data, &ldb,
                           &a(k, 0), &one, &cfactor, &c(k, 0), &c.n);
         } else if (conja != 3 && conjb == 2) {
             const MKL_INT one = 1;
             for (MKL_INT k = 0; k < c.m; k++)
                 xgemm<FL>(ntxc + (conja ^ 1), "c", &one, &b.n, &b.m, &scale,
-                          (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &b.n,
+                          (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &ldb,
                           &cfactor, &c(k, 0), &one);
         } else
             assert(false);
