@@ -749,7 +749,10 @@ class DMRGDriver:
     @property
     def basis(self):
         """Site basis for MPS."""
-        return [{bz.quanta[ix]: bz.n_states[ix] for ix in range(bz.n)} for bz in self.ghamil.basis]
+        return [
+            {bz.quanta[ix]: bz.n_states[ix] for ix in range(bz.n)}
+            for bz in self.ghamil.basis
+        ]
 
     def initialize_system(
         self,
@@ -913,17 +916,31 @@ class DMRGDriver:
                 self.orb_sym = bw.VectorPG(orb_sym)
         if hamil_init:
             std_ops = {
-                "": np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),   # identity
-                "c": np.array([[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]),  # alpha+
-                "d": np.array([[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]),  # alpha
-                "C": np.array([[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, -1, 0, 0]]), # beta+
-                "D": np.array([[0, 0, 1, 0], [0, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0]]), # beta
+                "": np.array(
+                    [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+                ),  # identity
+                "c": np.array(
+                    [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]
+                ),  # alpha+
+                "d": np.array(
+                    [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+                ),  # alpha
+                "C": np.array(
+                    [[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, -1, 0, 0]]
+                ),  # beta+
+                "D": np.array(
+                    [[0, 0, 1, 0], [0, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0]]
+                ),  # beta
             }
             if bw.qargs == ("U1Fermi", "AbelianPG"):
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
                     ipg = self.orb_sym[k]
-                    basis = [(self.bw.SX(0, 0), 1), (self.bw.SX(1, ipg), 2), (self.bw.SX(2, 0), 1)] # [0ab2]
+                    basis = [
+                        (self.bw.SX(0, 0), 1),
+                        (self.bw.SX(1, ipg), 2),
+                        (self.bw.SX(2, 0), 1),
+                    ]  # [0ab2]
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
@@ -931,8 +948,12 @@ class DMRGDriver:
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
                     ipg = self.orb_sym[k]
-                    basis = [(self.bw.SX(0, 0, 0), 1), (self.bw.SX(1, 1, ipg), 1),
-                        (self.bw.SX(1, -1, ipg), 1), (self.bw.SX(2, 0, 0), 1)] # [0ab2]
+                    basis = [
+                        (self.bw.SX(0, 0, 0), 1),
+                        (self.bw.SX(1, 1, ipg), 1),
+                        (self.bw.SX(1, -1, ipg), 1),
+                        (self.bw.SX(2, 0, 0), 1),
+                    ]  # [0ab2]
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
@@ -2031,9 +2052,9 @@ class DMRGDriver:
                         info = self.find_site_op_info(m, super_self.bw.SX(0, 0))
                         mat.allocate(info)
                         mat[info.find_state(super_self.bw.SX(0, 0))] = np.array([1.0])
-                        mat[
-                            info.find_state(super_self.bw.SX(1, self.orb_sym[m]))
-                        ] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = (
+                            np.array([1.0])
+                        )
                         self.site_norm_ops[m][""] = mat
 
                         # C
@@ -2051,9 +2072,9 @@ class DMRGDriver:
                             m, super_self.bw.SX(-1, -self.orb_sym[m])
                         )
                         mat.allocate(info)
-                        mat[
-                            info.find_state(super_self.bw.SX(1, self.orb_sym[m]))
-                        ] = np.array([1.0])
+                        mat[info.find_state(super_self.bw.SX(1, self.orb_sym[m]))] = (
+                            np.array([1.0])
+                        )
                         self.site_norm_ops[m]["D"] = mat
 
             def get_site_string_op(self, m, expr):
@@ -2280,7 +2301,10 @@ class DMRGDriver:
                     i_alloc = super_self.bw.b.IntVectorAllocator()
                     d_alloc = super_self.bw.b.DoubleVectorAllocator()
                     # site op infos
-                    if SymmetryTypes.SZ in super_self.symm_type and SymmetryTypes.SAny not in super_self.symm_type:
+                    if (
+                        SymmetryTypes.SZ in super_self.symm_type
+                        and SymmetryTypes.SAny not in super_self.symm_type
+                    ):
                         max_n, max_s = 10, 10
                         max_n_odd, max_s_odd = max_n | 1, max_s | 1
                         max_n_even, max_s_even = max_n_odd ^ 1, max_s_odd ^ 1
@@ -2875,8 +2899,9 @@ class DMRGDriver:
                 The block2 MPO object.
         """
         return self.get_mpo(
-            self.expr_builder().add_term("", [], 1.0).finalize(), ancilla=ancilla,
-            add_ident=add_ident
+            self.expr_builder().add_term("", [], 1.0).finalize(),
+            ancilla=ancilla,
+            add_ident=add_ident,
         )
 
     def unpack_g2e(self, g2e, n_sites=None):
@@ -3973,12 +3998,15 @@ class DMRGDriver:
 
     def make_kernel(self, kernel=None):
         EK = self.bw.bx.EffectiveKernel
+
         class Kernel(EK):
             def __init__(self, kernel):
                 EK.__init__(self)
                 self.kernel = kernel
+
             def compute(self, beta, f, a, b, xs):
                 self.kernel(beta, f, a, b, xs)
+
         return Kernel(kernel)
 
     def dmrg(
@@ -4176,8 +4204,8 @@ class DMRGDriver:
                 dmrg.ext_mes.append(ext_me)
 
         if dav_type is not None:
-            if '|' in dav_type:
-                dav_types = dav_type.split('|')
+            if "|" in dav_type:
+                dav_types = dav_type.split("|")
                 dtt = getattr(bw.b.DavidsonTypes, dav_types[0])
                 for dav_t in dav_types[1:]:
                     dtt = dtt | getattr(bw.b.DavidsonTypes, dav_t)
@@ -5239,7 +5267,9 @@ class DMRGDriver:
             scheme = bw.b.NPDMScheme(perms)
             opdq = (mbra.info.target - mket.info.target)[0]
             if SymmetryTypes.SU2 in bw.symm_type:
-                opdq.twos = opdq.twos_low = bw.b.SpinPermRecoupling.get_target_twos(op_str)
+                opdq.twos = opdq.twos_low = bw.b.SpinPermRecoupling.get_target_twos(
+                    op_str
+                )
             if iprint >= 4:
                 print("NPDM dq =", opdq)
                 print(scheme.to_str())
@@ -5542,8 +5572,7 @@ class DMRGDriver:
         gidx = np.argsort(np.abs(dvals))[::-1][:max_print]
         if iprint:
             print(
-                "Sum of weights of included %s = %20.15f\n"
-                % (dname, (dvals**2).sum())
+                "Sum of weights of included %s = %20.15f\n" % (dname, (dvals**2).sum())
             )
             for ii, idx in enumerate(gidx):
                 if self.reorder_idx is not None:
@@ -5618,7 +5647,9 @@ class DMRGDriver:
                     ket.move_left(self.ghamil.opf.cg, self.prule)
             else:
                 ket.canonical_form = "K" + ket.canonical_form[1:]
-                while ket.center != ket.n_sites - 1 and ket.center != refc + ket.dot - 1:
+                while (
+                    ket.center != ket.n_sites - 1 and ket.center != refc + ket.dot - 1
+                ):
                     ket.move_right(self.ghamil.opf.cg, self.prule)
                 if ket.dot == 2:
                     ket.center -= 1
@@ -6310,7 +6341,7 @@ class DMRGDriver:
     def stack_mpo(self, mpoa, mpob, add_ident=True, iprint=0):
         """
         Stack two MPOs.
-        
+
         Args:
             mpoa : MPO
                 The first MPO.
@@ -6327,7 +6358,9 @@ class DMRGDriver:
         """
         bw = self.bw
         if self.mpi:
-            mpo = bw.bs.StackedMPO(mpoa.prim_mpo.prim_mpo, mpob.prim_mpo.prim_mpo, iprint)
+            mpo = bw.bs.StackedMPO(
+                mpoa.prim_mpo.prim_mpo, mpob.prim_mpo.prim_mpo, iprint
+            )
         else:
             mpo = bw.bs.StackedMPO(mpoa.prim_mpo, mpob.prim_mpo, iprint)
         mpo = bw.bs.SimplifiedMPO(mpo, bw.bs.Rule(), False, False)
@@ -6616,10 +6649,16 @@ class DMRGDriver:
         bw = self.bw
         assert SymmetryTypes.SAny in bw.symm_type
         assert tag != mps.info.tag
+        if self.mpi is not None:
+            self.mpi.barrier()
         mps.info.load_mutable()
         mps.load_mutable()
-        umps = bw.bs.trans_unfused_mps_to_sany(bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, target)
-        zmps = umps.finalize()
+        umps = bw.bs.trans_unfused_mps_to_sany(
+            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, target
+        )
+        if self.mpi is not None:
+            self.mpi.barrier()
+        zmps = umps.finalize(self.prule)
 
         zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
@@ -6656,7 +6695,7 @@ class DMRGDriver:
         )
         if sz is not None:
             umps.resolve_singlet_embedding(sz)
-        zmps = umps.finalize()
+        zmps = umps.finalize(self.prule)
 
         zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
@@ -6846,7 +6885,15 @@ class DMRGDriver:
         return mps
 
     def get_mps_from_csf_coefficients(
-        self, dets, dvals, tag, dot=2, target=None, full_fci=True, left_vacuum=None
+        self,
+        dets,
+        dvals,
+        tag,
+        dot=2,
+        target=None,
+        full_fci=True,
+        left_vacuum=None,
+        iprint=1,
     ):
         """
         Construct an MPS from the given linear combination of Configuration
@@ -6875,6 +6922,8 @@ class DMRGDriver:
                 If not None, this is the left vacuum to be used in SE MPS.
                 If None, ``self.left_vacuum`` will be used.
                 Only has effects in SU2 mode for SE MPS with non-singlet target.
+            iprint : int
+                Verbosity. Default is 1.
 
         Returns:
             mps : MPS
@@ -6885,6 +6934,19 @@ class DMRGDriver:
 
         dtrie = bw.bs.DeterminantTRIE(self.n_sites, True)
         ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
+
+        if iprint:
+            print("basis mapping:")
+            kk = 0
+            for j in range(self.ghamil.basis[0].n):
+                for jm in range(self.ghamil.basis[0].quanta[j].multiplicity):
+                    for jj in range(self.ghamil.basis[0].n_states[j]):
+                        print(
+                            "  [%2d] %24s : m=%2d state=%2d"
+                            % (kk, self.ghamil.basis[0].quanta[j], jm, jj)
+                        )
+                        kk += 1
+
         map_dets = {}
         assert len(dets) == len(dvals)
         for it, det in enumerate(dets):
@@ -6917,8 +6979,18 @@ class DMRGDriver:
         mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
 
-    def get_spin_projection_mpo(self, twos, twosz, max_twosz=None, npts=10, cutoff=1E-14,
-                                add_ident=False, mpi_split=False, use_sz_symm=True, iprint=0):
+    def get_spin_projection_mpo(
+        self,
+        twos,
+        twosz,
+        max_twosz=None,
+        npts=10,
+        cutoff=1e-14,
+        add_ident=False,
+        mpi_split=False,
+        use_sz_symm=True,
+        iprint=0,
+    ):
         """
         Construct the spin projection MPO.
 
@@ -6949,16 +7021,19 @@ class DMRGDriver:
         import numpy as np
         from pyblock2.algebra.core import SubTensor, Tensor, MPO
         from pyblock2.algebra.io import MPOTools
+
         bw = self.bw
         n_sites = self.n_sites
         cg = bw.b.SU2CG()
         xts, wts = np.polynomial.legendre.leggauss(npts)
         xts = np.arccos(xts)
-        wts *= (twos + 1) / 2 * np.array([cg.wigner_d(twos, twosz, twosz, x) for x in xts])
+        wts *= (
+            (twos + 1) / 2 * np.array([cg.wigner_d(twos, twosz, twosz, x) for x in xts])
+        )
         it = np.ones((1, 1, 1, 1))
         pympo = None
         for ixw, (xt, wt) in enumerate(zip(xts, wts)):
-            if not mpi_split or (mpi_split and self.mpi.rank == ixw % self.mpi.size):
+            if not mpi_split or (mpi_split and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size):
                 ct = np.cos(xt / 2) * it
                 st, mt = np.sin(xt / 2) * it, -np.sin(xt / 2) * it
                 if SymmetryTypes.SZ in self.symm_type and use_sz_symm:
@@ -6968,7 +7043,13 @@ class DMRGDriver:
                         for q in lqs:
                             rqsd.add(q + bw.SX(0, 2, 0))
                             rqsd.add(q + bw.SX(0, -2, 0))
-                        rqs = sorted([q for q in rqsd if max_twosz is None or abs(q.twos) <= max_twosz])
+                        rqs = sorted(
+                            [
+                                q
+                                for q in rqsd
+                                if max_twosz is None or abs(q.twos) <= max_twosz
+                            ]
+                        )
                         rqs = [bw.SX()] if k == n_sites - 1 else rqs
                         blocks = []
                         for lq, rq in [(lq, rq) for lq in lqs for rq in rqs]:
@@ -6978,33 +7059,72 @@ class DMRGDriver:
                                     rt = ct
                                 elif xq == yq and lq == rq and xq.n != 1:
                                     rt = it
-                                elif lq + bw.SX(0, 2, 0) == rq and xq - bw.SX(0, 2, 0) == yq:
+                                elif (
+                                    lq + bw.SX(0, 2, 0) == rq
+                                    and xq - bw.SX(0, 2, 0) == yq
+                                ):
                                     rt = st
-                                elif lq + bw.SX(0, -2, 0) == rq and xq - bw.SX(0, -2, 0) == yq:
+                                elif (
+                                    lq + bw.SX(0, -2, 0) == rq
+                                    and xq - bw.SX(0, -2, 0) == yq
+                                ):
                                     rt = mt
                                 if rt is not None:
-                                    blocks.append(SubTensor(reduced=rt, q_labels=(lq, xq, yq, rq)))
+                                    blocks.append(
+                                        SubTensor(reduced=rt, q_labels=(lq, xq, yq, rq))
+                                    )
                         if k == 0:
-                            blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
+                            blocks = [
+                                SubTensor(
+                                    reduced=wt * x.reduced[0, ...],
+                                    q_labels=x.q_labels[1:],
+                                )
+                                for x in blocks
+                            ]
                         elif k == n_sites - 1:
-                            blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
+                            blocks = [
+                                SubTensor(
+                                    reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]
+                                )
+                                for x in blocks
+                            ]
                         tensors.append(Tensor(blocks=blocks))
                         lqs = rqs
                 elif SymmetryTypes.SAny in self.symm_type:
-                    rt = np.array([[np.cos(xt / 2), np.sin(xt / 2)], [-np.sin(xt / 2), np.cos(xt / 2)]])
+                    rt = np.array(
+                        [
+                            [np.cos(xt / 2), np.sin(xt / 2)],
+                            [-np.sin(xt / 2), np.cos(xt / 2)],
+                        ]
+                    )
                     rt = rt.reshape((1, 2, 2, 1))
                     q, qs, tensors = bw.SX(), [bw.SX()], []
                     for k, bz in enumerate(self.basis):
                         blocks = []
                         for xq in bz:
                             if xq.n == 1:
-                                blocks.append(SubTensor(reduced=rt, q_labels=(q, xq, xq, q)))
+                                blocks.append(
+                                    SubTensor(reduced=rt, q_labels=(q, xq, xq, q))
+                                )
                             else:
-                                blocks.append(SubTensor(reduced=it, q_labels=(q, xq, xq, q)))
+                                blocks.append(
+                                    SubTensor(reduced=it, q_labels=(q, xq, xq, q))
+                                )
                         if k == 0:
-                            blocks = [SubTensor(reduced=wt * x.reduced[0, ...], q_labels=x.q_labels[1:]) for x in blocks]
+                            blocks = [
+                                SubTensor(
+                                    reduced=wt * x.reduced[0, ...],
+                                    q_labels=x.q_labels[1:],
+                                )
+                                for x in blocks
+                            ]
                         elif k == n_sites - 1:
-                            blocks = [SubTensor(reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]) for x in blocks]
+                            blocks = [
+                                SubTensor(
+                                    reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]
+                                )
+                                for x in blocks
+                            ]
                         tensors.append(Tensor(blocks=blocks))
                 else:
                     assert False
@@ -7637,9 +7757,11 @@ class WickNormalOrder:
             for ig, ii in enumerate(ix):
                 idx = (slice(None),) * ig
                 idx += (
-                    cidx
-                    if is_inactive(ii.types)
-                    else (midx if is_single(ii.types) else ~cidx & ~midx),
+                    (
+                        cidx
+                        if is_inactive(ii.types)
+                        else (midx if is_single(ii.types) else ~cidx & ~midx)
+                    ),
                 )
                 x = x[idx]
             return x

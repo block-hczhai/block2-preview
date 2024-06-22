@@ -1196,14 +1196,147 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
 // Prefix trie structure of determinants (arbitrary symmetry)
 template <typename S, typename FL>
 struct DeterminantTRIE<S, FL, typename S::is_sany_t>
-    : TRIE<DeterminantTRIE<S, FL>, FL, 2> {
+    : TRIE<DeterminantTRIE<S, FL>, FL> {
     typedef typename GMatrix<FL>::FP FP;
+    typedef typename TRIE<DeterminantTRIE<S, FL>, FL>::XIT IT;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::data;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::dets;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::vals;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::invs;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::n_sites;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::enable_look_up;
+    using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
-        : TRIE<DeterminantTRIE<S, FL>, FL, 2>(n_sites, enable_look_up) {}
+        : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
     shared_ptr<UnfusedMPS<S, FL>> construct_mps(
         const shared_ptr<MPSInfo<S>> &info,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
-        throw runtime_error("Not implemented for arbitrary symmetry!");
+        shared_ptr<UnfusedMPS<S, FL>> r = make_shared<UnfusedMPS<S, FL>>();
+        r->info = info;
+        r->canonical_form = string(n_sites - 1, 'L') + "K";
+        r->center = n_sites - 1;
+        r->n_sites = n_sites;
+        r->dot = 1;
+        r->tensors.resize(n_sites);
+        S vacuum = info->left_dims_fci[0]->quanta[0];
+        vector<pair<S, IT>> cur_nodes =
+            vector<pair<S, IT>>{make_pair(vacuum, 0)};
+        info->left_dims[0] =
+            make_shared<StateInfo<S>>(info->left_dims_fci[0]->deep_copy());
+        for (int i = 0; i < n_sites; i++)
+            info->left_dims[i + 1] = make_shared<StateInfo<S>>(
+                info->left_dims_fci[i + 1]->deep_copy());
+        info->right_dims[n_sites] = make_shared<StateInfo<S>>(
+            info->right_dims_fci[n_sites]->deep_copy());
+        for (int i = n_sites - 1; i >= 0; i--)
+            info->right_dims[i] =
+                make_shared<StateInfo<S>>(info->right_dims_fci[i]->deep_copy());
+        for (int k = 0; k < n_sites; k++) {
+            vector<array<uint8_t, 3>> basis_iqs;
+            for (uint8_t j = 0; j < info->basis[k]->n; j++)
+                for (uint8_t jm = 0;
+                     jm < info->basis[k]->quanta[j].multiplicity(); jm++)
+                    for (uint8_t jj = 0; jj < info->basis[k]->n_states[j]; jj++)
+                        basis_iqs.push_back(array<uint8_t, 3>{j, jm, jj});
+            if (basis_iqs.size() > data[0].size())
+                throw runtime_error(
+                    "DeterminantTRIE<SAny> basis size too large!");
+            shared_ptr<SparseTensor<S, FL>> t =
+                make_shared<SparseTensor<S, FL>>();
+            vector<pair<S, IT>> next_nodes;
+            map<S, MKL_INT> lsh, rsh;
+            vector<map<pair<S, S>, vector<array<MKL_INT, 3>>>> blocks(
+                info->basis[k]->n);
+            vector<map<pair<S, S>, vector<FL>>> coeffs(info->basis[k]->n);
+            // determine shape
+            for (const auto &irx : cur_nodes) {
+                IT ir = irx.second;
+                S pq = irx.first;
+                for (uint8_t j = 0; j < (uint8_t)data[ir].size(); j++)
+                    if (data[ir][j] != 0) {
+                        S nq = pq + info->basis[k]->quanta[basis_iqs[j][0]];
+                        assert(basis_iqs[j][1] < nq.count());
+                        nq = nq[basis_iqs[j][1]];
+                        next_nodes.push_back(make_pair(nq, data[ir][j]));
+                        blocks[basis_iqs[j][0]][make_pair(pq, nq)].push_back(
+                            array<MKL_INT, 3>{lsh[pq], basis_iqs[j][2],
+                                              rsh[nq]});
+                        if (k == n_sites - 1) {
+                            int idx =
+                                (int)(lower_bound(dets.begin(), dets.end(),
+                                                  data[ir][j]) -
+                                      dets.begin());
+                            assert(idx < (int)dets.size() &&
+                                   dets[idx] == data[ir][j]);
+                            coeffs[basis_iqs[j][0]][make_pair(pq, nq)]
+                                .push_back(vals[idx]);
+                        } else
+                            rsh[nq]++;
+                    }
+                lsh[pq]++;
+            }
+            if (k == n_sites - 1) {
+                assert(rsh.size() == 1);
+                rsh.begin()->second = 1;
+            }
+            // create tensor
+            t->data.resize(blocks.size());
+            for (uint8_t j = 0; j < (uint8_t)blocks.size(); j++) {
+                uint8_t nmid = info->basis[k]->n_states[j];
+                for (const auto &mp : blocks[j]) {
+                    shared_ptr<GTensor<FL>> gt = make_shared<GTensor<FL>>(
+                        lsh.at(mp.first.first), nmid, rsh.at(mp.first.second));
+                    t->data[j].push_back(make_pair(
+                        make_pair(mp.first.first, mp.first.second), gt));
+                    if (k == n_sites - 1)
+                        for (size_t im = 0; im < mp.second.size(); im++)
+                            (*gt)({mp.second[im][0], mp.second[im][1],
+                                   mp.second[im][2]}) =
+                                coeffs[j].at(mp.first)[im];
+                    else
+                        for (const auto &mx : mp.second)
+                            (*gt)({mx[0], mx[1], mx[2]}) = (FL)(FP)1.0;
+                }
+            }
+            cur_nodes = next_nodes;
+            // put shape in bond dims
+            for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
+                total_bond_t new_total = 0;
+                if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
+                    info->left_dims[k + 1]->n_states[p] =
+                        (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
+                    new_total += info->left_dims[k + 1]->n_states[p];
+                } else
+                    info->left_dims[k + 1]->n_states[p] = 0;
+                info->left_dims[k + 1]->n_states_total = new_total;
+            }
+            r->tensors[k] = t;
+        }
+        for (int i = n_sites - 1; i >= 0; i--)
+            if (info->right_dims[i]->n_states_total >
+                (total_bond_t)dets.size()) {
+                total_bond_t new_total = 0;
+                for (int k = 0; k < info->right_dims[i]->n; k++) {
+                    uint64_t new_n_states =
+                        (uint64_t)(ceil((double)info->right_dims[i]
+                                            ->n_states[k] *
+                                        dets.size() /
+                                        info->right_dims[i]->n_states_total) +
+                                   0.1);
+                    assert(new_n_states != 0);
+                    info->right_dims[i]->n_states[k] =
+                        (ubond_t)min((uint64_t)new_n_states,
+                                     (uint64_t)numeric_limits<ubond_t>::max());
+                    new_total += info->right_dims[i]->n_states[k];
+                }
+                info->right_dims[i]->n_states_total = new_total;
+            }
+        info->check_bond_dimensions();
+        if (para_rule == nullptr || para_rule->is_root())
+            info->save_mutable();
+        if (para_rule != nullptr)
+            para_rule->comm->barrier();
+        return r;
     }
     // set the value for each CSF to the overlap between mps
     void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
