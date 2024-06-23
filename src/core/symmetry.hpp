@@ -147,12 +147,18 @@ template <int8_t L = 6> struct SAnyT {
                 return (int)values[k];
         return 0;
     }
+    int u1() const {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::U1)
+                return (int)values[k];
+        return 0;
+    }
     int twos() const {
         for (int8_t k = 0; k < L; k++)
             if (types[k] == SAnySymmTypes::SU2Fermi ||
                 types[k] == SAnySymmTypes::SU2)
                 return (int)values[k + 1];
-        return 0;
+        return u1();
     }
     int twos_low() const {
         for (int8_t k = 0; k < L; k++)
@@ -175,13 +181,21 @@ template <int8_t L = 6> struct SAnyT {
                 break;
             }
     }
+    void set_u1(int n) {
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::U1) {
+                values[k] = n;
+                break;
+            }
+    }
     void set_twos(int twos) {
         for (int8_t k = 0; k < L; k++)
             if (types[k] == SAnySymmTypes::SU2Fermi ||
                 types[k] == SAnySymmTypes::SU2) {
                 values[++k] = twos;
-                break;
+                return;
             }
+        set_u1(twos);
     }
     void set_twos_low(int twos) {
         for (int8_t k = 0; k < L; k++)

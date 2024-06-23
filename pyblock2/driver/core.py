@@ -333,6 +333,7 @@ class Block2Wrapper:
         self.b = b
         self.symm_type = symm_type
         self.qargs = None
+        self.hint = None
         has_cpx = hasattr(b, "cpx")
         has_sp = hasattr(b, "sp")
         has_spcpx = has_sp and hasattr(b.sp, "cpx")
@@ -503,7 +504,7 @@ class Block2Wrapper:
             self.VectorSX = b.VectorSGB
             self.VectorVectorSX = b.VectorVectorSGB
 
-    def set_symmetry_groups(self, *args):
+    def set_symmetry_groups(self, *args, hint=None):
         """
         Set the combination of symmetry sub-groups for ``symm_type = SAny``.
 
@@ -512,6 +513,8 @@ class Block2Wrapper:
                 List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
                 Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
                 "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+            hint : str or None
+                Hint for symmetry interpretation. Default is None.
         """
         assert self.SXT == self.b.SAny and len(args) <= 6
 
@@ -531,6 +534,7 @@ class Block2Wrapper:
             return q
 
         self.qargs = args
+        self.hint = hint
         self.SX = init_sany
 
 
@@ -734,7 +738,7 @@ class DMRGDriver:
                 self.mpi.barrier()
             self.frame.restart_dir = self.restart_dir
 
-    def set_symmetry_groups(self, *args):
+    def set_symmetry_groups(self, *args, hint=None):
         """
         Set the combination of symmetry sub-groups for ``symm_type = SAny``.
 
@@ -743,8 +747,10 @@ class DMRGDriver:
                 List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
                 Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
                 "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+            hint : str or None
+                Hint for symmetry interpretation. Default is None.
         """
-        self.bw.set_symmetry_groups(*args)
+        self.bw.set_symmetry_groups(*args, hint=hint)
 
     @property
     def basis(self):
@@ -932,7 +938,20 @@ class DMRGDriver:
                     [[0, 0, 1, 0], [0, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0]]
                 ),  # beta
             }
-            if bw.qargs == ("U1Fermi", "AbelianPG"):
+            std_ops_sgf = {
+                "": np.array([[1, 0], [0, 1]]),  # identity
+                "C": np.array([[0, 0], [1, 0]]),  # +
+                "D": np.array([[0, 1], [0, 0]]),  # -
+            }
+            if bw.qargs == ("U1Fermi", "AbelianPG") and bw.hint == "SGF":
+                site_basis, site_ops = [], []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [(self.bw.SX(0, 0), 1), (self.bw.SX(1, ipg), 1)]  # [0a]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops_sgf)
+                self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
+            elif bw.qargs == ("U1Fermi", "AbelianPG"):
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
                     ipg = self.orb_sym[k]
@@ -944,6 +963,21 @@ class DMRGDriver:
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
+            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG") and bw.hint == "SGF":
+                site_basis, site_ops = [], []
+                spin_sym = []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [
+                        (self.bw.SX(0, 0, 0), 1),
+                        (self.bw.SX(1, 1 - (k % 2) * 2, ipg), 1),
+                    ]  # [0a]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops_sgf)
+                    spin_sym.append({"C": 1 - (k % 2) * 2, "D": 1 - (1 - k % 2) * 2})
+                self.ghamil = self.get_custom_hamiltonian(
+                    site_basis, site_ops, spin_dependent_ops="CD", spin_sym=spin_sym
+                )
             elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
@@ -2226,7 +2260,14 @@ class DMRGDriver:
 
         return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
-    def get_custom_hamiltonian(self, site_basis, site_ops, orb_dependent_ops="cdCD"):
+    def get_custom_hamiltonian(
+        self,
+        site_basis,
+        site_ops,
+        orb_dependent_ops="cdCD",
+        spin_dependent_ops="",
+        spin_sym=None,
+    ):
         """
         Setting Hamiltonian in the general symmetry mode. ``SZ`` or ``SAny`` symmetry mode is required.
 
@@ -2246,6 +2287,10 @@ class DMRGDriver:
                 List of operator names that can have point group irrep.
                 If point group or ``orb_sym`` is not used, this can be empty.
                 Default is "cdCD".
+            spin_dependent_ops : str
+                List of operator names that can have different spin in different sites. Default is empty.
+            spin_sym : None or list[dict[str, int]]
+                List of spin symmetries for site operators. Default is None.
 
         Returns:
             ghamil : CustomHamiltonian
@@ -2262,7 +2307,7 @@ class DMRGDriver:
         ):
 
             class CustomHamiltonian(GH):
-                def __init__(self, vacuum, n_sites, orb_sym):
+                def __init__(self, vacuum, n_sites, orb_sym, spin_sym=None):
                     GH.__init__(self)
                     self.opf = super_self.bw.bs.OperatorFunctions(
                         super_self.bw.brs.CG()
@@ -2270,6 +2315,7 @@ class DMRGDriver:
                     self.vacuum = vacuum
                     self.n_sites = n_sites
                     self.orb_sym = orb_sym
+                    self.spin_sym = spin_sym
                     self.basis = super_self.bw.brs.VectorStateInfo(
                         [self.get_site_basis(m) for m in range(self.n_sites)]
                     )
@@ -2393,7 +2439,9 @@ class DMRGDriver:
                                 xp = self.site_norm_ops[m][p]
                                 q = xx.info.delta_quantum + xp.info.delta_quantum
                                 mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                                mat.allocate(self.find_site_op_info(m, q))
+                                dq = self.find_site_op_info(m, q)
+                                assert dq is not None
+                                mat.allocate(dq)
                                 self.opf.product(0, xx, xp, mat)
                                 xx = mat
                             ops[k] = self.site_norm_ops[m][k] = xx
@@ -2405,8 +2453,12 @@ class DMRGDriver:
                     for norm_ops in self.site_norm_ops:
                         for k, v in norm_ops.items():
                             if k not in qs:
-                                qs[k] = v.info.delta_quantum
-                                qs[k].pg = 0
+                                # must copy to prevent changing v.info.dq
+                                qs[k] = v.info.delta_quantum[0]
+                                if k in orb_dependent_ops:
+                                    qs[k].pg = 0
+                                if k in spin_dependent_ops:
+                                    qs[k].twos = 0
                     return super_self.bw.VectorVectorSX(
                         [
                             super_self.bw.VectorSX(
@@ -2425,13 +2477,19 @@ class DMRGDriver:
                     """Quantum number for string operators (orbital dependent part)."""
                     l, r = ref[k], ref[-1] - ref[k]
                     for j, (ex, ix) in enumerate(zip(expr, idxs)):
-                        ipg = self.orb_sym[ix]
-                        if ex not in orb_dependent_ops:
-                            pass
-                        elif j < k:
-                            l.pg = l.pg ^ ipg
-                        else:
-                            r.pg = r.pg ^ ipg
+                        if ex in orb_dependent_ops:
+                            ipg = self.orb_sym[ix]
+                            if j < k:
+                                l.pg = l.pg ^ ipg
+                            else:
+                                r.pg = r.pg ^ ipg
+                        if ex in spin_dependent_ops:
+                            assert self.spin_sym is not None
+                            ispin = self.spin_sym[ix][ex]
+                            if j < k:
+                                l.twos = l.twos + ispin
+                            else:
+                                r.twos = r.twos + ispin
                     return l, r
 
                 def get_string_quantum(self, expr, idxs):
@@ -2453,7 +2511,9 @@ class DMRGDriver:
                     for bz in self.basis:
                         bz.deallocate()
 
-            return CustomHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
+            return CustomHamiltonian(
+                self.vacuum, self.n_sites, self.orb_sym, spin_sym=spin_sym
+            )
         else:
             return NotImplemented
 
@@ -6994,6 +7054,13 @@ class DMRGDriver:
         mps = self.adjust_mps(mps, dot=dot)[0]
         return mps
 
+    def get_spin_projection_npts(self, n_sites, n_elec, twos):
+        import numpy as np
+        if n_elec <= n_sites:
+            return int(np.ceil((n_elec / 2 + twos / 2 + 1) / 2))
+        else:
+            return int(np.ceil(((2 * n_sites - n_elec) / 2 + twos / 2 + 1) / 2))
+
     def get_spin_projection_mpo(
         self,
         twos,
@@ -7048,7 +7115,10 @@ class DMRGDriver:
         it = np.ones((1, 1, 1, 1))
         pympo = None
         for ixw, (xt, wt) in enumerate(zip(xts, wts)):
-            if not mpi_split or (mpi_split and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size):
+            if not mpi_split or (
+                mpi_split
+                and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size
+            ):
                 ct = np.cos(xt / 2) * it
                 st, mt = np.sin(xt / 2) * it, -np.sin(xt / 2) * it
                 if SymmetryTypes.SZ in self.symm_type and use_sz_symm:
@@ -7105,7 +7175,74 @@ class DMRGDriver:
                             ]
                         tensors.append(Tensor(blocks=blocks))
                         lqs = rqs
-                elif SymmetryTypes.SAny in self.symm_type:
+                elif (
+                    SymmetryTypes.SAny in self.symm_type
+                    and bw.qargs == ("U1Fermi", "AbelianPG")
+                    and bw.hint == "SGF"
+                ):
+                    q, tensors = bw.SX(), []
+                    for k, bz in enumerate(self.basis):
+                        blocks = []
+                        xq, yq = sorted(bz, key=lambda xq: xq.n)
+                        if k % 2 == 0:
+                            blocks.append(SubTensor(
+                                reduced=np.array([1, -1]).reshape((1, 1, 1, 2)),
+                                q_labels=(q, xq, xq, q),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([1, 1]).reshape((1, 1, 1, 2)),
+                                q_labels=(q, yq, yq, q),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([1]).reshape((1, 1, 1, 1)),
+                                q_labels=(q, yq, xq, (q + yq - xq)[0]),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([1]).reshape((1, 1, 1, 1)),
+                                q_labels=(q, xq, yq, (q + xq - yq)[0]),
+                            ))
+                        else:
+                            cp, cm, st = (
+                                (1 + np.cos(xt / 2)) / 2,
+                                (1 - np.cos(xt / 2)) / 2,
+                                np.sin(xt / 2),
+                            )
+                            blocks.append(SubTensor(
+                                reduced=np.array([cp, -cm]).reshape((2, 1, 1, 1)),
+                                q_labels=(q, xq, xq, q),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([cp, cm]).reshape((2, 1, 1, 1)),
+                                q_labels=(q, yq, yq, q),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([st]).reshape((1, 1, 1, 1)),
+                                q_labels=((q + yq - xq)[0], xq, yq, q),
+                            ))
+                            blocks.append(SubTensor(
+                                reduced=np.array([st]).reshape((1, 1, 1, 1)),
+                                q_labels=((q + xq - yq)[0], yq, xq, q),
+                            ))
+                        if k == 0:
+                            blocks = [
+                                SubTensor(
+                                    reduced=wt * x.reduced[0, ...],
+                                    q_labels=x.q_labels[1:],
+                                )
+                                for x in blocks
+                            ]
+                        elif k == n_sites - 1:
+                            blocks = [
+                                SubTensor(
+                                    reduced=x.reduced[..., 0], q_labels=x.q_labels[:-1]
+                                )
+                                for x in blocks
+                            ]
+                        tensors.append(Tensor(blocks=blocks))
+                elif SymmetryTypes.SAny in self.symm_type and bw.qargs == (
+                    "U1Fermi",
+                    "AbelianPG",
+                ):
                     rt = np.array(
                         [
                             [np.cos(xt / 2), np.sin(xt / 2)],

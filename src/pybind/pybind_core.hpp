@@ -3934,6 +3934,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("init_sgb", &SAny::init_sgb, py::arg("n") = 0,
                     py::arg("pg") = 0)
         .def_property("n", &SAny::n, &SAny::set_n)
+        .def_property("u1", &SAny::u1, &SAny::set_u1)
         .def_property("twos", &SAny::twos, &SAny::set_twos)
         .def_property("twos_low", &SAny::twos_low, &SAny::set_twos_low)
         .def_property("pg", &SAny::pg, &SAny::set_pg)
