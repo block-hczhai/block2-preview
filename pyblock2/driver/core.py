@@ -2301,6 +2301,12 @@ class DMRGDriver:
         import numpy as np
         from itertools import accumulate
 
+        no_dep = (
+            spin_dependent_ops == ""
+            and max(self.orb_sym) == 0
+            and min(self.orb_sym) == 0
+        )
+
         if (
             SymmetryTypes.SZ in super_self.symm_type
             or SymmetryTypes.SAny in super_self.symm_type
@@ -2475,22 +2481,25 @@ class DMRGDriver:
 
                 def get_string_quanta(self, ref, expr, idxs, k):
                     """Quantum number for string operators (orbital dependent part)."""
-                    l, r = ref[k], ref[-1] - ref[k]
-                    for j, (ex, ix) in enumerate(zip(expr, idxs)):
-                        if ex in orb_dependent_ops:
-                            ipg = self.orb_sym[ix]
-                            if j < k:
-                                l.pg = l.pg ^ ipg
-                            else:
-                                r.pg = r.pg ^ ipg
-                        if ex in spin_dependent_ops:
-                            assert self.spin_sym is not None
-                            ispin = self.spin_sym[ix][ex]
-                            if j < k:
-                                l.twos = l.twos + ispin
-                            else:
-                                r.twos = r.twos + ispin
-                    return l, r
+                    if no_dep:
+                        return ref[k], ref[-1] - ref[k]
+                    else:
+                        l, r = ref[k], ref[-1] - ref[k]
+                        for j, (ex, ix) in enumerate(zip(expr, idxs)):
+                            if ex in orb_dependent_ops:
+                                ipg = self.orb_sym[ix]
+                                if j < k:
+                                    l.pg = l.pg ^ ipg
+                                else:
+                                    r.pg = r.pg ^ ipg
+                            if ex in spin_dependent_ops:
+                                assert self.spin_sym is not None
+                                ispin = self.spin_sym[ix][ex]
+                                if j < k:
+                                    l.twos = l.twos + ispin
+                                else:
+                                    r.twos = r.twos + ispin
+                        return l, r
 
                 def get_string_quantum(self, expr, idxs):
                     """Total quantum number for a string operator."""
@@ -7056,6 +7065,7 @@ class DMRGDriver:
 
     def get_spin_projection_npts(self, n_sites, n_elec, twos):
         import numpy as np
+
         if n_elec <= n_sites:
             return int(np.ceil((n_elec / 2 + twos / 2 + 1) / 2))
         else:
@@ -7185,44 +7195,60 @@ class DMRGDriver:
                         blocks = []
                         xq, yq = sorted(bz, key=lambda xq: xq.n)
                         if k % 2 == 0:
-                            blocks.append(SubTensor(
-                                reduced=np.array([1, -1]).reshape((1, 1, 1, 2)),
-                                q_labels=(q, xq, xq, q),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([1, 1]).reshape((1, 1, 1, 2)),
-                                q_labels=(q, yq, yq, q),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([1]).reshape((1, 1, 1, 1)),
-                                q_labels=(q, yq, xq, (q + yq - xq)[0]),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([1]).reshape((1, 1, 1, 1)),
-                                q_labels=(q, xq, yq, (q + xq - yq)[0]),
-                            ))
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([1, -1]).reshape((1, 1, 1, 2)),
+                                    q_labels=(q, xq, xq, q),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([1, 1]).reshape((1, 1, 1, 2)),
+                                    q_labels=(q, yq, yq, q),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([1]).reshape((1, 1, 1, 1)),
+                                    q_labels=(q, yq, xq, (q + yq - xq)[0]),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([1]).reshape((1, 1, 1, 1)),
+                                    q_labels=(q, xq, yq, (q + xq - yq)[0]),
+                                )
+                            )
                         else:
                             cp, cm, st = (
                                 (1 + np.cos(xt / 2)) / 2,
                                 (1 - np.cos(xt / 2)) / 2,
                                 np.sin(xt / 2),
                             )
-                            blocks.append(SubTensor(
-                                reduced=np.array([cp, -cm]).reshape((2, 1, 1, 1)),
-                                q_labels=(q, xq, xq, q),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([cp, cm]).reshape((2, 1, 1, 1)),
-                                q_labels=(q, yq, yq, q),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([st]).reshape((1, 1, 1, 1)),
-                                q_labels=((q + yq - xq)[0], xq, yq, q),
-                            ))
-                            blocks.append(SubTensor(
-                                reduced=np.array([st]).reshape((1, 1, 1, 1)),
-                                q_labels=((q + xq - yq)[0], yq, xq, q),
-                            ))
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([cp, -cm]).reshape((2, 1, 1, 1)),
+                                    q_labels=(q, xq, xq, q),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([cp, cm]).reshape((2, 1, 1, 1)),
+                                    q_labels=(q, yq, yq, q),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([st]).reshape((1, 1, 1, 1)),
+                                    q_labels=((q + yq - xq)[0], xq, yq, q),
+                                )
+                            )
+                            blocks.append(
+                                SubTensor(
+                                    reduced=np.array([st]).reshape((1, 1, 1, 1)),
+                                    q_labels=((q + xq - yq)[0], yq, xq, q),
+                                )
+                            )
                         if k == 0:
                             blocks = [
                                 SubTensor(
