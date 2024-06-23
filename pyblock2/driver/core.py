@@ -564,6 +564,7 @@ class DMRGDriver:
         stack_mem_ratio=0.4,
         fp_codec_cutoff=1e-16,
         fp_codec_chunk=1024,
+        min_mpo_mem=False,
         compressed_mps_storage=False,
     ):
         """
@@ -605,6 +606,8 @@ class DMRGDriver:
                 Default is 1E-16.
             fp_codec_chunk : int
                 Chunk size for compressed storage of renormalized operators. Default is 1024.
+            min_mpo_mem : bool
+                If True, will dynamically load/save MPO to save memory. Default is False.
             compressed_mps_storage : bool
                 Whether block-sparse tensor should be stored in compressed form to save storage (mainly for MPS).
                 Default is False.
@@ -621,6 +624,7 @@ class DMRGDriver:
         self.stack_mem_ratio = stack_mem_ratio
         self.fp_codec_cutoff = fp_codec_cutoff
         self.fp_codec_chunk = fp_codec_chunk
+        self.min_mpo_mem = min_mpo_mem
         self.compressed_mps_storage = compressed_mps_storage
         self.symm_type = symm_type
         self.clean_scratch = clean_scratch
@@ -721,6 +725,7 @@ class DMRGDriver:
         self.frame.minimal_disk_usage = True
         self.frame.use_main_stack = False
         self.frame.compressed_sparse_tensor_storage = self.compressed_mps_storage
+        self.frame.minimal_memory_usage = self.min_mpo_mem
 
         if self.mpi:
             self.mpi = bw.brs.MPICommunicator()
@@ -3039,6 +3044,7 @@ class DMRGDriver:
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
         block_max_length=False,
+        fast_no_orb_dep_op=False,
         add_ident=True,
         esptein_nesbet_partition=False,
         ancilla=False,
@@ -3193,6 +3199,9 @@ class DMRGDriver:
                 ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
                 If True, will separate the SVD or Bipartite for one- and two-electron integrals.
                 Default is False.
+            fast_no_orb_dep_op : bool
+                If the operator quantum number does not depend on orbital index,
+                one can set this True to save MPO construction time. Default is False.
             add_ident : bool
                 If True, the hidden identity operator will be added into the MPO.
                 This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
@@ -3551,6 +3560,7 @@ class DMRGDriver:
             disjoint_all_blocks=disjoint_all_blocks,
             disjoint_multiplier=disjoint_multiplier,
             block_max_length=block_max_length,
+            fast_no_orb_dep_op=fast_no_orb_dep_op,
             add_ident=add_ident,
             ancilla=ancilla,
         )
@@ -3571,6 +3581,7 @@ class DMRGDriver:
         disjoint_all_blocks=False,
         disjoint_multiplier=1.0,
         block_max_length=False,
+        fast_no_orb_dep_op=False,
         add_ident=True,
         ancilla=False,
     ):
@@ -3626,6 +3637,9 @@ class DMRGDriver:
                 ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
                 If True, will separate the SVD or Bipartite for one- and two-electron integrals.
                 Default is False.
+            fast_no_orb_dep_op : bool
+                If the operator quantum number does not depend on orbital index,
+                one can set this True to save MPO construction time. Default is False.
             add_ident : bool
                 If True, the hidden identity operator will be added into the MPO.
                 This is required when ``ecore`` is not zero and ``DMRGDriver.expectation``
@@ -3663,6 +3677,7 @@ class DMRGDriver:
         mpo.disjoint_all_blocks = disjoint_all_blocks
         mpo.disjoint_multiplier = disjoint_multiplier
         mpo.block_max_length = block_max_length
+        mpo.fast_no_orb_dep_op = fast_no_orb_dep_op
         mpo.build()
 
         if iprint:

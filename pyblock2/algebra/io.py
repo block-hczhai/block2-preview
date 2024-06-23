@@ -928,6 +928,13 @@ class MPOTools:
                     sr = lop[mat.indices[ig][1]].q_label
                     sm = mat.data[ig].q_label
                     assert sl + sm == sr
+        for ii in range(0, bmpo.n_sites):
+            bmpo.save_tensor(ii)
+            bmpo.unload_tensor(ii)
+            bmpo.save_left_operators(ii)
+            bmpo.unload_left_operators(ii)
+            bmpo.save_right_operators(ii)
+            bmpo.unload_right_operators(ii)
         bmpo = bs.SimplifiedMPO(bmpo, bs.Rule(), False, False)
         if add_ident:
             bmpo = bs.IdentityAddedMPO(bmpo)

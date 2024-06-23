@@ -62,7 +62,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                   OpNamesSet intermediate_ops = OpNamesSet::all_ops(),
                   const string &tag = "", bool check_indirect_ref = true)
         : prim_mpo(mpo), rule(rule),
-          MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag),
+          MPO<S, FL>(mpo->n_sites, tag == "" ? "SMP-" + mpo->tag : tag),
           collect_terms(collect_terms), use_intermediate(use_intermediate),
           intermediate_ops(intermediate_ops),
           check_indirect_ref(check_indirect_ref) {

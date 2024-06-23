@@ -131,6 +131,12 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
             }
             shared_ptr<OperatorTensor<S, FL>> opt =
                 make_shared<OperatorTensor<S, FL>>();
+            mpoa->load_tensor(m);
+            mpoa->load_left_operators(m);
+            mpoa->load_right_operators(m);
+            mpob->load_tensor(m);
+            mpob->load_left_operators(m);
+            mpob->load_right_operators(m);
             const int xm =
                 mpoa->tensors[m]->lmat->m * mpob->tensors[m]->lmat->m;
             const int xn =
@@ -406,6 +412,18 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
             if (iprint)
                 cout << "Mmpo = " << setw(10) << xn << " T = " << fixed
                      << setprecision(3) << tsite << endl;
+            mpoa->unload_tensor(m);
+            mpoa->unload_left_operators(m);
+            mpoa->unload_right_operators(m);
+            mpob->unload_tensor(m);
+            mpob->unload_left_operators(m);
+            mpob->unload_right_operators(m);
+            this->save_tensor(m);
+            this->unload_tensor(m);
+            this->save_left_operators(m);
+            this->unload_left_operators(m);
+            this->save_right_operators(m);
+            this->unload_right_operators(m);
         }
         if (iprint) {
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)

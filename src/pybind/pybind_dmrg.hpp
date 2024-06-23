@@ -2122,6 +2122,8 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("disjoint_multiplier",
                        &GeneralMPO<S, FL>::disjoint_multiplier)
         .def_readwrite("block_max_length", &GeneralMPO<S, FL>::block_max_length)
+        .def_readwrite("fast_no_orb_dep_op",
+                       &GeneralMPO<S, FL>::fast_no_orb_dep_op)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &,
                       MPOAlgorithmTypes>(),
