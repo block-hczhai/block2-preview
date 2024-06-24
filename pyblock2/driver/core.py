@@ -565,6 +565,7 @@ class DMRGDriver:
         fp_codec_cutoff=1e-16,
         fp_codec_chunk=1024,
         min_mpo_mem=False,
+        seq_type=None,
         compressed_mps_storage=False,
     ):
         """
@@ -608,6 +609,8 @@ class DMRGDriver:
                 Chunk size for compressed storage of renormalized operators. Default is 1024.
             min_mpo_mem : bool
                 If True, will dynamically load/save MPO to save memory. Default is False.
+            seq_type : None or str
+                Shared-memory scheme type. Default is None ('Tasked').
             compressed_mps_storage : bool
                 Whether block-sparse tensor should be stored in compressed form to save storage (mainly for MPS).
                 Default is False.
@@ -638,7 +641,11 @@ class DMRGDriver:
             n_threads // n_mkl_threads,
             n_mkl_threads,
         )
-        bw.b.Global.threading.seq_type = bw.b.SeqTypes.Tasked
+        if seq_type is None:
+            seq_type = bw.b.SeqTypes.Tasked
+        else:
+            seq_type = getattr(bw.b.SeqTypes, seq_type)
+        bw.b.Global.threading.seq_type = seq_type
         self.reorder_idx = None
         self.pg = "c1"
         self.orb_sym = None
@@ -7146,8 +7153,8 @@ class DMRGDriver:
         it = np.ones((1, 1, 1, 1))
         pympo = None
         for ixw, (xt, wt) in enumerate(zip(xts, wts)):
-            if not mpi_split or (
-                mpi_split
+            if self.mpi is None or not mpi_split or (
+                mpi_split 
                 and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size
             ):
                 ct = np.cos(xt / 2) * it

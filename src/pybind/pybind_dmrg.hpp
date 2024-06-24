@@ -1034,7 +1034,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                     py::arg("i"), py::arg("mps"), py::arg("cmps"),
                     py::arg("dot"), py::arg("fuse_left"), py::arg("mask"),
                     py::arg("forward"), py::arg("is_wfn"),
-                    py::arg("infer_info"))
+                    py::arg("infer_info"), py::arg("ket") = nullptr,
+                    py::arg("cket") = nullptr)
         .def_static("symm_context_convert_group",
                     &MovingEnvironment<S, FL, FLS>::symm_context_convert_group,
                     py::arg("i"), py::arg("mps"), py::arg("cmps"),

@@ -2031,103 +2031,116 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         frame_<FP>()->activate(0);
         mps->tensors[i] = old_wfn;
     }
-    static shared_ptr<SparseMatrixGroup<S, FLS>>
-    symm_context_convert_group(int i, const shared_ptr<MPS<S, FLS>> &mps,
-                         const shared_ptr<MPS<S, FLS>> &cmps, int dot,
-                         bool fuse_left, bool mask, bool forward, bool is_wfn,
-                         bool infer_info,
-                         const shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
-        shared_ptr<SparseMatrixGroup<S, FLS>> cpket = nullptr;
-        symm_context_convert_impl(i, mps, cmps, dot, fuse_left, mask, forward,
-                                  is_wfn, infer_info, pket, cpket);
-        return cpket;
-    }
     static shared_ptr<SparseMatrix<S, FLS>>
     symm_context_convert(int i, const shared_ptr<MPS<S, FLS>> &mps,
                          const shared_ptr<MPS<S, FLS>> &cmps, int dot,
                          bool fuse_left, bool mask, bool forward, bool is_wfn,
-                         bool infer_info) {
-        shared_ptr<SparseMatrixGroup<S, FLS>> cpket = nullptr;
-        return symm_context_convert_impl(i, mps, cmps, dot, fuse_left, mask,
-                                         forward, is_wfn, infer_info, nullptr,
-                                         cpket);
+                         bool infer_info,
+                         shared_ptr<SparseMatrix<S, FLS>> ket = nullptr,
+                         shared_ptr<SparseMatrix<S, FLS>> cket = nullptr) {
+        return symm_context_convert_impl(
+                   i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                   is_wfn, infer_info,
+                   ket == nullptr && !(!forward && infer_info) ? mps->tensors[i]
+                                                               : ket,
+                   cket == nullptr && !(forward && infer_info)
+                       ? cmps->tensors[i]
+                       : cket,
+                   nullptr, nullptr)
+            .first;
+    }
+    static shared_ptr<SparseMatrixGroup<S, FLS>> symm_context_convert_group(
+        int i, const shared_ptr<MPS<S, FLS>> &mps,
+        const shared_ptr<MPS<S, FLS>> &cmps, int dot, bool fuse_left, bool mask,
+        bool forward, bool is_wfn, bool infer_info,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
+        return symm_context_convert_impl(i, mps->info, cmps->info, dot,
+                                         fuse_left, mask, forward, is_wfn,
+                                         infer_info, mps->tensors[i],
+                                         cmps->tensors[i], pket, nullptr)
+            .second;
     }
     // forward = proj to high symmetry
-    static shared_ptr<SparseMatrix<S, FLS>>
-    symm_context_convert_impl(int i, const shared_ptr<MPS<S, FLS>> &mps,
-                              const shared_ptr<MPS<S, FLS>> &cmps, int dot,
+    static pair<shared_ptr<SparseMatrix<S, FLS>>,
+                shared_ptr<SparseMatrixGroup<S, FLS>>>
+    symm_context_convert_impl(int i, const shared_ptr<MPSInfo<S>> &info,
+                              const shared_ptr<MPSInfo<S>> &cinfo, int dot,
                               bool fuse_left, bool mask, bool forward,
                               bool is_wfn, bool infer_info,
-                              const shared_ptr<SparseMatrixGroup<S, FLS>> &pket,
-                              shared_ptr<SparseMatrixGroup<S, FLS>> &cpket) {
+                              shared_ptr<SparseMatrix<S, FLS>> ket,
+                              shared_ptr<SparseMatrix<S, FLS>> cket,
+                              shared_ptr<SparseMatrixGroup<S, FLS>> pket,
+                              shared_ptr<SparseMatrixGroup<S, FLS>> cpket) {
         if (is_wfn || fuse_left)
-            mps->info->load_left_dims(i), cmps->info->load_left_dims(i);
+            info->load_left_dims(i), cinfo->load_left_dims(i);
         else
-            mps->info->load_right_dims(i), cmps->info->load_right_dims(i);
+            info->load_right_dims(i), cinfo->load_right_dims(i);
         if (is_wfn || !fuse_left)
-            mps->info->load_right_dims(i + dot),
-                cmps->info->load_right_dims(i + dot);
+            info->load_right_dims(i + dot), cinfo->load_right_dims(i + dot);
         else
-            mps->info->load_left_dims(i + dot),
-                cmps->info->load_left_dims(i + dot);
-        StateInfo<S> l = is_wfn || fuse_left ? *mps->info->left_dims[i]
-                                             : *mps->info->right_dims[i],
-                     ml = *mps->info->basis[i],
-                     mr = *mps->info->basis[i + dot - 1],
-                     r = is_wfn || !fuse_left ? *mps->info->right_dims[i + dot]
-                                              : *mps->info->left_dims[i + dot];
+            info->load_left_dims(i + dot), cinfo->load_left_dims(i + dot);
+        StateInfo<S> l = is_wfn || fuse_left ? *info->left_dims[i]
+                                             : *info->right_dims[i],
+                     ml = dot == 0 ? StateInfo<S>() : *info->basis[i],
+                     mr = dot == 0 ? StateInfo<S>() : *info->basis[i + dot - 1],
+                     r = is_wfn || !fuse_left ? *info->right_dims[i + dot]
+                                              : *info->left_dims[i + dot];
         shared_ptr<StateInfo<S>> ll =
-            dot == 2 || fuse_left
+            dot == 2 || (dot != 0 && fuse_left)
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                      l, ml, *mps->info->left_dims_fci[i + 1]))
+                      l, ml, *info->left_dims_fci[i + 1]))
                 : make_shared<StateInfo<S>>(l);
         shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
-            dot == 2 || fuse_left
+            dot == 2 || (dot != 0 && fuse_left)
                 ? StateInfo<S>::get_connection_info(l, ml, *ll)
                 : nullptr;
         shared_ptr<StateInfo<S>> rr =
-            dot == 2 || !fuse_left
+            dot == 2 || (dot != 0 && !fuse_left)
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                      mr, r, *mps->info->right_dims_fci[i + dot - 1]))
+                      mr, r, *info->right_dims_fci[i + dot - 1]))
                 : make_shared<StateInfo<S>>(r);
         shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
-            dot == 2 || !fuse_left
+            dot == 2 || (dot != 0 && !fuse_left)
                 ? StateInfo<S>::get_connection_info(mr, r, *rr)
                 : nullptr;
-        StateInfo<S> lu = is_wfn || fuse_left ? *cmps->info->left_dims[i]
-                                              : *cmps->info->right_dims[i],
-                     mlu = *cmps->info->basis[i],
-                     mru = *cmps->info->basis[i + dot - 1],
-                     ru = is_wfn || !fuse_left
-                              ? *cmps->info->right_dims[i + dot]
-                              : *cmps->info->left_dims[i + dot];
+        StateInfo<S> lu = is_wfn || fuse_left ? *cinfo->left_dims[i]
+                                              : *cinfo->right_dims[i],
+                     mlu = dot == 0 ? StateInfo<S>() : *cinfo->basis[i],
+                     mru =
+                         dot == 0 ? StateInfo<S>() : *cinfo->basis[i + dot - 1],
+                     ru = is_wfn || !fuse_left ? *cinfo->right_dims[i + dot]
+                                               : *cinfo->left_dims[i + dot];
         shared_ptr<StateInfo<S>> llu =
-            dot == 2 || fuse_left
+            dot == 2 || (dot != 0 && fuse_left)
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                      lu, mlu, *cmps->info->left_dims_fci[i + 1]))
+                      lu, mlu, *cinfo->left_dims_fci[i + 1]))
                 : make_shared<StateInfo<S>>(lu);
         shared_ptr<typename StateInfo<S>::ConnectionInfo> clmu =
-            dot == 2 || fuse_left
+            dot == 2 || (dot != 0 && fuse_left)
                 ? StateInfo<S>::get_connection_info(lu, mlu, *llu)
                 : nullptr;
         shared_ptr<StateInfo<S>> rru =
-            dot == 2 || !fuse_left
+            dot == 2 || (dot != 0 && !fuse_left)
                 ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
-                      mru, ru, *cmps->info->right_dims_fci[i + dot - 1]))
+                      mru, ru, *cinfo->right_dims_fci[i + dot - 1]))
                 : make_shared<StateInfo<S>>(ru);
         shared_ptr<typename StateInfo<S>::ConnectionInfo> cmru =
-            dot == 2 || !fuse_left
+            dot == 2 || (dot != 0 && !fuse_left)
                 ? StateInfo<S>::get_connection_info(mru, ru, *rru)
                 : nullptr;
         shared_ptr<VectorAllocator<FPS>> d_alloc =
             make_shared<VectorAllocator<FPS>>();
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<SparseMatrix<S, FLS>> mask_wfn =
-            make_shared<SparseMatrix<S, FLS>>(d_alloc);
-        S ref = mps->info->vacuum;
-        S refu = cmps->info->vacuum;
-        if (pket != nullptr) {
+        const S ref = info->vacuum, refu = cinfo->vacuum;
+        const bool is_group = pket != nullptr || cpket != nullptr;
+        shared_ptr<SparseMatrix<S, FLS>> r_wfn =
+            is_group ? nullptr : make_shared<SparseMatrix<S, FLS>>(d_alloc);
+        shared_ptr<SparseMatrixGroup<S, FLS>> gr_wfn =
+            is_group ? make_shared<SparseMatrixGroup<S, FLS>>(d_alloc)
+                     : nullptr;
+        if (is_group && infer_info) {
+            // FIXME: multi will have problem
             vector<S> pket_dqs;
             for (int iw = 0; iw < pket->n; iw++) {
                 S dq = pket->infos[iw]->delta_quantum;
@@ -2147,16 +2160,15 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 info->initialize(*llu, *rru, pket_dqs[j], false, true);
                 infos.push_back(info);
             }
-            cpket = make_shared<SparseMatrixGroup<S, FLS>>(d_alloc);
-            cpket->allocate(infos);
-            cpket->clear();
-        } else if (infer_info) {
+            gr_wfn->allocate(infos);
+            gr_wfn->clear();
+        } else if (!is_group && infer_info) {
             shared_ptr<SparseMatrixInfo<S>> xinfo =
                 make_shared<SparseMatrixInfo<S>>(i_alloc);
             shared_ptr<StateInfo<S>> xll = forward ? llu : ll;
             shared_ptr<StateInfo<S>> xrr = forward ? rru : rr;
-            S xdq = is_wfn ? (forward ? cmps->info->target : mps->info->target)
-                           : (forward ? cmps->info->vacuum : mps->info->vacuum);
+            S xdq = is_wfn ? (forward ? cinfo->target : info->target)
+                           : (forward ? cinfo->vacuum : info->vacuum);
             if (fuse_left) {
                 xrr = forward ? TransStateInfo<S, S>::forward(rr, refu)
                               : TransStateInfo<S, S>::forward(rru, ref);
@@ -2173,13 +2185,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     ll = xll, l = *xll;
             }
             xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
-            mask_wfn->allocate(xinfo);
-        } else
-            mask_wfn->allocate(forward ? cmps->tensors[i]->info
-                                       : mps->tensors[i]->info);
-        if (pket == nullptr)
-            mask_wfn->clear();
-        S cptu = cmps->info->target, cpt = mps->info->target;
+            r_wfn->allocate(xinfo);
+            r_wfn->clear();
+        } else if (is_group) {
+            gr_wfn->allocate(forward ? cpket->infos : pket->infos);
+            gr_wfn->clear();
+        } else {
+            r_wfn->allocate(forward ? cket->info : ket->info);
+            r_wfn->clear();
+        }
+        S cptu = cinfo->target, cpt = info->target;
         shared_ptr<StateInfo<S>> cplu =
             is_wfn || fuse_left ? make_shared<StateInfo<S>>(lu)
                                 : make_shared<StateInfo<S>>(
@@ -2199,24 +2214,27 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<StateInfo<S>> conn_l =
             TransStateInfo<S, S>::backward_connection(cplu, cpl);
         shared_ptr<StateInfo<S>> conn_lm =
-            dot == 2 || fuse_left ? TransStateInfo<S, S>::backward_connection(
-                                        make_shared<StateInfo<S>>(mlu),
-                                        make_shared<StateInfo<S>>(ml))
-                                  : nullptr;
+            dot == 2 || (dot != 0 && fuse_left)
+                ? TransStateInfo<S, S>::backward_connection(
+                      make_shared<StateInfo<S>>(mlu),
+                      make_shared<StateInfo<S>>(ml))
+                : nullptr;
         shared_ptr<StateInfo<S>> conn_mr =
-            dot == 2 || !fuse_left ? TransStateInfo<S, S>::backward_connection(
-                                         make_shared<StateInfo<S>>(mru),
-                                         make_shared<StateInfo<S>>(mr))
-                                   : nullptr;
+            dot == 2 || (dot != 0 && !fuse_left)
+                ? TransStateInfo<S, S>::backward_connection(
+                      make_shared<StateInfo<S>>(mru),
+                      make_shared<StateInfo<S>>(mr))
+                : nullptr;
         shared_ptr<StateInfo<S>> conn_r =
             TransStateInfo<S, S>::backward_connection(cpru, cpr);
+        map<array<S, 2>, pair<FLS *, size_t>> mp0;
         map<array<S, 3>, pair<FLS *, size_t>> mp;
         map<array<S, 4>, pair<FLS *, size_t>> mp2;
-        int nxw = pket == nullptr ? 1 : pket->n;
+        int nxw = is_group ? (forward ? pket->n : gr_wfn->n) : 1;
         for (int iw = 0; iw < nxw; iw++) {
             shared_ptr<SparseMatrix<S, FLS>> xwfn =
-                forward ? (pket == nullptr ? mps->tensors[i] : (*pket)[iw])
-                        : mask_wfn;
+                forward ? (is_group ? (*pket)[iw] : ket)
+                        : (is_group ? (*gr_wfn)[iw] : r_wfn);
             for (int k = 0; k < xwfn->info->n; k++) {
                 S pln =
                     xwfn->info->quanta[k].get_bra(xwfn->info->delta_quantum);
@@ -2258,7 +2276,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     }
                     assert(p - xwfn->info->n_states_total[k] ==
                            xwfn->info->n_states_ket[k]);
-                } else if (dot == 2) {
+                } else if (dot == 0)
+                    mp0[array<S, 2>{pln, prn}] = make_pair(xwfn->data, 0);
+                else if (dot == 2) {
                     int ib = ll->find_state(pln), ik = rr->find_state(prn);
                     int bbed = clm->acc_n_states[ib + 1],
                         kked = cmr->acc_n_states[ik + 1];
@@ -2291,10 +2311,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     assert(false);
             }
         }
-        nxw = pket == nullptr ? 1 : cpket->n;
+        nxw = is_group ? (forward ? gr_wfn->n : cpket->n) : 1;
         for (int iw = 0; iw < nxw; iw++) {
             shared_ptr<SparseMatrix<S, FLS>> cwfn =
-                pket == nullptr ? cmps->tensors[i] : (*cpket)[iw];
+                forward ? (is_group ? (*gr_wfn)[iw] : r_wfn)
+                        : (is_group ? (*cpket)[iw] : cket);
             for (int k = 0; k < cwfn->info->n; k++) {
                 S plu =
                     cwfn->info->quanta[k].get_bra(cwfn->info->delta_quantum);
@@ -2313,9 +2334,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                      cwfn->info->n_states_ket[k];
                         S pplu = lu.quanta[ibbau], ppmu = mlu.quanta[ibbbu],
                           ppru = pru;
-                        FLS *x = forward && pket == nullptr
-                                     ? mask_wfn->data + pu
-                                     : cwfn->data + pu;
+                        FLS *x = cwfn->data + pu;
                         pu += lpu;
                         shared_ptr<StateInfo<S>> mls =
                             TransStateInfo<S, S>::forward(
@@ -2440,9 +2459,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                             (size_t)mru.n_states[ikkau] * ru.n_states[ikkbu];
                         S pplu = plu, ppmu = mru.quanta[ikkau],
                           ppru = ru.quanta[ikkbu];
-                        FLS *x = forward && pket == nullptr
-                                     ? mask_wfn->data + pu
-                                     : cwfn->data + pu;
+                        FLS *x = cwfn->data + pu;
                         size_t xstr = cwfn->info->n_states_ket[k];
                         pu += lpu;
                         shared_ptr<StateInfo<S>> mls =
@@ -2556,6 +2573,71 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     }
                     assert(pu - cwfn->info->n_states_total[k] ==
                            cwfn->info->n_states_ket[k]);
+                } else if (dot == 0) {
+                    S pplu = plu, ppru = pru;
+                    FLS *x = cwfn->data;
+                    shared_ptr<StateInfo<S>> mls =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(pplu), ref);
+                    shared_ptr<StateInfo<S>> mrs =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppru), ref);
+                    S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                    S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                    for (int iln = 0; iln < mls->n; iln++)
+                        for (int irn = 0; irn < mrs->n; irn++) {
+                            S lqn = mls->quanta[iln], rqn = mrs->quanta[irn];
+                            if (!mp0.count(array<S, 2>{lqn, rqn}))
+                                continue;
+                            FLS *xr = mp0.at(array<S, 2>{lqn, rqn}).first;
+                            lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                            rqn = is_wfn || !fuse_left ? cpt - rqn : rqn;
+                            int il = cpl->find_state(lqn);
+                            int ir = cpr->find_state(rqn);
+                            MKL_INT zl = cpl->n_states[il],
+                                    zr = cpr->n_states[ir];
+                            int klst = conn_l->n_states[il];
+                            int krst = conn_r->n_states[ir];
+                            int kled = il == cpl->n - 1
+                                           ? conn_l->n
+                                           : conn_l->n_states[il + 1];
+                            int kred = ir == cpr->n - 1
+                                           ? conn_r->n
+                                           : conn_r->n_states[ir + 1];
+                            size_t lsh = 0, rsh = 0;
+                            for (int ilp = klst;
+                                 ilp < kled && conn_l->quanta[ilp] != xpplu;
+                                 ilp++)
+                                lsh += cplu->n_states[cplu->find_state(
+                                    conn_l->quanta[ilp])];
+                            for (int irp = krst;
+                                 irp < kred && conn_r->quanta[irp] != xppru;
+                                 irp++)
+                                rsh += cpru->n_states[cpru->find_state(
+                                    conn_r->quanta[irp])];
+                            MKL_INT kl =
+                                (MKL_INT)
+                                    cplu->n_states[cplu->find_state(xpplu)];
+                            MKL_INT kr =
+                                (MKL_INT)
+                                    cpru->n_states[cpru->find_state(xppru)];
+                            if (mask) {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        xr[(ikl + lsh) * zr + (ikr + rsh)] =
+                                            1.0;
+                            } else if (forward) {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        x[(size_t)ikl * kr + (size_t)ikr] +=
+                                            xr[(ikl + lsh) * zr + (ikr + rsh)];
+                            } else {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        xr[(ikl + lsh) * zr + (ikr + rsh)] =
+                                            x[(size_t)ikl * kr + (size_t)ikr];
+                            }
+                        }
                 } else if (dot == 2) {
                     int ibu = llu->find_state(plu), iku = rru->find_state(pru);
                     int bbedu = clmu->acc_n_states[ibu + 1],
@@ -2579,9 +2661,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                               ppru = ru.quanta[ikkbu];
                             size_t npmru = mru.n_states[ikkau],
                                    npru = ru.n_states[ikkbu];
-                            FLS *x = forward && pket == nullptr
-                                         ? mask_wfn->data + pu + iplu + ipru
-                                         : cwfn->data + pu + iplu + ipru;
+                            FLS *x = cwfn->data + pu + iplu + ipru;
                             size_t xstr = cwfn->info->n_states_ket[k];
                             ipru += (size_t)npmru * npru;
                             S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
@@ -2800,7 +2880,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 }
             }
         }
-        return mask_wfn;
+        return make_pair(r_wfn, gr_wfn);
     }
     // Contract two adjcent MPS tensors to one two-site MPS tensor
     static void contract_two_dot(int i, const shared_ptr<MPS<S, FLS>> &mps,
