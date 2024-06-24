@@ -4112,6 +4112,7 @@ class DMRGDriver:
         dav_rel_conv_thrd=0.0,
         proj_mpss=None,
         proj_weights=None,
+        noise_type=None,
         decomp_type=None,
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
@@ -4204,6 +4205,10 @@ class DMRGDriver:
                 The weights of the MPS projection. This should be larger than the energy gap between
                 the targeted state and the projected state. But if this is too large,
                 the error in the projected state will affect the quality of the targeted state.
+            noise_type : None or str
+                The method for noise. Can be 'Wavefunction', 'DensityMatrix', 'Perturbative',
+                'ReducedPerturbative', 'ReducedPerturbativeCollected', or 'Nothing'.
+                Default is None (ReducedPerturbativeCollected).
             decomp_type : None or str
                 The method for MPS tensor decomposition. Can be 'SVD', 'PureSVD', or 'DensityMatrix'.
                 Default is None (DensityMatrix).
@@ -4297,10 +4302,11 @@ class DMRGDriver:
             else:
                 dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.davidson_shift = davidson_shift
+        if noise_type is None:
+            noise_type = 'ReducedPerturbativeCollected'
+        dmrg.noise_type = getattr(bw.b.NoiseTypes, noise_type)
         if lowmem_noise:
-            dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollectedLowMem
-        else:
-            dmrg.noise_type = bw.b.NoiseTypes.ReducedPerturbativeCollected
+            dmrg.noise_type = dmrg.noise_type | bw.b.NoiseTypes.LowMem
         if decomp_type is not None:
             dmrg.decomp_type = getattr(bw.b.DecompositionTypes, decomp_type)
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)
