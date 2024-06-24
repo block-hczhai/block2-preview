@@ -335,6 +335,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 set<shared_ptr<OpExpr<S>>, op_expr_less<S>> left_zero_ops,
                     right_zero_ops;
                 MPO<S, FL>::load_left_operators(i);
+                if (MPO<S, FL>::tag != mpo->tag)
+                    mpo->load_left_operators(i);
                 for (size_t j = 0;
                      j < MPO<S, FL>::left_operator_names[i]->data.size(); j++)
                     if (MPO<S, FL>::left_operator_names[i]
@@ -345,6 +347,8 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                 mpo->unload_left_operators(i);
                 MPO<S, FL>::unload_left_operators(i);
                 MPO<S, FL>::load_right_operators(i + 1);
+                if (MPO<S, FL>::tag != mpo->tag)
+                    mpo->load_right_operators(i + 1);
                 for (size_t j = 0;
                      j < MPO<S, FL>::right_operator_names[i + 1]->data.size();
                      j++)
