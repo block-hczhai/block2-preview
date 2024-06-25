@@ -597,6 +597,7 @@ template <bool IF> struct SGLong {
     int twos() const { return 0; }
     int pg() const { return (int)(data & 0xFFFFU); }
     void set_n(int n) { data = (data & 0xFFFFU) | (((uint32_t)n) << 16); }
+    void set_twos(int twos) {}
     void set_pg(int pg) { data = (data & (~0xFFFFU)) | ((uint32_t)pg); }
     int multiplicity() const noexcept { return 1; }
     bool is_fermion() const noexcept { return IF && ((data >> 16) & 1); }
