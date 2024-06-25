@@ -471,13 +471,8 @@ class MPSTools:
                     qs[-1] = qs[-1] + sz_shift
                     blocks.append(SubTensor(q_labels=tuple(qs), reduced=b.reduced))
             tensor = Tensor(blocks=blocks)
-            tt = Tensor.contract(
-                trm,
-                Tensor.contract(tensor, trr, idxa=[2], idxb=[0]),
-                idxa=[1],
-                idxb=[1],
-                out_trans=(1, 0, 2),
-            )
+            tt = Tensor.contract(tensor, trr, idxa=[2], idxb=[0])
+            tt = Tensor.contract(trm, tt, idxa=[1], idxb=[1], out_trans=(1, 0, 2))
             subz, kzm, finfo = {}, {}, {}
             for b in tt.blocks:
                 ja, jb = b.q_labels[2], b.q_labels[1]

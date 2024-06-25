@@ -264,6 +264,7 @@ template <typename S> void bind_mps(py::module &m) {
              &MPSInfo<S>::template swap_multi_wfn_to_fused_right<double>)
         .def("get_filename", &MPSInfo<S>::get_filename, py::arg("left"),
              py::arg("i"), py::arg("dir") = "")
+        .def("flip_twos", &MPSInfo<S>::flip_twos)
         .def("save_mutable", &MPSInfo<S>::save_mutable)
         .def("copy_mutable", &MPSInfo<S>::copy_mutable)
         .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
@@ -378,6 +379,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def(py::init<const vector<
                  vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>> &>())
         .def_readwrite("data", &SparseTensor<S, FL>::data)
+        .def("flip_twos", &SparseTensor<S, FL>::flip_twos)
         .def("__repr__", [](SparseTensor<S, FL> *self) {
             stringstream ss;
             ss << *self;
@@ -501,6 +503,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("initialize", &UnfusedMPS<S, FL>::initialize)
         .def("finalize", &UnfusedMPS<S, FL>::finalize,
              py::arg("para_rule") = nullptr)
+        .def("flip_twos", &UnfusedMPS<S, FL>::flip_twos)
         .def("resolve_singlet_embedding",
              &UnfusedMPS<S, FL>::resolve_singlet_embedding);
 

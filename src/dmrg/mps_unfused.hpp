@@ -53,6 +53,21 @@ template <typename S, typename FL> struct SparseTensor {
             }
         return os;
     }
+    void flip_twos(const shared_ptr<StateInfo<S>> &basis) {
+        vector<vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>> new_data(
+            basis->n);
+        vector<int> basis_map(basis->n);
+        for (int ip = 0; ip < (int)data.size(); ip++) {
+            S q = basis->quanta[ip];
+            q.set_twos(-q.twos());
+            const int iq = basis->find_state(q);
+            new_data[iq] = data[ip];
+            for (auto &m : new_data[iq])
+                m.first.first.set_twos(-m.first.first.twos()),
+                    m.first.second.set_twos(-m.first.second.twos());
+        }
+        data = new_data;
+    }
 };
 
 template <typename S1, typename S2, typename FL, typename = void,
@@ -685,6 +700,11 @@ template <typename S, typename FL> struct UnfusedMPS {
                     x.first.first = x.first.first - lq;
                     x.first.second = x.first.second - lq;
                 }
+    }
+    void flip_twos() const {
+        for (int i = 0; i < n_sites; i++)
+            tensors[i]->flip_twos(info->basis[i]);
+        info->flip_twos();
     }
 };
 

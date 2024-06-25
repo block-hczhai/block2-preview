@@ -203,6 +203,37 @@ template <typename S> struct MPSInfo {
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
+    void flip_twos() {
+        vacuum.set_twos(-vacuum.twos());
+        target.set_twos(-target.twos());
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < left_dims_fci[i]->n; j++)
+                left_dims_fci[i]->quanta[j].set_twos(
+                    -left_dims_fci[i]->quanta[j].twos());
+            left_dims_fci[i]->sort_states();
+        }
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < right_dims_fci[i]->n; j++)
+                right_dims_fci[i]->quanta[j].set_twos(
+                    -right_dims_fci[i]->quanta[j].twos());
+            right_dims_fci[i]->sort_states();
+        }
+        load_mutable();
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < left_dims[i]->n; j++)
+                left_dims[i]->quanta[j].set_twos(
+                    -left_dims[i]->quanta[j].twos());
+            left_dims[i]->sort_states();
+        }
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < right_dims[i]->n; j++)
+                right_dims[i]->quanta[j].set_twos(
+                    -right_dims[i]->quanta[j].twos());
+            right_dims[i]->sort_states();
+        }
+        save_mutable();
+        deallocate_mutable();
+    }
     // normal case is left_vacuum == right_vacuum == vacuum
     // only for singlet embedding left_vacuum is not vacuum
     virtual void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),

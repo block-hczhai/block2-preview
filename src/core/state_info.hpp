@@ -694,13 +694,16 @@ struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
         shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
         const S ref = bsi->quanta[0];
         map<S, vector<S>> mp;
-        int ii = 0;
+        int nb = 0, ii = 0;
         for (int i = 0; i < si->n; i++) {
             S q = si->quanta[i];
-            S z = forward(make_shared<StateInfo<S>>(q), ref)->quanta[0];
-            mp[z].push_back(q);
+            shared_ptr<StateInfo<S>> zs =
+                forward(make_shared<StateInfo<S>>(q), ref);
+            nb += zs->n;
+            for (int iz = 0; iz < zs->n; iz++)
+                mp[zs->quanta[iz]].push_back(q);
         }
-        so->allocate(si->n);
+        so->allocate(nb);
         for (int ib = 0; ib < bsi->n; ib++) {
             vector<S> &v = mp.at(bsi->quanta[ib]);
             so->n_states[ib] = ii;

@@ -933,21 +933,22 @@ class DMRGDriver:
             else:
                 self.orb_sym = bw.VectorPG(orb_sym)
         if hamil_init:
+            # for sany, order is 0ba2
             std_ops = {
                 "": np.array(
                     [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
                 ),  # identity
                 "c": np.array(
-                    [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]
+                    [[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, 1, 0, 0]]
                 ),  # alpha+
                 "d": np.array(
-                    [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+                    [[0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]]
                 ),  # alpha
                 "C": np.array(
-                    [[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, -1, 0, 0]]
+                    [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, -1, 0]]
                 ),  # beta+
                 "D": np.array(
-                    [[0, 0, 1, 0], [0, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0]]
+                    [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, -1], [0, 0, 0, 0]]
                 ),  # beta
             }
             std_ops_sgf = {
@@ -971,7 +972,7 @@ class DMRGDriver:
                         (self.bw.SX(0, 0), 1),
                         (self.bw.SX(1, ipg), 2),
                         (self.bw.SX(2, 0), 1),
-                    ]  # [0ab2]
+                    ]  # [0ba2]
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
@@ -996,10 +997,10 @@ class DMRGDriver:
                     ipg = self.orb_sym[k]
                     basis = [
                         (self.bw.SX(0, 0, 0), 1),
-                        (self.bw.SX(1, 1, ipg), 1),
                         (self.bw.SX(1, -1, ipg), 1),
+                        (self.bw.SX(1, 1, ipg), 1),
                         (self.bw.SX(2, 0, 0), 1),
-                    ]  # [0ab2]
+                    ]  # [0ba2]
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
@@ -5834,6 +5835,13 @@ class DMRGDriver:
         if ket.canonical_form[-1] == "M" and not isinstance(ket, bw.bs.MultiMPS):
             ket.canonical_form = ket.canonical_form[:-1] + "C"
         if dot == 1:
+            if ket.center == 0 and ket.canonical_form[0] in "S":
+                if self.mpi is not None:
+                    self.mpi.barrier()
+                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+                ket.save_data()
+                if self.mpi is not None:
+                    self.mpi.barrier()
             if ket.canonical_form[0] == "C" and ket.canonical_form[1] == "R":
                 ket.canonical_form = "K" + ket.canonical_form[1:]
             elif ket.canonical_form[-1] == "C" and ket.canonical_form[-2] == "L":
@@ -6740,6 +6748,30 @@ class DMRGDriver:
             r = bw.bs.trans_mps_to_complex(mps, tag)
         r.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         return r
+
+    def mps_flip_twos(self, mps):
+        """
+        Flip the sign of projection spin in the MPS.
+        
+        Args:
+            mps : MPS
+                The input MPS.
+        
+        Returns:
+            mps : MPS
+                The output MPS.
+        """
+        bw = self.bw
+        if self.mpi is not None:
+            self.mpi.barrier()
+        mps.info.load_mutable()
+        mps.load_mutable()
+        umps = bw.bs.UnfusedMPS(mps)
+        umps.flip_twos()
+        if self.mpi is not None:
+            self.mpi.barrier()
+        zmps = umps.finalize(self.prule)
+        return zmps
 
     def mps_change_symm(self, mps, tag, target):
         """

@@ -711,6 +711,7 @@ class MPS:
                     left = Tensor.contract(
                         self.tensors[i], other.tensors[i], [0], [0])
             else:
+                # possible error due to SRRR 1-dot MPS
                 lbra = Tensor.contract(left, self.tensors[i], [0], [0])
                 if self.tensors[i].rank == 4 or (
                         i == self.n_sites - 2 and self.tensors[i + 1]
