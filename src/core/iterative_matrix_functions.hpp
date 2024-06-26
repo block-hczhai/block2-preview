@@ -629,9 +629,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                          complex_dot(ors[j], bs[i]) * proj_weights[j]);
                 taus[i].clear();
                 sop(bs[i], taus[i]);
-                for (int j = 0; j < nwg; j++)
-                    iadd(taus[i], ors[j],
-                         complex_dot(ors[j], bs[i]) * proj_weights[j]);
             }
             if (pcomm == nullptr || pcomm->root == pcomm->rank) {
                 GDiagonalMatrix<FP> ld(nullptr, m);

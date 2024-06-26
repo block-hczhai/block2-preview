@@ -445,9 +445,13 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             bs.push_back(GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
-        for (size_t i = 0; i < ortho_bra.size(); i++)
+        for (size_t i = 0; i < ortho_bra.size(); i++) {
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
+            if (cmask.data != nullptr)
+                GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask, (FL)1.0,
+                                                  ors[i], ors[i], (FL)0.0);
+        }
         frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
@@ -1599,9 +1603,13 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                          (MKL_INT)bra[i]->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
-        for (size_t i = 0; i < ortho_bra.size(); i++)
+        for (size_t i = 0; i < ortho_bra.size(); i++) {
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
+            if (cmask.data != nullptr)
+                GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask, (FL)1.0,
+                                                  ors[i], ors[i], (FL)0.0);
+        }
         frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
