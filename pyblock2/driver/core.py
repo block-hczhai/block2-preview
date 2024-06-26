@@ -4288,7 +4288,10 @@ class DMRGDriver:
             assert len(proj_weights) == len(proj_mpss)
             dmrg.projection_weights = bw.VectorFP(proj_weights)
             dmrg.ext_mpss = bw.bs.VectorMPS(proj_mpss)
-            impo = self.get_identity_mpo()
+            if metric_mpo is None:
+                impo = self.get_identity_mpo()
+            else:
+                impo = metric_mpo
             for ext_mps in dmrg.ext_mpss:
                 if ext_mps.info.tag == ket.info.tag:
                     raise RuntimeError("Same tag for proj_mps and ket!!")

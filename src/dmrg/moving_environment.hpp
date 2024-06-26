@@ -2040,7 +2040,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                          shared_ptr<SparseMatrix<S, FLS>> cket = nullptr) {
         return symm_context_convert_impl(
                    i, mps->info, cmps->info, dot, fuse_left, mask, forward,
-                   is_wfn, infer_info,
+                   is_wfn, infer_info, false,
                    ket == nullptr && !(!forward && infer_info) ? mps->tensors[i]
                                                                : ket,
                    cket == nullptr && !(forward && infer_info)
@@ -2049,14 +2049,15 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                    nullptr, nullptr)
             .first;
     }
-    static shared_ptr<SparseMatrixGroup<S, FLS>> symm_context_convert_group(
+    static shared_ptr<SparseMatrixGroup<S, FLS>>
+    symm_context_convert_perturbative(
         int i, const shared_ptr<MPS<S, FLS>> &mps,
         const shared_ptr<MPS<S, FLS>> &cmps, int dot, bool fuse_left, bool mask,
         bool forward, bool is_wfn, bool infer_info,
         const shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
         return symm_context_convert_impl(i, mps->info, cmps->info, dot,
                                          fuse_left, mask, forward, is_wfn,
-                                         infer_info, mps->tensors[i],
+                                         infer_info, true, mps->tensors[i],
                                          cmps->tensors[i], pket, nullptr)
             .second;
     }
@@ -2066,7 +2067,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     symm_context_convert_impl(int i, const shared_ptr<MPSInfo<S>> &info,
                               const shared_ptr<MPSInfo<S>> &cinfo, int dot,
                               bool fuse_left, bool mask, bool forward,
-                              bool is_wfn, bool infer_info,
+                              bool is_wfn, bool infer_info, bool is_pert,
                               shared_ptr<SparseMatrix<S, FLS>> ket,
                               shared_ptr<SparseMatrix<S, FLS>> cket,
                               shared_ptr<SparseMatrixGroup<S, FLS>> pket,
@@ -2139,7 +2140,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<SparseMatrixGroup<S, FLS>> gr_wfn =
             is_group ? make_shared<SparseMatrixGroup<S, FLS>>(d_alloc)
                      : nullptr;
-        if (is_group && infer_info) {
+        if (is_pert) {
+            assert(is_group && infer_info);
             // FIXME: multi will have problem
             vector<S> pket_dqs;
             for (int iw = 0; iw < pket->n; iw++) {

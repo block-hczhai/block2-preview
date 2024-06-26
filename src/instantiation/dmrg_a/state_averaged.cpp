@@ -22,3 +22,5 @@
 
 template struct block2::MultiMPSInfo<block2::SAny>;
 template struct block2::MultiMPS<block2::SAny, double>;
+
+template struct block2::TransMultiMPSInfo<block2::SAny, block2::SAny>;

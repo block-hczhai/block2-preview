@@ -785,6 +785,8 @@ extern template struct block2::AntiHermitianRuleQC<block2::SAny, double>;
 extern template struct block2::MultiMPSInfo<block2::SAny>;
 extern template struct block2::MultiMPS<block2::SAny, double>;
 
+extern template struct block2::TransMultiMPSInfo<block2::SAny, block2::SAny>;
+
 // sweep_algorithm.hpp
 extern template struct block2::DMRG<block2::SAny, double, double>;
 extern template struct block2::Linear<block2::SAny, double, double>;

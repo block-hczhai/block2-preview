@@ -21,6 +21,8 @@
 #include "../pybind_dmrg.hpp"
 
 template void bind_trans_mps<SAny, SAny>(py::module &m, const string &aux_name);
+template void bind_trans_multi_mps<SAny, SAny>(py::module &m,
+                                               const string &aux_name);
 template auto
 bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
                                                     const string &aux_name)

@@ -319,8 +319,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     false);
             xket = context_ket;
             if (pket != nullptr) {
-                context_pket =
-                    MovingEnvironment<S, FL, FLS>::symm_context_convert_group(
+                context_pket = MovingEnvironment<S, FL, FLS>::
+                    symm_context_convert_perturbative(
                         i, me->ket, context_ket, 1,
                         !skip_decomp ? forward : fuse_left, false, true, true,
                         true, pket);
@@ -861,10 +861,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             xold_ket = context_old_ket;
             xket = context_ket;
             if (pket != nullptr) {
-                context_pket =
-                    MovingEnvironment<S, FL, FLS>::symm_context_convert_group(
-                        i, me->ket, context_ket, 2, true, false, true, true,
-                        true, pket);
+                context_pket = MovingEnvironment<
+                    S, FL, FLS>::symm_context_convert_perturbative(i, me->ket,
+                                                                   context_ket,
+                                                                   2, true,
+                                                                   false, true,
+                                                                   true, true,
+                                                                   pket);
                 xpket = context_pket;
             }
         }

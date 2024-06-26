@@ -304,6 +304,7 @@ PYBIND11_MODULE(block2, m) {
 #ifdef _USE_SANY
     bind_dmrg<SAny, double>(m_sany, "SAny");
     bind_trans_mps<SAny, SAny>(m_sany, "sany");
+    bind_trans_multi_mps<SAny, SAny>(m_sany, "sany");
     bind_fl_trans_mps_spin_specific<SAny, SAny, double>(m_sany, "sany");
 #ifdef _USE_COMPLEX
     bind_dmrg<SAny, complex<double>>(m_sany_cpx, "SAny");

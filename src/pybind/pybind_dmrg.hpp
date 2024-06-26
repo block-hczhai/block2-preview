@@ -484,22 +484,28 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def_readwrite("canonical_form", &UnfusedMPS<S, FL>::canonical_form)
         .def_static("forward_left_fused",
                     &UnfusedMPS<S, FL>::forward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
+                    py::arg("info"), py::arg("mat"), py::arg("wfn"))
         .def_static("forward_right_fused",
                     &UnfusedMPS<S, FL>::forward_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
+                    py::arg("info"), py::arg("mat"), py::arg("wfn"))
         .def_static("forward_mps_tensor",
                     &UnfusedMPS<S, FL>::forward_mps_tensor, py::arg("i"),
                     py::arg("mps"))
+        .def_static("forward_multi_mps_tensor",
+                    &UnfusedMPS<S, FL>::forward_multi_mps_tensor, py::arg("i"),
+                    py::arg("mmps"))
         .def_static("backward_left_fused",
                     &UnfusedMPS<S, FL>::backward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+                    py::arg("info"), py::arg("spt"), py::arg("wfn"))
         .def_static("backward_right_fused",
                     &UnfusedMPS<S, FL>::backward_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+                    py::arg("info"), py::arg("spt"), py::arg("wfn"))
         .def_static("backward_mps_tensor",
                     &UnfusedMPS<S, FL>::backward_mps_tensor, py::arg("i"),
                     py::arg("mps"), py::arg("spt"))
+        .def_static("backward_multi_mps_tensor",
+                    &UnfusedMPS<S, FL>::backward_multi_mps_tensor, py::arg("i"),
+                    py::arg("mmps"), py::arg("spt"))
         .def("initialize", &UnfusedMPS<S, FL>::initialize)
         .def("finalize", &UnfusedMPS<S, FL>::finalize,
              py::arg("para_rule") = nullptr)
@@ -1039,12 +1045,12 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                     py::arg("forward"), py::arg("is_wfn"),
                     py::arg("infer_info"), py::arg("ket") = nullptr,
                     py::arg("cket") = nullptr)
-        .def_static("symm_context_convert_group",
-                    &MovingEnvironment<S, FL, FLS>::symm_context_convert_group,
-                    py::arg("i"), py::arg("mps"), py::arg("cmps"),
-                    py::arg("dot"), py::arg("fuse_left"), py::arg("mask"),
-                    py::arg("forward"), py::arg("is_wfn"),
-                    py::arg("infer_info"), py::arg("pket"));
+        .def_static(
+            "symm_context_convert_perturbative",
+            &MovingEnvironment<S, FL, FLS>::symm_context_convert_perturbative,
+            py::arg("i"), py::arg("mps"), py::arg("cmps"), py::arg("dot"),
+            py::arg("fuse_left"), py::arg("mask"), py::arg("forward"),
+            py::arg("is_wfn"), py::arg("infer_info"), py::arg("pket"));
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S, FL, FLS>>>>(
         m, ("Vector" + name).c_str());
@@ -2225,6 +2231,13 @@ void bind_trans_mps(py::module &m, const string &aux_name) {
           &TransMPSInfo<S, T>::forward);
 }
 
+template <typename S, typename T>
+void bind_trans_multi_mps(py::module &m, const string &aux_name) {
+
+    m.def(("trans_multi_mps_info_to_" + aux_name).c_str(),
+          &TransMultiMPSInfo<S, T>::forward);
+}
+
 template <typename S, typename FL1, typename FL2>
 void bind_fl_trans_mps(py::module &m, const string &aux_name) {
 
@@ -2898,6 +2911,8 @@ extern template auto bind_fl_spin_specific<SAny, double>(py::module &m)
 
 extern template void bind_trans_mps<SAny, SAny>(py::module &m,
                                                 const string &aux_name);
+extern template void bind_trans_multi_mps<SAny, SAny>(py::module &m,
+                                                      const string &aux_name);
 extern template auto
 bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
                                                     const string &aux_name)
