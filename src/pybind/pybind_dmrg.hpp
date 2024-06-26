@@ -715,6 +715,9 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::cmat)
         .def_readwrite("vmat",
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::vmat)
+        .def_readwrite(
+            "context_mask",
+            &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::context_mask)
         .def_readwrite("tf", &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::tf)
         .def_readwrite("hop_mat",
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::hop_mat)

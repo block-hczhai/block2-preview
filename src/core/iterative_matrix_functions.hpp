@@ -524,6 +524,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         shared_ptr<VectorAllocator<FP>> x_alloc =
             make_shared<VectorAllocator<FP>>();
         int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
+        int orig_k = k;
         assert(!(davidson_type & DavidsonTypes::Exact));
         assert(!(davidson_type & DavidsonTypes::NonHermitian));
         // if proj_weights is empty or ElementProj, then projection is done by
@@ -579,7 +580,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                    << " for Davidson unitary to all given states (you are "
                       "possibly targeting a global symmetry sector with no "
                       "states or MPS has zero norm)!";
-                throw runtime_error(ss.str());
+                ss << "Space size = " << bs[i].size();
+                if (i > 0) {
+                    k = i;
+                    break;
+                } else
+                    throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);
         }
@@ -595,6 +601,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                    << " for Davidson unitary to all given states (you are "
                       "possibly targeting a global symmetry sector with no "
                       "states or MPS has zero norm)!";
+                ss << "Space size = " << bs[i].size();
                 throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);
@@ -830,7 +837,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 break;
         }
         if (xiter == soft_max_iter)
-            eigvals.resize(k, 0);
+            eigvals.resize(orig_k, 0);
         if (xiter == max_iter) {
             cout << "Error : only " << ck << " converged!" << endl;
             assert(false);

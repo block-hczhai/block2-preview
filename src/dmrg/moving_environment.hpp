@@ -2038,6 +2038,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                          bool infer_info,
                          shared_ptr<SparseMatrix<S, FLS>> ket = nullptr,
                          shared_ptr<SparseMatrix<S, FLS>> cket = nullptr) {
+        if (mps->get_type() & MPSTypes::MultiWfn)
+            mps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(mps->info)->targets[0];
+        if (cmps->get_type() & MPSTypes::MultiWfn)
+            cmps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(cmps->info)->targets[0];
         return symm_context_convert_impl(
                    i, mps->info, cmps->info, dot, fuse_left, mask, forward,
                    is_wfn, infer_info, false,
@@ -2049,16 +2055,40 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                    nullptr, nullptr)
             .first;
     }
+    static vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
+    symm_context_convert_group(int i, const shared_ptr<MultiMPS<S, FLS>> &mps,
+                               const shared_ptr<MultiMPS<S, FLS>> &cmps,
+                               int dot, bool fuse_left, bool mask, bool forward,
+                               bool is_wfn, bool infer_info) {
+        const size_t nw =
+            mask ? 1 : (forward ? mps->wfns.size() : cmps->wfns.size());
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> rwfns(nw);
+        for (int iw = 0; iw < (int)nw; iw++) {
+            rwfns[iw] =
+                symm_context_convert_impl(
+                    i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                    is_wfn, infer_info, false, nullptr, nullptr,
+                    !(!forward && infer_info) ? mps->wfns[iw] : nullptr,
+                    !(forward && infer_info) ? cmps->wfns[iw] : nullptr)
+                    .second;
+        }
+        return rwfns;
+    }
     static shared_ptr<SparseMatrixGroup<S, FLS>>
     symm_context_convert_perturbative(
         int i, const shared_ptr<MPS<S, FLS>> &mps,
         const shared_ptr<MPS<S, FLS>> &cmps, int dot, bool fuse_left, bool mask,
         bool forward, bool is_wfn, bool infer_info,
         const shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
-        return symm_context_convert_impl(i, mps->info, cmps->info, dot,
-                                         fuse_left, mask, forward, is_wfn,
-                                         infer_info, true, mps->tensors[i],
-                                         cmps->tensors[i], pket, nullptr)
+        if (mps->get_type() & MPSTypes::MultiWfn)
+            mps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(mps->info)->targets[0];
+        if (cmps->get_type() & MPSTypes::MultiWfn)
+            cmps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(cmps->info)->targets[0];
+        return symm_context_convert_impl(
+                   i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                   is_wfn, infer_info, true, nullptr, nullptr, pket, nullptr)
             .second;
     }
     // forward = proj to high symmetry
@@ -2164,13 +2194,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             }
             gr_wfn->allocate(infos);
             gr_wfn->clear();
-        } else if (!is_group && infer_info) {
-            shared_ptr<SparseMatrixInfo<S>> xinfo =
-                make_shared<SparseMatrixInfo<S>>(i_alloc);
+        } else if (infer_info) {
             shared_ptr<StateInfo<S>> xll = forward ? llu : ll;
             shared_ptr<StateInfo<S>> xrr = forward ? rru : rr;
-            S xdq = is_wfn ? (forward ? cinfo->target : info->target)
-                           : (forward ? cinfo->vacuum : info->vacuum);
             if (fuse_left) {
                 xrr = forward ? TransStateInfo<S, S>::forward(rr, refu)
                               : TransStateInfo<S, S>::forward(rru, ref);
@@ -2186,9 +2212,33 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 else
                     ll = xll, l = *xll;
             }
-            xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
-            r_wfn->allocate(xinfo);
-            r_wfn->clear();
+            if (is_group) {
+                int nxw = forward ? pket->n : cpket->n;
+                vector<shared_ptr<SparseMatrixInfo<S>>> infos(nxw);
+                for (int iw = 0; iw < nxw; iw++) {
+                    S xdq =
+                        is_wfn
+                            ? (forward
+                                   ? dynamic_pointer_cast<MultiMPSInfo<S>>(
+                                         cinfo)
+                                         ->targets[iw]
+                                   : dynamic_pointer_cast<MultiMPSInfo<S>>(info)
+                                         ->targets[iw])
+                            : (forward ? cinfo->vacuum : info->vacuum);
+                    infos[iw] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                    infos[iw]->initialize(*xll, *xrr, xdq, false, is_wfn);
+                }
+                gr_wfn->allocate(infos);
+                gr_wfn->clear();
+            } else {
+                S xdq = is_wfn ? (forward ? cinfo->target : info->target)
+                               : (forward ? cinfo->vacuum : info->vacuum);
+                shared_ptr<SparseMatrixInfo<S>> xinfo =
+                    make_shared<SparseMatrixInfo<S>>(i_alloc);
+                xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
+                r_wfn->allocate(xinfo);
+                r_wfn->clear();
+            }
         } else if (is_group) {
             gr_wfn->allocate(forward ? cpket->infos : pket->infos);
             gr_wfn->clear();
@@ -2196,39 +2246,6 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             r_wfn->allocate(forward ? cket->info : ket->info);
             r_wfn->clear();
         }
-        S cptu = cinfo->target, cpt = info->target;
-        shared_ptr<StateInfo<S>> cplu =
-            is_wfn || fuse_left ? make_shared<StateInfo<S>>(lu)
-                                : make_shared<StateInfo<S>>(
-                                      StateInfo<S>::complementary(lu, cptu));
-        shared_ptr<StateInfo<S>> cpl =
-            is_wfn || fuse_left ? make_shared<StateInfo<S>>(l)
-                                : make_shared<StateInfo<S>>(
-                                      StateInfo<S>::complementary(l, cpt));
-        shared_ptr<StateInfo<S>> cpru =
-            is_wfn || !fuse_left ? make_shared<StateInfo<S>>(
-                                       StateInfo<S>::complementary(ru, cptu))
-                                 : make_shared<StateInfo<S>>(ru);
-        shared_ptr<StateInfo<S>> cpr =
-            is_wfn || !fuse_left
-                ? make_shared<StateInfo<S>>(StateInfo<S>::complementary(r, cpt))
-                : make_shared<StateInfo<S>>(r);
-        shared_ptr<StateInfo<S>> conn_l =
-            TransStateInfo<S, S>::backward_connection(cplu, cpl);
-        shared_ptr<StateInfo<S>> conn_lm =
-            dot == 2 || (dot != 0 && fuse_left)
-                ? TransStateInfo<S, S>::backward_connection(
-                      make_shared<StateInfo<S>>(mlu),
-                      make_shared<StateInfo<S>>(ml))
-                : nullptr;
-        shared_ptr<StateInfo<S>> conn_mr =
-            dot == 2 || (dot != 0 && !fuse_left)
-                ? TransStateInfo<S, S>::backward_connection(
-                      make_shared<StateInfo<S>>(mru),
-                      make_shared<StateInfo<S>>(mr))
-                : nullptr;
-        shared_ptr<StateInfo<S>> conn_r =
-            TransStateInfo<S, S>::backward_connection(cpru, cpr);
         map<array<S, 2>, pair<FLS *, size_t>> mp0;
         map<array<S, 3>, pair<FLS *, size_t>> mp;
         map<array<S, 4>, pair<FLS *, size_t>> mp2;
@@ -2315,6 +2332,46 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
         nxw = is_group ? (forward ? gr_wfn->n : cpket->n) : 1;
         for (int iw = 0; iw < nxw; iw++) {
+            S cptu = cinfo->target, cpt = info->target;
+            if (is_group && !is_pert) {
+                cptu =
+                    dynamic_pointer_cast<MultiMPSInfo<S>>(cinfo)->targets[iw];
+                cpt = dynamic_pointer_cast<MultiMPSInfo<S>>(info)->targets[iw];
+            }
+            shared_ptr<StateInfo<S>> cplu =
+                is_wfn || fuse_left
+                    ? make_shared<StateInfo<S>>(lu)
+                    : make_shared<StateInfo<S>>(
+                          StateInfo<S>::complementary(lu, cptu));
+            shared_ptr<StateInfo<S>> cpl =
+                is_wfn || fuse_left ? make_shared<StateInfo<S>>(l)
+                                    : make_shared<StateInfo<S>>(
+                                          StateInfo<S>::complementary(l, cpt));
+            shared_ptr<StateInfo<S>> cpru =
+                is_wfn || !fuse_left
+                    ? make_shared<StateInfo<S>>(
+                          StateInfo<S>::complementary(ru, cptu))
+                    : make_shared<StateInfo<S>>(ru);
+            shared_ptr<StateInfo<S>> cpr =
+                is_wfn || !fuse_left ? make_shared<StateInfo<S>>(
+                                           StateInfo<S>::complementary(r, cpt))
+                                     : make_shared<StateInfo<S>>(r);
+            shared_ptr<StateInfo<S>> conn_l =
+                TransStateInfo<S, S>::backward_connection(cplu, cpl);
+            shared_ptr<StateInfo<S>> conn_lm =
+                dot == 2 || (dot != 0 && fuse_left)
+                    ? TransStateInfo<S, S>::backward_connection(
+                          make_shared<StateInfo<S>>(mlu),
+                          make_shared<StateInfo<S>>(ml))
+                    : nullptr;
+            shared_ptr<StateInfo<S>> conn_mr =
+                dot == 2 || (dot != 0 && !fuse_left)
+                    ? TransStateInfo<S, S>::backward_connection(
+                          make_shared<StateInfo<S>>(mru),
+                          make_shared<StateInfo<S>>(mr))
+                    : nullptr;
+            shared_ptr<StateInfo<S>> conn_r =
+                TransStateInfo<S, S>::backward_connection(cpru, cpr);
             shared_ptr<SparseMatrix<S, FLS>> cwfn =
                 forward ? (is_group ? (*gr_wfn)[iw] : r_wfn)
                         : (is_group ? (*cpket)[iw] : cket);
