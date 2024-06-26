@@ -377,8 +377,8 @@ template <typename S, typename FL> struct UnfusedMPS {
     vector<vector<shared_ptr<SparseTensor<S, FL>>>> wfns;
     string canonical_form;
     int center, n_sites, dot;
-    bool is_multi;
-    int nroots;
+    bool is_multi = false;
+    int nroots = 1;
     vector<typename GMatrix<FL>::FP> weights;
     UnfusedMPS() {}
     UnfusedMPS(const shared_ptr<MPS<S, FL>> &mps) { this->initialize(mps); }
