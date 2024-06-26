@@ -2056,10 +2056,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             .first;
     }
     static vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
-    symm_context_convert_group(int i, const shared_ptr<MultiMPS<S, FLS>> &mps,
-                               const shared_ptr<MultiMPS<S, FLS>> &cmps,
-                               int dot, bool fuse_left, bool mask, bool forward,
-                               bool is_wfn, bool infer_info) {
+    symm_context_convert_group(
+        int i, const shared_ptr<MultiMPS<S, FLS>> &mps,
+        const shared_ptr<MultiMPS<S, FLS>> &cmps, int dot, bool fuse_left,
+        bool mask, bool forward, bool is_wfn, bool infer_info,
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> kets =
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>>(),
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> ckets =
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>>()) {
         const size_t nw =
             mask ? 1 : (forward ? mps->wfns.size() : cmps->wfns.size());
         vector<shared_ptr<SparseMatrixGroup<S, FLS>>> rwfns(nw);
@@ -2068,8 +2072,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 symm_context_convert_impl(
                     i, mps->info, cmps->info, dot, fuse_left, mask, forward,
                     is_wfn, infer_info, false, nullptr, nullptr,
-                    !(!forward && infer_info) ? mps->wfns[iw] : nullptr,
-                    !(forward && infer_info) ? cmps->wfns[iw] : nullptr)
+                    kets.size() == 0 && !(!forward && infer_info)
+                        ? mps->wfns[iw]
+                        : (kets.size() == 0 ? nullptr : kets[iw]),
+                    ckets.size() == 0 && !(forward && infer_info)
+                        ? cmps->wfns[iw]
+                        : (ckets.size() == 0 ? nullptr : ckets[iw]))
                     .second;
         }
         return rwfns;

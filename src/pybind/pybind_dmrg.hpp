@@ -1041,6 +1041,14 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
                     &MovingEnvironment<S, FL, FLS>::propagate_multi_wfn,
                     py::arg("i"), py::arg("start_site"), py::arg("end_site"),
                     py::arg("mps"), py::arg("forward"), py::arg("cg"))
+        .def_static(
+            "symm_context_convert_group",
+            &MovingEnvironment<S, FL, FLS>::symm_context_convert_group,
+            py::arg("i"), py::arg("mps"), py::arg("cmps"), py::arg("dot"),
+            py::arg("fuse_left"), py::arg("mask"), py::arg("forward"),
+            py::arg("is_wfn"), py::arg("infer_info"),
+            py::arg("kets") = vector<shared_ptr<SparseMatrixGroup<S, FLS>>>(),
+            py::arg("ckets") = vector<shared_ptr<SparseMatrixGroup<S, FLS>>>())
         .def_static("symm_context_convert",
                     &MovingEnvironment<S, FL, FLS>::symm_context_convert,
                     py::arg("i"), py::arg("mps"), py::arg("cmps"),
