@@ -524,10 +524,10 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         pqq = make_pair((uint16_t)2,
                                         min((uint16_t)k, (uint16_t)(kmax - k)));
                     if (blocked)
-                        pqq =
-                            make_pair(kmax - k == k ? (uint16_t)2
-                                                    : (uint16_t)(kmax - k > k),
-                                      min((uint16_t)k, (uint16_t)(kmax - k)));
+                        pqq = make_pair(kmax - k == k && kmax != 0
+                                            ? (uint16_t)2
+                                            : (uint16_t)(kmax - k > k),
+                                        min((uint16_t)k, (uint16_t)(kmax - k)));
                     if (sum_mpo && kmax - k == k && k != 0)
                         pqq = make_pair(
                             (uint16_t)(2 + (sum_mpo_mod == -1
