@@ -557,6 +557,7 @@ class DMRGDriver:
         scratch="./nodex",
         clean_scratch=True,
         restart_dir=None,
+        restart_dir_per_sweep=None,
         n_threads=None,
         n_mkl_threads=1,
         symm_type=SymmetryTypes.SU2,
@@ -584,6 +585,10 @@ class DMRGDriver:
                 MPS files will not be removed. Default is True.
             restart_dir : None or str
                 If not None, MPS will be copied to the given directory after each DMRG sweep.
+                Default is None (MPS will not be copied).
+            restart_dir_per_sweep : None or str
+                If not None, MPS will be copied to the given directory after each DMRG sweep,
+                and the MPSs from different sweeps will be kept in separate directories.
                 Default is None (MPS will not be copied).
             n_threads : None or int
                 Number of threads. When MPI is used, this is the number of threads for each MPI processor.
@@ -623,6 +628,7 @@ class DMRGDriver:
 
         self._scratch = scratch
         self._restart_dir = restart_dir
+        self._restart_dir_per_sweep = restart_dir_per_sweep
         self.stack_mem = stack_mem
         self.stack_mem_ratio = stack_mem_ratio
         self.fp_codec_cutoff = fp_codec_cutoff
@@ -684,6 +690,19 @@ class DMRGDriver:
     def restart_dir(self, restart_dir):
         self._restart_dir = restart_dir
         self.frame.restart_dir = restart_dir
+
+    @property
+    def restart_dir_per_sweep(self):
+        """
+        If not None, MPS will be copied to the given directory after each DMRG sweep,
+        and the MPSs from different sweeps will be kept in separate directories.
+        """
+        return self._restart_dir_per_sweep
+
+    @restart_dir_per_sweep.setter
+    def restart_dir_per_sweep(self, restart_dir_per_sweep):
+        self._restart_dir_per_sweep = restart_dir_per_sweep
+        self.frame.restart_dir_per_sweep = restart_dir_per_sweep
 
     def set_symm_type(self, symm_type, reset_frame=True):
         """
@@ -749,6 +768,9 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             self.frame.restart_dir = self.restart_dir
+
+        if self.restart_dir_per_sweep is not None:
+            self.frame.restart_dir_per_sweep = self.restart_dir_per_sweep
 
     def set_symmetry_groups(self, *args, hint=None):
         """
