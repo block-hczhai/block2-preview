@@ -27,3 +27,6 @@ template auto
 bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
                                                     const string &aux_name)
     -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+template auto bind_fl_trans_mpo<SAny, SAny, double>(py::module &m,
+                                                    const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));

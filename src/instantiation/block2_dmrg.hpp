@@ -712,6 +712,7 @@ extern template struct block2::MPO<block2::SAny, double>;
 extern template struct block2::DiagonalMPO<block2::SAny, double>;
 extern template struct block2::AncillaMPO<block2::SAny, double>;
 extern template struct block2::IdentityAddedMPO<block2::SAny, double>;
+extern template struct block2::TransMPO<block2::SAny, block2::SAny, double>;
 
 // mpo_fusing.hpp
 extern template struct block2::StackedMPO<block2::SAny, double>;
@@ -1492,6 +1493,7 @@ extern template struct block2::MPO<block2::SAny, complex<double>>;
 extern template struct block2::DiagonalMPO<block2::SAny, complex<double>>;
 extern template struct block2::AncillaMPO<block2::SAny, complex<double>>;
 extern template struct block2::IdentityAddedMPO<block2::SAny, complex<double>>;
+extern template struct block2::TransMPO<block2::SAny, block2::SAny, complex<double>>;
 
 // mpo_fusing.hpp
 extern template struct block2::StackedMPO<block2::SAny, complex<double>>;

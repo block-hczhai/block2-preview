@@ -1616,4 +1616,180 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
     }
 };
 
+template <typename S1, typename S2, typename FL> struct TransMPO {
+    typedef typename GMatrix<FL>::FP FP;
+    static shared_ptr<MPO<S2, FL>>
+    forward(const shared_ptr<MPO<S1, FL>> &mpo,
+            const shared_ptr<Hamiltonian<S2, FL>> &hamil,
+            const string &tag = "") {
+        shared_ptr<MPO<S1, FL>> rmpo = make_shared<MPO<S1, FL>>(
+            mpo->n_sites, tag == "" ? "TR-" + mpo->tag : tag);
+        const int n_sites = mpo->n_sites;
+        rmpo->const_e = mpo->const_e;
+        const S2 ref = hamil->vacuum;
+        rmpo->tf = make_shared<TensorFunctions<S2, FL>>(hamil->opf);
+        rmpo->site_op_infos = hamil->site_op_infos;
+        rmpo->basis = hamil->basis;
+        rmpo->hamil = hamil;
+        rmpo->left_operator_names.resize(n_sites, nullptr);
+        rmpo->right_operator_names.resize(n_sites, nullptr);
+        rmpo->tensors.resize(n_sites, nullptr);
+        for (uint16_t m = 0; m < n_sites; m++)
+            rmpo->tensors[m] = make_shared<OperatorTensor<S2, FL>>();
+        rmpo->sparse_form = mpo->sparse_form;
+        rmpo->schemer = nullptr;
+        assert(mpo->schemer == nullptr);
+        shared_ptr<OpExpr<S2>> zero = make_shared<OpExpr<S2>>();
+        auto tr = [&ref](S1 q) -> S2 {
+            return TransStateInfo<S1, S2>::forward(
+                       make_shared<StateInfo<S1>>(q), ref)
+                ->quanta[0];
+        };
+        rmpo->op = make_shared<OpElement<S2, FL>>(
+            mpo->op->name, mpo->op->site_index, tr(mpo->op->q_label),
+            mpo->op->factor);
+        rmpo->left_vacuum = tr(mpo->left_vacuum);
+        for (int ii = 0; ii < n_sites; ii++) {
+            mpo->load_tensor(ii);
+            mpo->load_left_operators(ii);
+            mpo->load_right_operators(ii);
+            shared_ptr<OperatorTensor<S2, FL>> opt = rmpo->tensors[ii];
+            shared_ptr<OperatorTensor<S2, FL>> mopt = mpo->tensors[ii];
+            shared_ptr<Symbolic<S2>> pmat;
+            assert(mopt->lmat == mopt->rmat);
+            if (ii == 0)
+                pmat = make_shared<SymbolicRowVector<S2>>(mopt->lmat->n);
+            else if (ii == n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S2>>(mopt->lmat->m);
+            else {
+                pmat = make_shared<SymbolicMatrix<S2>>(mopt->lmat->m,
+                                                       mopt->lmat->n);
+                dynamic_pointer_cast<SymbolicMatrix<S2>>(pmat)->indices =
+                    dynamic_pointer_cast<SymbolicMatrix<S1>>(mopt->lmat)
+                        ->indices;
+                pmat->data.resize(mopt->lmat->data.size());
+            }
+            opt->lmat = opt->rmat = pmat;
+            for (int iop = 0; iop < mopt->lmat->data.size(); iop++)
+                if (mopt->lmat->data[iop]->get_type() == OpTypes::Zero)
+                    pmat->data[iop] = zero;
+                else if (mopt->lmat->data[iop]->get_type() == OpTypes::Elem) {
+                    const auto p = dynamic_pointer_cast<OpElement<S1, FL>>(
+                        mopt->lmat->data[iop]);
+                    pmat->data[iop] = make_shared<OpElement<S2, FL>>(
+                        p->name, p->site_index, tr(p->q_label), p->factor);
+                } else if (mopt->lmat->data[iop]->get_type() == OpTypes::Sum) {
+                    const auto p = dynamic_pointer_cast<OpSum<S1, FL>>(
+                        mopt->lmat->data[iop]);
+                    vector<shared_ptr<OpExpr<S2>>> strings(p->strings.size());
+                    for (size_t j = 0; j < p->strings.size(); j++) {
+                        const auto pp = dynamic_pointer_cast<OpElement<S1, FL>>(
+                            p->strings[j]);
+                        strings[j] = make_shared<OpElement<S2, FL>>(
+                            pp->name, pp->site_index, tr(pp->q_label),
+                            pp->factor);
+                    }
+                    pmat->data[iop] = sum(strings);
+                } else
+                    assert(false);
+            auto lop = make_shared<SymbolicRowVector<S2>>(
+                mpo->left_operator_names[ii]->n);
+            auto rop = make_shared<SymbolicColumnVector<S2>>(
+                mpo->right_operator_names[ii]->m);
+            for (int iop = 0; iop < lop->data.size(); iop++) {
+                const auto p = dynamic_pointer_cast<OpElement<S1, FL>>(
+                    mpo->left_operator_names[ii]->data[iop]);
+                lop->data[iop] = make_shared<OpElement<S2, FL>>(
+                    p->name, p->site_index, tr(p->q_label), p->factor);
+            }
+            for (int iop = 0; iop < rop->data.size(); iop++) {
+                const auto p = dynamic_pointer_cast<OpElement<S1, FL>>(
+                    mpo->right_operator_names[ii]->data[iop]);
+                rop->data[iop] = make_shared<OpElement<S2, FL>>(
+                    p->name, p->site_index, tr(p->q_label), p->factor);
+            }
+            rmpo->left_operator_names[ii] = lop;
+            rmpo->right_operator_names[ii] = rop;
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<StateInfo<S1>> conn =
+                TransStateInfo<S2, S1>::backward_connection(mpo->basis[ii],
+                                                            rmpo->basis[ii]);
+            for (const auto &op : mopt->ops) {
+                const auto p =
+                    dynamic_pointer_cast<OpElement<S1, FL>>(op.first);
+                auto q = make_shared<OpElement<S2, FL>>(
+                    p->name, p->site_index, tr(p->q_label), p->factor);
+                shared_ptr<SparseMatrix<S2, FL>> xmat =
+                    make_shared<SparseMatrix<S2, FL>>(d_alloc);
+                xmat->allocate(hamil->find_site_op_info(ii, q->q_label));
+                xmat->factor = op.second->factor;
+                for (int k = 0; k < op.second->info->n; k++) {
+                    S1 plu = op.second->info->quanta[k].get_bra(
+                        op.second->info->delta_quantum);
+                    S1 pru = op.second->info->quanta[k].get_ket();
+                    GMatrix<FL> r = (*op.second)[k];
+                    shared_ptr<StateInfo<S2>> mls =
+                        TransStateInfo<S1, S2>::forward(
+                            make_shared<StateInfo<S1>>(plu), ref);
+                    shared_ptr<StateInfo<S2>> mrs =
+                        TransStateInfo<S1, S2>::forward(
+                            make_shared<StateInfo<S1>>(pru), ref);
+                    for (int iln = 0; iln < mls->n; iln++)
+                        for (int irn = 0; irn < mrs->n; irn++) {
+                            S2 lqn = mls->quanta[iln], rqn = mrs->quanta[irn];
+                            GMatrix<FL> xr =
+                                (*xmat)[q->q_label.combine(lqn, rqn)];
+                            int il = rmpo->basis[ii]->find_state(lqn);
+                            int ir = rmpo->basis[ii]->find_state(rqn);
+                            MKL_INT zl = rmpo->basis[ii]->n_states[il],
+                                    zr = rmpo->basis[ii]->n_states[ir];
+                            int klst = conn->n_states[il];
+                            int krst = conn->n_states[ir];
+                            int kled = il == rmpo->basis[ii]->n - 1
+                                           ? conn->n
+                                           : conn->n_states[il + 1];
+                            int kred = ir == rmpo->basis[ii]->n - 1
+                                           ? conn->n
+                                           : conn->n_states[ir + 1];
+                            size_t lsh = 0, rsh = 0;
+                            for (int ilp = klst;
+                                 ilp < kled && conn->quanta[ilp] != plu; ilp++)
+                                lsh +=
+                                    mpo->basis[ii]
+                                        ->n_states[mpo->basis[ii]->find_state(
+                                            conn->quanta[ilp])];
+                            for (int irp = krst;
+                                 irp < kred && conn->quanta[irp] != pru; irp++)
+                                rsh +=
+                                    mpo->basis[ii]
+                                        ->n_states[mpo->basis[ii]->find_state(
+                                            conn->quanta[irp])];
+                            MKL_INT kl =
+                                (MKL_INT)mpo->basis[ii]
+                                    ->n_states[mpo->basis[ii]->find_state(plu)];
+                            MKL_INT kr =
+                                (MKL_INT)mpo->basis[ii]
+                                    ->n_states[mpo->basis[ii]->find_state(pru)];
+                            for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                    xr(ikl + lsh, ikr + rsh) = r(ikl, ikr);
+                        }
+                }
+                opt->ops[q] = xmat;
+            }
+            mpo->unload_tensor(ii);
+            mpo->unload_left_operators(ii);
+            mpo->unload_right_operators(ii);
+            rmpo->save_tensor(ii);
+            rmpo->unload_tensor(ii);
+            rmpo->save_left_operators(ii);
+            rmpo->unload_left_operators(ii);
+            rmpo->save_right_operators(ii);
+            rmpo->unload_right_operators(ii);
+        }
+        return rmpo;
+    }
+};
+
 } // namespace block2

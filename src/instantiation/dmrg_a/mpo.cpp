@@ -25,3 +25,4 @@ template struct block2::MPO<block2::SAny, double>;
 template struct block2::DiagonalMPO<block2::SAny, double>;
 template struct block2::AncillaMPO<block2::SAny, double>;
 template struct block2::IdentityAddedMPO<block2::SAny, double>;
+template struct block2::TransMPO<block2::SAny, block2::SAny, double>;

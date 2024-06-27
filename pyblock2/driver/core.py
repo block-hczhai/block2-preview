@@ -6798,6 +6798,36 @@ class DMRGDriver:
         zmps = umps.finalize(self.prule)
         return zmps
 
+    def mpo_change_symm(self, mpo, tag="", add_ident=True):
+        """
+        Change symmetry type of MPO.
+        Only works in SAny mode. The resulting MPO should be used in SAny mode.
+
+        Args:
+            mpo : MPO
+                The input MPO.
+            tag : str
+                The tag of the output MPO.
+            add_ident : bool
+                If True, the hidden identity operator will be added into the MPO. Default is True.
+
+        Returns:
+            rmpo : MPO
+                The output MPO.
+        """
+        bw = self.bw
+        assert SymmetryTypes.SAny in bw.symm_type
+        if self.mpi:
+            rmpo = bw.bs.trans_mpo_to_sany(mpo.prim_mpo.prim_mpo, self.ghamil, tag)
+        else:
+            rmpo = bw.bs.trans_mpo_to_sany(mpo.prim_mpo, self.ghamil, tag)
+        rmpo = bw.bs.SimplifiedMPO(rmpo, bw.bs.Rule(), False, False)
+        if add_ident:
+            rmpo = bw.bs.IdentityAddedMPO(rmpo)
+        if self.mpi:
+            rmpo = bw.bs.ParallelMPO(rmpo, self.prule)
+        return rmpo
+
     def mps_change_symm(self, mps, tag, target):
         """
         Change symmetry type of MPS.

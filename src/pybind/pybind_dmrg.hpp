@@ -2265,6 +2265,13 @@ void bind_fl_trans_mps_spin_specific(py::module &m, const string &aux_name) {
           &TransUnfusedMPS<S, T, FL>::forward);
 }
 
+template <typename S, typename T, typename FL>
+void bind_fl_trans_mpo(py::module &m, const string &aux_name) {
+
+    m.def(("trans_mpo_to_" + aux_name).c_str(), &TransMPO<S, T, FL>::forward,
+          py::arg("mpo"), py::arg("hamil"), py::arg("tag") = "");
+}
+
 template <typename S = void> void bind_dmrg_types(py::module &m) {
 
     py::enum_<TruncationTypes>(m, "TruncationTypes", py::arithmetic())
@@ -2928,6 +2935,9 @@ extern template auto
 bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
                                                     const string &aux_name)
     -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+extern template auto
+bind_fl_trans_mpo<SAny, SAny, double>(py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
 
 #ifdef _USE_COMPLEX
 extern template void bind_fl_general<SAny, complex<double>>(py::module &m);
@@ -2961,6 +2971,10 @@ extern template auto bind_fl_spin_specific<SAny, complex<double>>(py::module &m)
 extern template auto
 bind_fl_trans_mps_spin_specific<SAny, SAny, complex<double>>(
     py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+extern template auto
+bind_fl_trans_mpo<SAny, SAny, complex<double>>(py::module &m,
+                                               const string &aux_name)
     -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
 #endif
 
