@@ -3948,6 +3948,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_equal", &SAny::pg_equal)
         .def("symm_len", &SAny::symm_len)
         .def("su2_indices", &SAny::su2_indices)
+        .def("non_abelian_indices", &SAny::non_abelian_indices)
         .def("u1_indices", &SAny::u1_indices)
         .def("combine", &SAny::combine)
         .def("__getitem__", &SAny::operator[])

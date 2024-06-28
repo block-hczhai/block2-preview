@@ -333,7 +333,7 @@ class Block2Wrapper:
         self.b = b
         self.symm_type = symm_type
         self.qargs = None
-        self.hint = None
+        self.hints = []
         has_cpx = hasattr(b, "cpx")
         has_sp = hasattr(b, "sp")
         has_spcpx = has_sp and hasattr(b.sp, "cpx")
@@ -504,7 +504,7 @@ class Block2Wrapper:
             self.VectorSX = b.VectorSGB
             self.VectorVectorSX = b.VectorVectorSGB
 
-    def set_symmetry_groups(self, *args, hint=None):
+    def set_symmetry_groups(self, *args, hints=None):
         """
         Set the combination of symmetry sub-groups for ``symm_type = SAny``.
 
@@ -513,7 +513,7 @@ class Block2Wrapper:
                 List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
                 Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
                 "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
-            hint : str or None
+            hints : list[str] or None
                 Hint for symmetry interpretation. Default is None.
         """
         assert self.SXT == self.b.SAny and len(args) <= 6
@@ -534,7 +534,7 @@ class Block2Wrapper:
             return q
 
         self.qargs = args
-        self.hint = hint
+        self.hints = hints if hints is not None else []
         self.SX = init_sany
 
 
@@ -772,7 +772,7 @@ class DMRGDriver:
         if self.restart_dir_per_sweep is not None:
             self.frame.restart_dir_per_sweep = self.restart_dir_per_sweep
 
-    def set_symmetry_groups(self, *args, hint=None):
+    def set_symmetry_groups(self, *args, hints=None):
         """
         Set the combination of symmetry sub-groups for ``symm_type = SAny``.
 
@@ -781,10 +781,10 @@ class DMRGDriver:
                 List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
                 Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
                 "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
-            hint : str or None
+            hints : list[str] or None
                 Hint for symmetry interpretation. Default is None.
         """
-        self.bw.set_symmetry_groups(*args, hint=hint)
+        self.bw.set_symmetry_groups(*args, hints=hints)
 
     @property
     def basis(self):
@@ -884,6 +884,10 @@ class DMRGDriver:
                 self.vacuum = bw.SX(0, 0, 0)
                 self.target = bw.SX(n_elec, spin, pg_irrep)
                 self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+            elif bw.qargs == ("U1Fermi", "SU2", "SU2", "AbelianPG"):
+                self.vacuum = bw.SX(0, 0, 0, 0)
+                self.target = bw.SX(n_elec, spin, spin, pg_irrep)
+                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
             else:
                 raise RuntimeError("target argument required for custom symmetry.")
         elif target is None:
@@ -978,7 +982,12 @@ class DMRGDriver:
                 "C": np.array([[0, 0], [1, 0]]),  # +
                 "D": np.array([[0, 1], [0, 0]]),  # -
             }
-            if bw.qargs == ("U1Fermi", "AbelianPG") and bw.hint == "SGF":
+            std_ops_su2 = {
+                "": np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),  # identity
+                "C": np.array([[0, 0, 0], [1, 0, 0], [0, -2 ** 0.5, 0]]), # +
+                "D": np.array([[0, 2 ** 0.5, 0], [0, 0, 1], [0, 0, 0]]), # -
+            }
+            if bw.qargs == ("U1Fermi", "AbelianPG") and "SGF" in bw.hints:
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
                     ipg = self.orb_sym[k]
@@ -998,7 +1007,7 @@ class DMRGDriver:
                     site_basis.append(basis)
                     site_ops.append(std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
-            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG") and bw.hint == "SGF":
+            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG") and "SGF" in bw.hints:
                 site_basis, site_ops = [], []
                 spin_sym = []
                 for k in range(self.n_sites):
@@ -1025,6 +1034,18 @@ class DMRGDriver:
                     ]  # [0ba2]
                     site_basis.append(basis)
                     site_ops.append(std_ops)
+                self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
+            elif bw.qargs == ("U1Fermi", "SU2", "SU2", "AbelianPG"):
+                site_basis, site_ops = [], []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [
+                        (self.bw.SX(0, 0, 0, 0), 1),
+                        (self.bw.SX(1, 1, 1, ipg), 1),
+                        (self.bw.SX(2, 0, 0, 0), 1),
+                    ]  # [012]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops_su2)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
             elif SymmetryTypes.SO4 in bw.symm_type:
                 self.ghamil = self.get_so4_hamiltonian()
@@ -2446,7 +2467,7 @@ class DMRGDriver:
                         for name, op in ops.items():
                             assert op.shape == (pv, pv)
                             blocks = []
-                            dq = site_basis[m][0][0]
+                            dqs = None
                             for i in range(op.shape[0]):
                                 if q_map[i][0] != 0:
                                     continue
@@ -2457,62 +2478,96 @@ class DMRGDriver:
                                         op[i : q_map[i][2], j : q_map[j][2]], copy=True
                                     )
                                     if np.linalg.norm(mat) >= 1e-20:
-                                        dq = q_map[i][1] - q_map[j][1]
-                                        blocks.append((q_map[j][1], mat))
+                                        xdqs = q_map[i][1] - q_map[j][1]
+                                        if dqs is None:
+                                            dqs = [xdqs[ix] for ix in range(xdqs.count)]
+                                        else:
+                                            dqs = [dq for dq in dqs if any(dq == xdqs[ix] for ix in range(xdqs.count))]
+                                        blocks.append((q_map[i][1], q_map[j][1], mat))
+                            
+                            assert dqs is not None
+                            assert len(dqs) >= 1
+                            dq = dqs[0]
 
                             mat = super_self.bw.bs.SparseMatrix(d_alloc)
                             info = self.find_site_op_info(m, dq)
                             assert info is not None
                             mat.allocate(info)
-                            for q, mx in blocks:
-                                mat[info.find_state(q)] = np.ascontiguousarray(mx)
+                            for lq, rq, mx in blocks:
+                                xq = dq.combine(lq, rq)
+                                mat[info.find_state(xq)] = np.ascontiguousarray(mx)
                             self.site_norm_ops[m][name] = mat
 
-                def get_site_string_ops(self, m, ops):
+                def get_site_string_op(self, m, expr):
                     """Construct longer site operators from primitive ones."""
                     d_alloc = super_self.bw.b.DoubleVectorAllocator()
-                    for k in ops:
-                        if k in self.site_norm_ops[m]:
-                            ops[k] = self.site_norm_ops[m][k]
-                        else:
-                            xx = self.site_norm_ops[m][k[0]]
-                            for p in k[1:]:
-                                xp = self.site_norm_ops[m][p]
-                                q = xx.info.delta_quantum + xp.info.delta_quantum
-                                mat = super_self.bw.bs.SparseMatrix(d_alloc)
-                                dq = self.find_site_op_info(m, q)
-                                assert dq is not None
-                                mat.allocate(dq)
-                                self.opf.product(0, xx, xp, mat)
-                                xx = mat
-                            ops[k] = self.site_norm_ops[m][k] = xx
-                    return ops
+                    if expr in self.site_norm_ops[m]:
+                        return self.site_norm_ops[m][expr]
+                    if SymmetryTypes.SU2 in super_self.symm_type:
+                        l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
+                        a = self.get_site_string_op(m, expr[l.left_idx : l.mid_idx - 1])
+                        b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
+                        dq = self.get_su2_string_quantum(expr, [m] * (l.left_cnt + l.right_cnt))
+                        r = super_self.bw.bs.SparseMatrix(d_alloc)
+                        r.allocate(self.find_site_op_info(m, dq))
+                        self.opf.product(0, a, b, r)
+                        self.site_norm_ops[m][expr] = r
+                    else:
+                        r = self.site_norm_ops[m][expr[0]]
+                        for p in expr[1:]:
+                            xp = self.site_norm_ops[m][p]
+                            q = r.info.delta_quantum + xp.info.delta_quantum
+                            mat = super_self.bw.bs.SparseMatrix(d_alloc)
+                            dq = self.find_site_op_info(m, q)
+                            assert dq is not None
+                            mat.allocate(dq)
+                            self.opf.product(0, r, xp, mat)
+                            r = mat
+                        self.site_norm_ops[m][expr] = r
+                    return r
 
                 def init_string_quanta(self, exprs, term_l, left_vacuum):
                     """Quantum number for string operators (orbital independent part)."""
-                    qs = {}
-                    for norm_ops in self.site_norm_ops:
-                        for k, v in norm_ops.items():
-                            if k not in qs:
-                                # must copy to prevent changing v.info.dq
-                                qs[k] = v.info.delta_quantum[0]
-                                if k in orb_dependent_ops:
-                                    qs[k].pg = 0
-                                if k in spin_dependent_ops:
-                                    qs[k].twos = 0
-                    return super_self.bw.VectorVectorSX(
-                        [
-                            super_self.bw.VectorSX(
-                                list(
-                                    accumulate(
-                                        [qs[""]] + [qs[x] for x in expr],
-                                        lambda x, y: x + y,
+                    if SymmetryTypes.SU2 in super_self.symm_type:
+                        rr = super_self.bw.VectorVectorSX()
+                        for ix, expr in enumerate(exprs):
+                            r = super_self.bw.VectorSX([self.vacuum] * (term_l[ix] + 1))
+                            r[-1] = self.get_su2_string_quantum(expr, [])
+                            lacc = 0
+                            while True: # (.+(.+(.+.)0)0)0
+                                l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
+                                if l.right_idx == -1:
+                                    break
+                                exprr = expr[l.mid_idx : l.right_idx - 1]
+                                lacc += l.left_cnt
+                                r[lacc] = (r[-1] - self.get_su2_string_quantum(exprr, []))[0]
+                                expr = exprr
+                            rr.append(r)
+                        return rr
+                    else:
+                        qs = {}
+                        for norm_ops in self.site_norm_ops:
+                            for k, v in norm_ops.items():
+                                if k not in qs:
+                                    # must copy to prevent changing v.info.dq
+                                    qs[k] = v.info.delta_quantum[0]
+                                    if k in orb_dependent_ops:
+                                        qs[k].pg = 0
+                                    if k in spin_dependent_ops:
+                                        qs[k].twos = 0
+                        return super_self.bw.VectorVectorSX(
+                            [
+                                super_self.bw.VectorSX(
+                                    list(
+                                        accumulate(
+                                            [qs[""]] + [qs[x] for x in expr],
+                                            lambda x, y: x + y,
+                                        )
                                     )
                                 )
-                            )
-                            for expr in exprs
-                        ]
-                    )
+                                for expr in exprs
+                            ]
+                        )
 
                 def get_string_quanta(self, ref, expr, idxs, k):
                     """Quantum number for string operators (orbital dependent part)."""
@@ -2520,7 +2575,8 @@ class DMRGDriver:
                         return ref[k], ref[-1] - ref[k]
                     else:
                         l, r = ref[k], ref[-1] - ref[k]
-                        for j, (ex, ix) in enumerate(zip(expr, idxs)):
+                        pexpr = [x for x in expr if not x.isdigit() and x not in '()[]+-,;']
+                        for j, (ex, ix) in enumerate(zip(pexpr, idxs)):
                             if ex in orb_dependent_ops:
                                 ipg = self.orb_sym[ix]
                                 if j < k:
@@ -2536,13 +2592,42 @@ class DMRGDriver:
                                     r.twos = r.twos + ispin
                         return l, r
 
+                def get_su2_string_quantum(self, expr, idxs):
+                    if len(expr) == 0:
+                        return self.vacuum
+                    elif len(expr) == 1:
+                        if len(idxs) == 1:
+                            return self.site_norm_ops[idxs[0]][expr].info.delta_quantum
+                        else:
+                            for m in range(self.n_sites):
+                                if expr in self.site_norm_ops[m]:
+                                    xq = self.site_norm_ops[m][expr].info.delta_quantum[0]
+                                    if expr in orb_dependent_ops:
+                                        xq.pg = 0
+                                    return xq
+                    else:
+                        l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
+                        qs = super_self.bw.b.SpinRecoupling.get_quanta(expr, l, False)
+                        a = self.get_su2_string_quantum(expr[l.left_idx : l.mid_idx - 1], idxs[:l.left_cnt])
+                        b = self.get_su2_string_quantum(expr[l.mid_idx : l.right_idx - 1], idxs[l.left_cnt:])
+                        c = a + b
+                        nab_idx = c.non_abelian_indices()
+                        assert len(qs) == len(nab_idx)
+                        for ic in range(c.count):
+                            if all(c[ic].values[ix] == iq for iq, ix in zip(qs, nab_idx)):
+                                return c[ic]
+                        return c[0]
+
                 def get_string_quantum(self, expr, idxs):
                     """Total quantum number for a string operator."""
-                    qs = lambda ix: {
-                        k: v.info.delta_quantum
-                        for k, v in self.site_norm_ops[ix].items()
-                    }
-                    return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+                    if SymmetryTypes.SU2 in super_self.symm_type:
+                        return self.get_su2_string_quantum(expr, idxs)
+                    else:
+                        qs = lambda ix: {
+                            k: v.info.delta_quantum
+                            for k, v in self.site_norm_ops[ix].items()
+                        }
+                        return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
 
                 def deallocate(self):
                     """Release memory."""
@@ -7303,7 +7388,7 @@ class DMRGDriver:
                 elif (
                     SymmetryTypes.SAny in self.symm_type
                     and bw.qargs == ("U1Fermi", "AbelianPG")
-                    and bw.hint == "SGF"
+                    and "SGF" in bw.hints
                 ):
                     q, tensors = bw.SX(), []
                     for k, bz in enumerate(self.basis):

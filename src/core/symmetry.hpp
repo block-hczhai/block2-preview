@@ -227,6 +227,14 @@ template <int8_t L = 6> struct SAnyT {
                 r.push_back(++k);
         return r;
     }
+    vector<int> non_abelian_indices() const {
+        vector<int> r;
+        for (int8_t k = 0; k < L; k++)
+            if (types[k] == SAnySymmTypes::SU2Fermi ||
+                types[k] == SAnySymmTypes::SU2)
+                r.push_back(++k);
+        return r;
+    }
     int multiplicity() const {
         int r = 1;
         for (int8_t k = 0; k < L; k++)
