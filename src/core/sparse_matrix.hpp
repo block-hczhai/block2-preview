@@ -823,6 +823,7 @@ struct SparseMatrixInfo<
     }
     void deallocate() {
         assert(n != -1);
+        assert(alloc != nullptr || n == 0);
         alloc->deallocate((uint32_t *)quanta,
                           n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n));
         alloc = nullptr;

@@ -782,6 +782,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                     info->left_dims[i]->quanta[j] - lq;
             info->left_dims[i]->sort_states();
         }
+        info->check_bond_dimensions();
         info->save_mutable();
         info->deallocate_mutable();
         shared_ptr<SparseTensor<S, FL>> rst =

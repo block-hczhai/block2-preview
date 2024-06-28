@@ -255,9 +255,16 @@ template <typename S, typename FL> struct Hamiltonian {
     shared_ptr<SparseMatrixInfo<S>> find_site_op_info(uint16_t i, S q) const {
         auto p = lower_bound(site_op_infos[i].begin(), site_op_infos[i].end(),
                              q, SparseMatrixInfo<S>::cmp_op_info);
-        if (p == site_op_infos[i].end() || p->first != q)
-            return nullptr;
-        else
+        if (p == site_op_infos[i].end() || p->first != q) {
+            // in general Hamiltonian, allow skipping empty infos
+            shared_ptr<SparseMatrixInfo<S>> info =
+                make_shared<SparseMatrixInfo<S>>(nullptr);
+            info->n = 0;
+            info->delta_quantum = q;
+            info->is_fermion = q.is_fermion();
+            info->is_wavefunction = false;
+            return info;
+        } else
             return p->second;
     }
     // get the delta quantum of an operator string

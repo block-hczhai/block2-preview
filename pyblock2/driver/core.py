@@ -882,12 +882,30 @@ class DMRGDriver:
                 self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
             elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
                 self.vacuum = bw.SX(0, 0, 0)
-                self.target = bw.SX(n_elec, spin, pg_irrep)
-                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+                if left_vacuum is None:
+                    self.target = bw.SX(n_elec, spin, pg_irrep)
+                    self.left_vacuum = (
+                        self.vacuum if left_vacuum is None else left_vacuum
+                    )
+                else:
+                    self.target = bw.SX(
+                        n_elec + left_vacuum.n, spin - left_vacuum.twos, pg_irrep
+                    )
+                    self.left_vacuum = left_vacuum
             elif bw.qargs == ("U1Fermi", "SU2", "SU2", "AbelianPG"):
                 self.vacuum = bw.SX(0, 0, 0, 0)
-                self.target = bw.SX(n_elec, spin, spin, pg_irrep)
-                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+                if singlet_embedding and left_vacuum is None:
+                    self.target = bw.SX(n_elec + spin % 2, 0, 0, pg_irrep)
+                    self.left_vacuum = bw.SX(spin % 2, spin, spin, 0)
+                elif singlet_embedding and left_vacuum is not None:
+                    assert spin == left_vacuum.twos
+                    self.target = bw.SX(n_elec + left_vacuum.n, 0, 0, pg_irrep)
+                    self.left_vacuum = left_vacuum
+                else:
+                    self.target = bw.SX(n_elec, spin, spin, pg_irrep)
+                    self.left_vacuum = (
+                        self.vacuum if left_vacuum is None else left_vacuum
+                    )
             else:
                 raise RuntimeError("target argument required for custom symmetry.")
         elif target is None:
@@ -984,8 +1002,8 @@ class DMRGDriver:
             }
             std_ops_su2 = {
                 "": np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),  # identity
-                "C": np.array([[0, 0, 0], [1, 0, 0], [0, -2 ** 0.5, 0]]), # +
-                "D": np.array([[0, 2 ** 0.5, 0], [0, 0, 1], [0, 0, 0]]), # -
+                "C": np.array([[0, 0, 0], [1, 0, 0], [0, -(2**0.5), 0]]),  # +
+                "D": np.array([[0, 2**0.5, 0], [0, 0, 1], [0, 0, 0]]),  # -
             }
             if bw.qargs == ("U1Fermi", "AbelianPG") and "SGF" in bw.hints:
                 site_basis, site_ops = [], []
@@ -2301,7 +2319,12 @@ class DMRGDriver:
                         "C": super_self.bw.SX(1, self.orb_sym[ix]),
                         "D": super_self.bw.SX(-1, -self.orb_sym[ix]),
                     }
-                return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+                from functools import reduce
+
+                return reduce(
+                    lambda a, b: a + b,
+                    [qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)],
+                )
 
             def deallocate(self):
                 """Release memory."""
@@ -2433,17 +2456,11 @@ class DMRGDriver:
                     else:
                         for m in range(self.n_sites):
                             qs = {self.vacuum}
-                            for iter in range(20):
-                                new_qs = set()
-                                for q in qs:
-                                    for k, _ in site_basis[m]:
-                                        new_q = q + k
-                                        for iq in range(new_q.count):
-                                            new_qs.add(new_q[iq])
-                                        new_q = q - k
-                                        for iq in range(new_q.count):
-                                            new_qs.add(new_q[iq])
-                                qs = new_qs
+                            for q, _ in site_basis[m]:
+                                for k, _ in site_basis[m]:
+                                    new_q = q - k
+                                    for iq in range(new_q.count):
+                                        qs.add(new_q[iq])
                             for q in sorted(qs):
                                 mat = super_self.bw.brs.SparseMatrixInfo(i_alloc)
                                 mat.initialize(
@@ -2482,9 +2499,16 @@ class DMRGDriver:
                                         if dqs is None:
                                             dqs = [xdqs[ix] for ix in range(xdqs.count)]
                                         else:
-                                            dqs = [dq for dq in dqs if any(dq == xdqs[ix] for ix in range(xdqs.count))]
+                                            dqs = [
+                                                dq
+                                                for dq in dqs
+                                                if any(
+                                                    dq == xdqs[ix]
+                                                    for ix in range(xdqs.count)
+                                                )
+                                            ]
                                         blocks.append((q_map[i][1], q_map[j][1], mat))
-                            
+
                             assert dqs is not None
                             assert len(dqs) >= 1
                             dq = dqs[0]
@@ -2506,8 +2530,12 @@ class DMRGDriver:
                     if SymmetryTypes.SU2 in super_self.symm_type:
                         l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
                         a = self.get_site_string_op(m, expr[l.left_idx : l.mid_idx - 1])
-                        b = self.get_site_string_op(m, expr[l.mid_idx : l.right_idx - 1])
-                        dq = self.get_su2_string_quantum(expr, [m] * (l.left_cnt + l.right_cnt))
+                        b = self.get_site_string_op(
+                            m, expr[l.mid_idx : l.right_idx - 1]
+                        )
+                        dq = self.get_su2_string_quantum(
+                            expr, [m] * (l.left_cnt + l.right_cnt)
+                        )
                         r = super_self.bw.bs.SparseMatrix(d_alloc)
                         r.allocate(self.find_site_op_info(m, dq))
                         self.opf.product(0, a, b, r)
@@ -2534,13 +2562,15 @@ class DMRGDriver:
                             r = super_self.bw.VectorSX([self.vacuum] * (term_l[ix] + 1))
                             r[-1] = self.get_su2_string_quantum(expr, [])
                             lacc = 0
-                            while True: # (.+(.+(.+.)0)0)0
+                            while True:  # (.+(.+(.+.)0)0)0
                                 l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
                                 if l.right_idx == -1:
                                     break
                                 exprr = expr[l.mid_idx : l.right_idx - 1]
                                 lacc += l.left_cnt
-                                r[lacc] = (r[-1] - self.get_su2_string_quantum(exprr, []))[0]
+                                r[lacc] = (
+                                    r[-1] - self.get_su2_string_quantum(exprr, [])
+                                )[0]
                                 expr = exprr
                             rr.append(r)
                         return rr
@@ -2575,7 +2605,9 @@ class DMRGDriver:
                         return ref[k], ref[-1] - ref[k]
                     else:
                         l, r = ref[k], ref[-1] - ref[k]
-                        pexpr = [x for x in expr if not x.isdigit() and x not in '()[]+-,;']
+                        pexpr = [
+                            x for x in expr if not x.isdigit() and x not in "()[]+-,;"
+                        ]
                         for j, (ex, ix) in enumerate(zip(pexpr, idxs)):
                             if ex in orb_dependent_ops:
                                 ipg = self.orb_sym[ix]
@@ -2601,20 +2633,29 @@ class DMRGDriver:
                         else:
                             for m in range(self.n_sites):
                                 if expr in self.site_norm_ops[m]:
-                                    xq = self.site_norm_ops[m][expr].info.delta_quantum[0]
+                                    xq = self.site_norm_ops[m][expr].info.delta_quantum[
+                                        0
+                                    ]
                                     if expr in orb_dependent_ops:
                                         xq.pg = 0
                                     return xq
                     else:
                         l = super_self.bw.b.SpinRecoupling.get_level(expr, 0)
                         qs = super_self.bw.b.SpinRecoupling.get_quanta(expr, l, False)
-                        a = self.get_su2_string_quantum(expr[l.left_idx : l.mid_idx - 1], idxs[:l.left_cnt])
-                        b = self.get_su2_string_quantum(expr[l.mid_idx : l.right_idx - 1], idxs[l.left_cnt:])
+                        a = self.get_su2_string_quantum(
+                            expr[l.left_idx : l.mid_idx - 1], idxs[: l.left_cnt]
+                        )
+                        b = self.get_su2_string_quantum(
+                            expr[l.mid_idx : l.right_idx - 1],
+                            idxs[l.left_cnt : l.left_cnt + l.right_cnt],
+                        )
                         c = a + b
                         nab_idx = c.non_abelian_indices()
                         assert len(qs) == len(nab_idx)
                         for ic in range(c.count):
-                            if all(c[ic].values[ix] == iq for iq, ix in zip(qs, nab_idx)):
+                            if all(
+                                c[ic].values[ix] == iq for iq, ix in zip(qs, nab_idx)
+                            ):
                                 return c[ic]
                         return c[0]
 
@@ -2627,7 +2668,12 @@ class DMRGDriver:
                             k: v.info.delta_quantum
                             for k, v in self.site_norm_ops[ix].items()
                         }
-                        return sum([qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)])
+                        from functools import reduce
+
+                        return reduce(
+                            lambda a, b: a + b,
+                            [qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)],
+                        )
 
                 def deallocate(self):
                     """Release memory."""
@@ -4421,7 +4467,7 @@ class DMRGDriver:
                 dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.davidson_shift = davidson_shift
         if noise_type is None:
-            noise_type = 'ReducedPerturbativeCollected'
+            noise_type = "ReducedPerturbativeCollected"
         dmrg.noise_type = getattr(bw.b.NoiseTypes, noise_type)
         if lowmem_noise:
             dmrg.noise_type = dmrg.noise_type | bw.b.NoiseTypes.LowMem
@@ -6862,11 +6908,11 @@ class DMRGDriver:
     def mps_flip_twos(self, mps):
         """
         Flip the sign of projection spin in the MPS.
-        
+
         Args:
             mps : MPS
                 The input MPS.
-        
+
         Returns:
             mps : MPS
                 The output MPS.
@@ -6937,11 +6983,21 @@ class DMRGDriver:
             self.mpi.barrier()
         mps.info.load_mutable()
         mps.load_mutable()
+        su2_to_sz = (
+            len(mps.info.vacuum.su2_indices()) != 0 and len(target.u1_indices()) != 0
+        )
+        xtarget = target[0]
+        if su2_to_sz:
+            lv = mps.info.left_dims_fci[0].quanta[0]
+            xtarget.n = xtarget.n + lv.n
+            xtarget.twos = 0
         umps = bw.bs.trans_unfused_mps_to_sany(
-            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, target
+            bw.bs.UnfusedMPS(mps), tag, self.ghamil.opf.cg, xtarget
         )
         if self.mpi is not None:
             self.mpi.barrier()
+        if su2_to_sz:
+            umps.resolve_singlet_embedding(target.twos)
         zmps = umps.finalize(self.prule)
 
         zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
@@ -7325,9 +7381,13 @@ class DMRGDriver:
         it = np.ones((1, 1, 1, 1))
         pympo = None
         for ixw, (xt, wt) in enumerate(zip(xts, wts)):
-            if self.mpi is None or not mpi_split or (
-                mpi_split 
-                and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size
+            if (
+                self.mpi is None
+                or not mpi_split
+                or (
+                    mpi_split
+                    and self.mpi.rank == min(ixw, len(wts) - 1 - ixw) % self.mpi.size
+                )
             ):
                 ct = np.cos(xt / 2) * it
                 st, mt = np.sin(xt / 2) * it, -np.sin(xt / 2) * it

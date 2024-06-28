@@ -461,13 +461,11 @@ template <typename S1, typename S2, typename = void, typename = void>
 struct TransStateInfo {
     static shared_ptr<StateInfo<S2>>
     forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
-        throw runtime_error("TransStateInfo::forward: not implemented");
-        return nullptr;
+        return TransStateInfo<S2, S1>::backward(si, ref);
     }
     static shared_ptr<StateInfo<S1>>
     backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
-        throw runtime_error("TransStateInfo::backward: not implemented");
-        return nullptr;
+        return TransStateInfo<S2, S1>::forward(si, ref);
     }
     static shared_ptr<StateInfo<S2>>
     backward_connection(const shared_ptr<StateInfo<S2>> &si,
@@ -637,9 +635,30 @@ struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
         for (int i = 0; i < si->n; i++) {
             S q = si->quanta[i];
             S z = ref;
-            if (q.symm_len() == 3 && q.types[0] == SAnySymmTypes::U1Fermi &&
-                q.types[1] == SAnySymmTypes::U1 &&
-                q.types[2] == SAnySymmTypes::AbelianPG) {
+            if (q.symm_len() == 4 && q.types[0] == SAnySymmTypes::U1Fermi &&
+                q.types[1] == SAnySymmTypes::SU2 &&
+                q.types[2] == SAnySymmTypes::SU2 &&
+                q.types[3] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 3 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::U1 &&
+                    ref.types[2] == SAnySymmTypes::AbelianPG) {
+                    assert(q.values[1] == q.values[2]);
+                    z.values[0] = q.values[0];
+                    z.values[2] = q.values[3];
+                    for (int j = -q.values[2]; j <= q.values[2]; j += 2) {
+                        z.values[1] = j;
+                        mp[z] += si->n_states[i];
+                    }
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
+            } else if (q.symm_len() == 3 &&
+                       q.types[0] == SAnySymmTypes::U1Fermi &&
+                       q.types[1] == SAnySymmTypes::U1 &&
+                       q.types[2] == SAnySymmTypes::AbelianPG) {
                 if (ref.symm_len() == 2 &&
                     ref.types[0] == SAnySymmTypes::U1Fermi &&
                     ref.types[1] == SAnySymmTypes::AbelianPG) {
