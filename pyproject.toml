@@ -18,7 +18,6 @@ dependencies = [
     "mkl-include",
     "intel-openmp",
     "numpy",
-    "cmake>=3.19",
     "scipy",
     "psutil",
     "pybind11!=2.10.3,!=2.10.4,!=2.11.0,!=2.11.1",
@@ -32,16 +31,18 @@ Documentation = "https://block2.readthedocs.io/en/latest/"
 file = "LICENSE"
 
 [tool.scikit-build]
+cmake.version = ">=3.19"
 cmake.verbose = true
 logging.level = "INFO"
 cmake.build-type = "Release"
+wheel.packages = ["pyblock2"]
 
 [tool.scikit-build.cmake.define]
 USE_MKL = "ON"
 BUILD_LIB = "ON"
-# LARGE_BOND = "ON"
-# USE_KSYMM = "OFF"
-# USE_COMPLEX = "ON"
-# USE_SINGLE_PREC = "ON"
-# USE_SG = "ON"
-# USE_SANY = "ON"
+LARGE_BOND = "ON"
+USE_KSYMM = "OFF"
+USE_COMPLEX = "ON"
+USE_SINGLE_PREC = "ON"
+USE_SG = "ON"
+USE_SANY = "ON"

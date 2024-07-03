@@ -37,10 +37,8 @@ IF (${FORCE_LIB_ABS_PATH})
     CMAKE_POLICY(SET CMP0060 NEW) # force using absolute path when linking libraries
 ENDIF()
 
-# Use Pybind11 automatic Python detection.
-# It's more reliable than using find_package(PythonLibs) from old CMake versions.
 # find_package(Python COMPONENTS Interpreter Development) on
-# newer versions of CMake also works well.
+# newer versions of CMake is more reliable than find_package(PythonLibs)
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
@@ -548,10 +546,17 @@ IF (${BUILD_LIB})
     ENDIF()
     IF (NOT(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"))
         SET(OPT_FLAG ${OPT_FLAG} -Wno-error=attributes -Wno-attributes)
-    # -fvisibility=hidden is already used by pybind11_add_module
     ENDIF()
+    # make sure scikit-build-core installs the module in the correct location
     IF (${SKBUILD})
         INSTALL(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION .)
+        SET(PYSCRIPTS
+            pyblock2/driver/block2main
+            pyblock2/driver/gaopt
+            pyblock2/driver/readwfn.py
+            pyblock2/driver/writewfn.py
+        )
+        INSTALL(PROGRAMS ${PYSCRIPTS} DESTINATION ${SKBUILD_SCRIPTS_DIR})
     ENDIF()
 ELSEIF (${BUILD_TEST})
     ADD_EXECUTABLE(${PROJECT_NAME} unit_test/debug_main.cpp)
