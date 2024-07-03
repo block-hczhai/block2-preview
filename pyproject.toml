@@ -14,7 +14,7 @@ authors = [
 ]
 readme = "README.md"
 dependencies = [
-    "mkl",
+    "mkl==2021.4",
     "mkl-include",
     "intel-openmp",
     "numpy",
