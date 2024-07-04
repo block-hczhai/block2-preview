@@ -147,6 +147,10 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                 for (int imb = 0; imb < mpob->left_operator_names[m]->n;
                      imb++) {
                     const int imx = ima * mpob->left_operator_names[m]->n + imb;
+                    const auto opxa = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpoa->left_operator_names[m]->data[ima]);
+                    const auto opxb = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpob->left_operator_names[m]->data[imb]);
                     left_operator_names[m]->data[imx] =
                         make_shared<OpElement<S, FL>>(
                             OpNames::XL,
@@ -154,18 +158,18 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                        (uint16_t)(imx / 1000 % 1000),
                                        (uint16_t)(imx % 1000)},
                                       {}),
-                            dynamic_pointer_cast<OpElement<S, FL>>(
-                                mpoa->left_operator_names[m]->data[ima])
-                                    ->q_label +
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    mpob->left_operator_names[m]->data[imb])
-                                    ->q_label);
+                            opxa->q_label + opxb->q_label,
+                            opxa->factor * opxb->factor);
                 }
             for (int ima = 0; ima < mpoa->right_operator_names[m]->m; ima++)
                 for (int imb = 0; imb < mpob->right_operator_names[m]->m;
                      imb++) {
                     const int imx =
                         ima * mpob->right_operator_names[m]->m + imb;
+                    const auto opxa = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpoa->right_operator_names[m]->data[ima]);
+                    const auto opxb = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpob->right_operator_names[m]->data[imb]);
                     right_operator_names[m]->data[imx] =
                         make_shared<OpElement<S, FL>>(
                             OpNames::XR,
@@ -173,12 +177,8 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                        (uint16_t)(imx / 1000 % 1000),
                                        (uint16_t)(imx % 1000)},
                                       {}),
-                            dynamic_pointer_cast<OpElement<S, FL>>(
-                                mpoa->right_operator_names[m]->data[ima])
-                                    ->q_label +
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    mpob->right_operator_names[m]->data[imb])
-                                    ->q_label);
+                            opxa->q_label + opxb->q_label,
+                            opxa->factor * opxb->factor);
                 }
             if (m == 0) {
                 shared_ptr<SymbolicRowVector<S>> pmata =
@@ -341,6 +341,40 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                             pmat->data[imx] = zero;
                             continue;
                         }
+                        vector<shared_ptr<OpElement<S, FL>>> ppas;
+                        vector<shared_ptr<OpElement<S, FL>>> ppbs;
+                        if (pmata->data[ima]->get_type() == OpTypes::Elem)
+                            ppas.push_back(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima]));
+                        else if (pmata->data[ima]->get_type() == OpTypes::Sum) {
+                            const auto p = dynamic_pointer_cast<OpSum<S, FL>>(
+                                pmata->data[ima]);
+                            for (size_t j = 0; j < p->strings.size(); j++)
+                                ppas.push_back(
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        p->strings[j]
+                                            ->get_op()
+                                            ->scalar_multiply(
+                                                p->strings[j]->factor)));
+                        } else
+                            assert(false);
+                        if (pmatb->data[imb]->get_type() == OpTypes::Elem)
+                            ppbs.push_back(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb]));
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Sum) {
+                            const auto p = dynamic_pointer_cast<OpSum<S, FL>>(
+                                pmatb->data[imb]);
+                            for (size_t j = 0; j < p->strings.size(); j++)
+                                ppbs.push_back(
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        p->strings[j]
+                                            ->get_op()
+                                            ->scalar_multiply(
+                                                p->strings[j]->factor)));
+                        } else
+                            assert(false);
                         shared_ptr<OpElement<S, FL>> opel =
                             make_shared<OpElement<S, FL>>(
                                 OpNames::X,
@@ -349,40 +383,34 @@ template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
                                            (uint16_t)(imx / 1000 % 1000),
                                            (uint16_t)(imx % 1000)},
                                           {}),
-                                dynamic_pointer_cast<OpElement<S, FL>>(
-                                    pmata->data[ima])
-                                        ->q_label +
-                                    dynamic_pointer_cast<OpElement<S, FL>>(
-                                        pmatb->data[imb])
-                                        ->q_label);
-                        shared_ptr<SparseMatrix<S, FL>> mata =
-                            mpoa->tensors[m]->ops.at(
-                                abs_value(pmata->data[ima]));
-                        shared_ptr<SparseMatrix<S, FL>> matb =
-                            mpob->tensors[m]->ops.at(
-                                abs_value(pmatb->data[imb]));
+                                ppas[0]->q_label + ppbs[0]->q_label);
                         shared_ptr<SparseMatrix<S, FL>> xmat =
                             make_shared<SparseMatrix<S, FL>>(xd_alloc);
-                        const S q = (mata->info->delta_quantum +
-                                     matb->info->delta_quantum)[0];
-                        const FL phase =
-                            mata->info->delta_quantum.is_fermion() &&
-                                    dynamic_pointer_cast<OpElement<S, FL>>(
-                                        mpob->right_operator_names[m]
-                                            ->data[pmatb->indices[imb].first])
-                                        ->q_label.is_fermion()
-                                ? -1
-                                : 1;
+                        const S q = (ppas[0]->q_label + ppbs[0]->q_label)[0];
                         xmat->allocate(site_op_infos_mp[m].at(q));
-                        MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
-                                                     phase);
-                        pmat->data[imx] = opel->scalar_multiply(
-                            dynamic_pointer_cast<OpElement<S, FL>>(
-                                pmata->data[ima])
-                                ->factor *
-                            dynamic_pointer_cast<OpElement<S, FL>>(
-                                pmatb->data[imb])
-                                ->factor);
+                        for (const auto xpa : ppas)
+                            for (const auto xpb : ppbs) {
+                                shared_ptr<SparseMatrix<S, FL>> mata =
+                                    mpoa->tensors[m]->ops.at(
+                                        abs_value((shared_ptr<OpExpr<S>>)xpa));
+                                shared_ptr<SparseMatrix<S, FL>> matb =
+                                    mpob->tensors[m]->ops.at(
+                                        abs_value((shared_ptr<OpExpr<S>>)xpb));
+                                const FL phase =
+                                    mata->info->delta_quantum.is_fermion() &&
+                                            dynamic_pointer_cast<
+                                                OpElement<S, FL>>(
+                                                mpob->right_operator_names[m]
+                                                    ->data[pmatb->indices[imb]
+                                                               .first])
+                                                ->q_label.is_fermion()
+                                        ? -1
+                                        : 1;
+                                MPO<S, FL>::tf->opf->product(
+                                    0, mata, matb, xmat,
+                                    phase * xpa->factor * xpb->factor);
+                            }
+                        pmat->data[imx] = opel;
                         mats[imx] = xmat;
                     }
                 }

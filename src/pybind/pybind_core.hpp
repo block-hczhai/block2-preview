@@ -618,6 +618,7 @@ template <typename S, typename FL> void bind_fl_expr(py::module &m) {
         .def_readwrite("conj", &OpProduct<S, FL>::conj)
         .def_readwrite("a", &OpProduct<S, FL>::a)
         .def_readwrite("b", &OpProduct<S, FL>::b)
+        .def("get_op", &OpProduct<S, FL>::get_op)
         .def("__hash__", &OpProduct<S, FL>::hash);
 
     py::class_<OpSumProd<S, FL>, shared_ptr<OpSumProd<S, FL>>,

@@ -1814,6 +1814,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("tread", &MPO<S, FL>::tread)
         .def_readwrite("twrite", &MPO<S, FL>::twrite)
         .def("get_summary", &MPO<S, FL>::get_summary)
+        .def("get_bond_dims", &MPO<S, FL>::get_bond_dims)
         .def("get_filename", &MPO<S, FL>::get_filename)
         .def("load_left_operators", &MPO<S, FL>::load_left_operators)
         .def("save_left_operators", &MPO<S, FL>::save_left_operators)
@@ -2269,7 +2270,8 @@ template <typename S, typename T, typename FL>
 void bind_fl_trans_mpo(py::module &m, const string &aux_name) {
 
     m.def(("trans_mpo_to_" + aux_name).c_str(), &TransMPO<S, T, FL>::forward,
-          py::arg("mpo"), py::arg("hamil"), py::arg("tag") = "");
+          py::arg("mpo"), py::arg("hamil"), py::arg("tag") = "",
+          py::arg("left_vacuum") = T(T::invalid));
 }
 
 template <typename S = void> void bind_dmrg_types(py::module &m) {
