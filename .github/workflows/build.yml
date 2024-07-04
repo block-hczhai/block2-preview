@@ -267,13 +267,13 @@ jobs:
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
-          gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          gsed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           # if use mkl, will need iomp5
-          gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
-          gsed -i "/mkl/d" setup.py
-          gsed -i "/intel-openmp/d" setup.py
-          gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
+          gsed -i "/mkl/d" pyproject.toml
+          gsed -i "/intel-openmp/d" pyproject.toml
+          gsed -i "/USE_MKL/a OMP_LIB = \"OMP\"" pyproject.toml
+          gsed -i "/USE_MKL/c USE_MKL = \"OFF\"" pyproject.toml
+          gsed -i "/USE_MKL/a FORCE_LIB_ABS_PATH = \"OFF\"" pyproject.toml
           export OMPROOT=$(brew --prefix libomp)
           echo ${OMPROOT}
           cmake --version
@@ -300,13 +300,13 @@ jobs:
           brew install gnu-sed
           export PATH=/usr/local/opt/gnu-sed/bin:$PATH
           echo ${TAG_STRING:11}
-          gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
-          gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DARCH_ARM64=ON'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
-          gsed -i "/mkl/d" setup.py
-          gsed -i "/intel-openmp/d" setup.py
-          gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+          gsed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
+          gsed -i "/USE_MKL/a OMP_LIB = \"OMP\"" pyproject.toml
+          gsed -i "/USE_MKL/a ARCH_ARM64 = \"ON\"" pyproject.toml
+          gsed -i "/USE_MKL/a FORCE_LIB_ABS_PATH = \"OFF\"" pyproject.toml
+          gsed -i "/mkl/d" pyproject.toml
+          gsed -i "/intel-openmp/d" pyproject.toml
+          gsed -i "/USE_MKL/c USE_MKL = \"OFF\"" pyproject.toml
           git clone https://github.com/Homebrew/brew arm-brew
           cd arm-brew && git checkout 3.6.16 && cd ..
           ./arm-brew/bin/brew update
@@ -329,7 +329,7 @@ jobs:
           TAG_STRING: ${{ github.event.ref }}
         run: |
           echo ${TAG_STRING:11}
-          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          sed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
@@ -372,7 +372,7 @@ jobs:
           TAG_STRING: ${{ github.event.ref }}
         run: |
           echo ${TAG_STRING:11}
-          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          sed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           python -m pip install pip build twine setuptools --upgrade
           python -m build --sdist
 
@@ -388,9 +388,9 @@ jobs:
         run: |
           rm -r dist
           echo ${TAG_STRING:11}
-          sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-          sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
-          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          sed -i "/USE_MKL/a MPI = \"ON\"" pyproject.toml
+          sed -i "s/name = \"block2\"/name = \"block2-mpi\"/g" pyproject.toml
+          sed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           python -m build --sdist
           stat dist/block2_mpi-${TAG_STRING:11}.tar.gz
 
@@ -434,7 +434,7 @@ jobs:
           TAG_STRING: ${{ github.event.ref }}
         run: |
           echo ${TAG_STRING:11}
-          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          sed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           python -m pip install pip build twine setuptools --upgrade
           python -m build --sdist
 
@@ -454,9 +454,9 @@ jobs:
         run: |
           rm -r dist
           echo ${TAG_STRING:11}
-          sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-          sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
-          sed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
+          sed -i "/USE_MKL/a MPI = \"ON\"" pyproject.toml
+          sed -i "s/name = \"block2\"/name = \"block2-mpi\"/g" pyproject.toml
+          sed -i "s/^version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
           python -m build --sdist
 
       - name: download wheels (mpi)
