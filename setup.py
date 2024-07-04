@@ -74,6 +74,11 @@ class CMakeBuild(build_ext):
         print("Python3: ", sys.executable)
         print("Build Dir: ", self.build_temp)
 
+        if 'CMAKE_BUILD_PARALLEL_LEVEL' in os.environ:
+            cmake_parallel_flags = []
+        else:
+            cmake_parallel_flags = ['--parallel', '2']
+
         for ext in self.extensions:
 
             extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
@@ -123,7 +128,7 @@ class CMakeBuild(build_ext):
             )
 
             subprocess.check_call(
-                ["cmake", "--build", ".", "--config", cfg, "--", "--jobs=2"],
+                ["cmake", "--build", ".", "--config", cfg, "--", *cmake_parallel_flags],
                 cwd=self.build_temp,
             )
 
@@ -135,7 +140,7 @@ class CMakeBuild(build_ext):
             )
 
             subprocess.check_call(
-                ["cmake", "--build", ".", "--config", cfg, "--", "--jobs=2"],
+                ["cmake", "--build", ".", "--config", cfg, "--", *cmake_parallel_flags],
                 cwd=self.build_temp,
             )
 
