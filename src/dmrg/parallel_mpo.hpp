@@ -150,8 +150,8 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
     ParallelMPO(const shared_ptr<MPO<S, FL>> &mpo,
                 const shared_ptr<ParallelRule<S, FL>> &rule,
                 const string &tag = "")
-        : MPO<S, FL>(mpo->n_sites, tag == "" ? mpo->tag : tag), prim_mpo(mpo),
-          rule(rule) {
+        : MPO<S, FL>(mpo->n_sites, tag == "" ? "P-" + mpo->tag : tag),
+          prim_mpo(mpo), rule(rule) {
         rule->comm->para_type =
             rule->comm->para_type | ParallelTypes::NewScheme;
         shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
