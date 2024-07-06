@@ -739,7 +739,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                         h_eff->tf->opf->cg);
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->mat->data[0], nullptr, h_eff->op->lopt,
                         h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                     if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
                         h_eff->tf->opf->seq->auto_perform();
@@ -748,7 +748,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                     h_eff->diag->clear();
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->mat->data[0], nullptr, h_eff->op->lopt,
                         h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                 }
                 //
