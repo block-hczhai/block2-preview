@@ -185,15 +185,6 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                              unique(msubsl[i].begin(), msubsl[i].end())));
             }
         }
-        // cout << "opmat = " << op->mat << endl;
-        // if (op->stacked_mat != nullptr)
-        //     cout << "stacked_opmat = " << op->stacked_mat << endl;
-        // cout << "lops" << endl;
-        // for (auto & mm : op->lopt->ops)
-        //     cout << mm.first << " = " << *mm.second->info << " " << *mm.second << endl;
-        // cout << "rops" << endl;
-        // for (auto & mm : op->ropt->ops)
-        //     cout << mm.first << " = " << *mm.second->info << " " << *mm.second << endl;
         // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =

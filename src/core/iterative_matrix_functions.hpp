@@ -3679,7 +3679,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                              bool ensure_ortho = true, bool iprint = false) {
         if (x.m == 0 || x.n == 0)
             return;
-        // cout << "x = " << x << endl;
         sort(levels.begin(), levels.end(), greater<FP>());
         vector<DSU> dsus(levels.size() + 1, DSU(x.m + x.n));
         vector<pair<MKL_INT, MKL_INT>> acc_idxs;
@@ -3730,7 +3729,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     xk += min(xl, xr);
                     grt++;
                 }
-            // cout << "il = " << il << " grt = " << grt << endl;
         }
         // number of singular values may exceed the maximal number
         // when needed, remove some levels to avoid this
@@ -3822,14 +3820,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 xmats[rmap[ir].first](rmap[ir].second, cmap[ic].second) =
                     x(ir, ic);
             }
-            for (MKL_INT ig = 0; ig < grt; ig++) {
-                // cout << "x = " << xmats[ig] << endl;
+            for (MKL_INT ig = 0; ig < grt; ig++)
                 GMatrixFunctions<FL>::svd(xmats[ig], lmats[ig], smats[ig],
                                           rmats[ig]);
-                // cout << "l = " << lmats[ig] << endl;
-                // cout << "s = " << smats[ig] << endl;
-                // cout << "r = " << rmats[ig] << endl;
-            }
             // fill original matrices
             grt = 0;
             for (auto &r : dsus[il].roots)
@@ -3841,7 +3834,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         else
                             icmap[xr++] = t - x.m;
                     for (MKL_INT ii = 0; ii < lmats[grt].m; ii++) {
-                        // cout << "ii = " << ii << " " << irmap[ii] << endl;
                         GMatrixFunctions<FL>::copy(
                             GMatrix<FL>(&glmat(irmap[ii], gxk), 1,
                                         lmats[grt].n),
@@ -3854,15 +3846,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         xcopy<FL>(&rmats[grt].m, &rmats[grt](0, jj),
                                   &rmats[grt].n, &grmat(gxk, icmap[jj]),
                                   &grmat.n);
-                    // cout << "grt = " << grt << " gxk = " << gxk
-                    //      << " gl = " << glmat << endl;
                     grt++;
                     gxk += min(xl, xr);
                 }
         }
-        // cout << "gl = " << glmat << endl;
-        // cout << "gs = " << gsmat << endl;
-        // cout << "gr = " << grmat << endl;
         assert(gxk <= ssk);
         l.clear(), r.clear(), s.clear();
         vector<MKL_INT> iwork(max(max(x.m, x.n), gxk));
@@ -3949,9 +3936,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                  GMatrix<FL>(grmat.data + iwork[ir] * x.n, 1, x.n));
             xcopy<FL>(&x.m, &glmat(0, iwork[ir]), &glmat.n, &l(0, ir), &l.n);
         }
-        // cout << l << endl;
-        // cout << s << endl;
-        // cout << r << endl;
         c_alloc->deallocate(xwork, lwork);
         d_alloc->deallocate(swork, max(x.m, x.n) + ssk);
     }
