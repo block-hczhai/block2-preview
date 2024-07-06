@@ -21,6 +21,7 @@ OPTION(APPLE_ACC_SINGLE_PREC "Fix Apple Accelerate single prec" ON)
 OPTION(BUILD_LIB "Build python block2.so" OFF)
 OPTION(BUILD_CLIB "Build C++ block2.so" OFF)
 OPTION(FORCE_LIB_ABS_PATH "Using absolute path when linking libraries" ON)
+OPTION(USE_PCH "Use precompiled headers for faster builds" OFF)
 
 IF (NOT ${USE_DMRG})
     SET(USE_BIG_SITE OFF)
@@ -641,6 +642,11 @@ TARGET_INCLUDE_DIRECTORIES(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
     ${MKL_INCLUDE_DIR} ${SCI_INCLUDE_DIR})
+
+IF (${USE_PCH})
+    FILE(GLOB COREHDRS src/instantiation/*.hpp)
+    TARGET_PRECOMPILE_HEADERS(${PROJECT_NAME} PRIVATE ${COREHDRS})
+ENDIF()
 
 IF ((NOT APPLE) AND (NOT WIN32))
     TARGET_LINK_LIBRARIES(${PROJECT_NAME} PRIVATE rt)

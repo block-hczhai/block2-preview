@@ -6610,7 +6610,11 @@ class DMRGDriver:
         cps.gf_omega = omega
 
         cps.solve(n_sweeps, ket.center == 0, tol)
-        rgf, igf = cps.targets[-1]
+        if SymmetryTypes.CPX in bw.symm_type:
+            vgf = cps.targets[-1]
+        else:
+            rgf, igf = cps.targets[-1]
+            vgf = rgf + 1j * igf
 
         if self.clean_scratch:
             lme.remove_partition_files()
@@ -6618,7 +6622,7 @@ class DMRGDriver:
 
         if self.mpi is not None:
             self.mpi.barrier()
-        return rgf + 1j * igf
+        return vgf
 
     def stack_mpo(self, mpoa, mpob, add_ident=True, iprint=0):
         """
