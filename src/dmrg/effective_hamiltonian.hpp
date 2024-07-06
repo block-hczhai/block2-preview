@@ -150,9 +150,21 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
-        vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
-                                                  hop_left_vacuum);
+        vector<vector<pair<uint8_t, S>>> msubsl;
+        if (op->stacked_mat == nullptr)
+            msubsl = Partition<S, FL>::get_uniq_sub_labels(
+                op->mat, hop_mat, msl, hop_left_vacuum);
+        else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                      hop_left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    op->stacked_mat, hop_mat, msl,
+                    (hop_left_vacuum - hop_left_vacuum)[0]);
+            msubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, psubsl, xsubsl);
+        }
         // symbol-free npdm case
         if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
             dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
@@ -173,6 +185,15 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                              unique(msubsl[i].begin(), msubsl[i].end())));
             }
         }
+        // cout << "opmat = " << op->mat << endl;
+        // if (op->stacked_mat != nullptr)
+        //     cout << "stacked_opmat = " << op->stacked_mat << endl;
+        // cout << "lops" << endl;
+        // for (auto & mm : op->lopt->ops)
+        //     cout << mm.first << " = " << *mm.second->info << " " << *mm.second << endl;
+        // cout << "rops" << endl;
+        // for (auto & mm : op->ropt->ops)
+        //     cout << mm.first << " = " << *mm.second->info << " " << *mm.second << endl;
         // tensor product diagonal
         if (compute_diag) {
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info =
@@ -180,8 +201,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos,
                                        right_op_infos, diag->info, tf->opf->cg);
             diag->info->cinfo = diag_info;
-            tf->tensor_product_diagonal(op->mat->data[0], op->lopt, op->ropt,
-                                        diag, opdq);
+            tf->tensor_product_diagonal(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, diag, opdq);
             diag_info->deallocate();
         }
         // temp wavefunction
@@ -211,15 +234,19 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
-            tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
-                                        cmat, vmat, opdq, false);
+            tf->tensor_product_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
-            tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
-                                        cmat, vmat, opdq, false);
+            tf->tensor_product_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, opdq, false);
             if (seq_filename != "")
                 tf->opf->seq->save_data(seq_filename);
         }
@@ -418,8 +445,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     operator_quanta.begin();
         assert(ic < operator_quanta.size() && wfn_infos[ic] != nullptr);
         cmat->info->cinfo = wfn_infos[ic];
-        tf->tensor_product_multiply(op->mat->data[idx], op->lopt, op->ropt,
-                                    cmat, vmat, idx_opdq, all_reduce);
+        tf->tensor_product_multiply(
+            op->mat->data[idx],
+            op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+            op->lopt, op->ropt, cmat, vmat, idx_opdq, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
@@ -1272,9 +1301,21 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
-        vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
-                                                  hop_left_vacuum);
+        vector<vector<pair<uint8_t, S>>> msubsl;
+        if (op->stacked_mat == nullptr)
+            msubsl = Partition<S, FL>::get_uniq_sub_labels(
+                op->mat, hop_mat, msl, hop_left_vacuum);
+        else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                      hop_left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    op->stacked_mat, hop_mat, msl,
+                    (hop_left_vacuum - hop_left_vacuum)[0]);
+            msubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, psubsl, xsubsl);
+        }
         // symbol-free npdm case
         if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
             dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
@@ -1306,8 +1347,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                     left_op_infos, right_op_infos, diag->infos[i], tf->opf->cg);
                 diag->infos[i]->cinfo = diag_info;
                 shared_ptr<SparseMatrix<S, FL>> xdiag = (*diag)[i];
-                tf->tensor_product_diagonal(op->mat->data[0], op->lopt,
-                                            op->ropt, xdiag, opdq);
+                tf->tensor_product_diagonal(op->mat->data[0],
+                                            op->stacked_mat == nullptr
+                                                ? nullptr
+                                                : op->stacked_mat->data[0],
+                                            op->lopt, op->ropt, xdiag, opdq);
                 diag_info->deallocate();
             }
         }
@@ -1347,16 +1391,18 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (FL *)0;
-            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
-                                              op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, 1.0, false);
+            tf->tensor_product_multi_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, wfn_infos[0], opdq, 1.0, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (FL *)0;
-            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
-                                              op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, 1.0, false);
+            tf->tensor_product_multi_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, wfn_infos[0], opdq, 1.0, false);
             if (seq_filename != "")
                 tf->opf->seq->save_data(seq_filename);
         }
@@ -1570,9 +1616,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                 idx_opdq) -
                     operator_quanta.begin();
         assert(ic < operator_quanta.size());
-        tf->tensor_product_multi_multiply(op->mat->data[idx], op->lopt,
-                                          op->ropt, cmat, vmat, wfn_infos[ic],
-                                          idx_opdq, factor, all_reduce);
+        tf->tensor_product_multi_multiply(
+            op->mat->data[idx],
+            op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+            op->lopt, op->ropt, cmat, vmat, wfn_infos[ic], idx_opdq, factor,
+            all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav

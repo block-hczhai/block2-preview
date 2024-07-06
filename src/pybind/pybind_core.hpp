@@ -1143,6 +1143,8 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
         .def(py::init<>())
         .def_readwrite("dops", &DelayedOperatorTensor<S, FL>::dops)
         .def_readwrite("mat", &DelayedOperatorTensor<S, FL>::mat)
+        .def_readwrite("stacked_mat",
+                       &DelayedOperatorTensor<S, FL>::stacked_mat)
         .def_readwrite("lopt", &DelayedOperatorTensor<S, FL>::lopt)
         .def_readwrite("ropt", &DelayedOperatorTensor<S, FL>::ropt);
 
@@ -1201,7 +1203,8 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<Symbolic<S>> &,
-                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed) const) &
+                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed,
+                 const shared_ptr<Symbolic<S>> &) const) &
                  TensorFunctions<S, FL>::delayed_contract);
 
     py::class_<ArchivedTensorFunctions<S, FL>,

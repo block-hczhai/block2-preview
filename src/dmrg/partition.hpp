@@ -152,25 +152,80 @@ template <typename S, typename FL> struct Partition {
     static shared_ptr<OperatorTensor<S, FL>> build_left(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-        bool csr = false) {
+        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr) {
         shared_ptr<OperatorTensor<S, FL>> opt =
             make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::RVec);
-        opt->lmat = make_shared<SymbolicRowVector<S>>(
-            *dynamic_pointer_cast<SymbolicRowVector<S>>(mats[0]));
-        for (auto &mat : mats) {
-            for (size_t i = 0; i < mat->data.size(); i++)
-                if (mat->data[i]->get_type() != OpTypes::Zero) {
-                    shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S, FL>>()
-                                       : make_shared<SparseMatrix<S, FL>>();
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        if (stacked_mat == nullptr)
+            opt->lmat = make_shared<SymbolicRowVector<S>>(
+                *dynamic_pointer_cast<SymbolicRowVector<S>>(mats[0]));
+        else {
+            opt->lmat =
+                make_shared<SymbolicRowVector<S>>(mats[0]->n * stacked_mat->n);
+            for (size_t j = 0; j < stacked_mat->data.size(); j++) {
+                shared_ptr<OpElement<S, FL>> opb =
+                    stacked_mat->data[j]->get_type() != OpTypes::Zero
+                        ? dynamic_pointer_cast<OpElement<S, FL>>(
+                              abs_value(stacked_mat->data[j]))
+                        : nullptr;
+                for (size_t i = 0; i < mats[0]->data.size(); i++) {
+                    shared_ptr<OpElement<S, FL>> opa =
+                        mats[0]->data[i]->get_type() != OpTypes::Zero
+                            ? dynamic_pointer_cast<OpElement<S, FL>>(
+                                  abs_value(mats[0]->data[i]))
+                            : nullptr;
+                    opt->lmat->data[j * mats[0]->data.size() + i] =
+                        opa == nullptr || opb == nullptr
+                            ? zero
+                            : make_shared<OpProduct<S, FL>>(opa, opb, (FL)1.0);
                 }
+            }
         }
-        for (auto &p : opt->ops) {
-            shared_ptr<OpElement<S, FL>> op =
-                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
-            p.second->info = find_op_info(left_op_infos, op->q_label);
+        for (auto &mat : mats)
+            if (stacked_mat == nullptr) {
+                for (size_t i = 0; i < mat->data.size(); i++)
+                    if (mat->data[i]->get_type() != OpTypes::Zero) {
+                        shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
+                        opt->ops[op] =
+                            csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                : make_shared<SparseMatrix<S, FL>>();
+                    }
+            } else {
+                for (size_t j = 0; j < stacked_mat->data.size(); j++)
+                    if (stacked_mat->data[j]->get_type() != OpTypes::Zero) {
+                        shared_ptr<OpElement<S, FL>> opb =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                abs_value(stacked_mat->data[j]));
+                        for (size_t i = 0; i < mat->data.size(); i++)
+                            if (mat->data[i]->get_type() != OpTypes::Zero) {
+                                shared_ptr<OpElement<S, FL>> opa =
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        abs_value(mat->data[i]));
+                                shared_ptr<OpExpr<S>> op =
+                                    make_shared<OpProduct<S, FL>>(opa, opb,
+                                                                  (FL)1.0);
+                                opt->ops[op] =
+                                    csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                        : make_shared<SparseMatrix<S, FL>>();
+                            }
+                    }
+            }
+        if (stacked_mat == nullptr) {
+            for (auto &p : opt->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                p.second->info = find_op_info(left_op_infos, op->q_label);
+            }
+        } else {
+            for (auto &p : opt->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                p.second->info = find_op_info(
+                    left_op_infos, (op->a->q_label + op->b->q_label)[0]);
+                assert(p.second->info != nullptr);
+            }
         }
         return opt;
     }
@@ -178,25 +233,80 @@ template <typename S, typename FL> struct Partition {
     static shared_ptr<OperatorTensor<S, FL>> build_right(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        bool csr = false) {
+        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr) {
         shared_ptr<OperatorTensor<S, FL>> opt =
             make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
         assert(mats[0]->get_type() == SymTypes::CVec);
-        opt->rmat = make_shared<SymbolicColumnVector<S>>(
-            *dynamic_pointer_cast<SymbolicColumnVector<S>>(mats[0]));
-        for (auto &mat : mats) {
-            for (size_t i = 0; i < mat->data.size(); i++)
-                if (mat->data[i]->get_type() != OpTypes::Zero) {
-                    shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
-                    opt->ops[op] = csr ? make_shared<CSRSparseMatrix<S, FL>>()
-                                       : make_shared<SparseMatrix<S, FL>>();
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        if (stacked_mat == nullptr)
+            opt->rmat = make_shared<SymbolicColumnVector<S>>(
+                *dynamic_pointer_cast<SymbolicColumnVector<S>>(mats[0]));
+        else {
+            opt->rmat = make_shared<SymbolicColumnVector<S>>(mats[0]->m *
+                                                             stacked_mat->m);
+            for (size_t j = 0; j < stacked_mat->data.size(); j++) {
+                shared_ptr<OpElement<S, FL>> opb =
+                    stacked_mat->data[j]->get_type() != OpTypes::Zero
+                        ? dynamic_pointer_cast<OpElement<S, FL>>(
+                              abs_value(stacked_mat->data[j]))
+                        : nullptr;
+                for (size_t i = 0; i < mats[0]->data.size(); i++) {
+                    shared_ptr<OpElement<S, FL>> opa =
+                        mats[0]->data[i]->get_type() != OpTypes::Zero
+                            ? dynamic_pointer_cast<OpElement<S, FL>>(
+                                  abs_value(mats[0]->data[i]))
+                            : nullptr;
+                    opt->rmat->data[j * mats[0]->data.size() + i] =
+                        opa == nullptr || opb == nullptr
+                            ? zero
+                            : make_shared<OpProduct<S, FL>>(opa, opb, (FL)1.0);
                 }
+            }
         }
-        for (auto &p : opt->ops) {
-            shared_ptr<OpElement<S, FL>> op =
-                dynamic_pointer_cast<OpElement<S, FL>>(p.first);
-            p.second->info = find_op_info(right_op_infos, op->q_label);
+        for (auto &mat : mats)
+            if (stacked_mat == nullptr) {
+                for (size_t i = 0; i < mat->data.size(); i++)
+                    if (mat->data[i]->get_type() != OpTypes::Zero) {
+                        shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
+                        opt->ops[op] =
+                            csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                : make_shared<SparseMatrix<S, FL>>();
+                    }
+            } else {
+                for (size_t j = 0; j < stacked_mat->data.size(); j++)
+                    if (stacked_mat->data[j]->get_type() != OpTypes::Zero) {
+                        shared_ptr<OpElement<S, FL>> opb =
+                            dynamic_pointer_cast<OpElement<S, FL>>(
+                                abs_value(stacked_mat->data[j]));
+                        for (size_t i = 0; i < mat->data.size(); i++)
+                            if (mat->data[i]->get_type() != OpTypes::Zero) {
+                                shared_ptr<OpElement<S, FL>> opa =
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        abs_value(mat->data[i]));
+                                shared_ptr<OpExpr<S>> op =
+                                    make_shared<OpProduct<S, FL>>(opa, opb,
+                                                                  (FL)1.0);
+                                opt->ops[op] =
+                                    csr ? make_shared<CSRSparseMatrix<S, FL>>()
+                                        : make_shared<SparseMatrix<S, FL>>();
+                            }
+                    }
+            }
+        if (stacked_mat == nullptr) {
+            for (auto &p : opt->ops) {
+                shared_ptr<OpElement<S, FL>> op =
+                    dynamic_pointer_cast<OpElement<S, FL>>(p.first);
+                p.second->info = find_op_info(right_op_infos, op->q_label);
+            }
+        } else {
+            for (auto &p : opt->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                p.second->info = find_op_info(
+                    right_op_infos, (op->a->q_label + op->b->q_label)[0]);
+                assert(p.second->info != nullptr);
+            }
         }
         return opt;
     }
@@ -331,6 +441,65 @@ template <typename S, typename FL> struct Partition {
         }
         return subsl;
     }
+    static vector<S> get_stacked_uniq_labels(const vector<S> &ra,
+                                             const vector<S> &rb) {
+        vector<S> r;
+        for (const auto &xa : ra)
+            for (const auto &xb : rb) {
+                const S m = xa + xb;
+                for (int i = 0; i < m.count(); i++)
+                    r.push_back(m[i]);
+            }
+        sort(r.begin(), r.end());
+        r.resize(distance(r.begin(), unique(r.begin(), r.end())));
+        return r;
+    }
+    static vector<vector<pair<uint8_t, S>>> get_stacked_uniq_sub_labels(
+        const vector<S> &sla, const vector<S> &slb, const vector<S> &sl,
+        const vector<vector<pair<uint8_t, S>>> &subsla,
+        const vector<vector<pair<uint8_t, S>>> &subslb, bool partial = false,
+        bool left_only = true, bool uniq_sorted = true) {
+        vector<vector<pair<uint8_t, S>>> subsl(sl.size());
+        assert(subsla.size() == sla.size());
+        assert(subslb.size() == slb.size());
+        for (size_t ia = 0; ia < subsla.size(); ia++)
+            for (size_t ib = 0; ib < subslb.size(); ib++) {
+                S la = sla[ia], lb = slb[ib];
+                S l = (la + lb)[0];
+                size_t idx = lower_bound(sl.begin(), sl.end(), l) - sl.begin();
+                assert(idx != sl.size());
+                for (const auto &ma : subsla[ia])
+                    for (const auto &mb : subslb[ib])
+                        if (!partial) {
+                            S bra_a = ma.second.get_bra(la),
+                              ket_a = ma.second.get_ket();
+                            S bra_b = mb.second.get_bra(lb),
+                              ket_b = mb.second.get_ket();
+                            S bra = (bra_a + bra_b)[0],
+                              ket = (ket_a + ket_b)[0];
+                            S p = l.combine(bra, ket);
+                            assert(p != S(S::invalid));
+                            subsl[idx].push_back(make_pair(ma.first, p));
+                        } else if (left_only) {
+                            S bra_a = ma.second, bra_b = mb.second;
+                            S bra = (bra_a + bra_b)[0];
+                            subsl[idx].push_back(make_pair(ma.first, bra));
+                        } else {
+                            S mket_a = ma.second, mket_b = mb.second;
+                            S mket = (mket_a + mket_b)[0];
+                            subsl[idx].push_back(make_pair(ma.first, mket));
+                        }
+            }
+        if (uniq_sorted) {
+            for (size_t i = 0; i < subsl.size(); i++) {
+                sort(subsl[i].begin(), subsl[i].end());
+                subsl[i].resize(
+                    distance(subsl[i].begin(),
+                             unique(subsl[i].begin(), subsl[i].end())));
+            }
+        }
+        return subsl;
+    }
     static void deallocate_op_infos_notrunc(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>
             &op_infos_notrunc) {
@@ -352,6 +521,25 @@ template <typename S, typename FL> struct Partition {
                     from_op_infos[i].second->deep_copy(i_alloc));
             to_op_infos.push_back(make_pair(from_op_infos[i].first, info));
         }
+    }
+    static map<S, shared_ptr<SparseMatrixInfo<S>>> get_stacked_op_info(
+        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &infoa,
+        const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &infob,
+        shared_ptr<StateInfo<S>> basis) {
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        map<S, shared_ptr<SparseMatrixInfo<S>>> info;
+        for (const auto &xa : infoa)
+            for (const auto &xb : infob) {
+                S q = xa.first + xb.first;
+                for (int iq = 0; iq < q.count(); iq++)
+                    info[q[iq]] = nullptr;
+            }
+        for (auto &p : info) {
+            p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+            p.second->initialize(*basis, *basis, p.first, p.first.is_fermion());
+        }
+        return info;
     }
     // Generate SparseMatrixInfo for contracted left block operators
     // after renormalization (or rotation)

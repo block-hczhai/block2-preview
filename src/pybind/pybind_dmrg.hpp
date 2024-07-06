@@ -779,6 +779,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def_readwrite("center", &MovingEnvironment<S, FL, FLS>::center)
         .def_readwrite("dot", &MovingEnvironment<S, FL, FLS>::dot)
         .def_readwrite("mpo", &MovingEnvironment<S, FL, FLS>::mpo)
+        .def_readwrite("stacked_mpo",
+                       &MovingEnvironment<S, FL, FLS>::stacked_mpo)
         .def_readwrite("bra", &MovingEnvironment<S, FL, FLS>::bra)
         .def_readwrite("ket", &MovingEnvironment<S, FL, FLS>::ket)
         .def_readwrite("envs", &MovingEnvironment<S, FL, FLS>::envs)

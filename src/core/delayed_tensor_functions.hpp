@@ -235,7 +235,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
     }
     // vmats = expr x cmats
     void tensor_product_multi_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt,
         const shared_ptr<SparseMatrixGroup<S, FL>> &cmats,
@@ -244,6 +244,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
             S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
             &cinfos,
         S opdq, FL factor, bool all_reduce) const override {
+        assert(xexpr == nullptr);
         unordered_map<S, int> vdqs;
         vdqs.reserve(vmats->n);
         for (int iv = 0; iv < vmats->n; iv++)
@@ -259,7 +260,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
             for (int iv = 0; iv < vdq.count(); iv++)
                 if (vdqs.count(vdq[iv])) {
                     pcmat->info->cinfo = cinfos.at(opdq.combine(vdq[iv], cdq));
-                    tensor_product_multiply(expr, lopt, ropt, pcmat,
+                    tensor_product_multiply(expr, xexpr, lopt, ropt, pcmat,
                                             (*vmats)[vdqs[vdq[iv]]], opdq,
                                             false);
                 }
@@ -267,11 +268,13 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
     }
     // vmat = expr x cmat
     void tensor_product_multiply(const shared_ptr<OpExpr<S>> &expr,
+                                 const shared_ptr<OpExpr<S>> &xexpr,
                                  const shared_ptr<OperatorTensor<S, FL>> &lopt,
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &cmat,
                                  const shared_ptr<SparseMatrix<S, FL>> &vmat,
                                  S opdq, bool all_reduce) const override {
+        assert(xexpr == nullptr);
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S, FL>> op =
@@ -300,7 +303,8 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_multiply(x, lopt, ropt, cmat, vmat, opdq, false);
+                tensor_product_multiply(x, xexpr, lopt, ropt, cmat, vmat, opdq,
+                                        false);
         } break;
         case OpTypes::Zero:
             break;
@@ -311,10 +315,12 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
     }
     // mat = diag(expr)
     void tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
+                                 const shared_ptr<OpExpr<S>> &xexpr,
                                  const shared_ptr<OperatorTensor<S, FL>> &lopt,
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &mat,
                                  S opdq) const override {
+        assert(xexpr == nullptr);
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S, FL>> op =
@@ -343,7 +349,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_diagonal(x, lopt, ropt, mat, opdq);
+                tensor_product_diagonal(x, xexpr, lopt, ropt, mat, opdq);
         } break;
         case OpTypes::Zero:
             break;

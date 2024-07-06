@@ -4283,6 +4283,7 @@ class DMRGDriver:
         forward=None,
         kernel=None,
         metric_mpo=None,
+        stacked_mpo=None,
         context_ket=None,
     ):
         """
@@ -4398,6 +4399,8 @@ class DMRGDriver:
                 Kernel operation for the local problem.
             metric_mpo : None or MPO
                 The block2 MPO object for the metric. Default is None (identity metric).
+            stacked_mpo : None or MPO
+                The block2 MPO object stacked with the mpo. Default is None.
             context_ket : None or MPS
                 The block2 MPS object for the symmetry constraint. Default is None (no constraint).
 
@@ -4422,6 +4425,9 @@ class DMRGDriver:
             bra = ket
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "DMRG")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        if stacked_mpo is not None:
+            me.stacked_mpo = stacked_mpo
+            me.delayed_contraction = bw.b.OpNamesSet()
         me.cached_contraction = True
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
         metric_me = None

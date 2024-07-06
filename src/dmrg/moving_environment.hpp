@@ -153,6 +153,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     typedef typename GMatrix<FLS>::FC FCS;
     int n_sites, center, dot;
     shared_ptr<MPO<S, FL>> mpo;
+    shared_ptr<MPO<S, FL>> stacked_mpo = nullptr;
     shared_ptr<MPS<S, FLS>> bra, ket;
     // Represent the environments contracted around different center sites
     vector<shared_ptr<Partition<S, FL>>> envs;
@@ -218,6 +219,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                               bool preserve_data = false) {
         mpo->load_left_operators(i - 1);
         mpo->load_tensor(i - 1);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_left_operators(i - 1);
+            stacked_mpo->load_tensor(i - 1);
+        }
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
@@ -226,19 +231,53 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
+        shared_ptr<Symbolic<S>> stacked_mat =
+            stacked_mpo != nullptr ? stacked_mpo->left_operator_names[i - 1]
+                                   : nullptr;
+        vector<S> sl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            sl = Partition<S, FL>::get_uniq_labels(mats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(mats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_mat});
+            sl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> exprs =
             envs[i - 1]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[i - 1]
                        : envs[i - 1]->left->lmat * mpo->tensors[i - 1]->lmat);
-        vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> subsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            subsl = Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->left_operator_names[i - 1], sl, mpo->left_vacuum);
+            site_op_info = mpo->site_op_infos[i - 1];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    exprs, mpo->left_operator_names[i - 1], psl,
+                    mpo->left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[i - 1]->left == nullptr
+                        ? nullptr
+                        : stacked_mpo->left_operator_exprs[i - 1],
+                    stacked_mpo->left_operator_names[i - 1], xsl,
+                    stacked_mpo->left_vacuum);
+            subsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, sl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[i - 1], stacked_mpo->site_op_infos[i - 1],
+                mpo->basis[i - 1]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         Partition<S, FL>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
-            mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
+            site_op_info, left_op_infos_notrunc, mpo->tf->opf->cg);
         frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_left;
         if (cached_info.first == OpCachingTypes::Left &&
@@ -250,7 +289,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_left = Partition<S, FL>::build_left(
                 {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
-                mpo->sparse_form[i - 1] == 'S');
+                mpo->sparse_form[i - 1] == 'S', stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -266,6 +305,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 left_copy(i - 1, copied_infos, copied_left, false);
                 copied_mem = copied_left->get_total_memory();
             }
+        } else if (stacked_mpo != nullptr) {
+            mpo->tf->left_contract_stacked(
+                envs[i - 1]->left, mpo->tensors[i - 1],
+                stacked_mpo->tensors[i - 1], new_left,
+                mpo->left_operator_exprs[i - 1],
+                stacked_mpo->left_operator_exprs[i - 1], site_op_info_mp);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+            stacked_mpo->unload_tensor(i - 1);
+            stacked_mpo->unload_left_operators(i - 1);
         } else {
             // cached_opt might be partially delayed,
             // so further contraction is still needed
@@ -285,8 +334,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::init_left_op_infos(i - 1, bra->info, ket->info, sl,
                                              envs[i]->left_op_infos);
         frame_<FP>()->activate(1);
-        envs[i]->left =
-            Partition<S, FL>::build_left(mats, envs[i]->left_op_infos);
+        envs[i]->left = Partition<S, FL>::build_left(
+            mats, envs[i]->left_op_infos, false, stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -303,6 +352,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (!fused_contraction_rotation)
             mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
         else {
+            assert(stacked_mat == nullptr);
             mpo->tf->left_contract_rotate(copied_left, mpo->tensors[i - 1], fbt,
                                           fkt, new_left, envs[i]->left,
                                           mpo->left_operator_exprs.size() != 0
@@ -362,6 +412,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                                bool preserve_data = false) {
         mpo->load_right_operators(i + dot);
         mpo->load_tensor(i + dot);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_right_operators(i + dot);
+            stacked_mpo->load_tensor(i + dot);
+        }
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
@@ -371,7 +425,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->right_new_operator_names);
         }
-        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
+        shared_ptr<Symbolic<S>> stacked_mat =
+            stacked_mpo != nullptr ? stacked_mpo->right_operator_names[i + dot]
+                                   : nullptr;
+        vector<S> sl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            sl = Partition<S, FL>::get_uniq_labels(mats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(mats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_mat});
+            sl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> exprs =
             envs[i + 1]->right == nullptr
                 ? nullptr
@@ -379,14 +443,38 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        ? mpo->right_operator_exprs[i + dot]
                        : mpo->tensors[i + dot]->rmat *
                              envs[i + 1]->right->rmat);
-        vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> subsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            subsl = Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->right_operator_names[i + dot], sl,
                 ket->info->vacuum);
+            site_op_info = mpo->site_op_infos[i + dot];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    exprs, mpo->right_operator_names[i + dot], psl,
+                    ket->info->vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[i + 1]->right == nullptr
+                        ? nullptr
+                        : stacked_mpo->right_operator_exprs[i + dot],
+                    stacked_mpo->right_operator_names[i + dot], xsl,
+                    ket->info->vacuum);
+            subsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, sl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[i + dot],
+                stacked_mpo->site_op_infos[i + dot], mpo->basis[i + dot]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         Partition<S, FL>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
-            envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
-            right_op_infos_notrunc, mpo->tf->opf->cg);
+            envs[i + 1]->right_op_infos, site_op_info, right_op_infos_notrunc,
+            mpo->tf->opf->cg);
         frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_right;
         if (cached_info.first == OpCachingTypes::Right &&
@@ -398,7 +486,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_right = Partition<S, FL>::build_right(
                 {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
-                mpo->sparse_form[i + dot] == 'S');
+                mpo->sparse_form[i + dot] == 'S', stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -414,6 +502,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 right_copy(i + dot, copied_infos, copied_right, false);
                 copied_mem = copied_right->get_total_memory();
             }
+        } else if (stacked_mpo != nullptr) {
+            mpo->tf->right_contract_stacked(
+                envs[i + 1]->right, mpo->tensors[i + dot],
+                stacked_mpo->tensors[i + dot], new_right,
+                mpo->right_operator_exprs[i + dot],
+                stacked_mpo->right_operator_exprs[i + dot], site_op_info_mp);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+            stacked_mpo->unload_tensor(i + dot);
+            stacked_mpo->unload_right_operators(i + dot);
         } else {
             // cached_opt might be partially delayed,
             // so further contraction is still needed
@@ -433,8 +531,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::init_right_op_infos(i + dot, bra->info, ket->info, sl,
                                               envs[i]->right_op_infos);
         frame_<FP>()->activate(1);
-        envs[i]->right =
-            Partition<S, FL>::build_right(mats, envs[i]->right_op_infos);
+        envs[i]->right = Partition<S, FL>::build_right(
+            mats, envs[i]->right_op_infos, false, stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -451,6 +549,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         if (!fused_contraction_rotation)
             mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
         else {
+            assert(stacked_mat == nullptr);
             mpo->tf->right_contract_rotate(
                 copied_right, mpo->tensors[i + dot], fbt, fkt, new_right,
                 envs[i]->right,
@@ -1531,6 +1630,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S, FL>> &new_left, bool delayed) {
         mpo->load_left_operators(iL);
         mpo->load_tensor(iL);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_left_operators(iL);
+            stacked_mpo->load_tensor(iL);
+        }
         // left contract infos
         vector<shared_ptr<Symbolic<S>>> lmats = {mpo->left_operator_names[iL]};
         if (mpo->schemer != nullptr && iL == mpo->schemer->left_trans_site &&
@@ -1539,21 +1642,55 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             lmats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> lsl = Partition<S, FL>::get_uniq_labels(lmats);
+        shared_ptr<Symbolic<S>> stacked_lmat =
+            stacked_mpo != nullptr ? stacked_mpo->left_operator_names[iL]
+                                   : nullptr;
+        vector<S> lsl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            lsl = Partition<S, FL>::get_uniq_labels(lmats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(lmats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_lmat});
+            lsl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> lexprs =
             envs[iL]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[iL]
                        : envs[iL]->left->lmat * mpo->tensors[iL]->lmat);
-        vector<vector<pair<uint8_t, S>>> lsubsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> lsubsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            lsubsl = Partition<S, FL>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl, mpo->left_vacuum);
+            site_op_info = mpo->site_op_infos[iL];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    lexprs, mpo->left_operator_names[iL], psl,
+                    mpo->left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[iL]->left == nullptr
+                        ? nullptr
+                        : stacked_mpo->left_operator_exprs[iL],
+                    stacked_mpo->left_operator_names[iL], xsl,
+                    stacked_mpo->left_vacuum);
+            lsubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, lsl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[iL], stacked_mpo->site_op_infos[iL],
+                mpo->basis[iL]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         if (envs[iL]->left != nullptr && iL != 0 && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         Partition<S, FL>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
-            mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
+            site_op_info, left_op_infos, mpo->tf->opf->cg);
         // left contract
         frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Left &&
@@ -1563,14 +1700,21 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 p.second->info = Partition<S, FL>::find_op_info(
                     left_op_infos, p.second->info->delta_quantum);
         } else {
-            new_left = Partition<S, FL>::build_left(
-                lmats, left_op_infos, mpo->sparse_form[iL] == 'S');
-            mpo->tf->left_contract(envs[iL]->left, mpo->tensors[iL], new_left,
-                                   mpo->left_operator_exprs.size() != 0
-                                       ? mpo->left_operator_exprs[iL]
-                                       : nullptr,
-                                   delayed ? delayed_contraction
-                                           : OpNamesSet());
+            new_left = Partition<S, FL>::build_left(lmats, left_op_infos,
+                                                    mpo->sparse_form[iL] == 'S',
+                                                    stacked_lmat);
+            if (stacked_mpo != nullptr)
+                mpo->tf->left_contract_stacked(
+                    envs[iL]->left, mpo->tensors[iL], stacked_mpo->tensors[iL],
+                    new_left, mpo->left_operator_exprs[iL],
+                    stacked_mpo->left_operator_exprs[iL], site_op_info_mp);
+            else
+                mpo->tf->left_contract(
+                    envs[iL]->left, mpo->tensors[iL], new_left,
+                    mpo->left_operator_exprs.size() != 0
+                        ? mpo->left_operator_exprs[iL]
+                        : nullptr,
+                    delayed ? delayed_contraction : OpNamesSet());
             // for conventional scheme this will not be the case
             if (mpo->schemer != nullptr &&
                 iL == mpo->schemer->left_trans_site &&
@@ -1581,6 +1725,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     new_left, lmats[1], mpo->schemer->left_new_operator_exprs);
                 mpo->unload_schemer();
             }
+        }
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->unload_left_operators(iL);
+            stacked_mpo->unload_tensor(iL);
         }
         mpo->unload_tensor(iL);
         mpo->unload_left_operators(iL);
@@ -1607,9 +1755,23 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S, FL>> &new_right, bool delayed) {
         mpo->load_right_operators(iR);
         mpo->load_tensor(iR);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_right_operators(iR);
+            stacked_mpo->load_tensor(iR);
+        }
         // right contract infos
         vector<shared_ptr<Symbolic<S>>> rmats = {mpo->right_operator_names[iR]};
-        vector<S> rsl = Partition<S, FL>::get_uniq_labels(rmats);
+        shared_ptr<Symbolic<S>> stacked_rmat =
+            stacked_mpo != nullptr ? stacked_mpo->right_operator_names[iR]
+                                   : nullptr;
+        vector<S> rsl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            rsl = Partition<S, FL>::get_uniq_labels(rmats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(rmats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_rmat});
+            rsl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> rexprs =
             envs[iR - dot + 1]->right == nullptr
                 ? nullptr
@@ -1617,16 +1779,40 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        ? mpo->right_operator_exprs[iR]
                        : mpo->tensors[iR]->rmat *
                              envs[iR - dot + 1]->right->rmat);
-        vector<vector<pair<uint8_t, S>>> rsubsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> rsubsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            rsubsl = Partition<S, FL>::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[iR], rsl, ket->info->vacuum);
+            site_op_info = mpo->site_op_infos[iR];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    rexprs, mpo->right_operator_names[iR], psl,
+                    ket->info->vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[iR - dot + 1]->right == nullptr
+                        ? nullptr
+                        : stacked_mpo->right_operator_exprs[iR],
+                    stacked_mpo->right_operator_names[iR], xsl,
+                    ket->info->vacuum);
+            rsubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, rsl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[iR], stacked_mpo->site_op_infos[iR],
+                mpo->basis[iR]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         if (envs[iR - dot + 1]->right != nullptr && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         Partition<S, FL>::init_right_op_infos_notrunc(
             iR, bra->info, ket->info, rsl, rsubsl,
-            envs[iR - dot + 1]->right_op_infos, mpo->site_op_infos[iR],
-            right_op_infos, mpo->tf->opf->cg);
+            envs[iR - dot + 1]->right_op_infos, site_op_info, right_op_infos,
+            mpo->tf->opf->cg);
         // right contract
         frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Right &&
@@ -1637,13 +1823,25 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     right_op_infos, p.second->info->delta_quantum);
         } else {
             new_right = Partition<S, FL>::build_right(
-                rmats, right_op_infos, mpo->sparse_form[iR] == 'S');
-            mpo->tf->right_contract(
-                envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
-                mpo->right_operator_exprs.size() != 0
-                    ? mpo->right_operator_exprs[iR]
-                    : nullptr,
-                delayed ? delayed_contraction : OpNamesSet());
+                rmats, right_op_infos, mpo->sparse_form[iR] == 'S',
+                stacked_rmat);
+            if (stacked_mpo != nullptr)
+                mpo->tf->right_contract_stacked(
+                    envs[iR - dot + 1]->right, mpo->tensors[iR],
+                    stacked_mpo->tensors[iR], new_right,
+                    mpo->right_operator_exprs[iR],
+                    stacked_mpo->right_operator_exprs[iR], site_op_info_mp);
+            else
+                mpo->tf->right_contract(
+                    envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
+                    mpo->right_operator_exprs.size() != 0
+                        ? mpo->right_operator_exprs[iR]
+                        : nullptr,
+                    delayed ? delayed_contraction : OpNamesSet());
+        }
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->unload_right_operators(iR);
+            stacked_mpo->unload_tensor(iR);
         }
         mpo->unload_tensor(iR);
         mpo->unload_right_operators(iR);
@@ -1811,12 +2009,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 delayed_right_contract(iR, new_right);
         }
         mpo->load_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                      mpo->middle_operator_exprs[iM], delayed_contraction,
+                      stacked_mpo == nullptr
+                          ? nullptr
+                          : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
@@ -1827,6 +2030,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->unload_middle_operators(iM);
         shared_ptr<SparseMatrix<S, FL>> fbw =
             ComplexMixture<S, FL, FLS>::forward(bra_wfn);
         shared_ptr<SparseMatrix<S, FL>> fkw =
@@ -1943,12 +2148,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 delayed_right_contract(iR, new_right);
         }
         mpo->load_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                      mpo->middle_operator_exprs[iM], delayed_contraction,
+                      stacked_mpo == nullptr
+                          ? nullptr
+                          : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
@@ -1959,6 +2169,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->unload_middle_operators(iM);
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> fbw =
             ComplexMixture<S, FL, FLS>::forward(mbra->wfns);
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> fkw =
