@@ -93,9 +93,19 @@ For mixed ``openMP/MPI``, use ``mpirun --bind-to none -n ...`` or ``mpirun --bin
 Binary build
 ^^^^^^^^^^^^
 
-To build unit tests and binary executable (instead of python extension), use the following ::
+To build unit tests, use the following ::
 
     cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON
+
+To build the binary executable, use the following ::
+
+    cmake .. -DUSE_MKL=ON -DBUILD_EXE=ON
+
+To build the C++ library, use the following ::
+
+    cmake .. -DUSE_MKL=ON -DBUILD_CLIB=ON
+
+``-DBUILD_LIB=ON``, ``-DBUILD_TEST=ON``, ``-DBUILD_EXE=ON``, and ``-DBUILD_CLIB=ON`` can be used together so that multiple targets will be built.
 
 TBB (Intel Threading Building Blocks)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

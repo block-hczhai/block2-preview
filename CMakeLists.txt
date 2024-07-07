@@ -26,10 +26,6 @@ OPTION(BUILD_CORE "Build core objects" ON)
 OPTION(BUILD_PCH "Build precompiled headers" ON)
 OPTION(FORCE_LIB_ABS_PATH "Using absolute path when linking libraries" ON)
 
-IF (NOT (${BUILD_LIB} OR ${BUILD_CLIB} OR ${BUILD_TEST}))
-    SET(BUILD_EXE ON)
-ENDIF()
-
 IF (NOT ${USE_DMRG})
     SET(USE_BIG_SITE OFF)
     SET(USE_SP_DMRG OFF)
