@@ -351,8 +351,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
         if (!fused_contraction_rotation)
             mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
-        else {
-            assert(stacked_mat == nullptr);
+        else if (stacked_mpo != nullptr) {
+            mpo->tf->left_contract_rotate_stacked(
+                copied_left, mpo->tensors[i - 1], stacked_mpo->tensors[i - 1],
+                fbt, fkt, new_left, envs[i]->left,
+                mpo->left_operator_exprs[i - 1],
+                stacked_mpo->left_operator_exprs[i - 1], site_op_info_mp);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+            stacked_mpo->unload_tensor(i - 1);
+            stacked_mpo->unload_left_operators(i - 1);
+            copied_left = nullptr;
+        } else {
             mpo->tf->left_contract_rotate(copied_left, mpo->tensors[i - 1], fbt,
                                           fkt, new_left, envs[i]->left,
                                           mpo->left_operator_exprs.size() != 0
@@ -548,8 +558,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
         if (!fused_contraction_rotation)
             mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
-        else {
-            assert(stacked_mat == nullptr);
+        else if (stacked_mpo != nullptr) {
+            mpo->tf->right_contract_rotate_stacked(
+                copied_right, mpo->tensors[i + dot],
+                stacked_mpo->tensors[i + dot], fbt, fkt, new_right,
+                envs[i]->right, mpo->right_operator_exprs[i + dot],
+                stacked_mpo->right_operator_exprs[i + dot], site_op_info_mp);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+            stacked_mpo->unload_tensor(i + dot);
+            stacked_mpo->unload_right_operators(i + dot);
+            copied_right = nullptr;
+        } else {
             mpo->tf->right_contract_rotate(
                 copied_right, mpo->tensors[i + dot], fbt, fkt, new_right,
                 envs[i]->right,

@@ -119,7 +119,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
     }
     // vmat = expr[L part | R part] x cmat (for perturbative noise)
     void tensor_product_partial_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt, bool trace_right,
         const shared_ptr<SparseMatrix<S, FL>> &cmat,
@@ -130,6 +130,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
         const vector<S> &vdqs,
         const shared_ptr<SparseMatrixGroup<S, FL>> &vmats, int &vidx, int tvidx,
         bool do_reduce) const override {
+        assert(xexpr == nullptr);
         const shared_ptr<OpElement<S, FL>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
         if ((!trace_right && lopt->ops.count(i_op) == 0) ||
@@ -222,7 +223,7 @@ struct DelayedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_partial_multiply(x, lopt, ropt, trace_right,
+                tensor_product_partial_multiply(x, xexpr, lopt, ropt, trace_right,
                                                 cmat, psubsl, cinfos, vdqs,
                                                 vmats, vidx, tvidx, false);
         } break;

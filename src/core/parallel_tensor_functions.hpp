@@ -159,7 +159,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
     }
     // vmat = expr[L part | R part] x cmat (for perturbative noise)
     void tensor_product_partial_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt, bool trace_right,
         const shared_ptr<SparseMatrix<S, FL>> &cmat,
@@ -173,16 +173,23 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         if (expr->get_type() == OpTypes::ExprRef) {
             shared_ptr<OpExprRef<S>> op =
                 dynamic_pointer_cast<OpExprRef<S>>(expr);
-            TensorFunctions<S, FL>::tensor_product_partial_multiply(
-                op->op, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                vmats, vidx, tvidx, false);
+            if (xexpr != nullptr && xexpr->get_type() == OpTypes::ExprRef) {
+                shared_ptr<OpExprRef<S>> xop =
+                    dynamic_pointer_cast<OpExprRef<S>>(xexpr);
+                TensorFunctions<S, FL>::tensor_product_partial_multiply(
+                    op->op, xop->op, lopt, ropt, trace_right, cmat, psubsl,
+                    cinfos, vdqs, vmats, vidx, tvidx, false);
+            } else
+                TensorFunctions<S, FL>::tensor_product_partial_multiply(
+                    op->op, xexpr, lopt, ropt, trace_right, cmat, psubsl,
+                    cinfos, vdqs, vmats, vidx, tvidx, false);
             if (opf->seq->mode != SeqTypes::Auto &&
                 !(opf->seq->mode & SeqTypes::Tasked) && do_reduce)
                 rule->comm->reduce_sum(vmats, rule->comm->root);
         } else
             TensorFunctions<S, FL>::tensor_product_partial_multiply(
-                expr, lopt, ropt, trace_right, cmat, psubsl, cinfos, vdqs,
-                vmats, vidx, tvidx, false);
+                expr, xexpr, lopt, ropt, trace_right, cmat, psubsl, cinfos,
+                vdqs, vmats, vidx, tvidx, false);
     }
     // vmats = expr x cmats
     void tensor_product_multi_multiply(

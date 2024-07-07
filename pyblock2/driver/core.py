@@ -4472,6 +4472,32 @@ class DMRGDriver:
             else:
                 dmrg.davidson_type = getattr(bw.b.DavidsonTypes, dav_type)
         dmrg.davidson_shift = davidson_shift
+        if max(noises) != 0 and (noise_type is None or "Perturbative" in noise_type):
+            if (
+                self.mpi
+                and not isinstance(mpo.prim_mpo, bw.bs.IdentityAddedMPO)
+                and "HQC" not in mpo.tag
+            ) or (
+                not self.mpi
+                and not isinstance(mpo, bw.bs.IdentityAddedMPO)
+                and "HQC" not in mpo.tag
+            ):
+                print(
+                    "Warning: Noise will not be effective because mpo add_ident = False."
+                )
+            if stacked_mpo is not None:
+                if (
+                    self.mpi
+                    and not isinstance(stacked_mpo.prim_mpo, bw.bs.IdentityAddedMPO)
+                    and "HQC" not in stacked_mpo.tag
+                ) or (
+                    not self.mpi
+                    and not isinstance(stacked_mpo, bw.bs.IdentityAddedMPO)
+                    and "HQC" not in stacked_mpo.tag
+                ):
+                    print(
+                        "Warning: Noise will not be effective because stacked_mpo add_ident = False."
+                    )
         if noise_type is None:
             noise_type = "ReducedPerturbativeCollected"
         dmrg.noise_type = getattr(bw.b.NoiseTypes, noise_type)
@@ -6408,7 +6434,7 @@ class DMRGDriver:
         return norm
 
     def expectation(
-        self, bra, mpo, ket, store_bra_spectra=False, store_ket_spectra=False, iprint=0
+        self, bra, mpo, ket, stacked_mpo=None, store_bra_spectra=False, store_ket_spectra=False, iprint=0
     ):
         """
         Compute the expectation value between MPO and bra and ket MPSs:
@@ -6423,6 +6449,8 @@ class DMRGDriver:
                 The block2 MPO object, representing the operator.
             ket : MPS
                 The "ket" MPS.
+            stacked_mpo : None or MPO
+                The block2 MPO object stacked with the mpo. Default is None.
             store_bra_spectra : bool
                 If True, the ``bra`` MPS singular value spectra will be stored as
                 ``self._sweep_wfn_spectra`` which can be later used to compute the bipartite entropy.
@@ -6454,6 +6482,9 @@ class DMRGDriver:
         self.align_mps_center(mbra, mket)
         me = bw.bs.MovingEnvironment(mpo, mbra, mket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        if stacked_mpo is not None:
+            me.stacked_mpo = stacked_mpo
+            me.delayed_contraction = bw.b.OpNamesSet()
         if not prog:
             me.cached_contraction = False
             me.fused_contraction_rotation = True

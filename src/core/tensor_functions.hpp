@@ -356,7 +356,7 @@ template <typename S, typename FL> struct TensorFunctions {
     }
     // vmat = expr[L part | R part] x cmat (for perturbative noise)
     virtual void tensor_product_partial_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt, bool trace_right,
         const shared_ptr<SparseMatrix<S, FL>> &cmat,
@@ -369,12 +369,40 @@ template <typename S, typename FL> struct TensorFunctions {
         bool do_reduce) const {
         const shared_ptr<OpElement<S, FL>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
+        const shared_ptr<OpProduct<S, FL>> ii_op =
+            make_shared<OpProduct<S, FL>>(i_op, i_op, (FL)1.0);
         // if no identity operator found in one side,
         // then the site does not have to be optimized.
         // perturbative noise can be skipped
-        if ((!trace_right && lopt->ops.count(i_op) == 0) ||
-            (trace_right && ropt->ops.count(i_op) == 0))
+        if ((!trace_right &&
+             ((xexpr == nullptr && lopt->ops.count(i_op) == 0) ||
+              (xexpr != nullptr && lopt->ops.count(ii_op) == 0))) ||
+            (trace_right &&
+             ((xexpr == nullptr && ropt->ops.count(i_op) == 0) ||
+              (xexpr != nullptr && ropt->ops.count(ii_op) == 0))))
             return;
+        if (xexpr != nullptr) {
+            switch (xexpr->get_type()) {
+            case OpTypes::SumProd:
+                break;
+            case OpTypes::Prod:
+                break;
+            case OpTypes::Sum: {
+                shared_ptr<OpSum<S, FL>> xop =
+                    dynamic_pointer_cast<OpSum<S, FL>>(xexpr);
+                for (auto &x : xop->strings)
+                    tensor_product_partial_multiply(
+                        expr, x, lopt, ropt, trace_right, cmat, psubsl, cinfos,
+                        vdqs, vmats, vidx, tvidx, false);
+            }
+                return;
+            case OpTypes::Zero:
+                return;
+            default:
+                assert(false);
+                break;
+            }
+        }
         switch (expr->get_type()) {
         case OpTypes::SumProd: {
             shared_ptr<OpSumProd<S, FL>> op =
@@ -481,6 +509,7 @@ template <typename S, typename FL> struct TensorFunctions {
             bool dleft = false;
             if (lopt->get_type() == OperatorTensorTypes::Delayed ||
                 ropt->get_type() == OperatorTensorTypes::Delayed) {
+                assert(xexpr == nullptr);
                 dleft = lopt->get_type() == OperatorTensorTypes::Delayed;
                 shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
                     dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(
@@ -498,11 +527,23 @@ template <typename S, typename FL> struct TensorFunctions {
                 }
             }
             if (trace_right) {
-                assert(lopt->ops.count(op->a) != 0 &&
-                       ropt->ops.count(i_op) != 0);
-                shared_ptr<SparseMatrix<S, FL>> lmat = lopt->ops.at(op->a);
-                shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(i_op);
+                shared_ptr<OpExpr<S>> opxa = op->a, opxb = i_op;
                 S opdq = (op->conj & 1) ? -op->a->q_label : op->a->q_label;
+                if (xexpr != nullptr) {
+                    assert(xexpr->get_type() == OpTypes::Prod);
+                    shared_ptr<OpProduct<S, FL>> xop =
+                        dynamic_pointer_cast<OpProduct<S, FL>>(xexpr);
+                    opxa =
+                        make_shared<OpProduct<S, FL>>(op->a, xop->a, (FL)1.0);
+                    opxb = ii_op;
+                    opdq = (op->conj & 1)
+                               ? -(op->a->q_label + xop->a->q_label)[0]
+                               : (op->a->q_label + xop->a->q_label)[0];
+                }
+                assert(lopt->ops.count(opxa) != 0 &&
+                       ropt->ops.count(opxb) != 0);
+                shared_ptr<SparseMatrix<S, FL>> lmat = lopt->ops.at(opxa);
+                shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(opxb);
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij = (int)(lower_bound(
                                    psubsl.begin(), psubsl.end(),
@@ -527,11 +568,23 @@ template <typename S, typename FL> struct TensorFunctions {
                             op->factor, TraceTypes::Right);
                 }
             } else {
-                assert(lopt->ops.count(i_op) != 0 &&
-                       ropt->ops.count(op->b) != 0);
-                shared_ptr<SparseMatrix<S, FL>> lmat = lopt->ops.at(i_op);
-                shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(op->b);
+                shared_ptr<OpExpr<S>> opxa = i_op, opxb = op->b;
                 S opdq = (op->conj & 2) ? -op->b->q_label : op->b->q_label;
+                if (xexpr != nullptr) {
+                    assert(xexpr->get_type() == OpTypes::Prod);
+                    shared_ptr<OpProduct<S, FL>> xop =
+                        dynamic_pointer_cast<OpProduct<S, FL>>(xexpr);
+                    opxa = ii_op;
+                    opxb =
+                        make_shared<OpProduct<S, FL>>(op->b, xop->b, (FL)1.0);
+                    opdq = (op->conj & 2)
+                               ? -(op->b->q_label + xop->b->q_label)[0]
+                               : (op->b->q_label + xop->b->q_label)[0];
+                }
+                assert(lopt->ops.count(opxa) != 0 &&
+                       ropt->ops.count(opxb) != 0);
+                shared_ptr<SparseMatrix<S, FL>> lmat = lopt->ops.at(opxa);
+                shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(opxb);
                 S pks = cmat->info->delta_quantum + opdq;
                 int ij =
                     (int)(lower_bound(
@@ -565,14 +618,15 @@ template <typename S, typename FL> struct TensorFunctions {
             // non-reduced noise
             if (vidx != -1)
                 for (auto &x : op->strings)
-                    tensor_product_partial_multiply(x, lopt, ropt, trace_right,
-                                                    cmat, psubsl, cinfos, vdqs,
-                                                    vmats, vidx, tvidx, false);
+                    tensor_product_partial_multiply(
+                        x, xexpr, lopt, ropt, trace_right, cmat, psubsl, cinfos,
+                        vdqs, vmats, vidx, tvidx, false);
             // copy vmats to every thread, high memory mode
             else if (tvidx == -1)
                 parallel_reduce(
                     op->strings.size(), vmats,
-                    [&op, &lopt, &ropt, trace_right, &cmat, &psubsl, &cinfos,
+                    [&op, &xexpr, &lopt, &ropt, trace_right, &cmat, &psubsl,
+                     &cinfos,
                      &vdqs](const shared_ptr<TensorFunctions> &tf,
                             const shared_ptr<SparseMatrixGroup<S, FL>> &vmats,
                             size_t i) {
@@ -583,15 +637,16 @@ template <typename S, typename FL> struct TensorFunctions {
                         pcmat->info = pcmat_info;
                         int vidx = -1;
                         tf->tensor_product_partial_multiply(
-                            op->strings[i], lopt, ropt, trace_right, pcmat,
-                            psubsl, cinfos, vdqs, vmats, vidx, -1, false);
+                            op->strings[i], xexpr, lopt, ropt, trace_right,
+                            pcmat, psubsl, cinfos, vdqs, vmats, vidx, -1,
+                            false);
                     });
             // every thread works on a single vmat, low memory mode
             else if (tvidx == -2)
                 parallel_for(
                     vmats->n,
-                    [&op, &lopt, &ropt, trace_right, &cmat, &vmats, &psubsl,
-                     &cinfos,
+                    [&op, &xexpr, &lopt, &ropt, trace_right, &cmat, &vmats,
+                     &psubsl, &cinfos,
                      &vdqs](const shared_ptr<TensorFunctions> &tf, size_t i) {
                         shared_ptr<SparseMatrixInfo<S>> pcmat_info =
                             make_shared<SparseMatrixInfo<S>>(*cmat->info);
@@ -601,8 +656,9 @@ template <typename S, typename FL> struct TensorFunctions {
                         int vidx = -1;
                         for (auto &x : op->strings)
                             tf->tensor_product_partial_multiply(
-                                x, lopt, ropt, trace_right, pcmat, psubsl,
-                                cinfos, vdqs, vmats, vidx, (int)i, false);
+                                x, xexpr, lopt, ropt, trace_right, pcmat,
+                                psubsl, cinfos, vdqs, vmats, vidx, (int)i,
+                                false);
                     });
             else
                 assert(false);
@@ -1640,7 +1696,8 @@ template <typename S, typename FL> struct TensorFunctions {
                                 lopt, ropt, cmat, vmat, opdq, false);
                         });
                 }
-            } return;
+            }
+                return;
             case OpTypes::Zero:
                 return;
             default:
@@ -1684,11 +1741,8 @@ template <typename S, typename FL> struct TensorFunctions {
                     dynamic_pointer_cast<OpProduct<S, FL>>(xexpr);
                 opxa = make_shared<OpProduct<S, FL>>(op->a, xop->a, (FL)1.0);
                 opxb = make_shared<OpProduct<S, FL>>(op->b, xop->b, (FL)1.0);
-                assert(lopt->ops.count(opxa) != 0 &&
-                       ropt->ops.count(opxb) != 0);
-            } else
-                assert(lopt->ops.count(opxa) != 0 &&
-                       ropt->ops.count(opxb) != 0);
+            }
+            assert(lopt->ops.count(opxa) != 0 && ropt->ops.count(opxb) != 0);
             shared_ptr<SparseMatrix<S, FL>> lmat = lopt->ops.at(opxa);
             shared_ptr<SparseMatrix<S, FL>> rmat = ropt->ops.at(opxb);
             opf->tensor_product_multiply(op->conj, lmat, rmat, cmat, vmat, opdq,
@@ -1752,7 +1806,8 @@ template <typename S, typename FL> struct TensorFunctions {
                         opf->seq->auto_perform(GMatrix<FL>(
                             mat->data, (MKL_INT)mat->total_memory, 1));
                 }
-            } return;
+            }
+                return;
             case OpTypes::Zero:
                 return;
             default:
@@ -2784,6 +2839,136 @@ template <typename S, typename FL> struct TensorFunctions {
                         }
                         tf->tensor_product(expr, b->ops, a->ops,
                                            ab->ops.at(op));
+                        tf->opf->tensor_rotate(ab->ops.at(op), c->ops.at(op),
+                                               mpst_bra, mpst_ket, true);
+                        if (!frame_<FP>()->use_main_stack)
+                            ab->ops.at(op)->deallocate();
+                    }
+                });
+        }
+    }
+    virtual void left_contract_rotate_stacked(
+        const shared_ptr<OperatorTensor<S, FL>> &a,
+        const shared_ptr<OperatorTensor<S, FL>> &b,
+        const shared_ptr<OperatorTensor<S, FL>> &bx,
+        const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+        const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+        shared_ptr<OperatorTensor<S, FL>> &ab,
+        shared_ptr<OperatorTensor<S, FL>> &c,
+        const shared_ptr<Symbolic<S>> &exprs,
+        const shared_ptr<Symbolic<S>> &xexprs,
+        const map<S, shared_ptr<SparseMatrixInfo<S>>> &info_mp,
+        OpNamesSet delayed = OpNamesSet()) const {
+        if (frame_<FP>()->use_main_stack)
+            for (auto &p : ab->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                if (a == nullptr || !delayed(op->a->name))
+                    ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+            }
+        if (a == nullptr) {
+            left_assign_stacked(b, bx, ab);
+            left_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            for (auto &p : c->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
+            assert(exprs->data.size() * xexprs->data.size() ==
+                   ab->lmat->data.size());
+            const size_t nexprs = exprs->data.size();
+            // because of deallocation of the ab, we cannot use auto
+            assert(opf->seq->mode != SeqTypes::Auto);
+            parallel_for(
+                exprs->data.size() * xexprs->data.size(),
+                [&a, &b, &bx, &ab, &c, &mpst_bra, &mpst_ket, &exprs, &xexprs,
+                 &delayed, nexprs,
+                 &info_mp](const shared_ptr<TensorFunctions> &tf, size_t i) {
+                    shared_ptr<OpProduct<S, FL>> cop =
+                        dynamic_pointer_cast<OpProduct<S, FL>>(
+                            ab->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(ab->lmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i % nexprs] * ((FP)1.0 / cop->factor);
+                    shared_ptr<OpExpr<S>> xexpr = xexprs->data[i / nexprs];
+                    if (!delayed(cop->a->name)) {
+                        if (!frame_<FP>()->use_main_stack) {
+                            // skip cached part
+                            if (ab->ops.at(op)->alloc != nullptr)
+                                return;
+                            ab->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<FP>>();
+                            ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+                        }
+                        tf->tensor_product_stacked(expr, xexpr, a->ops, b->ops,
+                                                   bx->ops, ab->ops.at(op),
+                                                   true, info_mp);
+                        tf->opf->tensor_rotate(ab->ops.at(op), c->ops.at(op),
+                                               mpst_bra, mpst_ket, false);
+                        if (!frame_<FP>()->use_main_stack)
+                            ab->ops.at(op)->deallocate();
+                    }
+                });
+        }
+    }
+    virtual void right_contract_rotate_stacked(
+        const shared_ptr<OperatorTensor<S, FL>> &a,
+        const shared_ptr<OperatorTensor<S, FL>> &b,
+        const shared_ptr<OperatorTensor<S, FL>> &bx,
+        const shared_ptr<SparseMatrix<S, FL>> &mpst_bra,
+        const shared_ptr<SparseMatrix<S, FL>> &mpst_ket,
+        shared_ptr<OperatorTensor<S, FL>> &ab,
+        shared_ptr<OperatorTensor<S, FL>> &c,
+        const shared_ptr<Symbolic<S>> &exprs,
+        const shared_ptr<Symbolic<S>> &xexprs,
+        const map<S, shared_ptr<SparseMatrixInfo<S>>> &info_mp,
+        OpNamesSet delayed = OpNamesSet()) const {
+        if (frame_<FP>()->use_main_stack)
+            for (auto &p : ab->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                if (a == nullptr || !delayed(op->a->name))
+                    ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+            }
+        if (a == nullptr) {
+            right_assign_stacked(b, bx, ab);
+            right_rotate(ab, mpst_bra, mpst_ket, c);
+        } else {
+            for (auto &p : c->ops) {
+                shared_ptr<OpProduct<S, FL>> op =
+                    dynamic_pointer_cast<OpProduct<S, FL>>(p.first);
+                c->ops.at(op)->allocate(c->ops.at(op)->info);
+            }
+            assert(exprs->data.size() * xexprs->data.size() ==
+                   c->rmat->data.size());
+            const size_t nexprs = exprs->data.size();
+            // because of deallocation of the ab, we cannot use auto
+            assert(opf->seq->mode != SeqTypes::Auto);
+            parallel_for(
+                exprs->data.size() * xexprs->data.size(),
+                [&a, &b, &bx, &ab, &c, &mpst_bra, &mpst_ket, &exprs, &xexprs,
+                 &delayed, nexprs,
+                 &info_mp](const shared_ptr<TensorFunctions> &tf, size_t i) {
+                    shared_ptr<OpProduct<S, FL>> cop =
+                        dynamic_pointer_cast<OpProduct<S, FL>>(
+                            ab->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> op = abs_value(ab->rmat->data[i]);
+                    shared_ptr<OpExpr<S>> expr =
+                        exprs->data[i % nexprs] * ((FP)1.0 / cop->factor);
+                    shared_ptr<OpExpr<S>> xexpr = xexprs->data[i / nexprs];
+                    if (!delayed(cop->a->name)) {
+                        if (!frame_<FP>()->use_main_stack) {
+                            // skip cached part
+                            if (ab->ops.at(op)->alloc != nullptr)
+                                return;
+                            ab->ops.at(op)->alloc =
+                                make_shared<VectorAllocator<FP>>();
+                            ab->ops.at(op)->allocate(ab->ops.at(op)->info);
+                        }
+                        tf->tensor_product_stacked(expr, xexpr, b->ops, a->ops,
+                                                   bx->ops, ab->ops.at(op),
+                                                   false, info_mp);
                         tf->opf->tensor_rotate(ab->ops.at(op), c->ops.at(op),
                                                mpst_bra, mpst_ket, true);
                         if (!frame_<FP>()->use_main_stack)

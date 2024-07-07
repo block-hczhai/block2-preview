@@ -260,11 +260,31 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             make_shared<VectorAllocator<FP>>();
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
-        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
-        shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
-            1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
+        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0], xexpr = nullptr;
+        vector<pair<uint8_t, S>> psubsl;
+        if (op->stacked_mat == nullptr) {
+            shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            psubsl = Partition<S, FL>::get_uniq_sub_labels(
+                pmat, hop_mat, msl, hop_left_vacuum, true, trace_right,
+                false)[0];
+        } else {
+            xexpr = op->stacked_mat->data[0];
+            shared_ptr<Symbolic<S>> qmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            shared_ptr<Symbolic<S>> xmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{xexpr});
+            vector<vector<pair<uint8_t, S>>> qsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(qmat, hop_mat, msl,
+                                                      hop_left_vacuum, true,
+                                                      trace_right, false);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    xmat, hop_mat, msl, (hop_left_vacuum - hop_left_vacuum)[0],
+                    true, trace_right, false);
+            psubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, qsubsl, xsubsl, true, trace_right, false)[0];
+        }
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
         for (size_t j = 0; j < psubsl.size(); j++) {
@@ -364,7 +384,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        tf->tensor_product_partial_multiply(pexpr, op->lopt, op->ropt,
+        tf->tensor_product_partial_multiply(pexpr, xexpr, op->lopt, op->ropt,
                                             trace_right, ket, psubsl, cinfos,
                                             perturb_ket_labels, perturb_ket,
                                             vidx, low_mem ? -2 : -1, do_reduce);
@@ -1419,11 +1439,31 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             dynamic_pointer_cast<MultiMPSInfo<S>>(mps_info);
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
-        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
-        shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
-            1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
+        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0], xexpr = nullptr;
+        vector<pair<uint8_t, S>> psubsl;
+        if (op->stacked_mat == nullptr) {
+            shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            psubsl = Partition<S, FL>::get_uniq_sub_labels(
+                pmat, hop_mat, msl, hop_left_vacuum, true, trace_right,
+                false)[0];
+        } else {
+            xexpr = op->stacked_mat->data[0];
+            shared_ptr<Symbolic<S>> qmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            shared_ptr<Symbolic<S>> xmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{xexpr});
+            vector<vector<pair<uint8_t, S>>> qsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(qmat, hop_mat, msl,
+                                                      hop_left_vacuum, true,
+                                                      trace_right, false);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    xmat, hop_mat, msl, (hop_left_vacuum - hop_left_vacuum)[0],
+                    true, trace_right, false);
+            psubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, qsubsl, xsubsl, true, trace_right, false)[0];
+        }
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         for (int i = 0; i < ket[0]->n; i++) {
             S ket_label = ket[0]->infos[i]->delta_quantum;
@@ -1534,8 +1574,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 FP ket_norm = (*ket[ii])[i]->norm();
                 if (abs(ket_norm) > TINY)
                     tf->tensor_product_partial_multiply(
-                        (weights[ii] / ket_norm) * pexpr, op->lopt, op->ropt,
-                        trace_right, (*ket[ii])[i], psubsl, cinfos[i],
+                        (weights[ii] / ket_norm) * pexpr, xexpr, op->lopt,
+                        op->ropt, trace_right, (*ket[ii])[i], psubsl, cinfos[i],
                         perturb_ket_labels, perturb_ket, vidx,
                         low_mem ? -2 : -1, do_reduce);
             }

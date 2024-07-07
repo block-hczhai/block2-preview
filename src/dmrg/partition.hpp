@@ -462,8 +462,8 @@ template <typename S, typename FL> struct Partition {
         vector<vector<pair<uint8_t, S>>> subsl(sl.size());
         assert(subsla.size() == sla.size());
         assert(subslb.size() == slb.size());
-        for (size_t ia = 0; ia < subsla.size(); ia++)
-            for (size_t ib = 0; ib < subslb.size(); ib++) {
+        for (size_t ib = 0; ib < subslb.size(); ib++)
+            for (size_t ia = 0; ia < subsla.size(); ia++) {
                 S la = sla[ia], lb = slb[ib];
                 S l = (la + lb)[0];
                 size_t idx = lower_bound(sl.begin(), sl.end(), l) - sl.begin();
@@ -529,8 +529,8 @@ template <typename S, typename FL> struct Partition {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
         map<S, shared_ptr<SparseMatrixInfo<S>>> info;
-        for (const auto &xa : infoa)
-            for (const auto &xb : infob) {
+        for (const auto &xb : infob)
+            for (const auto &xa : infoa) {
                 S q = xa.first + xb.first;
                 for (int iq = 0; iq < q.count(); iq++)
                     info[q[iq]] = nullptr;
