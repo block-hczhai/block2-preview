@@ -4426,6 +4426,8 @@ class DMRGDriver:
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "DMRG")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         if stacked_mpo is not None:
+            if self.mpi is not None:
+                raise NotImplementedError()
             me.stacked_mpo = stacked_mpo
             me.delayed_contraction = bw.b.OpNamesSet()
         me.cached_contraction = True
@@ -4474,11 +4476,11 @@ class DMRGDriver:
         dmrg.davidson_shift = davidson_shift
         if max(noises) != 0 and (noise_type is None or "Perturbative" in noise_type):
             if (
-                self.mpi
+                self.mpi is not None
                 and not isinstance(mpo.prim_mpo, bw.bs.IdentityAddedMPO)
                 and "HQC" not in mpo.tag
             ) or (
-                not self.mpi
+                self.mpi is None
                 and not isinstance(mpo, bw.bs.IdentityAddedMPO)
                 and "HQC" not in mpo.tag
             ):
@@ -4487,11 +4489,11 @@ class DMRGDriver:
                 )
             if stacked_mpo is not None:
                 if (
-                    self.mpi
+                    self.mpi is not None
                     and not isinstance(stacked_mpo.prim_mpo, bw.bs.IdentityAddedMPO)
                     and "HQC" not in stacked_mpo.tag
                 ) or (
-                    not self.mpi
+                    self.mpi is None
                     and not isinstance(stacked_mpo, bw.bs.IdentityAddedMPO)
                     and "HQC" not in stacked_mpo.tag
                 ):
@@ -6483,6 +6485,8 @@ class DMRGDriver:
         me = bw.bs.MovingEnvironment(mpo, mbra, mket, "EXPT")
         me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
         if stacked_mpo is not None:
+            if self.mpi is not None:
+                raise NotImplementedError()
             me.stacked_mpo = stacked_mpo
             me.delayed_contraction = bw.b.OpNamesSet()
         if not prog:
