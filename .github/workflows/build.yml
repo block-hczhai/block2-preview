@@ -105,7 +105,7 @@ jobs:
           mkdir build
           cd build
           cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON -DUSE_PCH=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 2
 
       - name: build test (any-symm-pytest)
@@ -119,7 +119,7 @@ jobs:
           mkdir build
           cd build
           cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON -DUSE_PCH=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
           make -j 2
 
       - name: build test (serial, linux)
@@ -132,7 +132,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON -DUSE_PCH=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
       - name: build test (serial, macos)
@@ -144,7 +144,7 @@ jobs:
           mkdir build_test
           cd build_test
           cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON -DUSE_PCH=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
       - name: run test (serial, linux)
@@ -274,7 +274,6 @@ jobs:
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DUSE_PCH=ON'," setup.py
           export OMPROOT=$(brew --prefix libomp)
           echo ${OMPROOT}
           cmake --version
@@ -305,7 +304,6 @@ jobs:
           gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DARCH_ARM64=ON'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DUSE_PCH=ON'," setup.py
           gsed -i "/mkl/d" setup.py
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py

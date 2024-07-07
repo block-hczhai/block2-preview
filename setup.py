@@ -88,6 +88,7 @@ class CMakeBuild(build_ext):
                 "-DPYTHON_EXECUTABLE_HINT={}".format(sys.executable),
                 "-DUSE_MKL=ON",
                 "-DBUILD_LIB=ON",
+                "-DBUILD_EXE=ON",
                 "-DLARGE_BOND=ON",
                 "-DUSE_KSYMM=OFF",
                 "-DUSE_COMPLEX=ON",
@@ -117,18 +118,6 @@ class CMakeBuild(build_ext):
 
             if not os.path.exists(self.build_temp):
                 os.makedirs(self.build_temp)
-
-            subprocess.check_call(
-                ["cmake", ext.cmake_lists_dir] + cmake_args, cwd=self.build_temp
-            )
-
-            subprocess.check_call(
-                ["cmake", "--build", ".", "--config", cfg, "--", "--jobs=2"],
-                cwd=self.build_temp,
-            )
-
-            cmake_args = [x for x in cmake_args if x != "-DBUILD_LIB=ON"]
-            cmake_args += ["-DBUILD_LIB=OFF"]
 
             subprocess.check_call(
                 ["cmake", ext.cmake_lists_dir] + cmake_args, cwd=self.build_temp

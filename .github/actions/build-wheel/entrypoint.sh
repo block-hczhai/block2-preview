@@ -26,7 +26,6 @@ fi
 PY_EXE=/opt/python/"${PY_VER}"/bin/python3
 sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}'," setup.py
 sed -i "/DPYTHON_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
-sed -i "/DPYTHON_EXECUTABLE/a \                '-DUSE_PCH=ON'," setup.py
 
 ls -l /opt/python
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
