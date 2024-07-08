@@ -303,6 +303,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
+                                 info->target);
+            StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
+                                 info->target);
+        }
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -676,6 +682,12 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
+                                 info->target);
+            StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
+                                 info->target);
+        }
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -980,6 +992,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
+                                 info->target);
+            StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
+                                 info->target);
+        }
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -1331,6 +1349,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
+                                 info->target);
+            StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
+                                 info->target);
+        }
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();

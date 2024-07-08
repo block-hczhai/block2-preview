@@ -5935,6 +5935,7 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
         refc = ref if isinstance(ref, int) else ref.center
+        ket.info.load_mutable()
         ket.info.bond_dim = max(ket.info.bond_dim, ket.info.get_max_bond_dimension())
         if max_bond_dim is not None:
             ket.info.bond_dim = max_bond_dim
