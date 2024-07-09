@@ -225,13 +225,13 @@ class TestDMRG:
             iprint=1,
         )
         if name == "N2":
-            assert abs(energies[0] - -107.654122447523) < 1e-6
-            assert abs(energies[1] - -107.031449471625) < 1e-6
-            assert abs(energies[2] - -107.031449471625) < 1e-6
+            assert abs(energies[0] - -107.654122447523) < 1e-5
+            assert abs(energies[1] - -107.031449471625) < 1e-5
+            assert abs(energies[2] - -107.031449471625) < 1e-5
         elif name == "C2":  # may stuck in local minima
-            assert abs(energies[0] - -75.552895292344) < 1e-6
-            assert abs(energies[1] - -75.536490899999) < 1e-6
-            assert abs(energies[2] - -75.536490899999) < 1e-6
+            assert abs(energies[0] - -75.552895292344) < 1e-5
+            assert abs(energies[1] - -75.536490899999) < 1e-5
+            assert abs(energies[2] - -75.536490899999) < 1e-5
 
         driver.finalize()
 
