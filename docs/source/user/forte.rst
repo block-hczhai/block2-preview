@@ -3,12 +3,12 @@
 
 .. _user_forte:
 
-DMRGSCF (forte)
+DMRGSCF (Forte)
 ====================
 
-In this section we explain how to use ``block2`` and ``forte`` for CASSCF and DSRG calculations with DMRG as the active space solver.
+In this section we explain how to use ``block2`` and ``Forte`` for CASSCF and DSRG calculations with DMRG as the active space solver.
 
-``forte`` is an open-source package for strongly correlated methods, developed by Evangelista group.
+``Forte`` is an open-source package for strongly correlated methods, developed by Evangelista group.
 The detailed instruction for the installation and the usage of the code can be found in
 https://forte.readthedocs.io/.
 
@@ -17,7 +17,7 @@ Preparation
 
 First, we need to build and install the C++ library of ``block2``. This can be done using the ``-DBUILD_CLIB=ON`` option: ::
 
-    git clone -b p0.5.3rc7 https://github.com/block-hczhai/block2-preview
+    git clone https://github.com/block-hczhai/block2-preview
     cd block2-preview
     mkdir build
     cd build
@@ -27,16 +27,22 @@ First, we need to build and install the C++ library of ``block2``. This can be d
     export BLOCK2_DIR=$PWD/../install
     cd ../..
 
+If you're also building ``block2`` for its Python interface (to be used with ``PySCF``, for example), you can use the following ``cmake`` command instead: ::
+
+    cmake .. -DUSE_MKL=ON -DBUILD_CLIB=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DMPI=OFF -DCMAKE_INSTALL_PREFIX=../install
+
+which will install both the Python library and the C++ header library.
+
 After this, you will be able to find the block2 include files in ``${BLOCK2_DIR}/include/`` and ``libblock2.so`` in ``${BLOCK2_DIR}/lib64/``.
 The ``block2Config.cmake`` file can be found in ``${BLOCK2_DIR}/share/cmake/block2/``.
 
-Second, we need to build `psi4 <https://github.com/psi4/psi4>`_. Make sure an ``eigen3`` library is available in the system,
+Second, we need to build `Psi4 <https://github.com/psi4/psi4>`_. Make sure an ``Eigen3`` library is available in the system,
 which can be installed using ``apt install libeigen3-dev`` or ``conda install -c omnia eigen3``. If you use the ``conda`` package,
 you may need to add the ``cmake`` option ``-DCMAKE_PREFIX_PATH=${CONDA_PREFIX}`` so that ``cmake`` can find it.
 
 To save compiling time, one may install ``libint2`` using ``conda install conda-forge::libint==2.8.1`` before the following.
 
-Then we can build ``psi4`` as follows: ::
+Then we can build ``Psi4`` as follows: ::
 
     git clone -b v1.9 https://github.com/psi4/psi4
     git pull origin master --tags
@@ -58,7 +64,7 @@ Then we can add the following environment variables: ::
 Then the command ``psi4`` should be available in the terminal. And ``python -c 'import psi4'`` should work.
 If there is the error ``TypeError: issubclass() arg 1 must be a class``, try ``pip install --force-reinstall typing-extensions==4.5.0``.
 
-Third, we need to build `abmit <https://github.com/jturney/ambit>`_ as follows: ::
+Third, we need to build `ambit <https://github.com/jturney/ambit>`_ as follows: ::
 
     git clone -b v0.7.1 https://github.com/jturney/ambit
     cd ambit
@@ -71,10 +77,10 @@ Third, we need to build `abmit <https://github.com/jturney/ambit>`_ as follows: 
     cd ../..
 
 Finally, we can build `forte <https://github.com/evangelistalab/forte>`_.
-Here we use a revised version with the ``block2`` interface,
-which can be found in the ``block2_dmrg`` branch of the forked repo https://github.com/hczhai/forte. To build it, we can: ::
+The ``block2`` interface has been implemented in the main ``Forte`` branch.
+To build it, we can: ::
 
-    git clone -b block2_dmrg https://github.com/hczhai/forte
+    git clone https://github.com/evangelistalab/forte
     cd forte
     $(psi4 --plugin-compile) -Dambit_DIR=${AMBIT_DIR}/share/cmake/ambit \
         -DENABLE_block2=ON \

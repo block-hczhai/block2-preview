@@ -3,7 +3,7 @@
 
 .. _user_dmrgscf:
 
-DMRGSCF (pyscf)
+DMRGSCF (PySCF)
 ===============
 
 In this section we explain how to use ``block2`` (and optionally ``StackBlock``) and ``pyscf`` for ``DMRGSCF`` (CASSCF with DMRG as the active space solver).
