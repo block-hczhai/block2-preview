@@ -17,7 +17,7 @@ Preparation
 
 First, we need to build and install the C++ library of ``block2``. This can be done using the ``-DBUILD_CLIB=ON`` option: ::
 
-    git clone https://github.com/block-hczhai/block2-preview
+    git clone -b p0.5.3rc15 https://github.com/block-hczhai/block2-preview
     cd block2-preview
     mkdir build
     cd build
@@ -80,7 +80,7 @@ Finally, we can build `forte <https://github.com/evangelistalab/forte>`_.
 The ``block2`` interface has been implemented in the main ``Forte`` branch.
 To build it, we can: ::
 
-    git clone https://github.com/evangelistalab/forte
+    git clone -b gha-block2 https://github.com/evangelistalab/forte
     cd forte
     $(psi4 --plugin-compile) -Dambit_DIR=${AMBIT_DIR}/share/cmake/ambit \
         -DENABLE_block2=ON \
