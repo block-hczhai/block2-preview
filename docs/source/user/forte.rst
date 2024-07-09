@@ -31,7 +31,7 @@ If you're also building ``block2`` for its Python interface (to be used with ``P
 
     cmake .. -DUSE_MKL=ON -DBUILD_CLIB=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DMPI=OFF -DCMAKE_INSTALL_PREFIX=../install
 
-which will install both the Python library and the C++ header library.
+which will allow building both the Python extension and C++ library.
 
 After this, you will be able to find the block2 include files in ``${BLOCK2_DIR}/include/`` and ``libblock2.so`` in ``${BLOCK2_DIR}/lib64/``.
 The ``block2Config.cmake`` file can be found in ``${BLOCK2_DIR}/share/cmake/block2/``.
