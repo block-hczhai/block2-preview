@@ -6647,7 +6647,11 @@ class DMRGDriver:
 
         cps.solve(n_sweeps, ket.center == 0, tol)
         if SymmetryTypes.CPX in bw.symm_type:
-            vgf = cps.targets[-1]
+            if len(cps.targets[-1]) == 1:
+                vgf = cps.targets[-1][0]
+            else:
+                rgf, igf = cps.targets[-1]
+                vgf = rgf + 1j * igf
         else:
             rgf, igf = cps.targets[-1]
             vgf = rgf + 1j * igf
