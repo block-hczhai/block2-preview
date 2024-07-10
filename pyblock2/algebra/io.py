@@ -301,7 +301,7 @@ class MPSTools:
         return MPS(tensors=tensors)
 
     @staticmethod
-    def to_block2(mps, basis, center=0, tag="KET"):
+    def to_block2(mps, basis, center=0, tag="KET", left_vacuum=None):
         """
         Translate pyblock2 MPS to block2 MPS.
 
@@ -316,6 +316,8 @@ class MPSTools:
                 Phyiscal basis infomation at each site.
             tag : str
                 Tag of the block2 MPS. Default is "KET".
+            left_vacuum : None or SU2
+                Left vacuum for singlet embedding
 
         Returns:
             bmps : block2 MPS
@@ -330,7 +332,8 @@ class MPSTools:
         n_sites = len(mps.tensors)
         ql = mps.tensors[0].blocks[0].q_labels
         qr = mps.tensors[-1].blocks[0].q_labels
-        left_vacuum = (ql[1] - ql[0])[0]
+        if left_vacuum is None:
+            left_vacuum = (ql[1] - ql[0])[0]
         target = (qr[0] + qr[1])[0]
         vacuum = (target - target)[0]
         for ib, x in enumerate(basis):
