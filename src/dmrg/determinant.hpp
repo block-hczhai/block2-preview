@@ -272,16 +272,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 }
             cur_nodes = next_nodes;
             // put shape in bond dims
+            total_bond_t new_total = 0;
             for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
-                total_bond_t new_total = 0;
                 if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
                     info->left_dims[k + 1]->n_states[p] =
                         (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
                     new_total += info->left_dims[k + 1]->n_states[p];
                 } else
                     info->left_dims[k + 1]->n_states[p] = 0;
-                info->left_dims[k + 1]->n_states_total = new_total;
             }
+            info->left_dims[k + 1]->n_states_total = new_total;
             r->tensors[k] = t;
         }
         for (int i = n_sites - 1; i >= 0; i--)
@@ -303,12 +303,13 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
-                                 info->target);
+        for (int i = 0; i <= n_sites; i++)
             StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
                                  info->target);
-        }
+        for (int i = 0; i <= n_sites; i++)
+            info->left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            info->right_dims[i]->collect();
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -651,16 +652,16 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                 }
             cur_nodes = next_nodes;
             // put shape in bond dims
+            total_bond_t new_total = 0;
             for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
-                total_bond_t new_total = 0;
                 if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
                     info->left_dims[k + 1]->n_states[p] =
                         (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
                     new_total += info->left_dims[k + 1]->n_states[p];
                 } else
                     info->left_dims[k + 1]->n_states[p] = 0;
-                info->left_dims[k + 1]->n_states_total = new_total;
             }
+            info->left_dims[k + 1]->n_states_total = new_total;
             r->tensors[k] = t;
         }
         for (int i = n_sites - 1; i >= 0; i--)
@@ -682,12 +683,13 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
-                                 info->target);
+        for (int i = 0; i <= n_sites; i++)
             StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
                                  info->target);
-        }
+        for (int i = 0; i <= n_sites; i++)
+            info->left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            info->right_dims[i]->collect();
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -961,16 +963,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 }
             cur_nodes = next_nodes;
             // put shape in bond dims
+            total_bond_t new_total = 0;
             for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
-                total_bond_t new_total = 0;
                 if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
                     info->left_dims[k + 1]->n_states[p] =
                         (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
                     new_total += info->left_dims[k + 1]->n_states[p];
                 } else
                     info->left_dims[k + 1]->n_states[p] = 0;
-                info->left_dims[k + 1]->n_states_total = new_total;
             }
+            info->left_dims[k + 1]->n_states_total = new_total;
             r->tensors[k] = t;
         }
         for (int i = n_sites - 1; i >= 0; i--)
@@ -992,12 +994,13 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
-                                 info->target);
+        for (int i = 0; i <= n_sites; i++)
             StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
                                  info->target);
-        }
+        for (int i = 0; i <= n_sites; i++)
+            info->left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            info->right_dims[i]->collect();
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
@@ -1318,16 +1321,16 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
             }
             cur_nodes = next_nodes;
             // put shape in bond dims
+            total_bond_t new_total = 0;
             for (int p = 0; p < info->left_dims[k + 1]->n; p++) {
-                total_bond_t new_total = 0;
                 if (rsh.count(info->left_dims[k + 1]->quanta[p])) {
                     info->left_dims[k + 1]->n_states[p] =
                         (ubond_t)rsh.at(info->left_dims[k + 1]->quanta[p]);
                     new_total += info->left_dims[k + 1]->n_states[p];
                 } else
                     info->left_dims[k + 1]->n_states[p] = 0;
-                info->left_dims[k + 1]->n_states_total = new_total;
             }
+            info->left_dims[k + 1]->n_states_total = new_total;
             r->tensors[k] = t;
         }
         for (int i = n_sites - 1; i >= 0; i--)
@@ -1349,12 +1352,13 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                 }
                 info->right_dims[i]->n_states_total = new_total;
             }
-        for (int i = 0; i <= n_sites; i++) {
-            StateInfo<S>::filter(*info->left_dims[i], *info->right_dims[i],
-                                 info->target);
+        for (int i = 0; i <= n_sites; i++)
             StateInfo<S>::filter(*info->right_dims[i], *info->left_dims[i],
                                  info->target);
-        }
+        for (int i = 0; i <= n_sites; i++)
+            info->left_dims[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            info->right_dims[i]->collect();
         info->check_bond_dimensions();
         if (para_rule == nullptr || para_rule->is_root())
             info->save_mutable();
