@@ -93,6 +93,11 @@ class TestDMRG:
         )
         if name == "N2":
             assert abs(energy - -107.654122447523) < 1e-6
+
+            dets, vals = driver.get_csf_coefficients(ket, cutoff=0.1)
+            dets, vals = dets[np.argsort(-np.abs(vals))], vals[np.argsort(-np.abs(vals))]
+            assert abs(abs(vals[0]) - 0.9575065) < 1E-4
+            assert list(dets[0]) == [3] * 7 + [0] * 3
         elif name == "C2":
             assert abs(energy - -75.552895292451) < 1e-6
 
@@ -179,6 +184,11 @@ class TestDMRG:
         )
         if name == "N2":
             assert abs(energy - -107.654122447523) < 1e-6
+
+            dets, vals = driver.get_csf_coefficients(ket, cutoff=0.1)
+            dets, vals = dets[np.argsort(-np.abs(vals))], vals[np.argsort(-np.abs(vals))]
+            assert abs(abs(vals[0]) - 0.9575065) < 1E-4
+            assert list(dets[0]) == [3] * 7 + [0] * 3
         elif name == "C2":
             assert abs(energy - -75.552895292345) < 1e-6
 

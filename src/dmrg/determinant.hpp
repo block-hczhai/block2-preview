@@ -1405,7 +1405,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                 for (auto &m : mps->tensors[d]->data[jd]) {
                     S bra = m.first.first, ket = m.first.second;
                     S jket = bra + mps->info->basis[d]->quanta[jd];
-                    assert(basis_iqs[d][j][1] < jket.count());
+                    if (basis_iqs[d][j][1] >= jket.count())
+                        continue;
                     if (jket[basis_iqs[d][j][1]] == ket && !qkets.count(ket))
                         qkets[ket] = m.second->shape[2];
                 }
@@ -1466,7 +1467,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                 for (auto &m : mps->tensors[d]->data[jd]) {
                     S bra = m.first.first, ket = m.first.second;
                     S jket = bra + mps->info->basis[d]->quanta[jd];
-                    assert(basis_iqs[d][j][1] < jket.count());
+                    if (basis_iqs[d][j][1] >= jket.count())
+                        continue;
                     if (jket[basis_iqs[d][j][1]] != ket)
                         continue;
                     if (pmp->info->find_state(bra) == -1)
