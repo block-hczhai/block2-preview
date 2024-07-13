@@ -392,7 +392,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
         // depth-first traverse of trie
         while (!ptrs.empty()) {
 #pragma omp master
-        check_signal_()();
+            check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
@@ -774,7 +774,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
         // depth-first traverse of trie
         while (!ptrs.empty()) {
 #pragma omp master
-        check_signal_()();
+            check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
@@ -1083,7 +1083,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
         // depth-first traverse of trie
         while (!ptrs.empty()) {
 #pragma omp master
-        check_signal_()();
+            check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
@@ -1455,7 +1455,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
         // depth-first traverse of trie
         while (!ptrs.empty()) {
 #pragma omp master
-        check_signal_()();
+            check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
             for (int ip = pstart; ip < (int)ptrs.size(); ip++) {
