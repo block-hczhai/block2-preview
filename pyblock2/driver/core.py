@@ -5948,13 +5948,13 @@ class DMRGDriver:
                     else:
                         ket.canonical_form = ket.canonical_form[:-1] + "T"
                 while ket.center != refc:
-                    ket.move_left(self.ghamil.opf.cg, self.prule)
+                    ket.move_left(None, self.prule)
             else:
                 ket.canonical_form = "K" + ket.canonical_form[1:]
                 while (
                     ket.center != ket.n_sites - 1 and ket.center != refc + ket.dot - 1
                 ):
-                    ket.move_right(self.ghamil.opf.cg, self.prule)
+                    ket.move_right(None, self.prule)
                 if ket.dot == 2:
                     ket.center -= 1
             if self.mpi is not None:
@@ -5992,7 +5992,7 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             if ket.canonical_form[ket.center] in "ST":
-                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+                ket.flip_fused_form(ket.center, None, self.prule)
             ket.save_data()
             if self.mpi is not None:
                 self.mpi.barrier()
@@ -6029,7 +6029,7 @@ class DMRGDriver:
             if ket.center == 0 and ket.canonical_form[0] in "S":
                 if self.mpi is not None:
                     self.mpi.barrier()
-                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+                ket.flip_fused_form(ket.center, None, self.prule)
                 ket.save_data()
                 if self.mpi is not None:
                     self.mpi.barrier()
@@ -6052,7 +6052,7 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             if ket.canonical_form[ket.center] in "KJ":
-                ket.flip_fused_form(ket.center, self.ghamil.opf.cg, self.prule)
+                ket.flip_fused_form(ket.center, None, self.prule)
             ket.center = ket.n_sites - 2
             ket.save_data()
             if self.mpi is not None:
@@ -6705,7 +6705,6 @@ class DMRGDriver:
             mps : MPS
                 The MPS loaded from disk.
         """
-        cg = self.ghamil.opf.cg
         if (
             mps.canonical_form[mps.center] == "L"
             and mps.center != mps.n_sites - mps.dot
@@ -6714,7 +6713,7 @@ class DMRGDriver:
             if mps.canonical_form[mps.center] in "ST" and mps.dot == 2:
                 if self.mpi is not None:
                     self.mpi.barrier()
-                mps.flip_fused_form(mps.center, cg, self.prule)
+                mps.flip_fused_form(mps.center, None, self.prule)
                 mps.save_data()
                 if self.mpi is not None:
                     self.mpi.barrier()
@@ -6726,7 +6725,7 @@ class DMRGDriver:
             if mps.canonical_form[mps.center] in "KJ" and mps.dot == 2:
                 if self.mpi is not None:
                     self.mpi.barrier()
-                mps.flip_fused_form(mps.center, cg, self.prule)
+                mps.flip_fused_form(mps.center, None, self.prule)
                 mps.save_data()
                 if self.mpi is not None:
                     self.mpi.barrier()
@@ -6743,7 +6742,7 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             if mps.canonical_form[mps.center] in "KJ":
-                mps.flip_fused_form(mps.center, cg, self.prule)
+                mps.flip_fused_form(mps.center, None, self.prule)
             mps.center = mps.n_sites - 2
             mps.save_data()
             if self.mpi is not None:
@@ -6756,7 +6755,7 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             if mps.canonical_form[mps.center] in "ST":
-                mps.flip_fused_form(mps.center, cg, self.prule)
+                mps.flip_fused_form(mps.center, None, self.prule)
             mps.save_data()
             if self.mpi is not None:
                 self.mpi.barrier()
@@ -6849,13 +6848,13 @@ class DMRGDriver:
                 else:
                     cp_mps.canonical_form = cp_mps.canonical_form[:-1] + "T"
                 cp_mps.center = cp_mps.n_sites - 1
-            cp_mps.move_left(self.ghamil.opf.cg, self.prule)
+            cp_mps.move_left(None, self.prule)
         if forward:
             if left_vacuum is None:
                 left_vacuum = self.bw.SXT.invalid
-            cp_mps.to_singlet_embedding_wfn(self.ghamil.opf.cg, left_vacuum, self.prule)
+            cp_mps.to_singlet_embedding_wfn(None, left_vacuum, self.prule)
         else:
-            cp_mps.from_singlet_embedding_wfn(self.ghamil.opf.cg, self.prule)
+            cp_mps.from_singlet_embedding_wfn(None, self.prule)
         cp_mps.save_data()
         cp_mps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         if self.mpi is not None:

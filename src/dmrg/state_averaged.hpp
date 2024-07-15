@@ -227,8 +227,10 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
             MPS<S, FL>::initialize_right(info, center + dot);
     }
     void flip_fused_form(
-        int center, const shared_ptr<CG<S>> &cg,
+        int center, shared_ptr<CG<S>> cg,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) override {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (para_rule == nullptr || para_rule->is_root()) {
             load_wavefunction(center);
             if (canonical_form[center] == 'T')

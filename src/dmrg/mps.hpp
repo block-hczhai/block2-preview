@@ -1839,8 +1839,10 @@ template <typename S, typename FL> struct MPS {
             }
     }
     virtual void
-    flip_fused_form(int center, const shared_ptr<CG<S>> &cg,
+    flip_fused_form(int center, shared_ptr<CG<S>> cg,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (para_rule == nullptr || para_rule->is_root()) {
             load_tensor(center);
             if (canonical_form[center] == 'S')
@@ -1994,8 +1996,10 @@ template <typename S, typename FL> struct MPS {
             flip_fused_form(center, cg, para_rule);
     }
     // CC -> KR or K -> S or LS -> KR or LK -> KR
-    void move_left(const shared_ptr<CG<S>> &cg,
+    void move_left(shared_ptr<CG<S>> cg,
                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (canonical_form[center] == 'C') {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
@@ -2083,8 +2087,10 @@ template <typename S, typename FL> struct MPS {
             assert(false);
     }
     // CC -> LS or S -> K or KR -> LS or SR -> LS
-    void move_right(const shared_ptr<CG<S>> &cg,
+    void move_right(shared_ptr<CG<S>> cg,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (canonical_form[center] == 'C') {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
