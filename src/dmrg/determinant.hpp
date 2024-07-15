@@ -391,6 +391,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
 #pragma omp parallel num_threads(ntg)
         // depth-first traverse of trie
         while (!ptrs.empty()) {
+#pragma omp master
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
@@ -772,6 +773,7 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
 #pragma omp parallel num_threads(ntg)
         // depth-first traverse of trie
         while (!ptrs.empty()) {
+#pragma omp master
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
@@ -1080,6 +1082,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
 #pragma omp parallel num_threads(ntg)
         // depth-first traverse of trie
         while (!ptrs.empty()) {
+#pragma omp master
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
@@ -1451,6 +1454,7 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
 #pragma omp parallel num_threads(ntg)
         // depth-first traverse of trie
         while (!ptrs.empty()) {
+#pragma omp master
             check_signal_()();
             int pstart = max(0, (int)ptrs.size() - ngroup);
 #pragma omp for schedule(static)
