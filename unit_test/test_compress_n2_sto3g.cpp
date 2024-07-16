@@ -7,8 +7,8 @@ using namespace block2;
 
 template <typename FL> class TestLinearN2STO3G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 28;
     typedef typename GMatrix<FL>::FP FP;
     typedef typename GMatrix<FL>::FL FLL;
 
@@ -201,7 +201,7 @@ TYPED_TEST(TestLinearN2STO3G, TestSU2) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
@@ -227,7 +227,7 @@ TYPED_TEST(TestLinearN2STO3G, TestSZ) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),

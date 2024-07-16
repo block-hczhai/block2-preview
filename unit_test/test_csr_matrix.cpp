@@ -8,8 +8,8 @@ class TestCSRMatrix : public ::testing::Test {
   protected:
     typedef double FP;
     static const int n_tests = 200;
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     double sparsity = 0.5;
     void fill_sparse_double(double *data, size_t n) {
         Random::fill<double>(data, n);

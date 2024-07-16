@@ -231,7 +231,7 @@ struct DyallFCIDUMP : FCIDUMP<double> {
             fd->ts[s].clear();
             for (uint16_t i = 0; i < n; i++)
                 for (uint16_t j = 0; j < n; j++)
-                    fd->ts[s](i, j) = t(s, i, j);
+                    fd->ts[s](i, j) = t((uint8_t)s, i, j);
         }
         function<bool(uint16_t, uint16_t, uint16_t, uint16_t)> is_ext;
         if (merged_external)

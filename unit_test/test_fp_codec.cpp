@@ -48,7 +48,7 @@ TEST_F(TestFPCodec, TestFloatFPCodec) {
         vector<float> arr(n), arx(n);
         if (Random::rand_int(0, 10) != 0)
             Random::fill<float>(arr.data(), n, -5, 5);
-        FPCodec<float> fpc(1E-4, chunk_size);
+        FPCodec<float> fpc((float)1E-4, chunk_size);
         stringstream ss;
         fpc.write_array(ss, arr.data(), n);
         ss.clear();
@@ -116,7 +116,7 @@ TEST_F(TestFPCodec, TestFloatCompressedVector) {
         vector<float> arr(n), arx(n);
         if (Random::rand_int(0, 10) != 0)
             Random::fill<float>(arr.data(), n, -5, 5);
-        float prec = 1E-4;
+        float prec = (float)1E-4;
         FPCodec<float> fpc(prec, chunk_size);
         stringstream ss;
         fpc.write_array(ss, arr.data(), n);

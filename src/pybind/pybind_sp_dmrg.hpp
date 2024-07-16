@@ -57,13 +57,16 @@ template <typename S, typename FL> void bind_fl_sp_dmrg(py::module &m) {
                  assert(e_pqpq.strides()[1] == sizeof(double));
                  assert(one_pdm.strides()[1] == sizeof(double));
                  GMatrix<double> dm_pqqp(e_pqqp.mutable_data(),
-                                         e_pqqp.shape()[0], e_pqqp.shape()[1]);
+                                         (MKL_INT)e_pqqp.shape()[0],
+                                         (MKL_INT)e_pqqp.shape()[1]);
                  GMatrix<double> dm_pqpq(e_pqpq.mutable_data(),
-                                         e_pqpq.shape()[0], e_pqpq.shape()[1]);
+                                         (MKL_INT)e_pqpq.shape()[0],
+                                         (MKL_INT)e_pqpq.shape()[1]);
                  GMatrix<double> dm_one(one_pdm.mutable_data(),
-                                        one_pdm.shape()[0], one_pdm.shape()[1]);
-                 double ener = self->template energy_zeroth<double>(fcidump, dm_pqqp,
-                                                           dm_pqpq, dm_one);
+                                        (MKL_INT)one_pdm.shape()[0],
+                                        (MKL_INT)one_pdm.shape()[1]);
+                 double ener = self->template energy_zeroth<double>(
+                     fcidump, dm_pqqp, dm_pqpq, dm_one);
                  return ener;
              })
         .def("sampling", &StochasticPDMRG<S, FL>::sampling)

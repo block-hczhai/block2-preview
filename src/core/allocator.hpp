@@ -271,9 +271,9 @@ template <typename T> struct VectorAllocator : Allocator<T> {
      * @return The output stream.
      */
     friend ostream &operator<<(ostream &os, const VectorAllocator &c) {
-        os << "N-ALLOCATED=" << c.data.size << " USED="
+        os << "N-ALLOCATED=" << c.data.size() << " USED="
            << accumulate(
-                  c.data.begin(), c.data.end(), 0,
+                  c.data.begin(), c.data.end(), (size_t)0,
                   [](size_t i, const vector<T> &j) { return i + j.size(); })
            << endl;
         return os;

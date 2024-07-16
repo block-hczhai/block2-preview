@@ -1287,10 +1287,16 @@ template <typename S, typename FL> struct TensorFunctions {
             shared_ptr<GTensor<FL, uint64_t>> prev =
                 npdm_sort_load_file(filename, compressed);
             int ntg = threading->activate_global();
-#pragma omp parallel for schedule(static, 1048576) num_threads(ntg)
-            for (size_t ix = 0; ix < prev->size(); ix++)
-                (*result->data)[ix] =
-                    (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            const size_t plen = (prev->size() + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+            {
+                int tid = threading->get_thread_id();
+                const size_t ixst = plen * tid;
+                const size_t ixed = min(prev->size(), plen * (tid + 1));
+                for (size_t ix = ixst; ix < ixed; ix++)
+                    (*result->data)[ix] =
+                        (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            }
             threading->activate_normal();
         }
         string fn = filename + (compressed ? ".fpc" : ".npy");
@@ -1903,10 +1909,10 @@ template <typename S, typename FL> struct TensorFunctions {
             if (it->second->total_memory != 0) {
                 if (it->second->alloc == dalloc_<FP>())
                     mp.emplace_back(it->second->data, it->second,
-                                    del_ops.count(it->first));
+                                    (uint8_t)del_ops.count(it->first));
                 else
                     mp_ext.emplace_back(it->second->data, it->second,
-                                        del_ops.count(it->first));
+                                        (uint8_t)del_ops.count(it->first));
             }
         sort(
             mp.begin(), mp.end(),

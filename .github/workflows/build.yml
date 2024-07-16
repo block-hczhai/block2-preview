@@ -18,17 +18,19 @@ permissions:
 
 jobs:
   test:
-    name: test ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.plat }} ${{ matrix.parallel }}
+    name: test ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.parallel }}
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-12 ]
+        os: [ ubuntu-20.04, macos-12, windows-2022 ]
         python: [ 3.12 ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
         exclude:
           - os: macos-12
+            parallel: mpi
+          - os: windows-2022
             parallel: mpi
       fail-fast: false
 
@@ -38,11 +40,11 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: install requirements
+      - name: install requirements (linux / macos)
+        if: matrix.os == 'macos-12' || matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
         run: |
-          export PYT=$(which python)
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 
@@ -51,6 +53,33 @@ jobs:
         run: |
           sudo apt-get install libopenmpi-dev
           python -m pip install mpi4py
+
+      - name: install requirements (windows)
+        if: matrix.os == 'windows-2022'
+        run: |
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' ninja pybind11==2.12.0
+
+      - name: Download OpenBLAS (windows)
+        if: matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          $file = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.27/OpenBLAS-0.3.27-x64.zip"
+          Invoke-WebRequest -Uri $file -OutFile "OpenBLAS-0.3.27-x64.zip"
+          Expand-Archive -Path "OpenBLAS-0.3.27-x64.zip" -DestinationPath $env:BLAS_ROOT
+
+      - name: build gtest (windows)
+        if: matrix.os == 'windows-2022' && matrix.parallel == 'serial'
+        env:
+          GTEST_ROOT: D:\a\gtest
+        run: |
+          Get-WmiObject -Class Win32_Processor
+          git clone  -b release-1.8.0 https://github.com/google/googletest.git
+          cd googletest
+          cmake -G "Visual Studio 17 2022" -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" -Dgtest_force_shared_crt=ON
+          cmake --build . -j 2 --config Release
+          cmake --install . --prefix $env:GTEST_ROOT
 
       - name: build gtest (linux)
         if: matrix.os == 'ubuntu-20.04'
@@ -94,8 +123,8 @@ jobs:
           brew install libomp
           cp /usr/local/opt/libomp/include/*.h /usr/local/include/
 
-      - name: build test (serial-pytest)
-        if: matrix.parallel == 'serial-pytest'
+      - name: build test (serial-pytest, linux | macos)
+        if: matrix.parallel == 'serial-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-12')
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
@@ -108,8 +137,20 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 2
 
-      - name: build test (any-symm-pytest)
-        if: matrix.parallel == 'any-symm-pytest'
+      - name: build test (serial-pytest, windows)
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
+          mkdir build
+          cd build
+          cmake --version
+          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          cmake --build . -j 2 --config Release -- '/v:d'
+
+      - name: build test (any-symm-pytest, linux | macos)
+        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-12')
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '10.9'
@@ -121,6 +162,30 @@ jobs:
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
           make -j 2
+
+      - name: build test (any-symm-pytest, windows)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
+          mkdir build
+          cd build
+          cmake --version
+          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
+          cmake --build . -j 2 --config Release -- '/v:d'
+
+      - name: build test (serial, windows)
+        if: matrix.parallel == 'serial' && matrix.os == 'windows-2022'
+        env:
+          GTEST_ROOT: D:\a\gtest
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
+          mkdir build_test
+          cd build_test
+          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (serial, linux)
         if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
@@ -147,6 +212,20 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
+      - name: run test (serial, windows)
+        if: matrix.parallel == 'serial' && matrix.os == 'windows-2022'
+        env:
+          GTEST_ROOT: D:\a\gtest
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          cd build_test/Release
+          Copy-Item -Path "..\data" -Destination ".\" -Recurse
+          $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
+          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          & $dumpbin /DEPENDENTS .\block2_tests.exe
+          .\block2_tests.exe
+
       - name: run test (serial, linux)
         if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
         run: |
@@ -162,6 +241,22 @@ jobs:
         run: |
           cd build_test
           ./block2_tests
+
+      - name: run test (serial-pytest, windows)
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
+          $xpwd = Get-Location
+          $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
+          $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
+          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          python -m pip install pytest
+          python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --fd_data=${xpwd}/data
 
       - name: run test (serial-pytest, linux)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
@@ -181,6 +276,22 @@ jobs:
           python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
+
+      - name: run test (any-symm-pytest, windows)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
+          $xpwd = Get-Location
+          $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
+          $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
+          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          python -m pip install pytest
+          python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --symm sany --fd_data=${xpwd}/data
 
       - name: run test (any-symm-pytest, linux)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-20.04'

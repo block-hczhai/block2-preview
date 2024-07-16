@@ -59,7 +59,7 @@ struct Prime {
             }
     }
     /** Return positive x mod n. */
-    inline static int pmod(LL x, LL n) { return (x % n + n) % n; }
+    inline static LL pmod(LL x, LL n) { return (x % n + n) % n; }
     /** Extended Euclidean algorithm.
      * Find integers x and y such that a x + b y = gcd(a, b).
      * @param a Integer a.
@@ -266,7 +266,7 @@ struct Prime {
         vector<pair<LL, int>> pp;
         LL phi = p - 1;
         if (p <= 4)
-            return p - 1;
+            return (int)(p - 1);
         else if (!is_prime(p)) {
             factors((p & 1) ? p : p / 2, pp);
             if (pp.size() != 1 || pp[0].first == 2)

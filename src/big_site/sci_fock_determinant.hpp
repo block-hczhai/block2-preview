@@ -52,10 +52,10 @@ using intVec = std::vector<int>;
 namespace sci_detail {
 
 constexpr int fragmentDetLen = 14;
-static_assert(fragmentDetLen % 2 == 0 and fragmentDetLen > 0,
+static_assert(fragmentDetLen % 2 == 0 && fragmentDetLen > 0,
               "fragmentDetLen must be even!");
 
-inline int BitCount(long x) {
+inline int BitCount(long long x) {
     x = (x & 0x5555555555555555ULL) + ((x >> 1) & 0x5555555555555555ULL);
     x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
     x = (x & 0x0F0F0F0F0F0F0F0FULL) + ((x >> 4) & 0x0F0F0F0F0F0F0F0FULL);
@@ -81,7 +81,7 @@ inline int BitCount(long x) {
     */
 }
 
-inline int ffsl(long x) {
+inline int ffsl(long long x) {
 #ifdef __GNUC__
     return __builtin_ffsl(x);
 #else
@@ -105,7 +105,7 @@ struct SCIFockDeterminant {
 
     // 0th position of 0th long is the first position
     // 63rd position of the last long is the last position
-    std::array<long, sci_detail::fragmentDetLen>
+    std::array<long long, sci_detail::fragmentDetLen>
         repr; //!< 0th position of 0th long is the first position
               //!! 63rd position of the last long is the last position
     static int getEffDetLen(const int norbs_) { return norbs_ / 64 + 1; }
@@ -128,7 +128,7 @@ struct SCIFockDeterminant {
           EffDetLen{getEffDetLen(norbs_)} {
         //       vvv Actually, I (mis-)use fragmentDet also so I put this in
         //       assertion (for avocado code)
-        assert((norbs == 1 or (norbs % 2) == 0) and
+        assert((norbs == 1 || (norbs % 2) == 0) and
                "norbs must be even! We have spin orbitals");
         assert(EffDetLen <= sci_detail::fragmentDetLen and
                "recompile with larger fragmentDetLen!");
@@ -199,9 +199,9 @@ struct SCIFockDeterminant {
     /** Number of alpha electrons this determinant represents. */
     int Nalpha() const {
         int nalpha = 0;
-        constexpr long alleven = 0x5555555555555555;
+        constexpr long long alleven = 0x5555555555555555LL;
         for (int i = 0; i < EffDetLen; ++i) {
-            long even = repr[i] & alleven;
+            long long even = repr[i] & alleven;
             nalpha += sci_detail::BitCount(even);
         }
         return nalpha;
@@ -210,9 +210,9 @@ struct SCIFockDeterminant {
     /** Number of beta electrons this determinant represents. */
     int Nbeta() const {
         int nbeta = 0;
-        constexpr long allodd = 0xAAAAAAAAAAAAAAAA;
+        constexpr long long allodd = 0xAAAAAAAAAAAAAAAALL;
         for (int i = 0; i < EffDetLen; ++i) {
-            long odd = repr[i] & allodd;
+            long long odd = repr[i] & allodd;
             nbeta += sci_detail::BitCount(odd);
         }
         return nbeta;
@@ -235,11 +235,11 @@ struct SCIFockDeterminant {
         } else if (nBetaEl > d.nBetaEl) {
             return false;
         }
-        assert(nAlphaEl == d.nAlphaEl and nBetaEl == d.nBetaEl);
+        assert(nAlphaEl == d.nAlphaEl && nBetaEl == d.nBetaEl);
         // ATTENTION: Just this vv does *not* according to alpha/beta el!
         for (int i = EffDetLen - 1; i >= 0; i--) {
             if (i > 0) {
-                assert(repr[i] == 0 and d.repr[i] == 0);
+                assert(repr[i] == 0 && d.repr[i] == 0);
             }
             if (repr[i] < d.repr[i])
                 return true;
@@ -264,9 +264,9 @@ struct SCIFockDeterminant {
     /** Sets the occupation of the ith orbital. */
     void setocc(const int i, const bool occ) {
         // assert(i< norbs and i >= 0);
-        long Integer = i / 64, bit = i % 64;
-        constexpr long one = 1;
-        assert(Integer < sci_detail::fragmentDetLen and Integer >= 0);
+        int Integer = i / 64, bit = i % 64;
+        constexpr long long one = 1;
+        assert(Integer < sci_detail::fragmentDetLen && Integer >= 0);
         if (occ) {
             repr[Integer] |= one << bit;
         } else {
@@ -277,7 +277,7 @@ struct SCIFockDeterminant {
     /** Gets the occupation of the ith orbital. */
     bool getocc(const int i) const {
         // assert(i<norbs and i >= 0);
-        assert(i / 64 < sci_detail::fragmentDetLen and i >= 0);
+        assert(i / 64 < sci_detail::fragmentDetLen && i >= 0);
         // TODO HRL: See JCP, 149, 214110: n mod 64 == n & 63 and n / 64 == n >>
         // 6
         //      accordingly, it should be
@@ -286,15 +286,15 @@ struct SCIFockDeterminant {
         //             => apparently, g++ does NOT optimize it in such a away
         //      so test whether explicit shifiting and &ing does help.
         //     => less ASM calls!
-        long Integer = i / 64, bit = i % 64, reprBit = repr[Integer];
+        long long Integer = i / 64, bit = i % 64, reprBit = repr[Integer];
         return ((reprBit >> bit & 1) == 0) ? false : true;
     }
     void parity(const int start, const int end, double &parity) const {
-        constexpr long one = 1;
+        constexpr long long one = 1;
         // TODO HRL: see getOcc: %64 and /64 can be optimized
         // TODO:; Avoid duplication with Determinants.hpp
-        long mask = (one << (start % 64)) - one;
-        long result = repr[start / 64] & mask;
+        long long mask = (one << (start % 64)) - one;
+        long long result = repr[start / 64] & mask;
         int nonZeroBits = -sci_detail::BitCount(result);
 
         assert(end / 64 < repr.size());
@@ -330,13 +330,13 @@ struct SCIFockDeterminant {
         const auto det = d.getRepArrayVec();
         assert((d.norbs % 2) == 0 and "Norbs needs to be even! Spin orbitals");
         for (int i = 0; i < d.norbs / 2; i++) {
-            if (det[2 * i] == false and det[2 * i + 1] == false) {
+            if (det[2 * i] == 0 && det[2 * i + 1] == 0) {
                 os << 0; //<<" ";
-            } else if (det[2 * i] == true and det[2 * i + 1] == false) {
+            } else if (det[2 * i] == 1 && det[2 * i + 1] == 0) {
                 os << "a"; //<<" ";
-            } else if (det[2 * i] == false and det[2 * i + 1] == true) {
+            } else if (det[2 * i] == 0 && det[2 * i + 1] == 1) {
                 os << "b"; //<<" ";
-            } else if (det[2 * i] == true and det[2 * i + 1] == true) {
+            } else if (det[2 * i] == 1 && det[2 * i + 1] == 1) {
                 os << 2; //<<" ";
             }
             if ((i + 1) % 5 == 0) {
@@ -396,9 +396,9 @@ struct SCIFockDeterminant {
         parity(min(i, a), max(i, a), sgn);
 
         double energy = I1(i, a);
-        constexpr long one = 1;
+        constexpr long long one = 1;
         for (int I = 0; I < EffDetLen; I++) {
-            long reprBit = repr[I];
+            long long reprBit = repr[I];
             while (reprBit != 0) {
                 int pos = sci_detail::ffsl(reprBit);
                 int j = I * 64 + pos - 1;
@@ -431,7 +431,7 @@ struct SCIFockDeterminant {
         int I = min(i, j), J = max(i, j), A = min(a, b), B = max(a, b);
         parity(min(I, A), max(I, A), sgn);
         parity(min(J, B), max(J, B), sgn);
-        if (A > J or B < I) {
+        if (A > J || B < I) {
             sgn *= -1.;
         }
         return sgn * (I2(A, I, B, J) - I2(A, J, B, I));
@@ -558,7 +558,7 @@ struct SCIFockDeterminant {
         }
         int idx = (int)(std::lower_bound(iClosed.begin(), iClosed.end(), iOrb) -
                         iClosed.begin());
-        if (idx < nOrb and iClosed[idx] == iOrb) { // Already in there
+        if (idx < nOrb && iClosed[idx] == iOrb) { // Already in there
             return std::make_pair<int, std::vector<int>>(
                 0, std::vector<int>{}); // Go to Fermi Hell
         } else {
@@ -592,7 +592,7 @@ struct SCIFockDeterminant {
         }
         int idx = (int)(std::lower_bound(iClosed.begin(), iClosed.end(), iOrb) -
                         iClosed.begin());
-        if (idx < nOrb and iClosed[idx] == iOrb) { // Already in there
+        if (idx < nOrb && iClosed[idx] == iOrb) { // Already in there
             int phase = idx % 2 == 0 ? 1 : -1;
             std::vector<int> out(nOrb - 1);
             for (int i = 0; i < idx; ++i) {

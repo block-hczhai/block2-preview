@@ -59,7 +59,7 @@ struct DRTMPS {
         for (size_t j = 0; j < drt->jds.size(); j++)
             for (int16_t d = 0; d < 4; d++)
                 if (drt->jds[j][d] != 0)
-                    inv_jds[drt->jds[j][d]][d] = j;
+                    inv_jds[drt->jds[j][d]][d] = (int)j;
         return inv_jds;
     }
     DRTMPS(const shared_ptr<DRT<S, T>> &drt, const vector<LL> &shapes,
@@ -91,9 +91,10 @@ struct DRTMPS {
                     if (drt->jds[j][d] != 0) {
                         GMatrix<FL> pd(r->data[k].data() +
                                            r->offsets[k][(j - jz) * 4 + d],
-                                       r->shapes[j], r->shapes[drt->jds[j][d]]);
+                                       (MKL_INT)r->shapes[j],
+                                       (MKL_INT)r->shapes[drt->jds[j][d]]);
                         for (LL x = drt->xs[j][d]; x < drt->xs[j][d + 1]; x++)
-                            pd(x, x - drt->xs[j][d]) =
+                            pd((MKL_INT)x, (MKL_INT)(x - drt->xs[j][d])) =
                                 j >= drt->n_init_qs ? (FL)1.0 : ci[x + ij[j]];
                     }
         return r;
@@ -139,15 +140,17 @@ struct DRTMPS {
                     if (drt->jds[pkr[pi][j]][d] != 0 &&
                         shapes[pkr[pi][j]] != 0 &&
                         shapes[drt->jds[pkr[pi][j]][d]] != 0) {
-                        GMatrix<FL> ma(mats[pi].data() + idxs[pi][j], 1,
-                                       idxs[pi][j + 1] - idxs[pi][j]);
+                        GMatrix<FL> ma(
+                            mats[pi].data() + idxs[pi][j], 1,
+                            (MKL_INT)(idxs[pi][j + 1] - idxs[pi][j]));
                         GMatrix<FL> mb(
                             (FL *)data[k].data() +
                                 offsets[k][(pkr[pi][j] - jz) * 4 + d],
-                            shapes[pkr[pi][j]],
-                            shapes[drt->jds[pkr[pi][j]][d]]);
-                        GMatrix<FL> mc(mats[pj].data() + mat_sz, 1,
-                                       shapes[drt->jds[pkr[pi][j]][d]]);
+                            (MKL_INT)shapes[pkr[pi][j]],
+                            (MKL_INT)shapes[drt->jds[pkr[pi][j]][d]]);
+                        GMatrix<FL> mc(
+                            mats[pj].data() + mat_sz, 1,
+                            (MKL_INT)shapes[drt->jds[pkr[pi][j]][d]]);
                         GMatrixFunctions<FL>::multiply(ma, 0, mb, 0, mc,
                                                        (FL)1.0, (FL)0.0);
                         idxs[pj][idx_sz++] = mat_sz;
@@ -198,15 +201,18 @@ struct DRTMPS {
                     if ((l = inv_jds[j][d]) != -1 && new_shapes[l] != 0) {
                         if (shapes[j] != 0)
                             GMatrixFunctions<FL>::multiply(
-                                GMatrix<FL>(gauges[l].data(), new_shapes[l],
-                                            shapes[l]),
+                                GMatrix<FL>(gauges[l].data(),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)shapes[l]),
                                 false,
                                 GMatrix<FL>((FL *)data[k].data() +
                                                 offsets[k][(l - pz) * 4 + d],
-                                            shapes[l], shapes[j]),
+                                            (MKL_INT)shapes[l],
+                                            (MKL_INT)shapes[j]),
                                 false,
                                 GMatrix<FL>(matx.data() + mz * shapes[j],
-                                            new_shapes[l], shapes[j]),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)shapes[j]),
                                 (FL)1.0, (FL)0.0);
                         mz += new_shapes[l];
                     }
@@ -216,19 +222,23 @@ struct DRTMPS {
                     continue;
                 if (k != 0) {
                     GMatrixFunctions<FL>::qr(
-                        GMatrix<FL>(matx.data(), mz, shapes[j]),
-                        GMatrix<FL>(matq.data(), mz, new_shapes[j]),
-                        GMatrix<FL>(gauges[j].data(), new_shapes[j],
-                                    shapes[j]));
+                        GMatrix<FL>(matx.data(), (MKL_INT)mz,
+                                    (MKL_INT)shapes[j]),
+                        GMatrix<FL>(matq.data(), (MKL_INT)mz,
+                                    (MKL_INT)new_shapes[j]),
+                        GMatrix<FL>(gauges[j].data(), (MKL_INT)new_shapes[j],
+                                    (MKL_INT)shapes[j]));
                     mz = 0;
                     for (int16_t d = 0; d < 4; d++)
                         if ((l = inv_jds[j][d]) != -1) {
                             GMatrixFunctions<FL>::copy(
                                 GMatrix<FL>(r->data[k].data() +
                                                 r->offsets[k][(l - pz) * 4 + d],
-                                            new_shapes[l], new_shapes[j]),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]),
                                 GMatrix<FL>(matq.data() + mz * new_shapes[j],
-                                            new_shapes[l], new_shapes[j]));
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]));
                             mz += new_shapes[l];
                         }
                 } else {
@@ -239,9 +249,11 @@ struct DRTMPS {
                             GMatrixFunctions<FL>::copy(
                                 GMatrix<FL>(r->data[k].data() +
                                                 r->offsets[k][(l - pz) * 4 + d],
-                                            new_shapes[l], new_shapes[j]),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]),
                                 GMatrix<FL>(matx.data() + mz * new_shapes[j],
-                                            new_shapes[l], new_shapes[j]));
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]));
                             mz += new_shapes[l];
                         }
                 }
@@ -283,11 +295,13 @@ struct DRTMPS {
                         GMatrixFunctions<FL>::multiply(
                             GMatrix<FL>((FL *)data[k].data() +
                                             offsets[k][(j - jz) * 4 + d],
-                                        shapes[j], shapes[l]),
+                                        (MKL_INT)shapes[j], (MKL_INT)shapes[l]),
                             false,
-                            GMatrix<FL>(gauges[l].data(), shapes[l],
-                                        new_shapes[l]),
-                            false, GMatrix<FL>(tmpx.data() + mz, shapes[j], nx),
+                            GMatrix<FL>(gauges[l].data(), (MKL_INT)shapes[l],
+                                        (MKL_INT)new_shapes[l]),
+                            false,
+                            GMatrix<FL>(tmpx.data() + mz, (MKL_INT)shapes[j],
+                                        (MKL_INT)nx),
                             (FL)1.0, (FL)0.0);
                         mz += new_shapes[l];
                     }
@@ -297,10 +311,13 @@ struct DRTMPS {
                     tmpr[j - jz].reserve(mm * nx);
                     if (mm != 0) {
                         GMatrixFunctions<FL>::svd(
-                            GMatrix<FL>(tmpx.data(), shapes[j], nx),
-                            GMatrix<FL>(tmpl[j - jz].data(), shapes[j], mm),
-                            GMatrix<FL>(tmps[j - jz].data(), 1, mm),
-                            GMatrix<FL>(tmpr[j - jz].data(), mm, nx));
+                            GMatrix<FL>(tmpx.data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)nx),
+                            GMatrix<FL>(tmpl[j - jz].data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)mm),
+                            GMatrix<FL>(tmps[j - jz].data(), 1, (MKL_INT)mm),
+                            GMatrix<FL>(tmpr[j - jz].data(), (MKL_INT)mm,
+                                        (MKL_INT)nx));
                         if (k == drt->n_sites - 1) {
                             assert(mm == 1 && shapes[j] == 1);
                             for (LL i = 0; i < nx; i++)
@@ -321,8 +338,8 @@ struct DRTMPS {
                 LL mm = min(nx, shapes[j]);
                 if (mm != 0)
                     GMatrixFunctions<FL>::copy(
-                        GMatrix<FL>(s_vals.data() + total_s, 1, mm),
-                        GMatrix<FL>(tmps[j - jz].data(), 1, mm));
+                        GMatrix<FL>(s_vals.data() + total_s, 1, (MKL_INT)mm),
+                        GMatrix<FL>(tmps[j - jz].data(), 1, (MKL_INT)mm));
                 total_s += mm;
             }
             vector<LL> srt_idx(total_s);
@@ -349,7 +366,7 @@ struct DRTMPS {
                         nx += new_shapes[l];
                 LL mm = min(nx, shapes[j]);
                 for (isrtz = isrt;
-                     isrt < srt_idx.size() && srt_idx[isrt] - total_s < mm;)
+                     isrt < (LL)srt_idx.size() && srt_idx[isrt] - total_s < mm;)
                     isrt++;
                 new_shapes[j] = isrt - isrtz;
                 gauges[j].resize(shapes[j] * new_shapes[j]);
@@ -382,11 +399,11 @@ struct DRTMPS {
                                     new_data[k].data() +
                                         new_offsets[k][(j - jz) * 4 + d] +
                                         (jsrt - isrtz) * new_shapes[l],
-                                    1, new_shapes[l]),
+                                    1, (MKL_INT)new_shapes[l]),
                                 GMatrix<FL>(tmpr[j - jz].data() +
                                                 (srt_idx[jsrt] - total_s) * nx +
                                                 mz,
-                                            1, new_shapes[l]));
+                                            1, (MKL_INT)new_shapes[l]));
                         mz += new_shapes[l];
                     }
                 total_s += min(nx, shapes[j]);
@@ -412,26 +429,27 @@ struct DRTMPS {
                             continue;
                         tmp.reserve(shapes[j] * other->shapes[l]);
                         GMatrixFunctions<FL>::multiply(
-                            GMatrix<FL>(mats[j].data(), shapes[j],
-                                        other->shapes[j]),
+                            GMatrix<FL>(mats[j].data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)other->shapes[j]),
                             false,
                             GMatrix<FL>((FL *)other->data[k].data() +
                                             other->offsets[k][(j - jz) * 4 + d],
-                                        other->shapes[j], other->shapes[l]),
+                                        (MKL_INT)other->shapes[j],
+                                        (MKL_INT)other->shapes[l]),
                             false,
-                            GMatrix<FL>(tmp.data(), shapes[j],
-                                        other->shapes[l]),
+                            GMatrix<FL>(tmp.data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)other->shapes[l]),
                             (FL)1.0, (FL)0.0);
                         GMatrixFunctions<FL>::multiply(
                             GMatrix<FL>((FL *)data[k].data() +
                                             offsets[k][(j - jz) * 4 + d],
-                                        shapes[j], shapes[l]),
+                                        (MKL_INT)shapes[j], (MKL_INT)shapes[l]),
                             3,
-                            GMatrix<FL>(tmp.data(), shapes[j],
-                                        other->shapes[l]),
+                            GMatrix<FL>(tmp.data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)other->shapes[l]),
                             false,
-                            GMatrix<FL>(mats[l].data(), shapes[l],
-                                        other->shapes[l]),
+                            GMatrix<FL>(mats[l].data(), (MKL_INT)shapes[l],
+                                        (MKL_INT)other->shapes[l]),
                             (FL)1.0, (FL)1.0);
                     }
             for (l = jz; l < j; l++)
@@ -460,7 +478,7 @@ struct DRTMPS {
                 mats[make_pair(i, i)] =
                     vector<FL>(shapes[i] * other->shapes[i], (FL)1.0);
             vector<FL> tmp;
-            for (int k = drt->n_sites - 1, j = 0, jz, l; k >= 0; k--) {
+            for (int k = drt->n_sites - 1, j = 0; k >= 0; k--) {
                 int16_t dh =
                     (int16_t)(upper_bound(
                                   hdrt->xs.begin() + jh * (hdrt->nd + 1),
@@ -495,28 +513,32 @@ struct DRTMPS {
                             tmp.reserve(shapes[jbra] * other->shapes[lket]);
                             GMatrixFunctions<FL>::multiply(
                                 GMatrix<FL>(mats[make_pair(jbra, jket)].data(),
-                                            shapes[jbra], other->shapes[jket]),
+                                            (MKL_INT)shapes[jbra],
+                                            (MKL_INT)other->shapes[jket]),
                                 false,
                                 GMatrix<FL>(
                                     (FL *)other->data[k].data() +
                                         other->offsets[k]
                                                       [(jket - jz) * 4 + dket],
-                                    other->shapes[jket], other->shapes[lket]),
+                                    (MKL_INT)other->shapes[jket],
+                                    (MKL_INT)other->shapes[lket]),
                                 false,
-                                GMatrix<FL>(tmp.data(), shapes[jbra],
-                                            other->shapes[lket]),
+                                GMatrix<FL>(tmp.data(), (MKL_INT)shapes[jbra],
+                                            (MKL_INT)other->shapes[lket]),
                                 f * smat.data[md], (FL)0.0);
                             GMatrixFunctions<FL>::multiply(
                                 GMatrix<FL>(
                                     (FL *)data[k].data() +
                                         offsets[k][(jbra - jz) * 4 + dbra],
-                                    shapes[jbra], shapes[lbra]),
+                                    (MKL_INT)shapes[jbra],
+                                    (MKL_INT)shapes[lbra]),
                                 3,
-                                GMatrix<FL>(tmp.data(), shapes[jbra],
-                                            other->shapes[lket]),
+                                GMatrix<FL>(tmp.data(), (MKL_INT)shapes[jbra],
+                                            (MKL_INT)other->shapes[lket]),
                                 false,
                                 GMatrix<FL>(mats[make_pair(lbra, lket)].data(),
-                                            shapes[lbra], other->shapes[lket]),
+                                            (MKL_INT)shapes[lbra],
+                                            (MKL_INT)other->shapes[lket]),
                                 (FL)1.0, (FL)1.0);
                         }
                 }
@@ -563,7 +585,8 @@ struct HDRTMPO {
         for (size_t j = 0; j < hdrt->n_rows(); j++)
             for (int16_t d = 0; d < hdrt->nd; d++)
                 if (hdrt->jds[j * hdrt->nd + d] != 0)
-                    inv_jds[hdrt->jds[j * hdrt->nd + d] * hdrt->nd + d] = j;
+                    inv_jds[hdrt->jds[j * hdrt->nd + d] * hdrt->nd + d] =
+                        (int)j;
         return inv_jds;
     }
     HDRTMPO(const shared_ptr<HDRT<S, T>> &hdrt, const vector<LL> &shapes,
@@ -596,11 +619,13 @@ struct HDRTMPO {
                         GMatrix<FL> pd(
                             r->data[k].data() +
                                 r->offsets[k][(j - jz) * hdrt->nd + d],
-                            r->shapes[j],
-                            r->shapes[hdrt->jds[j * hdrt->nd + d]]);
+                            (MKL_INT)r->shapes[j],
+                            (MKL_INT)r->shapes[hdrt->jds[j * hdrt->nd + d]]);
                         for (LL x = hdrt->xs[j * (hdrt->nd + 1) + d];
                              x < hdrt->xs[j * (hdrt->nd + 1) + d + 1]; x++)
-                            pd(x, x - hdrt->xs[j * (hdrt->nd + 1) + d]) =
+                            pd((MKL_INT)x,
+                               (MKL_INT)(x -
+                                         hdrt->xs[j * (hdrt->nd + 1) + d])) =
                                 j >= hdrt->n_init_qs ? (FL)1.0 : ci[x + ij[j]];
                     }
         return r;
@@ -647,16 +672,19 @@ struct HDRTMPO {
                     if (hdrt->jds[pkr[pi][j] * hdrt->nd + d] != 0 &&
                         shapes[pkr[pi][j]] != 0 &&
                         shapes[hdrt->jds[pkr[pi][j] * hdrt->nd + d]] != 0) {
-                        GMatrix<FL> ma(mats[pi].data() + idxs[pi][j], 1,
-                                       idxs[pi][j + 1] - idxs[pi][j]);
+                        GMatrix<FL> ma(
+                            mats[pi].data() + idxs[pi][j], 1,
+                            (MKL_INT)(idxs[pi][j + 1] - idxs[pi][j]));
                         GMatrix<FL> mb(
                             (FL *)data[k].data() +
                                 offsets[k][(pkr[pi][j] - jz) * hdrt->nd + d],
-                            shapes[pkr[pi][j]],
-                            shapes[hdrt->jds[pkr[pi][j] * hdrt->nd + d]]);
+                            (MKL_INT)shapes[pkr[pi][j]],
+                            (MKL_INT)
+                                shapes[hdrt->jds[pkr[pi][j] * hdrt->nd + d]]);
                         GMatrix<FL> mc(
                             mats[pj].data() + mat_sz, 1,
-                            shapes[hdrt->jds[pkr[pi][j] * hdrt->nd + d]]);
+                            (MKL_INT)
+                                shapes[hdrt->jds[pkr[pi][j] * hdrt->nd + d]]);
                         GMatrixFunctions<FL>::multiply(ma, 0, mb, 0, mc,
                                                        (FL)1.0, (FL)0.0);
                         idxs[pj][idx_sz++] = mat_sz;
@@ -711,16 +739,18 @@ struct HDRTMPO {
                         new_shapes[l] != 0) {
                         if (shapes[j] != 0)
                             GMatrixFunctions<FL>::multiply(
-                                GMatrix<FL>(gauges[l].data(), new_shapes[l],
-                                            shapes[l]),
+                                GMatrix<FL>(gauges[l].data(),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)shapes[l]),
                                 false,
                                 GMatrix<FL>(
                                     (FL *)data[k].data() +
                                         offsets[k][(l - pz) * hdrt->nd + d],
-                                    shapes[l], shapes[j]),
+                                    (MKL_INT)shapes[l], (MKL_INT)shapes[j]),
                                 false,
                                 GMatrix<FL>(matx.data() + mz * shapes[j],
-                                            new_shapes[l], shapes[j]),
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)shapes[j]),
                                 (FL)1.0, (FL)0.0);
                         mz += new_shapes[l];
                     }
@@ -730,10 +760,12 @@ struct HDRTMPO {
                     continue;
                 if (k != 0) {
                     GMatrixFunctions<FL>::qr(
-                        GMatrix<FL>(matx.data(), mz, shapes[j]),
-                        GMatrix<FL>(matq.data(), mz, new_shapes[j]),
-                        GMatrix<FL>(gauges[j].data(), new_shapes[j],
-                                    shapes[j]));
+                        GMatrix<FL>(matx.data(), (MKL_INT)mz,
+                                    (MKL_INT)shapes[j]),
+                        GMatrix<FL>(matq.data(), (MKL_INT)mz,
+                                    (MKL_INT)new_shapes[j]),
+                        GMatrix<FL>(gauges[j].data(), (MKL_INT)new_shapes[j],
+                                    (MKL_INT)shapes[j]));
                     mz = 0;
                     for (int16_t d = 0; d < hdrt->nd; d++)
                         if ((l = inv_jds[j * hdrt->nd + d]) != -1) {
@@ -741,9 +773,11 @@ struct HDRTMPO {
                                 GMatrix<FL>(
                                     r->data[k].data() +
                                         r->offsets[k][(l - pz) * hdrt->nd + d],
-                                    new_shapes[l], new_shapes[j]),
+                                    (MKL_INT)new_shapes[l],
+                                    (MKL_INT)new_shapes[j]),
                                 GMatrix<FL>(matq.data() + mz * new_shapes[j],
-                                            new_shapes[l], new_shapes[j]));
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]));
                             mz += new_shapes[l];
                         }
                 } else {
@@ -755,9 +789,11 @@ struct HDRTMPO {
                                 GMatrix<FL>(
                                     r->data[k].data() +
                                         r->offsets[k][(l - pz) * hdrt->nd + d],
-                                    new_shapes[l], new_shapes[j]),
+                                    (MKL_INT)new_shapes[l],
+                                    (MKL_INT)new_shapes[j]),
                                 GMatrix<FL>(matx.data() + mz * new_shapes[j],
-                                            new_shapes[l], new_shapes[j]));
+                                            (MKL_INT)new_shapes[l],
+                                            (MKL_INT)new_shapes[j]));
                             mz += new_shapes[l];
                         }
                 }
@@ -800,11 +836,13 @@ struct HDRTMPO {
                         GMatrixFunctions<FL>::multiply(
                             GMatrix<FL>((FL *)data[k].data() +
                                             offsets[k][(j - jz) * hdrt->nd + d],
-                                        shapes[j], shapes[l]),
+                                        (MKL_INT)shapes[j], (MKL_INT)shapes[l]),
                             false,
-                            GMatrix<FL>(gauges[l].data(), shapes[l],
-                                        new_shapes[l]),
-                            false, GMatrix<FL>(tmpx.data() + mz, shapes[j], nx),
+                            GMatrix<FL>(gauges[l].data(), (MKL_INT)shapes[l],
+                                        (MKL_INT)new_shapes[l]),
+                            false,
+                            GMatrix<FL>(tmpx.data() + mz, (MKL_INT)shapes[j],
+                                        (MKL_INT)nx),
                             (FL)1.0, (FL)0.0);
                         mz += new_shapes[l];
                     }
@@ -814,10 +852,13 @@ struct HDRTMPO {
                     tmpr[j - jz].reserve(mm * nx);
                     if (mm != 0) {
                         GMatrixFunctions<FL>::svd(
-                            GMatrix<FL>(tmpx.data(), shapes[j], nx),
-                            GMatrix<FL>(tmpl[j - jz].data(), shapes[j], mm),
-                            GMatrix<FL>(tmps[j - jz].data(), 1, mm),
-                            GMatrix<FL>(tmpr[j - jz].data(), mm, nx));
+                            GMatrix<FL>(tmpx.data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)nx),
+                            GMatrix<FL>(tmpl[j - jz].data(), (MKL_INT)shapes[j],
+                                        (MKL_INT)mm),
+                            GMatrix<FL>(tmps[j - jz].data(), 1, (MKL_INT)mm),
+                            GMatrix<FL>(tmpr[j - jz].data(), (MKL_INT)mm,
+                                        (MKL_INT)nx));
                         if (k == hdrt->n_sites - 1) {
                             assert(mm == 1 && shapes[j] == 1);
                             for (LL i = 0; i < nx; i++)
@@ -838,8 +879,8 @@ struct HDRTMPO {
                 LL mm = min(nx, shapes[j]);
                 if (mm != 0)
                     GMatrixFunctions<FL>::copy(
-                        GMatrix<FL>(s_vals.data() + total_s, 1, mm),
-                        GMatrix<FL>(tmps[j - jz].data(), 1, mm));
+                        GMatrix<FL>(s_vals.data() + total_s, 1, (MKL_INT)mm),
+                        GMatrix<FL>(tmps[j - jz].data(), 1, (MKL_INT)mm));
                 total_s += mm;
             }
             vector<LL> srt_idx(total_s);
@@ -866,7 +907,7 @@ struct HDRTMPO {
                         nx += new_shapes[l];
                 LL mm = min(nx, shapes[j]);
                 for (isrtz = isrt;
-                     isrt < srt_idx.size() && srt_idx[isrt] - total_s < mm;)
+                     isrt < (LL)srt_idx.size() && srt_idx[isrt] - total_s < mm;)
                     isrt++;
                 new_shapes[j] = isrt - isrtz;
                 gauges[j].resize(shapes[j] * new_shapes[j]);
@@ -902,11 +943,11 @@ struct HDRTMPO {
                                         new_offsets[k]
                                                    [(j - jz) * hdrt->nd + d] +
                                         (jsrt - isrtz) * new_shapes[l],
-                                    1, new_shapes[l]),
+                                    1, (MKL_INT)new_shapes[l]),
                                 GMatrix<FL>(tmpr[j - jz].data() +
                                                 (srt_idx[jsrt] - total_s) * nx +
                                                 mz,
-                                            1, new_shapes[l]));
+                                            1, (MKL_INT)new_shapes[l]));
                         mz += new_shapes[l];
                     }
                 total_s += min(nx, shapes[j]);

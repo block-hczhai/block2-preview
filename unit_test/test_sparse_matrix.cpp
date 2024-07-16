@@ -6,8 +6,8 @@ using namespace block2;
 
 template <typename S> class TestSparseMatrix : public ::testing::Test {
   protected:
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 24;
+    size_t isize = 1LL << 20;
+    size_t dsize = 1LL << 24;
     typedef double FP;
     static const int n_tests = 200;
     void SetUp() override {

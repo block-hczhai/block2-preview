@@ -34,7 +34,7 @@ template <typename S> struct QZLabel {
                  kmod <= kmax));
     }
     int multi() const { return 1; }
-    int fermion() const { return n & 1; }
+    bool fermion() const { return (bool)(n & 1); }
     int composite_pg() const {
         return (int)(pg | (k * (pgmax - pgmin + 1)) |
                      (kmod * (pgmax - pgmin + 1) * (kmax - kmin + 1)));
@@ -160,7 +160,7 @@ template <typename S> struct QULabel {
                  kmod <= kmax));
     }
     int multi() const { return twos + 1; }
-    int fermion() const { return n & 1; }
+    bool fermion() const { return (bool)(n & 1); }
     int composite_pg() const {
         return (int)(pg | (k * (pgmax - pgmin + 1)) |
                      (kmod * (pgmax - pgmin + 1) * (kmax - kmin + 1)));

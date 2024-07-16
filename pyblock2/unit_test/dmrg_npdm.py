@@ -11,18 +11,14 @@ def symm_type(pytestconfig):
     return pytestconfig.getoption("symm")
 
 
-@pytest.fixture(scope="module", params=["N2"])
-def system_def(request):
-    from pyscf import gto
+@pytest.fixture(scope="module")
+def fd_data(pytestconfig):
+    return pytestconfig.getoption("fd_data")
 
-    if request.param == "N2":
-        mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
-        return mol, 0, None, "N2"
-    elif request.param == "C2":
-        mol = gto.M(
-            atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
-        )
-        return mol, 2, 8, "C2"
+
+@pytest.fixture(scope="module", params=["N2"])
+def name(request):
+    return request.param
 
 
 @pytest.fixture(scope="module", params=["Normal", "Fast", "SF", "SFLM"])
@@ -41,24 +37,36 @@ def fuse_ctrrot_type(request):
 
 
 class TestNPDM:
-    def test_rhf(self, tmp_path, system_def, site_type, algo_type, fuse_ctrrot_type, symm_type):
-        from pyscf import scf, fci
-
-        mol, ncore, ncas, name = system_def
-        mf = scf.RHF(mol).run(conv_tol=1e-14)
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(
-            mf, ncore, ncas, g2e_symm=8
-        )
-
+    def test_rhf(self, tmp_path, name, site_type, algo_type, fuse_ctrrot_type, symm_type, fd_data):
         symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+
+        if fd_data == "":
+            from pyscf import gto, scf, fci
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                ncore, ncas = 0, None
+            elif name == "C2":
+                mol = gto.M(
+                    atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
+                )
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                ncore, ncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(mf, ncore, ncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.RHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1e, g2e, ecore = driver.h1e, driver.g2e, driver.ecore
 
         mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)
@@ -92,6 +100,8 @@ class TestNPDM:
                 | NPDMAlgorithmTypes.Compressed
                 | NPDMAlgorithmTypes.LowMem
             )
+        else:
+            assert False
 
         porder = 4 if algo_type == "SFLM" else 3
         if site_type != 0:
@@ -111,6 +121,9 @@ class TestNPDM:
             )
 
         driver.finalize()
+
+        if fd_data != "":
+            return
 
         mx = fci.FCI(mf)
         mx.kernel(h1e, g2e, ncas, n_elec, tol=1e-12)
@@ -189,25 +202,38 @@ class TestNPDM:
             print("pdm4 diff = %9.2g" % ddm4)
             assert ddm4 < 1e-5
 
-    def test_uhf(self, tmp_path, system_def, site_type, algo_type, symm_type):
-        from pyscf import scf, fci
-
-        mol, ncore, ncas, name = system_def
-        mf = scf.RHF(mol).run(conv_tol=1e-14)
-        umf = mf.to_uhf()
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-
-        ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(
-            umf, ncore, ncas, g2e_symm=8
-        )
+    def test_uhf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data):
         symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+        
+        if fd_data == "":
+            from pyscf import gto, scf, fci
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                umf = mf.to_uhf()
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                ncore, ncas = 0, None
+            elif name == "C2":
+                mol = gto.M(
+                    atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
+                )
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                umf = mf.to_uhf()
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                ncore, ncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(umf, ncore, ncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.UHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1es, g2es, ecore = driver.h1e, driver.g2e, driver.ecore
 
         mpo = driver.get_qc_mpo(h1e=h1es, g2e=g2es, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)
@@ -258,6 +284,9 @@ class TestNPDM:
 
         driver.finalize()
 
+        if fd_data != "":
+            return
+
         mx = fci.FCI(mf)
         h1e, g2e = itg.get_rhf_integrals(mf, ncore, ncas, g2e_symm=8)[-3:-1]
         mx.kernel(h1e, g2e, ncas, n_elec, tol=1e-12)
@@ -306,24 +335,38 @@ class TestNPDM:
             print("pdm3 diff = %9.2g" % ddm3)
             assert ddm3 < 1e-5
 
-    def test_ghf(self, tmp_path, system_def, site_type, algo_type, symm_type):
-        from pyscf import scf, fci
-
-        mol, xncore, xncas, name = system_def
-        mf = scf.RHF(mol).run(conv_tol=1e-14)
-        gmf = mf.to_ghf()
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(
-            gmf, xncore, xncas, g2e_symm=8
-        )
+    def test_ghf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data):
         symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+
+        if fd_data == "":
+            from pyscf import gto, scf, fci
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                gmf = mf.to_ghf()
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                xncore, xncas = 0, None
+            elif name == "C2":
+                mol = gto.M(
+                    atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
+                )
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                gmf = mf.to_ghf()
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                xncore, xncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(gmf, xncore, xncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.GHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1e, g2e, ecore = driver.h1e, driver.g2e, driver.ecore
 
         mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=1)
         ket = driver.get_random_mps(tag="GS", bond_dim=250, nroots=1)
@@ -373,6 +416,9 @@ class TestNPDM:
             )
 
         driver.finalize()
+
+        if fd_data != "":
+            return
 
         ncas = ncas // 2
         xncore = xncore // 2

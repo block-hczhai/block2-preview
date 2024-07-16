@@ -8,8 +8,8 @@ using namespace block2;
 template <typename FL>
 class TestRTEGreenFunctionH10STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     typedef typename GMatrix<FL>::FP FP;
 
     template <typename S>

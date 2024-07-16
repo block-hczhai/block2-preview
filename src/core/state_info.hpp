@@ -293,7 +293,7 @@ struct StateInfo<S,
             }
         nc = 0;
         for (int ic = 0; ic < c.n; ic++)
-            nc += mp.at(c.quanta[ic]).size();
+            nc += (int)mp.at(c.quanta[ic]).size();
         shared_ptr<typename StateInfo::ConnectionInfo> ci =
             make_shared<typename StateInfo::ConnectionInfo>();
         ci->acc_n_states.reserve(c.n + 1);

@@ -2525,7 +2525,7 @@ class DMRGDriver:
         self.ecore = fcidump.const_e
         import numpy as np
 
-        symm_err = fcidump.symmetrize(self.orb_sym)
+        symm_err = fcidump.symmetrize(bw.b.VectorUInt8(self.orb_sym))
         if iprint >= 1:
             print("symmetrize error = ", symm_err)
 
@@ -2533,32 +2533,32 @@ class DMRGDriver:
         mm = nn * (nn + 1) // 2
         ll = mm * (mm + 1) // 2
         if not fcidump.uhf:
-            self.h1e = np.array(fcidump.h1e_matrix(), copy=False).reshape((nn, nn))
+            self.h1e = np.asarray(fcidump.h1e_matrix()).reshape((nn, nn))
             if fcidump.general:
-                self.g2e = np.array(fcidump.g2e_1fold(), copy=False).reshape(
+                self.g2e = np.asarray(fcidump.g2e_1fold()).reshape(
                     (nn, nn, nn, nn)
                 )
             else:
-                self.g2e = np.array(fcidump.g2e_8fold(), copy=False).reshape((ll,))
+                self.g2e = np.asarray(fcidump.g2e_8fold()).reshape((ll,))
         else:
             self.h1e = tuple(
-                np.array(fcidump.h1e_matrix(s=s), copy=False).reshape((nn, nn))
+                np.asarray(fcidump.h1e_matrix(s=s)).reshape((nn, nn))
                 for s in [0, 1]
             )
             if fcidump.general:
                 self.g2e = tuple(
-                    np.array(fcidump.g2e_1fold(sl=sl, sr=sr), copy=False).reshape(
+                    np.asarray(fcidump.g2e_1fold(sl=sl, sr=sr)).reshape(
                         (nn, nn, nn, nn)
                     )
                     for sl, sr in [(0, 0), (0, 1), (1, 1)]
                 )
             else:
                 self.g2e = (
-                    np.array(fcidump.g2e_8fold(sl=0, sr=0), copy=False).reshape((ll,)),
-                    np.array(fcidump.g2e_4fold(sl=0, sr=1), copy=False).reshape(
+                    np.asarray(fcidump.g2e_8fold(sl=0, sr=0)).reshape((ll,)),
+                    np.asarray(fcidump.g2e_4fold(sl=0, sr=1)).reshape(
                         (mm, mm)
                     ),
-                    np.array(fcidump.g2e_8fold(sl=1, sr=1), copy=False).reshape((ll,)),
+                    np.asarray(fcidump.g2e_8fold(sl=1, sr=1)).reshape((ll,)),
                 )
         return fcidump
 
@@ -5231,7 +5231,7 @@ class DMRGDriver:
                 npdms[ip] *= np.array(np.sqrt(2.0)) ** (scheme.n_max_ops // 2)
         else:
             for ip in range(len(npdms)):
-                npdms[ip] = np.array(npdms[ip], copy=False)
+                npdms[ip] = np.asarray(npdms[ip])
 
         if self.reorder_idx is not None:
             rev_idx = np.argsort(self.reorder_idx)

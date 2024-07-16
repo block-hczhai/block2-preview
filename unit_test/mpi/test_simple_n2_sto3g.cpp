@@ -37,8 +37,8 @@ template <typename FL> class TestSimpleN2STO3G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 22;
-    size_t dsize = 1L << 28;
+    size_t isize = 1LL << 22;
+    size_t dsize = 1LL << 28;
     typedef typename GMatrix<FL>::FP FP;
     typedef typename GMatrix<FL>::FL FLL;
 

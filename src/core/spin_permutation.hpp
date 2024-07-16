@@ -315,7 +315,7 @@ struct SpinPermTensor {
         for (int j = 0; j < (int)r.size(); j++)
             r[j] =
                 ((uint8_t)data[0][0].ops[j].first & (uint8_t)SpinOperator::S) |
-                (data[0][0].ops[j].first & SpinOperator::C);
+                ((uint8_t)data[0][0].ops[j].first & (uint8_t)SpinOperator::C);
         return r;
     }
     SpinPermTensor operator*(double d) const {
@@ -870,7 +870,7 @@ struct SpinRecoupling {
     recouple_split(const map<string, double> &x,
                    const vector<uint16_t> &ref_indices, int split_idx, SU2CG cg,
                    bool heis) {
-        int nn = ref_indices.size();
+        int nn = (int)ref_indices.size();
         vector<uint16_t> ref_split_idx;
         int ref_mid = -1;
         for (int i = 1; i < nn; i++)
@@ -895,7 +895,7 @@ struct SpinRecoupling {
             Level h = get_level(r.begin()->first, 0);
             ii = h.left_idx;
             for (int i = ref_mid - 1; i >= 0; i--) {
-                r = recouple(r, ii, ref_split_idx[i], cg, heis);
+                r = recouple(r, ii, (int8_t)ref_split_idx[i], cg, heis);
                 ii = get_level(r.begin()->first, ii).left_idx;
             }
         } else if (split_idx == -1) {
@@ -909,7 +909,7 @@ struct SpinRecoupling {
             // handle drt hamiltonian split
             int ii = 0;
             for (int i = (int)ref_split_idx.size() - 1; i >= 0; i--) {
-                r = recouple(r, ii, ref_split_idx[i], cg, heis);
+                r = recouple(r, ii, (int8_t)ref_split_idx[i], cg, heis);
                 ii = get_level(r.begin()->first, ii).left_idx;
             }
         }
@@ -942,7 +942,7 @@ struct SpinPermPattern {
         // ha = all possible lists of the max one and undetermined ones (maxx)
         for (uint16_t i = 1; i <= pp.back().second; i++) {
             vector<uint16_t> hb;
-            for (int j = 0, k; j < (int)ha.size(); j += x.size()) {
+            for (int j = 0, k; j < (int)ha.size(); j += (int)x.size()) {
                 for (k = (int)x.size() - 1; k >= 0; k--)
                     if (ha[j + k] != maxx)
                         break;
@@ -961,9 +961,9 @@ struct SpinPermPattern {
         vector<uint16_t> r(ha.size() * g.size() /
                            (x.size() - pp.back().second));
         size_t ir = 0;
-        for (int h = 0; h < (int)ha.size(); h += x.size())
+        for (int h = 0; h < (int)ha.size(); h += (int)x.size())
             for (int j = 0; j < (int)g.size();
-                 j += x.size() - pp.back().second) {
+                 j += (int)(x.size() - pp.back().second)) {
                 memcpy(r.data() + ir, ha.data() + h,
                        x.size() * sizeof(uint16_t));
                 for (int k = 0, kk = 0; k < (int)x.size(); k++)
@@ -1054,7 +1054,7 @@ struct SpinPermPattern {
                                      int target_twos = 0, int split_idx = -1,
                                      bool ref_split = false) {
         SU2CG cg;
-        int nn = cds.size();
+        int nn = (int)cds.size();
         vector<uint16_t> indices = ref_indices;
         if (indices.size() == 0)
             for (int i = 0; i < nn; i++)
@@ -1193,7 +1193,7 @@ struct SpinPermScheme {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[k] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr, mask);
-            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
             for (int jj = 0; jj < nj; jj++) {
                 vector<uint16_t> indices(rr.begin() + jj * irr.size(),
                                          rr.begin() + (jj + 1) * irr.size());
@@ -1232,7 +1232,7 @@ struct SpinPermScheme {
             int split_idx = is_npdm ? spat.get_split_index(i) : -1;
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr);
-            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
             vector<string> ttp = SpinPermPattern::get_unique(
                 cds, irr, target_twos, split_idx, true);
             for (int jj = 0; jj < nj; jj++) {
@@ -1276,10 +1276,10 @@ struct SpinPermScheme {
                 for (int ja = 0; ja < (int)pgg.size() && !found; ja++)
                     for (int jb = ja + 1; jb < (int)pgg.size() && !found;
                          jb++) {
-                        MatrixRef a(mptr.data(), pgg[0].size(), 2);
+                        MatrixRef a(mptr.data(), (MKL_INT)pgg[0].size(), 2);
                         MatrixRef x(mptr.data() + a.size(), 2, 1);
                         MatrixRef b(mptr.data() + a.size() + x.size(),
-                                    pgg[0].size(), 1);
+                                    (MKL_INT)pgg[0].size(), 1);
                         for (int k = 0; k < (int)pgg[0].size(); k++)
                             b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
                                  a(k, 1) = pgg[jb][k];
@@ -1296,10 +1296,10 @@ struct SpinPermScheme {
                     for (int jb = ja + 1; jb < (int)pgg.size() && !found; jb++)
                         for (int jc = jb + 1; jc < (int)pgg.size() && !found;
                              jc++) {
-                            MatrixRef a(mptr.data(), pgg[0].size(), 3);
+                            MatrixRef a(mptr.data(), (MKL_INT)pgg[0].size(), 3);
                             MatrixRef x(mptr.data() + a.size(), 3, 1);
                             MatrixRef b(mptr.data() + a.size() + x.size(),
-                                        pgg[0].size(), 1);
+                                        (MKL_INT)pgg[0].size(), 1);
                             for (int k = 0; k < (int)pgg[0].size(); k++)
                                 b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
                                      a(k, 1) = pgg[jb][k], a(k, 2) = pgg[jc][k];
@@ -1323,10 +1323,11 @@ struct SpinPermScheme {
                              jc++)
                             for (int jd = jc + 1;
                                  jd < (int)pgg.size() && !found; jd++) {
-                                MatrixRef a(mptr.data(), pgg[0].size(), 4);
+                                MatrixRef a(mptr.data(), (MKL_INT)pgg[0].size(),
+                                            4);
                                 MatrixRef x(mptr.data() + a.size(), 4, 1);
                                 MatrixRef b(mptr.data() + a.size() + x.size(),
-                                            pgg[0].size(), 1);
+                                            (MKL_INT)pgg[0].size(), 1);
                                 for (int k = 0; k < (int)pgg[0].size(); k++)
                                     b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
                                          a(k, 1) = pgg[jb][k],
@@ -1358,11 +1359,12 @@ struct SpinPermScheme {
                                  jd < (int)pgg.size() && !found; jd++)
                                 for (int je = jd + 1;
                                      je < (int)pgg.size() && !found; je++) {
-                                    MatrixRef a(mptr.data(), pgg[0].size(), 5);
+                                    MatrixRef a(mptr.data(),
+                                                (MKL_INT)pgg[0].size(), 5);
                                     MatrixRef x(mptr.data() + a.size(), 5, 1);
                                     MatrixRef b(mptr.data() + a.size() +
                                                     x.size(),
-                                                pgg[0].size(), 1);
+                                                (MKL_INT)pgg[0].size(), 1);
                                     for (int k = 0; k < (int)pgg[0].size(); k++)
                                         b(k, 0) = pgv[k], a(k, 0) = pgg[ja][k],
                                              a(k, 1) = pgg[jb][k],
@@ -1417,11 +1419,11 @@ struct SpinPermScheme {
         int ntg = threading->activate_global();
         map<vector<uint16_t>, map<string, double>> ref_ps;
         map<string, double> p = map<string, double>{make_pair(spin_str, 1.0)};
-        for (int i = spat.count() - 1; i >= 0; i--) {
+        for (int i = (int)spat.count() - 1; i >= 0; i--) {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr, mask);
-            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
             int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
             vector<map<string, double>> ps(nj);
 #pragma omp parallel for schedule(static, 20) num_threads(ntg)
@@ -1475,14 +1477,14 @@ struct SpinPermScheme {
         r.index_patterns.resize(spat.count());
         r.data.resize(spat.count());
         map<pair<int, vector<uint16_t>>, int> unique_data;
-        int xi = spat.count() - 1;
+        int xi = (int)spat.count() - 1;
         vector<uint16_t> xrr = spat[xi];
         int xq = is_npdm ? spat.get_split_index(xi) : (is_drt ? -2 : -1);
         vector<string> unique_strs =
             SpinPermPattern::get_unique(cds, xrr, target_twos, xq, true);
         r.index_patterns[xi] = xrr;
         vector<uint16_t> rr = SpinPermPattern::all_reordering(xrr, mask);
-        int xnj = xrr.size() == 0 ? 1 : rr.size() / xrr.size();
+        int xnj = xrr.size() == 0 ? 1 : (int)(rr.size() / xrr.size());
         for (int jj = 0; jj < xnj; jj++) {
             vector<uint16_t> indices(rr.begin() + jj * xrr.size(),
                                      rr.begin() + (jj + 1) * xrr.size());
@@ -1556,7 +1558,7 @@ struct SpinPermScheme {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[i] = irr;
             vector<uint16_t> rr = SpinPermPattern::all_reordering(irr, mask);
-            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
             int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
             vector<map<string, double>> recouples(unique_strs.size());
             map<string, int> map_unique_strs;
@@ -1604,8 +1606,8 @@ struct SpinPermScheme {
     }
     string to_str() const {
         stringstream ss;
-        int cnt = index_patterns.size();
-        int nn = cnt == 0 ? 0 : index_patterns[0].size();
+        int cnt = (int)index_patterns.size();
+        int nn = cnt == 0 ? 0 : (int)index_patterns[0].size();
         ss << "N = " << nn << " COUNT = " << cnt << endl;
         for (size_t ic = 0; ic < cnt; ic++) {
             for (uint16_t j = 0; j < nn; j++)
@@ -1689,7 +1691,7 @@ struct NPDMCounter {
         for (int i = 0; i < (int)kk.size(); i++)
             if ((i == kk.size() - 1 && r[kk[i]] < k) ||
                 (i < kk.size() - 1 && r[kk[i]] + 1 < r[kk[i + 1]])) {
-                int j = i == kk.size() - 1 ? pattern.size() : kk[i + 1];
+                int j = i == kk.size() - 1 ? (int)pattern.size() : kk[i + 1];
                 for (int m = kk[i]; m < j; m++)
                     r[m]++;
                 for (int m = 0; m < kk[i]; m++)
@@ -1731,10 +1733,10 @@ struct NPDMCounter {
                 r[i] = r[i - 1];
             else {
                 int cnt = dp[gz][n_sites - k];
-                r[i] = n_sites -
+                r[i] = (uint16_t)n_sites -
                        (uint16_t)(lower_bound(dp[gz].begin(),
                                               dp[gz].begin() + n_sites - k + 1,
-                                              cnt - ix) -
+                                              (uint32_t)(cnt - ix)) -
                                   dp[gz].begin());
                 ix -= cnt - dp[gz][n_sites - r[i]];
                 k = r[i] + 1;
@@ -1753,7 +1755,8 @@ struct NPDMCounter {
                 kk.push_back(i);
         for (int i = (int)kk.size() - 1; i >= 0; i--)
             if (r[kk[i]] < n_sites - kk.size() + i) {
-                int j = i == kk.size() - 1 ? pattern.size() : kk[i + 1];
+                int j =
+                    i == kk.size() - 1 ? (int)pattern.size() : (int)kk[i + 1];
                 for (int m = kk[i]; m < j; m++)
                     r[m]++;
                 for (int m = j; m < (int)r.size(); m++)
@@ -1903,7 +1906,7 @@ struct NPDMScheme {
             for (auto &r : left_patterns.at(k)) {
                 left_terms.push_back(
                     make_pair(make_pair(k, r.first), (bool)r.second));
-                r.second = left_terms.size() - 1;
+                r.second = (int)left_terms.size() - 1;
             }
         // right terms sorting
         map_keys.clear();
@@ -1919,7 +1922,7 @@ struct NPDMScheme {
             for (auto &r : right_patterns.at(k)) {
                 right_terms.push_back(
                     make_pair(make_pair(k, r.first), (bool)r.second));
-                r.second = right_terms.size() - 1;
+                r.second = (int)right_terms.size() - 1;
             }
         // last right terms sorting
         map_keys.clear();
@@ -1936,7 +1939,8 @@ struct NPDMScheme {
                 if (r.second) {
                     last_right_terms.push_back(
                         make_pair(make_pair(k, r.first), (bool)r.second));
-                    r.second = last_right_terms.size() - 1 + right_terms.size();
+                    r.second =
+                        (int)(last_right_terms.size() - 1 + right_terms.size());
                 } else
                     r.second = right_patterns.at(k).at(r.first);
         // middle blocking

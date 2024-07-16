@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestNPDM : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     typedef double FP;
 
     void SetUp() override {
@@ -491,7 +491,7 @@ TEST_F(TestNPDM, TestSU2) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_d2h);
+              [](uint8_t x) { return (uint8_t)PointGroup::swap_d2h(x); });
     SU2 vacuum(0);
     SU2 target(fcidump->n_elec(), fcidump->twos(),
                PointGroup::swap_d2h(fcidump->isym()));
@@ -868,7 +868,7 @@ TEST_F(TestNPDM, TestSZ) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_d2h);
+              [](uint8_t x) { return (uint8_t)PointGroup::swap_d2h(x); });
     SZ vacuum(0);
     SZ target(fcidump->n_elec(), fcidump->twos(),
               PointGroup::swap_d2h(fcidump->isym()));
@@ -1313,7 +1313,7 @@ TEST_F(TestNPDM, TestSGF) {
     fcidump = make_shared<SpinOrbitalFCIDUMP<double>>(fcidump);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_d2h);
+              [](uint8_t x) { return (uint8_t)PointGroup::swap_d2h(x); });
     SGF vacuum(0);
     SGF target(fcidump->n_elec(), PointGroup::swap_d2h(fcidump->isym()));
     int norb = fcidump->n_sites();

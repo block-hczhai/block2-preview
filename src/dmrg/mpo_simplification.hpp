@@ -83,7 +83,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
         vector<size_t> left_op_sizes(MPO<S, FL>::n_sites);
         vector<size_t> right_op_sizes(MPO<S, FL>::n_sites);
         MPO<S, FL>::left_operator_names = mpo->left_operator_names;
-        for (size_t i = 0; i < MPO<S, FL>::left_operator_names.size(); i++) {
+        for (int i = 0; i < (int)MPO<S, FL>::left_operator_names.size(); i++) {
             mpo->load_left_operators(i);
             MPO<S, FL>::left_operator_names[i] =
                 mpo->left_operator_names[i]->copy();
@@ -93,7 +93,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             MPO<S, FL>::unload_left_operators(i);
         }
         MPO<S, FL>::right_operator_names = mpo->right_operator_names;
-        for (size_t i = 0; i < MPO<S, FL>::right_operator_names.size(); i++) {
+        for (int i = 0; i < (int)MPO<S, FL>::right_operator_names.size(); i++) {
             mpo->load_right_operators(i);
             MPO<S, FL>::right_operator_names[i] =
                 mpo->right_operator_names[i]->copy();
@@ -164,7 +164,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             }
         if (mpo->middle_operator_exprs.size() != 0 &&
             MPO<S, FL>::tag == mpo->tag) {
-            for (size_t i = 0; i < mpo->middle_operator_names.size(); i++) {
+            for (int i = 0; i < (int)mpo->middle_operator_names.size(); i++) {
                 mpo->load_left_operators(i);
                 mpo->load_right_operators(i + 1);
             }
@@ -321,7 +321,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
             // if some operators are erased in left/right operator names
             // they should not appear in middle operator exprs
             // and the expr should be zero
-            for (size_t i = 0; i < MPO<S, FL>::middle_operator_names.size();
+            for (int i = 0; i < (int)MPO<S, FL>::middle_operator_names.size();
                  i++) {
                 if (frame_<FP>()->minimal_memory_usage)
                     cout << "MPO SIM MIDDLE DEP ... " << setw(4) << i << " / "
@@ -421,7 +421,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                 if (check_indirect_ref)
                                     xmp[abs_value(
                                         MPO<S, FL>::left_operator_names[i]
-                                            ->data[j])] = j;
+                                            ->data[j])] = (int)j;
                                 else
                                     MPO<S, FL>::left_operator_names[i]
                                         ->data[j] = zero;
@@ -480,7 +480,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                 if (check_indirect_ref)
                                     xmp[abs_value(MPO<S, FL>::schemer
                                                       ->left_new_operator_names
-                                                      ->data[j])] = j;
+                                                      ->data[j])] = (int)j;
                                 else
                                     MPO<S, FL>::schemer->left_new_operator_names
                                         ->data[j] = zero;
@@ -641,7 +641,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                 if (check_indirect_ref)
                                     xmp[abs_value(
                                         MPO<S, FL>::right_operator_names[i]
-                                            ->data[j])] = j;
+                                            ->data[j])] = (int)j;
                                 else
                                     MPO<S, FL>::right_operator_names[i]
                                         ->data[j] = zero;
@@ -700,7 +700,7 @@ template <typename S, typename FL> struct SimplifiedMPO : MPO<S, FL> {
                                 if (check_indirect_ref)
                                     xmp[abs_value(MPO<S, FL>::schemer
                                                       ->right_new_operator_names
-                                                      ->data[j])] = j;
+                                                      ->data[j])] = (int)j;
                                 else
                                     MPO<S, FL>::schemer
                                         ->right_new_operator_names->data[j] =

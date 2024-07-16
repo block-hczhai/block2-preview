@@ -96,7 +96,7 @@ template <typename FL> struct COOSparseMat {
         MKL_INT cur_row = -1;
         for (size_t k = 0; k < idx2.size(); k++) {
             while (data[idx2[k]].first.first != cur_row)
-                mat.rows[++cur_row] = k;
+                mat.rows[++cur_row] = (MKL_INT)k;
             mat.data[k] = data[idx2[k]].second,
             mat.cols[k] = data[idx2[k]].first.second;
         }
@@ -116,10 +116,10 @@ struct SCIFCIDUMPTwoInt {
     SCIFCIDUMPTwoInt(const std::shared_ptr<block2::FCIDUMP<double>> &fcidump,
                      int nOrbOther, int nOrbThis, bool isRight)
         : fcidump{fcidump}, nOrbOther{nOrbOther}, nOrbThis{nOrbThis},
-          nOrb{nOrbOther + nOrbThis},
-          nSOrbOther{2 * nOrbOther}, nSOrbThis{2 * nOrbThis},
-          Direct(nOrbThis, nOrbThis), Exchange(nOrbThis, nOrbThis) {
-        if (not isRight) {
+          nOrb{nOrbOther + nOrbThis}, nSOrbOther{2 * nOrbOther},
+          nSOrbThis{2 * nOrbThis}, Direct(nOrbThis, nOrbThis),
+          Exchange(nOrbThis, nOrbThis) {
+        if (!isRight) {
             // Attention: Quick and dirty hack: nOrbOther only serve here as an
             // offset so just set it to 0
             this->nOrbOther = 0;
@@ -140,7 +140,7 @@ struct SCIFCIDUMPTwoInt {
 #endif
     inline double
     operator()(int i, int j, int k, int l) const { // TODO always use offset
-        if (not((i % 2 == j % 2) and (k % 2 == l % 2))) {
+        if (!((i % 2 == j % 2) && (k % 2 == l % 2))) {
             return 0.0; // TODO avoid instances of this
         }
         i += nSOrbOther;
@@ -156,7 +156,7 @@ struct SCIFCIDUMPTwoInt {
 #endif
     inline double
     intsR(int i, int j, int k, int l) const {
-        if (not((i % 2 == j % 2) and (k % 2 == l % 2))) {
+        if (!((i % 2 == j % 2) && (k % 2 == l % 2))) {
             return 0.0; // TODO avoid instances of this
         }
         j += nSOrbOther;
@@ -171,7 +171,7 @@ struct SCIFCIDUMPTwoInt {
 #endif
     inline double
     intsP(int i, int j, int k, int l) const {
-        if (not((i % 2 == j % 2) and (k % 2 == l % 2))) {
+        if (!((i % 2 == j % 2) && (k % 2 == l % 2))) {
             return 0.0; // TODO avoid instances of this
         }
         j += nSOrbOther;
@@ -188,12 +188,12 @@ struct SCIFCIDUMPTwoInt {
         k += nSOrbOther;
         l += nSOrbOther;
         double sumi;
-        if (not((x % 2 == y % 2) and (k % 2 == l % 2))) {
+        if (!((x % 2 == y % 2) && (k % 2 == l % 2))) {
             sumi = 0.0;
         } else {
             sumi = intsImpl(x, y, k, l);
         }
-        if ((x % 2 == l % 2) and (k % 2 == y % 2)) {
+        if ((x % 2 == l % 2) && (k % 2 == y % 2)) {
             sumi -= intsImpl(x, l, k, y);
         }
         return sumi;
@@ -207,13 +207,13 @@ struct SCIFCIDUMPTwoInt {
 #endif
     inline double
     intsImpl(const int i, const int j, const int k, const int l) const {
-        assert((i % 2 == j % 2) and (k % 2 == l % 2));
-        assert(i >= 0 and j >= 0 and k >= 0 and l >= 0);
+        assert((i % 2 == j % 2) && (k % 2 == l % 2));
+        assert(i >= 0 && j >= 0 && k >= 0 && l >= 0);
         uint16_t I = i / 2;
         uint16_t J = j / 2;
         uint16_t K = k / 2;
         uint16_t L = l / 2;
-        assert(I < nOrb and J < nOrb and K < nOrb and L < nOrb);
+        assert(I < nOrb && J < nOrb && K < nOrb && L < nOrb);
         uint8_t sl = i % 2;
         uint8_t sr = k % 2;
         assert(fcidump->data != nullptr);
@@ -228,9 +228,9 @@ struct SCIFCIDUMPOneInt {
     SCIFCIDUMPOneInt(const std::shared_ptr<block2::FCIDUMP<double>> &fcidump,
                      int nOrbOther, int nOrbThis, bool isRight)
         : fcidump{fcidump}, nOrbOther{nOrbOther}, nOrbThis{nOrbThis},
-          nOrb{nOrbOther + nOrbThis},
-          nSOrbOther{2 * nOrbOther}, nSOrbThis{2 * nOrbThis} {
-        if (not isRight) {
+          nOrb{nOrbOther + nOrbThis}, nSOrbOther{2 * nOrbOther},
+          nSOrbThis{2 * nOrbThis} {
+        if (!isRight) {
             // Attention: Quick and dirty hack: nOrbOther only serve here as an
             // offset so just set it to 0
             this->nOrbOther = 0;
@@ -270,7 +270,7 @@ struct SCIFCIDUMPOneInt {
         assert(i % 2 == j % 2);
         uint16_t I = i / 2;
         uint16_t J = j / 2;
-        assert(I < nOrb and J < nOrb);
+        assert(I < nOrb && J < nOrb);
         uint8_t s = i % 2;
         assert(fcidump->data != nullptr);
         return fcidump->t(s, I, J);

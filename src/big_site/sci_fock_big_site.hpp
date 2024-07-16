@@ -20,7 +20,7 @@
 
 /** Adapted from sciblock2/sci/sciWrapper.hpp
  * by Huanchen Zhai Jul 18, 2021.
- * 
+ *
  * Merged hpp and cpp for unified treatment of symmetry class.
  * by Huanchen Zhai Jun 30, 2023.
  *
@@ -211,7 +211,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
           verbose{verbose}, ints2(fcidump, nOrbOther, nOrbThis, isRight),
           ints1(fcidump, nOrbOther, nOrbThis, isRight) {
         vector<vector<int>> occs = poccs;
-        if (nMaxEl == -999 and occs.size() == 0) {
+        if (nMaxEl == -999 && occs.size() == 0) {
             return; // dummy
         }
         if (verbose)
@@ -248,11 +248,11 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 break;
             }
         }
-        if (hasSymmetry and verbose) {
+        if (hasSymmetry && verbose) {
             cout << "#- with symmetry -" << endl;
         }
         const auto sOrbThis = 2 * nOrbThis; // spin orbs
-        if (nMaxAlphaEl > nOrbThis or nMaxBetaEl > nOrbThis)
+        if (nMaxAlphaEl > nOrbThis || nMaxBetaEl > nOrbThis)
             throw std::runtime_error(
                 "SCIFockBigSite: nMaxElpha/BetaEl=" +
                 Parsing::to_string(nMaxAlphaEl) +
@@ -307,7 +307,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
             std::vector<S> prelimQNs;
             for (int nBeta = 0; nBeta <= nMaxBetaEl; ++nBeta) {
                 for (int nAlpha = 0; nAlpha <= nMaxAlphaEl; ++nAlpha) {
-                    if (nAlpha + nBeta > nMaxEl or nAlpha + nBeta > sOrbThis) {
+                    if (nAlpha + nBeta > nMaxEl || nAlpha + nBeta > sOrbThis) {
                         continue;
                     }
                     const auto qN = nAlpha + nBeta;
@@ -340,14 +340,14 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     // now iterate within their sectors
                     auto lastPgSym = getPgSym(fSpace[sInit]);
                     auto sStart = sInit;
-                    for (int ii = sInit; ii < fSpace.size(); ++ii) {
+                    for (int ii = (int)sInit; ii < (int)fSpace.size(); ++ii) {
                         auto newPgSym = getPgSym(fSpace[ii]);
                         if (lastPgSym != newPgSym) {
                             quantumNumbers.emplace_back(
                                 nAlpha + nBeta, nAlpha - nBeta, lastPgSym);
-                            quantumNumberToIdx.emplace(quantumNumbers.back(),
-                                                       quantumNumbers.size() -
-                                                           1);
+                            quantumNumberToIdx.emplace(
+                                quantumNumbers.back(),
+                                (int)(quantumNumbers.size() - 1));
                             offsets.emplace_back(sStart, ii);
                             // say("#", nAlpha, nBeta, "        ->", nAlpha +
                             // nBeta, nAlpha - nBeta, lastPgSym,
@@ -364,8 +364,9 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     }
                     quantumNumbers.emplace_back(nAlpha + nBeta, nAlpha - nBeta,
                                                 lastPgSym);
-                    quantumNumberToIdx.emplace(quantumNumbers.back(),
-                                               quantumNumbers.size() - 1);
+                    quantumNumberToIdx.emplace(
+                        quantumNumbers.back(),
+                        (int)(quantumNumbers.size() - 1));
                     auto sNow = fSpace.size();
                     offsets.emplace_back(sStart, sNow);
                     // say("#", nAlpha, nBeta, "        ->", nAlpha + nBeta,
@@ -379,8 +380,9 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 } else {
                     quantumNumbers.emplace_back(nAlpha + nBeta, nAlpha - nBeta,
                                                 0);
-                    quantumNumberToIdx.emplace(quantumNumbers.back(),
-                                               quantumNumbers.size() - 1);
+                    quantumNumberToIdx.emplace(
+                        quantumNumbers.back(),
+                        (int)(quantumNumbers.size() - 1));
                     auto sNow = fSpace.size();
                     offsets.emplace_back(sInit, sNow);
                     auto sAdded = sNow - sInit;
@@ -456,7 +458,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     lastA = nAlpha;
                     lastB = nBeta, lastpg = pg;
                 }
-                if (N != lastN or M != lastM or pg != lastpg) {
+                if (N != lastN || M != lastM || pg != lastpg) {
                     auto it = quantumNumberToIdx.find({N, M, pg});
                     if (it != quantumNumberToIdx.end()) {
                         throw std::runtime_error("QNs not sorted");
@@ -464,8 +466,9 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     auto sNow = fSpace.size() - 1;
                     offsets.emplace_back(sInit, sNow);
                     quantumNumbers.emplace_back(lastN, lastM, lastpg);
-                    quantumNumberToIdx.emplace(quantumNumbers.back(),
-                                               quantumNumbers.size() - 1);
+                    quantumNumberToIdx.emplace(
+                        quantumNumbers.back(),
+                        (int)(quantumNumbers.size() - 1));
                     auto sAdded = sNow - sInit;
                     sInit = ii;
                     if (hasSymmetry) {
@@ -501,7 +504,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
             }
             quantumNumbers.emplace_back(N, M, pg);
             quantumNumberToIdx.emplace(quantumNumbers.back(),
-                                       quantumNumbers.size() - 1);
+                                       (int)(quantumNumbers.size() - 1));
             auto sAdded = sNow - sInit;
             // say("#", nAlpha, nBeta, "->", nAlpha + nBeta, nAlpha - nBeta, pg,
             // "|",  sAdded);
@@ -551,7 +554,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     for (size_t ii = 0; ii < quantumNumbers.size(); ++ii) {
                         quantumNumbers[ii] = quantumNumbersOld[idx[ii]];
                         quantumNumberToIdx.emplace(
-                            std::move(quantumNumbersOld[idx[ii]]), ii);
+                            std::move(quantumNumbersOld[idx[ii]]), (int)ii);
                         auto o1Old = offsetsOld[idx[ii]].first;
                         auto o2Old = offsetsOld[idx[ii]].second;
                         auto size = o2Old - o1Old;
@@ -596,7 +599,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         fragIndexMap.reserve(fSpace.size());
         for (size_t i = 0; i < fSpace.size(); ++i) {
             const auto &det = fSpace[i];
-            assert(det.nAlphaEl >= 0 and det.EffDetLen > 0);
+            assert(det.nAlphaEl >= 0 && det.EffDetLen > 0);
             fragIndexMap.insert({det, i});
         }
         if (nOrbThis > std::numeric_limits<uint16_t>::max()) {
@@ -607,7 +610,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         b->allocate((int)quantumNumbers.size());
         memcpy(b->quanta, quantumNumbers.data(), b->n * sizeof(S));
         for (int iq = 0; iq < (int)quantumNumbers.size(); iq++)
-            b->n_states[iq] = offsets[iq].second - offsets[iq].first;
+            b->n_states[iq] = (ubond_t)(offsets[iq].second - offsets[iq].first);
         b->sort_states();
         BigSite<S, FL>::basis = b;
         // hz: set big site op_infos
@@ -661,7 +664,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
             //      sizes are set)
             mat.initialize(BigSite<S, FL>::find_site_op_info(op.q_label));
             const auto &delta_qn = op.q_label;
-            if (false and op.name == OpNames::R) { // DEBUG
+            if (false && op.name == OpNames::R) { // DEBUG
                 cout << "m == " << iSite << "allocate" << op.name << "s"
                      << (int)op.site_index[0] << "," << (int)op.site_index[1]
                      << "ss" << (int)op.site_index.s(0)
@@ -781,7 +784,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 if (mat[sym].size() <
                     sparsityStart) { // Dense; this is important as
                                      // there are also 1 x 1 matrices
-                    mat[sym].nnz = mat[sym].size();
+                    mat[sym].nnz = (MKL_INT)mat[sym].size();
                     mat[sym].alloc = make_shared<
                         VectorAllocator<typename GMatrix<FL>::FP>>();
                     mat[sym].allocate();
@@ -815,14 +818,14 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 assert(iQ < quantumNumbers.size());
                 auto &sym = quantumNumbers[iQ];
                 assert(mat[sym].m == mat[sym].n);
-                if (not idxInKet(iQ, qnIdxKetI)) {
+                if (!idxInKet(iQ, qnIdxKetI)) {
                     continue;
                 }
                 inBra[iQ] = true;
                 if (mat[sym].size() <
                     sparsityStart) { // Dense; this is important as there are
                                      // also 1 x 1 matrices
-                    mat[sym].nnz = mat[sym].size();
+                    mat[sym].nnz = (MKL_INT)mat[sym].size();
                     mat[sym].alloc = make_shared<
                         VectorAllocator<typename GMatrix<FL>::FP>>();
                     mat[sym].allocate();
@@ -847,7 +850,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 }
             }
             for (int iQ = 0; iQ < qSize; ++iQ) {
-                if (not inBra[iQ]) {
+                if (!inBra[iQ]) {
                     const auto &sym = quantumNumbers[iQ]; // ket qn number
                     smat.resize(mat[sym].m, mat[sym].n);
                     smat.fillCSR(mat[sym]);
@@ -881,7 +884,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -916,13 +919,13 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                          // it is not used
                     int ncre = 0, ndes = 0;
                     {
-                        long u, b, k;
-                        constexpr long one = 1;
+                        long long u, b, k;
+                        constexpr long long one = 1;
                         for (int i = 0; i < bra.EffDetLen; i++) {
                             u = bra.repr[i] ^ ket.repr[i];
                             b = u & bra.repr[i]; // the cre bits
                             k = u & ket.repr[i]; // the des bits
-                            while (b != 0 and ncre <= 2) {
+                            while (b != 0 && ncre <= 2) {
                                 int pos = sci_detail::ffsl(
                                     b); // hrl     Returns one plus the index
                                         // of the least significant 1-bit of x,
@@ -933,7 +936,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                 ncre++;
                                 b &= ~(one << (pos - 1));
                             }
-                            while (k != 0 and ndes <= 2) {
+                            while (k != 0 && ndes <= 2) {
                                 int pos = sci_detail::ffsl(k);
                                 des[ndes] = pos - 1 + i * 64;
                                 ndes++;
@@ -943,7 +946,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                             // ndes,"and",cre[0],cre[1], "and",des[0],des[1],
                             // "fullfiled",ncre >= 2 and ndes
                             // >=2);
-                            if (ncre > 2 or ndes > 2) {
+                            if (ncre > 2 || ndes > 2) {
                                 // May happen for space larger than CISD:
                                 // Particle number does not help here
                                 goto doneHereH;
@@ -969,7 +972,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     } else {
                         // ioUtil::say("oops",iD,jD, "bra",bra.getClosed(),
                         // "ket",ket.getClosed(), "ncre ndes",ncre,ndes);
-                        assert(false and "this should not happen");
+                        assert(false && "this should not happen");
                     }
                 doneHereH:
                     continue;
@@ -1039,13 +1042,13 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
     }
     /** Fill Q op */
     void fillOp_Q(const S &deltaQN, std::vector<entryTuple2> &entries) const {
-        assert(isRight and "Should not happen for left big site and NC MPO!");
+        assert(isRight && "Should not happen for left big site and NC MPO!");
         // sum_kl [ [xy|kl] - [xl|ky] ] k' l
         checkOMP();
         Timer clock;
         clock.get_time();
         auto &refMat = entries.at(0).mat;
-        const int entrySize = entries.size();
+        const int entrySize = (int)entries.size();
         const auto qnPairs = getQNpairsQ(
             refMat, deltaQN); // all entries should generate the same pairs!
         sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, entrySize);
@@ -1060,7 +1063,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -1100,19 +1103,19 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                         std::array<int, 2> cre{-1, -1}, des{-1, -1};
                         int ncre = 0, ndes = 0;
                         {
-                            long u, b, k;
-                            constexpr long one = 1;
+                            long long u, b, k;
+                            constexpr long long one = 1;
                             for (int i = 0; i < bra.EffDetLen; i++) {
                                 u = bra.repr[i] ^ ket.repr[i];
                                 b = u & bra.repr[i]; // the cre bits
                                 k = u & ket.repr[i]; // the des bits
-                                while (b != 0 and ncre <= 1) {
+                                while (b != 0 && ncre <= 1) {
                                     int pos = sci_detail::ffsl(b);
                                     cre[ncre] = pos - 1 + i * 64;
                                     ncre++;
                                     b &= ~(one << (pos - 1));
                                 }
-                                while (k != 0 and ndes <= 1) {
+                                while (k != 0 && ndes <= 1) {
                                     int pos = sci_detail::ffsl(k);
                                     des[ndes] = pos - 1 + i * 64;
                                     ndes++;
@@ -1122,7 +1125,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                 // ndes,"and",cre[0],cre[1],
                                 // "and",des[0],des[1], "fullfiled",ncre >= 2
                                 // and ndes >=2);
-                                if (ncre > 1 or ndes > 1) {
+                                if (ncre > 1 || ndes > 1) {
                                     // May happen for space larger than CISD:
                                     // Particle number does not help here
                                     goto doneHereQ;
@@ -1132,7 +1135,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                         // if(ncre != 1 and ndes != 1){
                         //    say(ii,jj,"ops",bra.getClosed(),"ket",ket.getClosed(),"cre",cre[0],cre[1],"des",des[0],des[1]);
                         //}
-                        assert(ncre == 1 and ndes == 1);
+                        assert(ncre == 1 && ndes == 1);
                         FL sgn = 1.0;
                         ket.parity(min(cre[0], des[0]), max(cre[0], des[0]),
                                    sgn);
@@ -1191,7 +1194,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         //                        #counts  time  <time>   sparsity  dense sparse
         const std::string fStr =
             "%10d      %12.6f  %.2e  %.3f %9d  %9d  %9d       %6.3f";
-        if (not verbose) {
+        if (!verbose) {
             return;
         }
         cout << "#----------------------------------" << endl;
@@ -1363,7 +1366,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
      * ops. If ops == {"X"}, then all vectors will be set.*/
     void setQnIdxBra(const std::vector<int> &inp,
                      const std::vector<char> &ops) {
-        if (ops.size() == 1 and ops[0] == 'X') {
+        if (ops.size() == 1 && ops[0] == 'X') {
             qnIdxBraH = inp;
             qnIdxBraI = inp;
             qnIdxBraQ = inp;
@@ -1410,7 +1413,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
      * ops. If ops == {"X"}, then all vectors will be set.*/
     void setQnIdxKet(const std::vector<int> &inp,
                      const std::vector<char> &ops) {
-        if (ops.size() == 1 and ops[0] == 'X') {
+        if (ops.size() == 1 && ops[0] == 'X') {
             qnIdxKetH = inp;
             qnIdxKetI = inp;
             qnIdxKetQ = inp;
@@ -1587,7 +1590,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
             if (jQit == quantumNumberToIdx.end()) {
                 continue;
             }
-            if (not idxInKet(iQ, qnIdxKet)) {
+            if (!idxInKet(iQ, qnIdxKet)) {
                 continue;
             }
             const auto jQ = jQit->second;
@@ -1598,7 +1601,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         // sci_detail::allocateEmptyMatrices routine in SciWrapper
         //                  (due to batched calculation via vector<entrytuple>)
         for (int iQ = 0; iQ < qSize; ++iQ) {
-            if (not inBra[iQ]) {
+            if (!inBra[iQ]) {
                 const auto &sym = quantumNumbers[iQ]; // ket qn number
                 auto ptr = mat.info->find_state(sym);
                 if (ptr < 0) {
@@ -1723,7 +1726,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
             symmEls.reserve(coeffs(0, iRow).size());
         }
         for (int ii = 0; ii < ompThreads; ++ii) {
-            if /* constexpr */ (not Symmetrize) {
+            if /* constexpr */ (!Symmetrize) {
                 nCount += coeffs(ii, iRow).size();
             } else { // Bit costly, but only needed for H
                 for (const auto &tripl : coeffs(ii, iRow)) {
@@ -1740,13 +1743,13 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         auto sparsity = (mat.size() - nCount) / static_cast<double>(mat.size());
         summSparsity += sparsity;
         const auto isSparse =
-            sparsity > sparsityThresh and mat.size() >= sparsityStart;
-        if (not isSparse) {
-            mat.nnz = mat.size();
+            sparsity > sparsityThresh && mat.size() >= sparsityStart;
+        if (!isSparse) {
+            mat.nnz = (MKL_INT)mat.size();
             mat.alloc =
                 make_shared<VectorAllocator<typename GMatrix<FL>::FP>>();
             mat.allocate();
-            memset(mat.data, 0.0, mat.size() * sizeof(FL));
+            memset(mat.data, 0, mat.size() * sizeof(FL));
             auto matRef = mat.dense_ref();
             for (int ii = 0; ii < ompThreads; ++ii) {
                 for (const auto &tripl : coeffs(ii, iRow)) {
@@ -1819,7 +1822,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -1847,12 +1850,14 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     // Find the determinant
                     SCIFockDeterminant bra(ket.norbs, closedBra);
                     const auto map_val = fragIndexMap.find(bra);
-                    int iD =
-                        map_val == fragIndexMap.cend() ? -1 : map_val->second;
+                    int iD = map_val == fragIndexMap.cend()
+                                 ? -1
+                                 : (int)map_val->second;
                     if (iD >= 0) { // may not be in there
                         auto ii = iD - o1Bra;
                         allOpCoeffs(iThread, 0)
-                            .emplace_back(make_pair(ii, jj), phase);
+                            .emplace_back(make_pair((MKL_INT)ii, (MKL_INT)jj),
+                                          phase);
                     }
                 }
             }
@@ -1906,7 +1911,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -1923,7 +1928,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 const auto jD = o1Ket + jj;
                 const auto &ket = fragSpace[jD];
                 const auto closedKet = ket.getClosed();
-                if /* constexpr */ (Type == 0 or Type == 2) { // A: i j; B: i' j
+                if /* constexpr */ (Type == 0 || Type == 2) { // A: i j; B: i' j
                     applResult =
                         SCIFockDeterminant::applyAnnihilator(closedKet, jOrbL);
                 } else { // A': j' i'
@@ -1952,9 +1957,9 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                         const auto map_val = fragIndexMap.find(bra);
                         int iD = map_val == fragIndexMap.cend()
                                      ? -1
-                                     : map_val->second;
+                                     : (int)map_val->second;
                         if (iD >= 0) { // may not be in there
-                            int ii = iD - o1Bra;
+                            int ii = (int)(iD - o1Bra);
                             allOpCoeffs(iThread, 0)
                                 .emplace_back(make_pair(ii, jj),
                                               phase1 * phase2);
@@ -2011,7 +2016,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
         Timer clock;
         clock.get_time();
         auto &refMat = entries.at(0).mat;
-        const int entrySize = entries.size();
+        const int entrySize = (int)entries.size();
         const auto qnPairs = getQNpairsR(refMat, deltaQN);
         sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, entrySize);
         vector<vector<FL>> Hijs(ompThreads, vector<FL>(entrySize, 0));
@@ -2026,7 +2031,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -2046,7 +2051,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     auto &bra = const_cast<SCIFockDeterminant &>(
                         fragSpace[iD]); // will be restored
 #endif
-                    if /* constexpr */ (not Dagger) {
+                    if /* constexpr */ (!Dagger) {
                         closed = bra.getClosed(); // TODO could be saved...
                     }
                     const auto jD = o1Ket + jj;
@@ -2089,7 +2094,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                     //     for R', we have <ket| l' = <ket l|
                     auto &chDet = Dagger ? bra : ket;
                     for (int ll = 0; ll < 2 * nOrbThis; ++ll) {
-                        if (not chDet.getocc(ll)) {
+                        if (!chDet.getocc(ll)) {
                             continue;
                         }
                         chDet.setocc(ll, false);
@@ -2117,25 +2122,25 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                              // although it is not used
                             int ncre = 0, ndes = 0;
                             {
-                                long u, b, k;
-                                constexpr long one = 1;
+                                long long u, b, k;
+                                constexpr long long one = 1;
                                 for (int i = 0; i < bra.EffDetLen; i++) {
                                     u = bra.repr[i] ^ ket.repr[i];
                                     b = u & bra.repr[i]; // the cre bits
                                     k = u & ket.repr[i]; // the des bits
-                                    while (b != 0 and ncre <= 1) {
+                                    while (b != 0 && ncre <= 1) {
                                         int pos = sci_detail::ffsl(b);
                                         cre[ncre] = pos - 1 + i * 64;
                                         ncre++;
                                         b &= ~(one << (pos - 1));
                                     }
-                                    while (k != 0 and ndes <= 1) {
+                                    while (k != 0 && ndes <= 1) {
                                         int pos = sci_detail::ffsl(k);
                                         des[ndes] = pos - 1 + i * 64;
                                         ndes++;
                                         k &= ~(one << (pos - 1));
                                     }
-                                    if (ncre > 1 or ndes > 1) {
+                                    if (ncre > 1 || ndes > 1) {
                                         // I already have the proper symmetry
                                         // labels so this should not happen May
                                         // happen for space larger than CISD:
@@ -2159,7 +2164,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                     }
                                 }
                             } else {
-                                assert(false and "this should not happen");
+                                assert(false && "this should not happen");
                             }
                         }
                     doneHereR3:
@@ -2215,11 +2220,11 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
     void fillOp_P_impl(const S &deltaQN,
                        std::vector<entryTuple2> &entries) const {
         checkOMP();
-        assert(isRight and "Should not happen for left big site and NC MPO!");
+        assert(isRight && "Should not happen for left big site and NC MPO!");
         Timer clock;
         clock.get_time();
         auto &refMat = entries.at(0).mat;
-        const int entrySize = entries.size();
+        const int entrySize = (int)entries.size();
         sci_detail::DenseMat<TripletVec> allOpCoeffs(ompThreads, entrySize);
         const auto qnPairs = getQNpairsP(
             refMat, deltaQN); // all entries should generate the same pairs!
@@ -2234,7 +2239,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                 offsets[ketQN].first; // openMP cant handle auto [...] -.-
             const auto o2Ket =
                 offsets[ketQN].second; // openMP cant handle auto [...] -.-
-            const int sizKet = o2Ket - o1Ket;
+            const int sizKet = (int)(o2Ket - o1Ket);
             const auto o1Bra =
                 offsets[braQN].first; // openMP cant handle auto [...] -.-
             const auto o2Bra =
@@ -2263,13 +2268,13 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                          // although it is not used
                         int nchg = 0;
                         {
-                            long u, k;
-                            constexpr long one = 1;
+                            long long u, k;
+                            constexpr long long one = 1;
                             for (int i = 0; i < bra.EffDetLen; i++) {
                                 u = bra.repr[i] ^ ket.repr[i];
                                 if /* constexpr */ (Dagger) {
                                     k = u & bra.repr[i]; // the cre bits
-                                    while (k != 0 and nchg <= 2) {
+                                    while (k != 0 && nchg <= 2) {
                                         int pos = sci_detail::ffsl(
                                             k); // hrl     Returns one plus the
                                                 // index of the least
@@ -2283,7 +2288,7 @@ struct SCIFockBigSite<S, FL, typename S::is_sz_t> : public BigSite<S, FL> {
                                     }
                                 } else {
                                     k = u & ket.repr[i]; // the des bits
-                                    while (k != 0 and nchg <= 2) {
+                                    while (k != 0 && nchg <= 2) {
                                         int pos = sci_detail::ffsl(k);
                                         chg[nchg] = pos - 1 + i * 64;
                                         nchg++;

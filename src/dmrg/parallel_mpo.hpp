@@ -186,7 +186,8 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
         MPO<S, FL>::right_operator_exprs = mpo->right_operator_exprs;
         MPO<S, FL>::middle_operator_exprs = mpo->middle_operator_exprs;
         rule->set_partition(ParallelRulePartitionTypes::Left);
-        for (size_t ix = 0; ix < MPO<S, FL>::left_operator_exprs.size(); ix++) {
+        for (int ix = 0; ix < (int)MPO<S, FL>::left_operator_exprs.size();
+             ix++) {
             auto &x = MPO<S, FL>::left_operator_exprs[ix];
             auto &y = MPO<S, FL>::left_operator_names[ix];
             mpo->load_left_operators(ix);
@@ -202,7 +203,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
             MPO<S, FL>::unload_left_operators(ix);
         }
         rule->set_partition(ParallelRulePartitionTypes::Right);
-        for (size_t ix = 0; ix < MPO<S, FL>::right_operator_exprs.size();
+        for (int ix = 0; ix < (int)MPO<S, FL>::right_operator_exprs.size();
              ix++) {
             auto &x = MPO<S, FL>::right_operator_exprs[ix];
             auto &y = MPO<S, FL>::right_operator_names[ix];
@@ -220,7 +221,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
             MPO<S, FL>::unload_right_operators(ix);
         }
         rule->set_partition(ParallelRulePartitionTypes::Middle);
-        for (size_t ix = 0; ix < MPO<S, FL>::middle_operator_exprs.size();
+        for (int ix = 0; ix < (int)MPO<S, FL>::middle_operator_exprs.size();
              ix++) {
             auto &x = MPO<S, FL>::middle_operator_exprs[ix];
             auto &y = MPO<S, FL>::middle_operator_names[ix];
@@ -295,7 +296,7 @@ template <typename S, typename FL> struct ParallelMPO : MPO<S, FL> {
                 ? this->deep_copy(MPO<S, FL>::tag + "@" + new_tag)
                 : make_shared<ParallelMPO>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);
-        for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+        for (int ix = 0; ix < (int)rmpo->middle_operator_exprs.size(); ix++) {
             rmpo->load_middle_operators(ix);
             auto &x = rmpo->middle_operator_exprs[ix];
             x = x->copy();

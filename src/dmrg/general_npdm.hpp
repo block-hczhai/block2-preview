@@ -242,7 +242,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             LL lshape = lshapes[m], rshape = rshapes[m];
             // left operator names
             shared_ptr<SymbolicRowVector<S>> plop =
-                make_shared<SymbolicRowVector<S>>(lshape);
+                make_shared<SymbolicRowVector<S>>((int)lshape);
             vector<uint16_t> idx;
             map<string, LL> lmap, rmap;
             ixx = 0;
@@ -289,7 +289,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             assert(ixx == lshape);
             // right operator names
             shared_ptr<SymbolicColumnVector<S>> prop =
-                make_shared<SymbolicColumnVector<S>>(rshape);
+                make_shared<SymbolicColumnVector<S>>((int)rshape);
             ixx = 0;
             for (int i = 0; i < (int)scheme->right_terms.size(); i++) {
                 int cnt =
@@ -370,15 +370,16 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             // construct local operators
             shared_ptr<OperatorTensor<S, FL>> opt = tensors[m];
             shared_ptr<Symbolic<S>> plmat = nullptr, prmat = nullptr;
-            int llshape = m == 0 ? 1 : lshapes[m - 1], lrshape = lshapes[m];
+            int llshape = m == 0 ? 1 : (int)lshapes[m - 1],
+                lrshape = (int)lshapes[m];
             if (m == 0)
                 plmat = make_shared<SymbolicRowVector<S>>(lrshape);
             else if (m == n_sites - 1)
                 plmat = make_shared<SymbolicColumnVector<S>>(llshape);
             else
                 plmat = make_shared<SymbolicMatrix<S>>(llshape, lrshape);
-            int rlshape = rshapes[m],
-                rrshape = m == n_sites - 1 ? 1 : rshapes[m + 1];
+            int rlshape = (int)rshapes[m],
+                rrshape = m == n_sites - 1 ? 1 : (int)rshapes[m + 1];
             if (m == 0)
                 prmat = make_shared<SymbolicRowVector<S>>(rrshape);
             else if (m == n_sites - 1)
@@ -759,9 +760,9 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             if (symbol_free)
                 mshape = pmshape = 1;
             shared_ptr<SymbolicColumnVector<S>> pmop =
-                make_shared<SymbolicColumnVector<S>>(pmshape);
+                make_shared<SymbolicColumnVector<S>>((int)pmshape);
             shared_ptr<SymbolicColumnVector<S>> pmexpr =
-                make_shared<SymbolicColumnVector<S>>(pmshape);
+                make_shared<SymbolicColumnVector<S>>((int)pmshape);
             LL im = 0;
             shared_ptr<SymbolicRowVector<S>> pmlop =
                 dynamic_pointer_cast<SymbolicRowVector<S>>(
@@ -964,15 +965,15 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
                  << tsite_total << endl
                  << endl;
-        for (size_t i = 0; i < middle_operator_names.size(); i++) {
+        for (int i = 0; i < (int)middle_operator_names.size(); i++) {
             this->save_middle_operators(i);
             this->unload_middle_operators(i);
         }
-        for (size_t i = 0; i < left_operator_names.size(); i++) {
+        for (int i = 0; i < (int)left_operator_names.size(); i++) {
             this->save_left_operators(i);
             this->unload_left_operators(i);
         }
-        for (size_t i = 0; i < right_operator_names.size(); i++) {
+        for (int i = 0; i < (int)right_operator_names.size(); i++) {
             this->save_right_operators(i);
             this->unload_right_operators(i);
         }

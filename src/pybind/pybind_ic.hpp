@@ -130,7 +130,7 @@ template <typename S = void> void bind_nd_array(py::module &m) {
                      vector<MKL_INT> shape(arr.ndim());
                      vector<ssize_t> strides(arr.ndim());
                      for (int i = 0; i < arr.ndim(); i++)
-                         shape[i] = arr.shape()[i],
+                         shape[i] = (MKL_INT)arr.shape()[i],
                          strides[i] = arr.strides()[i] / sizeof(double);
                      if (copy) {
                          NDArray r(shape, strides, nullptr);

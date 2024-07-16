@@ -1015,8 +1015,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast = (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst = (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             GMatrix<FL> work(nullptr, am, conj_ket ? ket.m : ket.n);
             work.allocate(d_alloc);
             // work = a * ket
@@ -1041,8 +1041,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast = (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst = (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             GMatrix<FL> work(nullptr, a.m, kn);
             work.allocate(d_alloc);
             if (da.m == 1 && da.n == 1)
@@ -1078,8 +1078,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast = (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst = (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             multiply(GMatrix<FL>(&a(ast, 0), am, a.n), false, ket,
                      conj_ket ? 1 : 2, GMatrix<FL>(&c(cst, 0), cm, c.n), scale,
                      1.0);
@@ -1088,8 +1088,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast = (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst = (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             if (da.m == 1 && da.n == 1)
                 // c = a * (1 x db)
                 multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, db,
@@ -1119,8 +1119,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast = (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst = (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             if (da.m == 1 && da.n == 1)
                 // c = (1 x db) * a
                 multiply(db, dconjb ? 3 : 0, GMatrix<FL>(&a(ast, 0), am, a.n),
@@ -1139,8 +1139,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             const FL cfactor = 1.0;
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast = (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst = (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             xgemm<FL>("n", conj_bra ? "c" : "n", &kn, &c.m, &a.m, &scale,
                       &a(0, ast), &a.n, bra.data, &bra.n, &cfactor, &c(0, cst),
                       &c.n);
@@ -1181,9 +1181,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         const MKL_INT k = 1, lda = a.n + 1, ldb = b.n + 1;
         const MKL_INT ldda = da.n + 1, lddb = db.n + 1;
         const bool ddconja =
-            dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+            (bool)((int)dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1)));
         const bool ddconjb =
-            dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+            (bool)((int)dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1)));
         if (da.m == 1 && da.n == 1) {
             scale *= ddconja ? conj(*da.data) : *da.data;
             const MKL_INT dn = db.n - abs(ddstr);
@@ -1266,25 +1266,25 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                 if (b.n == c.n) {
                     const MKL_INT n = b.m * b.n;
                     xgemm<FL>("n", "n", &n, &a.n, &a.n, &scale, b.data, &n,
-                              a.data, &a.n, &cfactor, &c(0, stride), &n);
+                              a.data, &a.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(b.n < c.n);
                     for (MKL_INT k = 0; k < b.m; k++)
                         xgemm<FL>("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
-                                  &b.n, a.data, &a.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &b.n, a.data, &a.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
                     const MKL_INT n = a.m * a.n;
                     xgemm<FL>("n", "n", &n, &b.n, &b.n, &scale, a.data, &n,
-                              b.data, &b.n, &cfactor, &c(0, stride), &n);
+                              b.data, &b.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(a.n < c.n);
                     for (MKL_INT k = 0; k < a.m; k++)
                         xgemm<FL>("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
-                                  &a.n, b.data, &b.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &a.n, b.data, &b.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else {
                 for (MKL_INT i = 0, inc = 1; i < a.m; i++)
@@ -1292,7 +1292,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                         const FL factor = scale * a(i, j);
                         for (MKL_INT k = 0; k < b.m; k++)
                             xaxpy<FL>(&b.n, &factor, &b(k, 0), &inc,
-                                      &c(i * b.m + k, j * b.n + stride), &inc);
+                                      &c(i * b.m + k, j * b.n + 0) + stride,
+                                      &inc);
                     }
             }
             break;
@@ -1301,19 +1302,19 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                 if (b.n == c.n) {
                     const MKL_INT n = b.m * b.n;
                     xgemm<FL>("n", "c", &n, &a.n, &a.n, &scale, b.data, &n,
-                              a.data, &a.n, &cfactor, &c(0, stride), &n);
+                              a.data, &a.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(b.n < c.n);
                     for (MKL_INT k = 0; k < b.m; k++)
                         xgemm<FL>("n", "c", &b.n, &a.n, &a.n, &scale, &b(k, 0),
-                                  &b.n, a.data, &a.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &b.n, a.data, &a.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 assert(a.m <= c.n);
                 for (MKL_INT k = 0; k < a.n; k++)
                     xgemm<FL>("c", "n", &a.m, &b.n, &b.n, &scale, &a(0, k),
-                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else {
                 for (MKL_INT i = 0, inc = 1; i < a.n; i++)
@@ -1321,7 +1322,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                         const FL factor = scale * conj(a(j, i));
                         for (MKL_INT k = 0; k < b.m; k++)
                             xaxpy<FL>(&b.n, &factor, &b(k, 0), &inc,
-                                      &c(i * b.m + k, j * b.n + stride), &inc);
+                                      &c(i * b.m + k, j * b.n + 0) + stride,
+                                      &inc);
                     }
             }
             break;
@@ -1330,19 +1332,19 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                 assert(b.m <= c.n);
                 for (MKL_INT k = 0; k < b.n; k++)
                     xgemm<FL>("c", "n", &b.m, &a.n, &a.n, &scale, &b(0, k),
-                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
                     const MKL_INT n = a.m * a.n;
                     xgemm<FL>("n", "c", &n, &b.n, &b.n, &scale, a.data, &n,
-                              b.data, &b.n, &cfactor, &c(0, stride), &n);
+                              b.data, &b.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(a.n < c.n);
                     for (MKL_INT k = 0; k < a.m; k++)
                         xgemm<FL>("n", "c", &a.n, &b.n, &b.n, &scale, &a(k, 0),
-                                  &a.n, b.data, &b.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &a.n, b.data, &b.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else {
                 for (MKL_INT i = 0, inca = 1, inc = b.m; i < b.n; i++)
@@ -1350,7 +1352,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                         const FL factor = scale * conj(b(j, i));
                         for (MKL_INT k = 0; k < a.m; k++)
                             xaxpy<FL>(&a.n, &factor, &a(k, 0), &inca,
-                                      &c(k * b.n + i, j + stride), &inc);
+                                      &c(k * b.n + i, j + 0) + stride, &inc);
                     }
             }
             break;
@@ -1358,12 +1360,12 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
             if (a.m == 1 && a.n == 1) {
                 for (MKL_INT k = 0; k < b.n; k++)
                     xgemm<FL>("c", "c", &b.m, &a.n, &a.n, &scale, &b(0, k),
-                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else if (b.m == 1 && b.n == 1) {
                 for (MKL_INT k = 0; k < a.n; k++)
                     xgemm<FL>("c", "c", &a.m, &b.n, &b.n, &scale, &a(0, k),
-                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else {
                 for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.n; i++)
@@ -1371,7 +1373,7 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                         const FL factor = scale * conj(a(j, i));
                         for (MKL_INT k = 0; k < b.n; k++)
                             for (MKL_INT l = 0; l < b.m; l++)
-                                c(i * b.n + k, j * b.m + l + stride) +=
+                                *(&c(i * b.n + k, j * b.m + l) + stride) +=
                                     factor * conj(b(l, k));
                     }
             }

@@ -61,7 +61,7 @@ template <typename S> struct SymbolicRowVector : Symbolic<S> {
     SymbolicRowVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
         : Symbolic<S>(1, n, data) {}
     SymTypes get_type() const override { return SymTypes::RVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) {
+    shared_ptr<OpExpr<S>> &operator[](size_t i) {
         assert(i < this->data.size());
         return Symbolic<S>::data[i];
     }
@@ -89,7 +89,7 @@ template <typename S> struct SymbolicColumnVector : Symbolic<S> {
     SymbolicColumnVector(int n, const vector<shared_ptr<OpExpr<S>>> &data)
         : Symbolic<S>(n, 1, data) {}
     SymTypes get_type() const override { return SymTypes::CVec; }
-    shared_ptr<OpExpr<S>> &operator[](int i) {
+    shared_ptr<OpExpr<S>> &operator[](size_t i) {
         assert(i < this->data.size());
         return Symbolic<S>::data[i];
     }

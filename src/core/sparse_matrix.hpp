@@ -1073,7 +1073,7 @@ template <typename S, typename FL> struct SparseMatrix {
         size_t nnz = 0;
         for (size_t i = 0; i < total_memory; i++)
             nnz += abs(this->data[i]) > TINY;
-        return 1.0 - (FP)nnz / total_memory;
+        return (FP)1.0 - (FP)nnz / total_memory;
     }
     void iscale(FL d) const {
         assert(factor == (FP)1.0);
@@ -2354,9 +2354,15 @@ struct TransSparseMatrix<
         xmat->allocate(mat->info);
         xmat->factor = (FL2)mat->factor;
         int ntg = threading->activate_global();
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < xmat->total_memory; i++)
-            xmat->data[i] = (FL2)mat->data[i];
+        const size_t plen = (xmat->total_memory + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            const size_t ixst = plen * tid;
+            const size_t ixed = min(xmat->total_memory, plen * (tid + 1));
+            for (size_t i = ixst; i < ixed; i++)
+                xmat->data[i] = (FL2)mat->data[i];
+        }
         threading->activate_normal();
         return xmat;
     }
@@ -2376,9 +2382,15 @@ struct TransSparseMatrix<
         xmat->allocate(mat->info);
         xmat->factor = (FL2)xreal<FL1>(mat->factor);
         int ntg = threading->activate_global();
-#pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < xmat->total_memory; i++)
-            xmat->data[i] = (FL2)xreal<FL1>(mat->data[i]);
+        const size_t plen = (xmat->total_memory + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            const size_t ixst = plen * tid;
+            const size_t ixed = min(xmat->total_memory, plen * (tid + 1));
+            for (size_t i = ixst; i < ixed; i++)
+                xmat->data[i] = (FL2)xreal<FL1>(mat->data[i]);
+        }
         threading->activate_normal();
         return xmat;
     }

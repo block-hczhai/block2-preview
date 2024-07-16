@@ -37,8 +37,8 @@ template <typename FL> class TestDMRG : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 30;
-    size_t dsize = 1L << 34;
+    size_t isize = 1LL << 30;
+    size_t dsize = 1LL << 34;
     typedef typename GMatrix<FL>::FP FP;
 
     void SetUp() override {

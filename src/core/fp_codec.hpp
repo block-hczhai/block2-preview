@@ -274,7 +274,7 @@ struct FPCodec {
             size_t n_this_chunk =
                 min(nchunk - ib * n_parallel_chunks, n_parallel_chunks);
 #pragma omp for schedule(static)
-            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+            for (int ic = 0; ic < (int)n_this_chunk; ic++) {
                 size_t offset = ic * chunk_size;
                 size_t batch_offset =
                     (ic + ib * n_parallel_chunks) * chunk_size;
@@ -325,7 +325,7 @@ struct FPCodec {
                 ifs.read((char *)(pdata + offset + ic), sizeof(T) * cplen);
             }
 #pragma omp for schedule(static)
-            for (size_t ic = 0; ic < n_this_chunk; ic++) {
+            for (int ic = 0; ic < (int)n_this_chunk; ic++) {
                 size_t offset = ic * chunk_size;
                 size_t batch_offset =
                     (ic + ib * n_parallel_chunks) * chunk_size;
@@ -548,9 +548,9 @@ template <typename T> struct CompressedVectorMT : CompressedVector<T> {
      * @param ntg Number of threads.
      */
     CompressedVectorMT(const shared_ptr<CompressedVector<T>> &ref_cv, int ntg)
-        : ref_cv(ref_cv), CompressedVector<T>(ref_cv->arr_len, ref_cv->fpc.prec,
-                                              ref_cv->chunk_size,
-                                              ref_cv->ncache) {
+        : ref_cv(ref_cv),
+          CompressedVector<T>(ref_cv->arr_len, ref_cv->fpc.prec,
+                              ref_cv->chunk_size, ref_cv->ncache) {
         ref_cv->finalize();
         cache_datas.resize(ntg);
         icaches.resize(ntg);

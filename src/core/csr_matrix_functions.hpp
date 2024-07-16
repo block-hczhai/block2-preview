@@ -960,7 +960,8 @@ template <typename FL> struct GCSRMatrixFunctions {
         GCSRMatrix<FL> r(c.m, c.n, a.nnz * b.nnz, nullptr, nullptr, nullptr);
         r.alloc = d_alloc;
         r.allocate();
-        uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
+        uint32_t m_stride = (uint32_t)(stride / c.n),
+                 n_stride = (uint32_t)(stride % c.n);
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
         memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         vector<GCSRMatrix<FL>> tmps;
@@ -1017,7 +1018,7 @@ template <typename FL> struct GCSRMatrixFunctions {
             if (a.nnz != a.size())
                 a.to_dense(ad);
             GMatrix<FL> cd =
-                c.nnz == c.size()
+                c.nnz == (MKL_INT)c.size()
                     ? c.dense_ref()
                     : GMatrix<FL>((FL *)d_alloc->allocate(c.size() * cpx_sz),
                                   c.m, c.n);
@@ -1038,7 +1039,8 @@ template <typename FL> struct GCSRMatrixFunctions {
                          nullptr);
         r.alloc = d_alloc;
         r.allocate();
-        uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
+        uint32_t m_stride = (uint32_t)(stride / c.n),
+                 n_stride = (uint32_t)(stride % c.n);
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
         memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         GCSRMatrix<FL> tmp;
@@ -1117,7 +1119,8 @@ template <typename FL> struct GCSRMatrixFunctions {
                          nullptr);
         r.alloc = d_alloc;
         r.allocate();
-        uint32_t m_stride = stride / c.n, n_stride = stride % c.n;
+        uint32_t m_stride = (uint32_t)(stride / c.n),
+                 n_stride = (uint32_t)(stride % c.n);
         uint32_t m_length = (conja ? a.n : a.m) * (conjb ? b.n : b.m);
         memset(r.rows, 0, (r.m + 1) * sizeof(MKL_INT));
         GCSRMatrix<FL> tmp;

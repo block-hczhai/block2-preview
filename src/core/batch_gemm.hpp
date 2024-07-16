@@ -436,32 +436,32 @@ struct AdvancedGEMM<FL,
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
                 batch->xgemm(false, false, b.m * b.n, 1, 1, scale, b.data, 1,
-                             a.data, 1, cfactor, &c(0, stride), 1);
+                             a.data, 1, cfactor, &c(0, 0) + stride, 1);
             else if (!conjb) {
                 batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
                                    cfactor, 1, b.m);
                 for (MKL_INT k = 0; k < b.m; k++)
-                    batch->xgemm_array(&b(k, 0), a.data, &c(k, stride));
+                    batch->xgemm_array(&b(k, 0), a.data, &c(k, 0) + stride);
             } else {
                 batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
                                    cfactor, 1, b.n);
                 for (MKL_INT k = 0; k < b.n; k++)
-                    batch->xgemm_array(&b(0, k), a.data, &c(k, stride));
+                    batch->xgemm_array(&b(0, k), a.data, &c(k, 0) + stride);
             }
         } else if (b.m == 1 && b.n == 1) {
             if (!conja && a.n == c.n)
                 batch->xgemm(false, false, a.m * a.n, 1, 1, scale, a.data, 1,
-                             b.data, 1, cfactor, &c(0, stride), 1);
+                             b.data, 1, cfactor, &c(0, 0) + stride, 1);
             else if (!conja) {
                 batch->xgemm_group(false, false, a.n, 1, 1, scale, 1, 1,
                                    cfactor, 1, a.m);
                 for (MKL_INT k = 0; k < a.m; k++)
-                    batch->xgemm_array(&a(k, 0), b.data, &c(k, stride));
+                    batch->xgemm_array(&a(k, 0), b.data, &c(k, 0) + stride);
             } else {
                 batch->xgemm_group(false, false, a.m, 1, 1, scale, a.n, 1,
                                    cfactor, 1, a.n);
                 for (MKL_INT k = 0; k < a.n; k++)
-                    batch->xgemm_array(&a(0, k), b.data, &c(k, stride));
+                    batch->xgemm_array(&a(0, k), b.data, &c(k, 0) + stride);
             }
         } else {
             if (!conja && !conjb) {
@@ -470,36 +470,36 @@ struct AdvancedGEMM<FL,
                 for (MKL_INT i = 0; i < a.m; i++)
                     for (MKL_INT j = 0; j < a.n; j++)
                         for (MKL_INT k = 0; k < b.m; k++)
-                            batch->xgemm_array(
-                                &b(k, 0), &a(i, j),
-                                &c(i * b.m + k, j * b.n + stride));
+                            batch->xgemm_array(&b(k, 0), &a(i, j),
+                                               &c(i * b.m + k, j * b.n) +
+                                                   stride);
             } else if (conja && !conjb) {
                 batch->xgemm_group(false, false, b.n, 1, 1, scale, 1, 1,
                                    cfactor, 1, b.m * a.m * a.n);
                 for (MKL_INT i = 0; i < a.n; i++)
                     for (MKL_INT j = 0; j < a.m; j++)
                         for (MKL_INT k = 0; k < b.m; k++)
-                            batch->xgemm_array(
-                                &b(k, 0), &a(j, i),
-                                &c(i * b.m + k, j * b.n + stride));
+                            batch->xgemm_array(&b(k, 0), &a(j, i),
+                                               &c(i * b.m + k, j * b.n) +
+                                                   stride);
             } else if (!conja && conjb) {
                 batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
                                    cfactor, 1, b.n * a.m * a.n);
                 for (MKL_INT i = 0; i < a.m; i++)
                     for (MKL_INT j = 0; j < a.n; j++)
                         for (MKL_INT k = 0; k < b.n; k++)
-                            batch->xgemm_array(
-                                &b(0, k), &a(i, j),
-                                &c(i * b.n + k, j * b.m + stride));
+                            batch->xgemm_array(&b(0, k), &a(i, j),
+                                               &c(i * b.n + k, j * b.m) +
+                                                   stride);
             } else {
                 batch->xgemm_group(false, false, b.m, 1, 1, scale, b.n, 1,
                                    cfactor, 1, b.n * a.m * a.n);
                 for (MKL_INT i = 0; i < a.n; i++)
                     for (MKL_INT j = 0; j < a.m; j++)
                         for (MKL_INT k = 0; k < b.n; k++)
-                            batch->xgemm_array(
-                                &b(0, k), &a(j, i),
-                                &c(i * b.n + k, j * b.m + stride));
+                            batch->xgemm_array(&b(0, k), &a(j, i),
+                                               &c(i * b.n + k, j * b.m) +
+                                                   stride);
             }
         }
     }
@@ -616,32 +616,34 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
         if (a.m == 1 && a.n == 1) {
             if (!conjb && b.n == c.n)
                 batch->xgemm(false, conja ? 3 : 0, b.m * b.n, 1, 1, scale,
-                             b.data, 1, a.data, 1, cfactor, &c(0, stride), 1);
+                             b.data, 1, a.data, 1, cfactor, &c(0, 0) + stride,
+                             1);
             else if (!conjb) {
                 batch->xgemm_group(false, conja ? 3 : 0, b.n, 1, 1, scale, 1, 1,
                                    cfactor, 1, b.m);
                 for (MKL_INT k = 0; k < b.m; k++)
-                    batch->xgemm_array(&b(k, 0), a.data, &c(k, stride));
+                    batch->xgemm_array(&b(k, 0), a.data, &c(k, 0) + stride);
             } else {
                 batch->xgemm_group(conja ? 3 : 0, 3, 1, b.m, 1, scale, 1, b.n,
                                    cfactor, c.n, b.n);
                 for (MKL_INT k = 0; k < b.n; k++)
-                    batch->xgemm_array(a.data, &b(0, k), &c(k, stride));
+                    batch->xgemm_array(a.data, &b(0, k), &c(k, 0) + stride);
             }
         } else if (b.m == 1 && b.n == 1) {
             if (!conja && a.n == c.n)
                 batch->xgemm(false, conjb ? 3 : 0, a.m * a.n, 1, 1, scale,
-                             a.data, 1, b.data, 1, cfactor, &c(0, stride), 1);
+                             a.data, 1, b.data, 1, cfactor, &c(0, 0) + stride,
+                             1);
             else if (!conja) {
                 batch->xgemm_group(false, conjb ? 3 : 0, a.n, 1, 1, scale, 1, 1,
                                    cfactor, 1, a.m);
                 for (MKL_INT k = 0; k < a.m; k++)
-                    batch->xgemm_array(&a(k, 0), b.data, &c(k, stride));
+                    batch->xgemm_array(&a(k, 0), b.data, &c(k, 0) + stride);
             } else {
                 batch->xgemm_group(conjb ? 3 : 0, 3, 1, a.m, 1, scale, 1, a.n,
                                    cfactor, c.n, a.n);
                 for (MKL_INT k = 0; k < a.n; k++)
-                    batch->xgemm_array(b.data, &a(0, k), &c(k, stride));
+                    batch->xgemm_array(b.data, &a(0, k), &c(k, 0) + stride);
             }
         } else {
             if (!conja && !conjb) {
@@ -650,36 +652,36 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
                 for (MKL_INT i = 0; i < a.m; i++)
                     for (MKL_INT j = 0; j < a.n; j++)
                         for (MKL_INT k = 0; k < b.m; k++)
-                            batch->xgemm_array(
-                                &b(k, 0), &a(i, j),
-                                &c(i * b.m + k, j * b.n + stride));
+                            batch->xgemm_array(&b(k, 0), &a(i, j),
+                                               &c(i * b.m + k, j * b.n + 0) +
+                                                   stride);
             } else if (conja && !conjb) {
                 batch->xgemm_group(false, 3, b.n, 1, 1, scale, 1, 1, cfactor, 1,
                                    b.m * a.m * a.n);
                 for (MKL_INT i = 0; i < a.n; i++)
                     for (MKL_INT j = 0; j < a.m; j++)
                         for (MKL_INT k = 0; k < b.m; k++)
-                            batch->xgemm_array(
-                                &b(k, 0), &a(j, i),
-                                &c(i * b.m + k, j * b.n + stride));
+                            batch->xgemm_array(&b(k, 0), &a(j, i),
+                                               &c(i * b.m + k, j * b.n + 0) +
+                                                   stride);
             } else if (!conja && conjb) {
                 batch->xgemm_group(false, 3, 1, b.m, 1, scale, 1, b.n, cfactor,
                                    c.n, b.n * a.m * a.n);
                 for (MKL_INT i = 0; i < a.m; i++)
                     for (MKL_INT j = 0; j < a.n; j++)
                         for (MKL_INT k = 0; k < b.n; k++)
-                            batch->xgemm_array(
-                                &a(i, j), &b(0, k),
-                                &c(i * b.n + k, j * b.m + stride));
+                            batch->xgemm_array(&a(i, j), &b(0, k),
+                                               &c(i * b.n + k, j * b.m + 0) +
+                                                   stride);
             } else {
                 batch->xgemm_group(3, 3, 1, b.m, 1, scale, 1, b.n, cfactor, c.n,
                                    b.n * a.m * a.n);
                 for (MKL_INT i = 0; i < a.n; i++)
                     for (MKL_INT j = 0; j < a.m; j++)
                         for (MKL_INT k = 0; k < b.n; k++)
-                            batch->xgemm_array(
-                                &a(j, i), &b(0, k),
-                                &c(i * b.n + k, j * b.m + stride));
+                            batch->xgemm_array(&a(j, i), &b(0, k),
+                                               &c(i * b.n + k, j * b.m + 0) +
+                                                   stride);
             }
         }
     }
@@ -713,9 +715,9 @@ struct AdvancedGEMM<FL, typename enable_if<is_complex<FL>::value>::type> {
         assert(da.m == da.n && db.m == db.n);
         const MKL_INT ddstr = 0;
         const bool ddconja =
-            dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+            (bool)((int)dconja ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1)));
         const bool ddconjb =
-            dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1));
+            (bool)((int)dconjb ^ (dleft ? (abconj & 1) : ((abconj & 2) >> 1)));
         if (da.m == 1 && da.n == 1) {
             scale *= ddconja ? xconj<FL>(*da.data) : *da.data;
             const FL *bdata =
@@ -957,8 +959,10 @@ template <typename FL> struct BatchGEMMSeq {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             work = GMatrix<FL>((FL *)0 + batch[0]->work, am,
                                conj_ket ? ket.m : ket.n);
             // work = a * ket
@@ -983,8 +987,10 @@ template <typename FL> struct BatchGEMMSeq {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             work = GMatrix<FL>((FL *)0 + batch[0]->work, a.m, kn);
             if (da.m == 1 && da.n == 1)
                 // work = a * (1 x db)
@@ -1026,15 +1032,19 @@ template <typename FL> struct BatchGEMMSeq {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             AdvancedGEMM<FL>::multiply(
                 batch[1], GMatrix<FL>(&a(ast, 0), am, a.n), false, ket,
                 conj_ket ? 1 : 2, GMatrix<FL>(&c(cst, 0), cm, c.n), scale, 1.0);
         } else {
             dconja ^= conj_ket, dconjb ^= conj_ket;
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             if (da.m == 1 && da.n == 1)
                 // c = a * (1 x db)
                 AdvancedGEMM<FL>::multiply(
@@ -1063,8 +1073,10 @@ template <typename FL> struct BatchGEMMSeq {
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             if (da.m == 1 && da.n == 1)
                 // c = (1 x db) * a
                 AdvancedGEMM<FL>::multiply(
@@ -1085,8 +1097,10 @@ template <typename FL> struct BatchGEMMSeq {
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             // c = bra * a
             batch[1]->xgemm(conj_bra ? 3 : 0, false, c.m, kn, a.m, scale,
                             bra.data, bra.n, &a(0, ast), a.n, 1.0, &c(0, cst),

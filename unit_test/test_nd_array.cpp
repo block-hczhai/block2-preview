@@ -61,10 +61,10 @@ class TestNDArray : public ::testing::Test {
         int aout_dim = a.ndim() - (int)aidx.size() - (int)br_aidx.size();
         int bout_dim = b.ndim() - (int)bidx.size() - (int)br_aidx.size();
         int br_dim = (int)br_aidx.size();
-        int br_order[br_dim];
+        vector<int> br_order(br_dim);
         for (int i = 0; i < br_dim; i++)
             br_order[i] = i;
-        sort(br_order, br_order + br_dim,
+        sort(br_order.begin(), br_order.begin() + br_dim,
              [&br_aidx](int a, int b) { return br_aidx[a] < br_aidx[b]; });
         for (int i = 0; i < a.ndim(); i++)
             if (aidxs[i] == -2)

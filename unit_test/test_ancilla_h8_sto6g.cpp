@@ -7,8 +7,8 @@ using namespace block2;
 
 template <typename FL> class TestAncillaH8STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     typedef typename GMatrix<FL>::FP FP;
 
     template <typename S>
@@ -115,7 +115,7 @@ void TestAncillaH8STO6G<FL>::test_imag_te(
     for (size_t i = 0; i < te_energies.size(); i++) {
         cout << "== " << name << " =="
              << " BETA = " << setw(10) << fixed << setprecision(4)
-             << ((FL)i * beta) << " E = " << fixed << setw(22)
+             << ((FL)(FP)(int)i * beta) << " E = " << fixed << setw(22)
              << setprecision(12) << te_energies[i]
              << " error-fted = " << scientific << setprecision(3) << setw(10)
              << (te_energies[i] - energies_fted[i])
@@ -146,7 +146,7 @@ TYPED_TEST(TestAncillaH8STO6G, TestSU2) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     vector<FL> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,
@@ -188,7 +188,7 @@ TYPED_TEST(TestAncillaH8STO6G, TestSZ) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->template orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     vector<FL> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,

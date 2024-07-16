@@ -210,35 +210,35 @@ template <typename FL> struct GeneralFCIDUMP {
                                     xs = istart * 4;
                              xxm < (2 - (im == jm));
                              xxm++, xim = jm, xjm = im) {
-                            indices.back()[xs + 0] = pm[xim];
-                            indices.back()[xs + 1] = pm[xjm];
-                            indices.back()[xs + 2] = qm[xjm];
-                            indices.back()[xs + 3] = qm[xim];
+                            indices.back()[xs + 0] = (uint16_t)pm[xim];
+                            indices.back()[xs + 1] = (uint16_t)pm[xjm];
+                            indices.back()[xs + 2] = (uint16_t)qm[xjm];
+                            indices.back()[xs + 3] = (uint16_t)qm[xim];
                             data.back()[istart] = factor * vals[xm[im] + jm];
                             istart++, xs += 4;
                             if (gm[xim] == 2) {
-                                indices.back()[xs + 0] = qm[xim];
-                                indices.back()[xs + 1] = pm[xjm];
-                                indices.back()[xs + 2] = qm[xjm];
-                                indices.back()[xs + 3] = pm[xim];
+                                indices.back()[xs + 0] = (uint16_t)qm[xim];
+                                indices.back()[xs + 1] = (uint16_t)pm[xjm];
+                                indices.back()[xs + 2] = (uint16_t)qm[xjm];
+                                indices.back()[xs + 3] = (uint16_t)pm[xim];
                                 data.back()[istart] =
                                     factor * vals[xm[im] + jm];
                                 istart++, xs += 4;
                             }
                             if (gm[xjm] == 2) {
-                                indices.back()[xs + 0] = pm[xim];
-                                indices.back()[xs + 1] = qm[xjm];
-                                indices.back()[xs + 2] = pm[xjm];
-                                indices.back()[xs + 3] = qm[xim];
+                                indices.back()[xs + 0] = (uint16_t)pm[xim];
+                                indices.back()[xs + 1] = (uint16_t)qm[xjm];
+                                indices.back()[xs + 2] = (uint16_t)pm[xjm];
+                                indices.back()[xs + 3] = (uint16_t)qm[xim];
                                 data.back()[istart] =
                                     factor * vals[xm[im] + jm];
                                 istart++, xs += 4;
                             }
                             if (gm[xim] == 2 && gm[xjm] == 2) {
-                                indices.back()[xs + 0] = qm[xim];
-                                indices.back()[xs + 1] = qm[xjm];
-                                indices.back()[xs + 2] = pm[xjm];
-                                indices.back()[xs + 3] = pm[xim];
+                                indices.back()[xs + 0] = (uint16_t)qm[xim];
+                                indices.back()[xs + 1] = (uint16_t)qm[xjm];
+                                indices.back()[xs + 2] = (uint16_t)pm[xjm];
+                                indices.back()[xs + 3] = (uint16_t)pm[xim];
                                 data.back()[istart] =
                                     factor * vals[xm[im] + jm];
                                 istart++, xs += 4;
@@ -262,7 +262,7 @@ template <typename FL> struct GeneralFCIDUMP {
         const size_t plen = len / ntg + !!(len % ntg);
         if (rperm.size() == 0)
             for (size_t i = 0; i < shape.size(); i++)
-                rperm.push_back(i);
+                rperm.push_back((uint16_t)i);
 #pragma omp parallel num_threads(ntg)
         {
             int tid = threading->get_thread_id();
@@ -283,7 +283,7 @@ template <typename FL> struct GeneralFCIDUMP {
                     if (abs(factor * vals[i]) > cutoff) {
                         for (int j = 0; j < (int)shape.size(); j++)
                             indices.back()[istart * shape.size() + rperm[j]] =
-                                i / strides[j] % shape[j];
+                                (uint16_t)(i / strides[j] % shape[j]);
                         data.back()[istart] = factor * vals[i];
                         istart++;
                     }
@@ -293,7 +293,7 @@ template <typename FL> struct GeneralFCIDUMP {
                         int irrep = 0;
                         for (int j = 0; j < (int)shape.size(); j++) {
                             indices.back()[istart * shape.size() + rperm[j]] =
-                                i / strides[j] % shape[j];
+                                (uint16_t)(i / strides[j] % shape[j]);
                             irrep ^= orb_sym[i / strides[j] % shape[j]];
                         }
                         data.back()[istart] = factor * vals[i] * (FL)(!irrep);

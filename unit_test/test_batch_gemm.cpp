@@ -7,8 +7,8 @@ using namespace block2;
 template <typename FL> class TestBatchGEMM : public ::testing::Test {
   protected:
     typedef typename GMatrix<FL>::FP FP;
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 24;
+    size_t isize = 1LL << 20;
+    size_t dsize = 1LL << 24;
     static const int n_tests = 200;
     void SetUp() override {
         Random::rand_seed(1969);

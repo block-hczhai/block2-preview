@@ -15,8 +15,8 @@ template <typename FL> class TestComplexMatrix : public ::testing::Test {
             GMatrixFunctions<FL>::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 28;
     void SetUp() override {
         Random::rand_seed(0);
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");

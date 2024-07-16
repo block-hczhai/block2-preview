@@ -37,8 +37,8 @@ class TestDETN2STO3G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 22;
-    size_t dsize = 1L << 30;
+    size_t isize = 1LL << 22;
+    size_t dsize = 1LL << 30;
     typedef double FP;
     template <typename S, typename FL>
     void test_dmrg(const S target,

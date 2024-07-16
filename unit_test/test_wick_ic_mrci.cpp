@@ -171,7 +171,7 @@ struct WickICMRCI {
             }
             string nkey = skey;
             map<char, char> ket_bra_map;
-            int pidx = skey.length();
+            int pidx = (int)skey.length();
             for (int j = 4; j < (int)skey.length(); j++) {
                 if (skey[j] == 'p')
                     pidx = j;
@@ -180,7 +180,7 @@ struct WickICMRCI {
                     ket_bra_map[skey[j + 4 - skey.length()]] = skey[j];
             }
             nkey = skey.substr(0, 4) + skey.substr(pidx);
-            int nact = skey.length() - pidx;
+            int nact = (int)(skey.length() - pidx);
             string bra_expr = ket_expr;
             for (int j = 0; j < (int)bra_expr.length(); j++)
                 if (ket_bra_map.count(bra_expr[j]))

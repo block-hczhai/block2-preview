@@ -140,28 +140,28 @@ typedef GMatrix<double> MatrixRef;
 template <typename FL, typename = void> struct GDiagonalMatrix;
 
 // Diagonal matrix
-template <typename FL>
-struct GDiagonalMatrix<FL,
-                       typename enable_if<is_floating_point<FL>::value>::type>
-    : GMatrix<FL> {
-    using GMatrix<FL>::data;
-    using GMatrix<FL>::m;
-    using GMatrix<FL>::n;
-    FL zero = 0.0;
-    GDiagonalMatrix(FL *data, MKL_INT n) : GMatrix<FL>(data, n, n) {}
-    FL &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? *(data + i) : const_cast<FL &>(zero);
+template <typename FLX>
+struct GDiagonalMatrix<FLX,
+                       typename enable_if<is_floating_point<FLX>::value>::type>
+    : GMatrix<FLX> {
+    using GMatrix<FLX>::data;
+    using GMatrix<FLX>::m;
+    using GMatrix<FLX>::n;
+    FLX zero = 0.0;
+    GDiagonalMatrix(FLX *data, MKL_INT n) : GMatrix<FLX>(data, n, n) {}
+    FLX &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? *(data + i) : const_cast<FLX &>(zero);
     }
     size_t size() const { return (size_t)m; }
     // need override since size() is changed (which is not virtual)
-    void allocate(const shared_ptr<Allocator<FL>> &alloc = nullptr) {
-        data = (alloc == nullptr ? dalloc_<FL>() : alloc)->allocate(size());
+    void allocate(const shared_ptr<Allocator<FLX>> &alloc = nullptr) {
+        data = (alloc == nullptr ? dalloc_<FLX>() : alloc)->allocate(size());
     }
-    void deallocate(const shared_ptr<Allocator<FL>> &alloc = nullptr) {
-        (alloc == nullptr ? dalloc_<FL>() : alloc)->deallocate(data, size());
+    void deallocate(const shared_ptr<Allocator<FLX>> &alloc = nullptr) {
+        (alloc == nullptr ? dalloc_<FLX>() : alloc)->deallocate(data, size());
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(FL)); }
+    void clear() { memset(data, 0, size() * sizeof(FLX)); }
     friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
@@ -177,16 +177,16 @@ typedef GDiagonalMatrix<double> DiagonalMatrix;
 template <typename FL, typename = void> struct GIdentityMatrix;
 
 // Identity matrix
-template <typename FL>
-struct GIdentityMatrix<FL,
-                       typename enable_if<is_floating_point<FL>::value>::type>
-    : GDiagonalMatrix<FL> {
-    using GDiagonalMatrix<FL>::zero;
-    FL one = 1.0;
-    GIdentityMatrix(MKL_INT n, FL one = 1.0)
-        : GDiagonalMatrix<FL>(nullptr, n), one(one) {}
-    FL &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? const_cast<FL &>(one) : const_cast<FL &>(zero);
+template <typename FLX>
+struct GIdentityMatrix<FLX,
+                       typename enable_if<is_floating_point<FLX>::value>::type>
+    : GDiagonalMatrix<FLX> {
+    using GDiagonalMatrix<FLX>::zero;
+    FLX one = 1.0;
+    GIdentityMatrix(MKL_INT n, FLX one = 1.0)
+        : GDiagonalMatrix<FLX>(nullptr, n), one(one) {}
+    FLX &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? const_cast<FLX &>(one) : const_cast<FLX &>(zero);
     }
     void allocate() {}
     void deallocate() {}
@@ -296,32 +296,32 @@ template <> struct GMatrix<complex<double>> {
 typedef GMatrix<complex<double>> ComplexMatrixRef;
 
 // Diagonal complex matrix
-template <typename FL>
-struct GDiagonalMatrix<FL, typename enable_if<is_complex<FL>::value>::type>
-    : GMatrix<FL> {
-    using GMatrix<FL>::data;
-    using GMatrix<FL>::m;
-    using GMatrix<FL>::n;
-    FL zero = 0.0;
-    GDiagonalMatrix(FL *data, MKL_INT n) : GMatrix<FL>(data, n, n) {}
-    FL &operator()(MKL_INT i, MKL_INT j) const {
-        return i == j ? *(data + i) : const_cast<FL &>(zero);
+template <typename FLX>
+struct GDiagonalMatrix<FLX, typename enable_if<is_complex<FLX>::value>::type>
+    : GMatrix<FLX> {
+    using GMatrix<FLX>::data;
+    using GMatrix<FLX>::m;
+    using GMatrix<FLX>::n;
+    FLX zero = 0.0;
+    GDiagonalMatrix(FLX *data, MKL_INT n) : GMatrix<FLX>(data, n, n) {}
+    FLX &operator()(MKL_INT i, MKL_INT j) const {
+        return i == j ? *(data + i) : const_cast<FLX &>(zero);
     }
     size_t size() const { return (size_t)m; }
     // need override since size() is changed (which is not virtual)
-    void allocate(const shared_ptr<Allocator<typename GMatrix<FL>::FP>> &alloc =
-                      nullptr) {
-        data = (FL *)(alloc == nullptr ? dalloc_<typename GMatrix<FL>::FP>()
-                                       : alloc)
+    void allocate(const shared_ptr<Allocator<typename GMatrix<FLX>::FP>>
+                      &alloc = nullptr) {
+        data = (FLX *)(alloc == nullptr ? dalloc_<typename GMatrix<FLX>::FP>()
+                                        : alloc)
                    ->allocate(size() * 2);
     }
-    void deallocate(const shared_ptr<Allocator<typename GMatrix<FL>::FP>>
+    void deallocate(const shared_ptr<Allocator<typename GMatrix<FLX>::FP>>
                         &alloc = nullptr) {
-        (alloc == nullptr ? dalloc_<typename GMatrix<FL>::FP>() : alloc)
-            ->deallocate((typename GMatrix<FL>::FP *)data, size() * 2);
+        (alloc == nullptr ? dalloc_<typename GMatrix<FLX>::FP>() : alloc)
+            ->deallocate((typename GMatrix<FLX>::FP *)data, size() * 2);
         data = nullptr;
     }
-    void clear() { memset(data, 0, size() * sizeof(FL)); }
+    void clear() { memset(data, 0, size() * sizeof(FLX)); }
     friend ostream &operator<<(ostream &os, const GDiagonalMatrix &mat) {
         os << "DIAG CPX-MAT ( " << mat.m << "x" << mat.n << " )" << endl;
         os << "[ ";
@@ -464,7 +464,7 @@ template <typename FL, typename IX = MKL_INT> struct GTensor {
                 header[i] == '\n')
                 continue;
             else if (header[i] == '\'' || header[i] == '\"') {
-                for (j = i + 1; j < header_len; j++)
+                for (j = i + 1; j < (int)header_len; j++)
                     if (header[j] == header[i] && header[j - 1] != '\\')
                         break;
                 assert(header[j] == header[i]);
@@ -473,14 +473,14 @@ template <typename FL, typename IX = MKL_INT> struct GTensor {
             } else if (header[i] == ':' || header[i] == ',')
                 tokens.push_back(string(1, header[i]));
             else if (header[i] == '(') {
-                for (j = i + 1; j < header_len; j++)
+                for (j = i + 1; j < (int)header_len; j++)
                     if (header[j] == ')')
                         break;
                 assert(header[j] == ')');
                 tokens.push_back(header.substr(i + 1, j - i - 1));
                 i = j;
             } else {
-                for (j = i + 1; j < header_len; j++)
+                for (j = i + 1; j < (int)header_len; j++)
                     if (header[j] == '}' || header[j] == ',' ||
                         header[j] == ':' || header[j] == ' ')
                         break;

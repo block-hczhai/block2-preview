@@ -714,8 +714,6 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
                         int_idx[i][3] ==
                     0) {
                     ip++;
-                    if (ip == 6)
-                        ;
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     cps_ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];

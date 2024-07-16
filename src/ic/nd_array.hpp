@@ -300,6 +300,22 @@ struct NDArray {
         size_t size_left = size() / size_right;
         NDArray r(new_shape);
         int ntg = threading->activate_global();
+#ifdef _MSC_VER
+        const size_t plen = (size_left + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            const size_t ixst = plen * tid;
+            const size_t ixed = min(size_left, plen * (tid + 1));
+            for (size_t i = ixst; i < ixed; i++) {
+                const double *__restrict a_data = data + i * size_right;
+                double rr = 0;
+                for (size_t j = 0; j < size_right; j++)
+                    rr += a_data[j];
+                r.data[i] = rr;
+            }
+        }
+#else
 #pragma omp parallel for schedule(static) num_threads(ntg)
         for (size_t i = 0; i < size_left; i++) {
             const double *__restrict__ a_data = data + i * size_right;
@@ -308,6 +324,7 @@ struct NDArray {
                 rr += a_data[j];
             r.data[i] = rr;
         }
+#endif
         threading->activate_normal();
         return r;
     }
@@ -462,6 +479,30 @@ struct NDArray {
         const size_t size_right = a.shape[xperm.back()];
         const ssize_t stride_right = a.strides[xperm.back()];
         int ntg = threading->activate_global();
+#ifdef _MSC_VER
+        const size_t plen = (size_left + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            const size_t ixst = plen * tid;
+            const size_t ixed = min(size_left, plen * (tid + 1));
+            for (size_t j = ixst; j < ixed; j++) {
+                ssize_t offset_a = 0, jx = j;
+                for (int i = dim - 2; i >= 0; jx /= bx.shape[i--])
+                    offset_a +=
+                        ((ssize_t)jx % bx.shape[i]) * a.strides[xperm[i]];
+                const double *__restrict a_data = a.data + offset_a;
+                double *__restrict b_data = bx.data + j * size_right;
+                if (beta == 0.0) {
+                    for (size_t i = 0; i < size_right; i++)
+                        b_data[i] = alpha * a_data[i * stride_right];
+                } else
+                    for (size_t i = 0; i < size_right; i++)
+                        b_data[i] =
+                            alpha * a_data[i * stride_right] + beta * b_data[i];
+            }
+        }
+#else
 #pragma omp parallel for schedule(static) num_threads(ntg)
         for (size_t j = 0; j < size_left; j++) {
             ssize_t offset_a = 0, jx = j;
@@ -483,6 +524,7 @@ struct NDArray {
                     b_data[i] =
                         alpha * a_data[i * stride_right] + beta * b_data[i];
         }
+#endif
         threading->activate_normal();
     }
     // outpur br is sorted original br idx in a
@@ -514,34 +556,35 @@ struct NDArray {
         for (int i = 0; i < nctr; i++)
             idxbx[i + nbr] = ridx[idxb[i]];
         assert(c.is_c_order());
-        int outa[ndima - nctr - nbr], outb[ndimb - nctr - nbr];
+        vector<int> outa(ndima - nctr - nbr), outb(ndimb - nctr - nbr);
         MKL_INT a_free_dim = 1, b_free_dim = 1, ctr_dim = 1, br_dim = 1;
         set<int> idxa_set(idxax.begin(), idxax.end());
         set<int> idxb_set(idxbx.begin(), idxbx.end());
         for (int i = 0, ioa = 0; i < ndima; i++)
             if (!idxa_set.count(i))
                 outa[ioa] = i, a_free_dim *= ax.shape[i], ioa++;
-        sort(outa, outa + (ndima - nctr - nbr),
+        sort(outa.begin(), outa.begin() + (ndima - nctr - nbr),
              [&idxxa](int a, int b) { return idxxa[a] < idxxa[b]; });
         for (int i = 0, iob = 0; i < ndimb; i++)
             if (!idxb_set.count(i))
                 outb[iob] = i, b_free_dim *= bx.shape[i], iob++;
-        sort(outb, outb + (ndimb - nctr - nbr),
+        sort(outb.begin(), outb.begin() + (ndimb - nctr - nbr),
              [&idxxb](int a, int b) { return idxxb[a] < idxxb[b]; });
         int trans_a = 0, trans_b = 0;
 
-        int ctr_idx[nctr + nbr];
+        vector<int> ctr_idx(nctr + nbr);
         for (int i = 0; i < nbr; i++)
             ctr_idx[i] = i, br_dim *= ax.shape[idxax[i]];
         for (int i = nbr; i < nbr + nctr; i++)
             ctr_idx[i] = i, ctr_dim *= ax.shape[idxax[i]];
-        sort(ctr_idx, ctr_idx + nbr,
+        sort(ctr_idx.begin(), ctr_idx.begin() + nbr,
              [&idxax](int a, int b) { return idxax[a] < idxax[b]; });
-        sort(ctr_idx + nbr, ctr_idx + nbr + nctr,
+        sort(ctr_idx.begin() + nbr, ctr_idx.begin() + nbr + nctr,
              [&idxax](int a, int b) { return idxax[a] < idxax[b]; });
 
         // checking whether permutation is necessary
-        if (!ax.is_c_order() || !is_sorted(outa, outa + (ndima - nctr - nbr)))
+        if (!ax.is_c_order() ||
+            !is_sorted(outa.begin(), outa.begin() + (ndima - nctr - nbr)))
             trans_a = 0;
         else if (nbr != 0 &&
                  (idxax[ctr_idx[0]] != 0 || idxax[ctr_idx[nbr - 1]] != nbr - 1))
@@ -555,7 +598,8 @@ struct NDArray {
                  idxax[ctr_idx[nbr + nctr - 1]] == ndima - 1)
             trans_a = -1;
 
-        if (!bx.is_c_order() || !is_sorted(outb, outb + (ndimb - nctr - nbr)))
+        if (!bx.is_c_order() ||
+            !is_sorted(outb.begin(), outb.begin() + (ndimb - nctr - nbr)))
             trans_b = 0;
         else if (nbr != 0 && !(idxbx[ctr_idx[0]] == 0 &&
                                idxbx[ctr_idx[nbr - 1]] == nbr - 1))
@@ -725,7 +769,7 @@ struct NDArray {
             }
             // handle ellipses of operands
             if (op_features[iop] & _ELLIP) {
-                int nchar = arrs[iop].ndim() - (operands[iop].length() - 3);
+                int nchar = (int)(arrs[iop].ndim() - (operands[iop].length() - 3));
                 if (!ellip_determined) {
                     stringstream ss;
                     for (int j = 0; j < nchar; j++) {

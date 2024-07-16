@@ -295,14 +295,15 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 {
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-                    for (int ij = 0; ij < m * m; ij++)
+                    for (int ij = 0; ij < m * m; ij++) {
                         int i = ij / m, j = ij % m;
 #else
 #pragma omp for schedule(dynamic) collapse(2)
                     for (int i = 0; i < m; i++)
-                        for (int j = 0; j < m; j++)
+                        for (int j = 0; j < m; j++) {
 #endif
-                    alpha(i, j) = complex_dot(bs[i], sigmas[j]);
+                        alpha(i, j) = complex_dot(bs[i], sigmas[j]);
+                    }
                 }
                 eig(alpha, ld, ld_imag, left);
                 for (int i = 0; i < m; i++)
@@ -2298,7 +2299,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             }
         }
         // M = 1
-        for (size_t i = 0; i < S; ++i) {
+        for (MKL_INT i = 0; i < S; ++i) {
             M(i, i) = 1.0;
         }
         const FP angle = 0.7071067811865476; // To avoid too small residuals
@@ -2321,7 +2322,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                    N](GMatrix<FL> in) {
             if (a_diagonal.data == nullptr)
                 return;
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     in(i, 0) /= a_diagonal(i, i);
                 } else {
@@ -2346,10 +2347,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             // vvv I need P.conj() @ r ...; on the other hand, P is random
             // anyways. so it should not matter?
             // multiply(P,false, r,false, f, cmplx(1.0,0.0), cmplx(0.0,0.0));
-            for (size_t i = 0; i < S; ++i) {
+            for (MKL_INT i = 0; i < S; ++i) {
                 f(i, 0) = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), r);
             }
-            for (size_t k = 0; k < S; ++k) { // Krylov space setup
+            for (MKL_INT k = 0; k < S; ++k) { // Krylov space setup
                 // solve Mc = f
                 const auto size = S - k;
                 GMatrix<FL> uk(&U(k, 0), N, 1);
@@ -2362,8 +2363,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         // lda?
                         GMatrix<FL> M2(MM.data, size, size);
                         GMatrix<FL> ff(&f(k, 0), size, 1);
-                        for (size_t i = k; i < S; ++i) {
-                            for (size_t j = k; j < S; ++j) {
+                        for (MKL_INT i = k; i < S; ++i) {
+                            for (MKL_INT j = k; j < S; ++j) {
                                 M2(i - k, j - k) = M(i, j);
                             }
                         }
@@ -2401,14 +2402,14 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 // G = A @ U[:,k]
                 op(uk, gk);
                 // Bi-Orthogonalize the new basis vectors
-                for (size_t i = 0; i < k; ++i) {
+                for (MKL_INT i = 0; i < k; ++i) {
                     FL alpha = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), gk);
                     alpha /= M(i, i);
                     iadd(gk, GMatrix<FL>(&G(i, 0), N, 1), -alpha);
                     iadd(uk, GMatrix<FL>(&U(i, 0), N, 1), -alpha);
                 }
                 // M = P' G (first k-1 entries are zero)
-                for (size_t i = k; i < S; ++i) {
+                for (MKL_INT i = k; i < S; ++i) {
                     M(i, k) = complex_dot(GMatrix<FL>(&P(i, 0), N, 1), gk);
                 }
                 if (abs(M(k, k)) < 1e-20) { // oops!
@@ -2435,19 +2436,19 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                          << "i" << scientific << setw(13) << setprecision(2)
                          << norm_r << endl;
                 }
-                if (not doContinue(niter, norm_r)) {
+                if (!doContinue(niter, norm_r)) {
                     break;
                 }
                 // New f = P'*r (first k components are zero)
                 if (k < S - 1) {
-                    for (size_t j = k + 1; j < S; ++j) {
+                    for (MKL_INT j = k + 1; j < S; ++j) {
                         f(j, 0) -= beta * M(j, k);
                     }
                 }
             } // Krylov space setup
             ++outeriter;
 
-            if (not doContinue(niter, norm_r))
+            if (!doContinue(niter, norm_r))
                 break;
             // Precondition v = Minv r; TODO avoid copy&paste
             copy(v, r);
@@ -2639,7 +2640,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                                    N](const GMatrix<FL> &in,
                                       const GMatrix<FL> &out) {
             assert(a_diagonal.data != nullptr);
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     out(i, 0) = in(i, 0) / a_diagonal(i, i);
                 } else {
@@ -2658,7 +2659,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 return;
             }
             // out = A M in
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     tmpP(i, 0) = in(i, 0) / a_diagonal(i, i);
                 } else {
@@ -2674,7 +2675,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 return;
             }
             // out = M' A' in
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     out(i, 0) /= xconj<FL>(a_diagonal(i, i));
                 } else {
@@ -2727,7 +2728,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
         if (beta > 0.0) {
             // iscale(u, 1.0 / beta); // vv is more accurate
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 u(i, 0) /= beta;
             }
             ropM(u, v);
@@ -2737,7 +2738,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&alpha, 1, pcomm->root);
             }
             // iscale(v, 1.0 / alpha); // vv is more accurate
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 v(i, 0) /= alpha;
             }
         } else {
@@ -2799,7 +2800,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
 
             if (beta > 0.0) {
                 // iscale(u, 1./beta); // vv is more accurate
-                for (size_t i = 0; i < N; ++i) {
+                for (MKL_INT i = 0; i < N; ++i) {
                     u(i, 0) /= beta;
                 }
                 anorm = sqrt(anorm * anorm + alpha * alpha + beta * beta);
@@ -2814,7 +2815,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
                 if (alpha > 0.0) {
                     // iscale(v, 1./alpha);
-                    for (size_t i = 0; i < N; ++i) {
+                    for (MKL_INT i = 0; i < N; ++i) {
                         v(i, 0) /= alpha;
                     }
                 }
@@ -2962,7 +2963,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         if (a_diagonal.data != nullptr) {
             tmpP.deallocate();
             // M x = z
-            for (size_t i = 0; i < N; ++i) {
+            for (MKL_INT i = 0; i < N; ++i) {
                 if (abs(a_diagonal(i, i)) > precond_reg) {
                     x(i, 0) /= a_diagonal(i, i);
                 } else {
@@ -3055,7 +3056,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         const auto AshiftOp = [&op, scale, Ashift, N](const GMatrix<FL> &in,
                                                       GMatrix<FL> &out) {
             op(in, out);
-            for (size_t i = 0; i < N; ++i)
+            for (MKL_INT i = 0; i < N; ++i)
                 out(i, 0) = scale * out(i, 0) + Ashift * in(i, 0);
         };
         //
@@ -3078,7 +3079,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 AshiftOp(phiMinus, phi); // phi1 = H phi0
             } else {
                 AshiftOp(phiMinus, phi); // phin = 2 H phi_n-1 - phi_n-2
-                for (size_t i = 0; i < N; ++i) {
+                for (MKL_INT i = 0; i < N; ++i) {
                     phi(i, 0) = (FP)2. * phi(i, 0) - phiMinusMinus(i, 0);
                 }
             }
@@ -3091,13 +3092,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
             // alternative vv; less accurate but seems to be more stable
             // prec = -static_cast<complex<typename
             // GMatrix<FP>::FL>>(chebCoeffNum(iCheb, nCheby));
-            if (prec != zone and not isnan(real(fu / prec)) and
-                not isnan(imag(fu / prec))) {
+            if (prec != zone && !isnan(real(fu / prec)) &&
+                !isnan(imag(fu / prec))) {
                 prec = damp * fac * fu / prec;
                 if (iprint)
                     cout << iCheb << " " << prec << ", " << dot(phi, phi)
                          << endl;
-                for (size_t i = 0; i < N; ++i)
+                for (MKL_INT i = 0; i < N; ++i)
                     //      vv original formula was for (-A + w); so need to
                     //      change sign here
                     xOut[i] -= cast(scale) * prec * cast(phi(i, 0));
@@ -3116,7 +3117,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         phi.deallocate();
 
         FC out{0., 0.};
-        for (size_t i = 0; i < N; ++i) {
+        for (MKL_INT i = 0; i < N; ++i) {
             x(i, 0) = xOut[i];
             out += conj(x(i, 0)) * b(i, 0);
         }

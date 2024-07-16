@@ -932,8 +932,10 @@ struct GMatrixFunctions<
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             GMatrix<FL> work(nullptr, am, conj_ket ? ket.m : ket.n);
             work.allocate(d_alloc);
             // work = a * ket
@@ -958,8 +960,10 @@ struct GMatrixFunctions<
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             GMatrix<FL> work(nullptr, a.m, kn);
             work.allocate(d_alloc);
             if (da.m == 1 && da.n == 1)
@@ -993,8 +997,10 @@ struct GMatrixFunctions<
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             multiply(GMatrix<FL>(&a(ast, 0), am, a.n), false, ket, conj_ket,
                      GMatrix<FL>(&c(cst, 0), cm, c.n), scale, 1.0);
             return (size_t)ket.m * ket.n * am;
@@ -1002,8 +1008,10 @@ struct GMatrixFunctions<
             dconja ^= conj_ket, dconjb ^= conj_ket;
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             if (da.m == 1 && da.n == 1)
                 // c = a * (1 x db)
                 multiply(GMatrix<FL>(&a(0, ast), a.m, a.n), false, db, dconjb,
@@ -1033,8 +1041,10 @@ struct GMatrixFunctions<
             dconja ^= conj_bra, dconjb ^= conj_bra;
             MKL_INT am = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT cm = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
-            uint32_t ast = conj_bra ? stride / bra.n : stride % bra.n;
-            uint32_t cst = conj_bra ? stride % bra.n : stride / bra.n;
+            uint32_t ast =
+                (uint32_t)(conj_bra ? stride / bra.n : stride % bra.n);
+            uint32_t cst =
+                (uint32_t)(conj_bra ? stride % bra.n : stride / bra.n);
             if (da.m == 1 && da.n == 1)
                 // c = (1 x db) * a
                 multiply(db, dconjb, GMatrix<FL>(&a(ast, 0), am, a.n), false,
@@ -1053,8 +1063,10 @@ struct GMatrixFunctions<
             MKL_INT kn = (dconja ? da.m : da.n) * (dconjb ? db.m : db.n);
             MKL_INT km = (dconja ? da.n : da.m) * (dconjb ? db.n : db.m);
             const FL cfactor = 1.0;
-            uint32_t ast = conj_ket ? stride % ket.n : stride / ket.n;
-            uint32_t cst = conj_ket ? stride / ket.n : stride % ket.n;
+            uint32_t ast =
+                (uint32_t)(conj_ket ? stride % ket.n : stride / ket.n);
+            uint32_t cst =
+                (uint32_t)(conj_ket ? stride / ket.n : stride % ket.n);
             xgemm<FL>("n", conj_bra ? "t" : "n", &kn, &c.m, &a.m, &scale,
                       &a(0, ast), &a.n, bra.data, &bra.n, &cfactor, &c(0, cst),
                       &c.n);
@@ -1138,25 +1150,25 @@ struct GMatrixFunctions<
                 if (b.n == c.n) {
                     const MKL_INT n = b.m * b.n;
                     xgemm<FL>("n", "n", &n, &a.n, &a.n, &scale, b.data, &n,
-                              a.data, &a.n, &cfactor, &c(0, stride), &n);
+                              a.data, &a.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(b.n < c.n);
                     for (MKL_INT k = 0; k < b.m; k++)
                         xgemm<FL>("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
-                                  &b.n, a.data, &a.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &b.n, a.data, &a.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
                     const MKL_INT n = a.m * a.n;
                     xgemm<FL>("n", "n", &n, &b.n, &b.n, &scale, a.data, &n,
-                              b.data, &b.n, &cfactor, &c(0, stride), &n);
+                              b.data, &b.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(a.n < c.n);
                     for (MKL_INT k = 0; k < a.m; k++)
                         xgemm<FL>("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
-                                  &a.n, b.data, &b.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &a.n, b.data, &b.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else {
                 for (MKL_INT i = 0, inc = 1; i < a.m; i++)
@@ -1164,7 +1176,8 @@ struct GMatrixFunctions<
                         const FL factor = scale * a(i, j);
                         for (MKL_INT k = 0; k < b.m; k++)
                             xaxpy<FL>(&b.n, &factor, &b(k, 0), &inc,
-                                      &c(i * b.m + k, j * b.n + stride), &inc);
+                                      &c(i * b.m + k, j * b.n + 0) + stride,
+                                      &inc);
                     }
             }
             break;
@@ -1173,19 +1186,19 @@ struct GMatrixFunctions<
                 if (b.n == c.n) {
                     const MKL_INT n = b.m * b.n;
                     xgemm<FL>("n", "n", &n, &a.n, &a.n, &scale, b.data, &n,
-                              a.data, &a.n, &cfactor, &c(0, stride), &n);
+                              a.data, &a.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(b.n < c.n);
                     for (MKL_INT k = 0; k < b.m; k++)
                         xgemm<FL>("n", "n", &b.n, &a.n, &a.n, &scale, &b(k, 0),
-                                  &b.n, a.data, &a.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &b.n, a.data, &a.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else if (b.m == 1 && b.n == 1) {
                 assert(a.m <= c.n);
                 for (MKL_INT k = 0; k < a.n; k++)
                     xgemm<FL>("t", "n", &a.m, &b.n, &b.n, &scale, &a(0, k),
-                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else {
                 for (MKL_INT i = 0, inc = 1; i < a.n; i++)
@@ -1193,7 +1206,8 @@ struct GMatrixFunctions<
                         const FL factor = scale * a(j, i);
                         for (MKL_INT k = 0; k < b.m; k++)
                             xaxpy<FL>(&b.n, &factor, &b(k, 0), &inc,
-                                      &c(i * b.m + k, j * b.n + stride), &inc);
+                                      &c(i * b.m + k, j * b.n + 0) + stride,
+                                      &inc);
                     }
             }
             break;
@@ -1202,19 +1216,19 @@ struct GMatrixFunctions<
                 assert(b.m <= c.n);
                 for (MKL_INT k = 0; k < b.n; k++)
                     xgemm<FL>("t", "n", &b.m, &a.n, &a.n, &scale, &b(0, k),
-                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else if (b.m == 1 && b.n == 1) {
                 if (a.n == c.n) {
                     const MKL_INT n = a.m * a.n;
                     xgemm<FL>("n", "n", &n, &b.n, &b.n, &scale, a.data, &n,
-                              b.data, &b.n, &cfactor, &c(0, stride), &n);
+                              b.data, &b.n, &cfactor, &c(0, 0) + stride, &n);
                 } else {
                     assert(a.n < c.n);
                     for (MKL_INT k = 0; k < a.m; k++)
                         xgemm<FL>("n", "n", &a.n, &b.n, &b.n, &scale, &a(k, 0),
-                                  &a.n, b.data, &b.n, &cfactor, &c(k, stride),
-                                  &c.n);
+                                  &a.n, b.data, &b.n, &cfactor,
+                                  &c(k, 0) + stride, &c.n);
                 }
             } else {
                 for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.m; i++)
@@ -1222,7 +1236,8 @@ struct GMatrixFunctions<
                         const FL factor = scale * a(i, j);
                         for (MKL_INT k = 0; k < b.n; k++)
                             xaxpy<FL>(&b.m, &factor, &b(0, k), &incb,
-                                      &c(i * b.n + k, j * b.m + stride), &inc);
+                                      &c(i * b.n + k, j * b.m + 0) + stride,
+                                      &inc);
                     }
             }
             break;
@@ -1230,12 +1245,12 @@ struct GMatrixFunctions<
             if (a.m == 1 && a.n == 1) {
                 for (MKL_INT k = 0; k < b.n; k++)
                     xgemm<FL>("t", "n", &b.m, &a.n, &a.n, &scale, &b(0, k),
-                              &b.n, a.data, &a.n, &cfactor, &c(k, stride),
+                              &b.n, a.data, &a.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else if (b.m == 1 && b.n == 1) {
                 for (MKL_INT k = 0; k < a.n; k++)
                     xgemm<FL>("t", "n", &a.m, &b.n, &b.n, &scale, &a(0, k),
-                              &a.n, b.data, &b.n, &cfactor, &c(k, stride),
+                              &a.n, b.data, &b.n, &cfactor, &c(k, 0) + stride,
                               &c.n);
             } else {
                 for (MKL_INT i = 0, incb = b.n, inc = 1; i < a.n; i++)
@@ -1243,7 +1258,8 @@ struct GMatrixFunctions<
                         const FL factor = scale * a(j, i);
                         for (MKL_INT k = 0; k < b.n; k++)
                             xaxpy<FL>(&b.m, &factor, &b(0, k), &incb,
-                                      &c(i * b.n + k, j * b.m + stride), &inc);
+                                      &c(i * b.n + k, j * b.m + 0) + stride,
+                                      &inc);
                     }
             }
             break;

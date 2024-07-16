@@ -196,11 +196,11 @@ template <typename S, typename FL> struct OperatorFunctions {
             int ibra = rot_bra->info->find_state(cq);
             int iket = rot_ket->info->find_state(cqprime);
             if (seq->mode != SeqTypes::None && seq->mode != SeqTypes::Tasked)
-                seq->rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra], !trans | 2,
-                            (*rot_ket)[iket], trans, scale);
+                seq->rotate((*a)[ia], (*c)[ic], (*rot_bra)[ibra],
+                            (int)!trans | 2, (*rot_ket)[iket], trans, scale);
             else
                 GMatrixFunctions<FL>::rotate((*a)[ia], (*c)[ic],
-                                             (*rot_bra)[ibra], !trans | 2,
+                                             (*rot_bra)[ibra], (int)!trans | 2,
                                              (*rot_ket)[iket], trans, scale);
         }
         if (seq->mode & SeqTypes::Simple)
@@ -296,9 +296,9 @@ template <typename S, typename FL> struct OperatorFunctions {
                 int ia = cinfo->ia[il], ib = cinfo->ib[il], ic = cinfo->ic[il];
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl =
-                    (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
-                          dinfo->ic + idp);
+                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb,
+                                            (uint32_t)idc) -
+                                dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];
@@ -597,9 +597,9 @@ template <typename S, typename FL> struct OperatorFunctions {
                     seq->simple_perform();
                 double factor = cinfo->factor[il];
                 int idc = dleft ? ia : ib;
-                int idl =
-                    (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb, idc) -
-                          dinfo->ic + idp);
+                int idl = (int)(lower_bound(dinfo->ic + idxa, dinfo->ic + idxb,
+                                            (uint32_t)idc) -
+                                dinfo->ic + idp);
                 for (; idl < idxb && dinfo->ic[idl] == idc; idl++) {
                     found = true;
                     int ida = dinfo->ia[idl], idb = dinfo->ib[idl];

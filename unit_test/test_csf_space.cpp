@@ -8,8 +8,8 @@ class TestCSFSpace : public ::testing::Test {
   protected:
     typedef double FP;
     static const int n_tests = 200;
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     double norm(const vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat) const {
         double normsq = 0;
         for (auto &mmat : mat)

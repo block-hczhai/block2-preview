@@ -14,8 +14,8 @@ template <typename FL> class TestMatrix : public ::testing::Test {
             GMatrixFunctions<FL>::multiply(a, false, b, false, c, 1.0, 0.0);
         }
     };
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 28;
     void SetUp() override {
         Random::rand_seed(0);
         unsigned int sd = (unsigned)Random::rand_int(1, 1 << 30);

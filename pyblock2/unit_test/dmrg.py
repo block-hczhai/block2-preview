@@ -11,18 +11,14 @@ def symm_type(pytestconfig):
     return pytestconfig.getoption("symm")
 
 
-@pytest.fixture(scope="module", params=["N2"])
-def system_def(request):
-    from pyscf import gto
+@pytest.fixture(scope="module")
+def fd_data(pytestconfig):
+    return pytestconfig.getoption("fd_data")
 
-    if request.param == "N2":
-        mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
-        return mol, 0, None, "N2"
-    elif request.param == "C2":
-        mol = gto.M(
-            atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
-        )
-        return mol, 2, 8, "C2"
+
+@pytest.fixture(scope="module", params=["N2"])
+def name(request):
+    return request.param
 
 
 @pytest.fixture(scope="module", params=["Coulomb", "Gaunt", "Breit"])
@@ -31,25 +27,39 @@ def dhf_type(request):
 
 
 class TestDMRG:
-    def test_rhf(self, tmp_path, system_def, symm_type):
-        from pyscf import scf
-
-        mol, ncore, ncas, name = system_def
-        mf = scf.RHF(mol).run(conv_tol=1e-14)
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(
-            mf, ncore, ncas
-        )
+    def test_rhf(self, tmp_path, name, symm_type, fd_data):
         symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
         driver = DMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+
+        if fd_data == "":
+            from pyscf import gto, scf
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                ncore, ncas = 0, None
+            elif name == "C2":
+                mol = gto.M(
+                    atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
+                )
+                mf = scf.RHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                ncore, ncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_rhf_integrals(mf, ncore, ncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.RHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1e, g2e, ecore = driver.h1e, driver.g2e, driver.ecore
+
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
 
@@ -107,7 +117,6 @@ class TestDMRG:
             thrds=thrds,
             iprint=1,
         )
-        print(energy)
         if name == "N2":
             assert abs(energy - -107.30674473475638) < 1e-6
         elif name == "C2":
@@ -115,25 +124,39 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_uhf(self, tmp_path, system_def, symm_type):
-        from pyscf import scf
-
-        mol, ncore, ncas, name = system_def
-        mf = scf.UHF(mol).run(conv_tol=1e-14)
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-        ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(
-            mf, ncore, ncas
-        )
+    def test_uhf(self, tmp_path, name, symm_type, fd_data):
         symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
         driver = DMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+
+        if fd_data == "":
+            from pyscf import gto, scf
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.UHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                ncore, ncas = 0, None
+            elif name == "C2":
+                mol = gto.M(
+                    atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0
+                )
+                mf = scf.UHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                ncore, ncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1es, g2es, orb_sym = itg.get_uhf_integrals(mf, ncore, ncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.UHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1es, g2es, ecore = driver.h1e, driver.g2e, driver.ecore
+
         for h1e in h1es:
             h1e[np.abs(h1e) < 1e-7] = 0
             assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
@@ -184,25 +207,37 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_ghf(self, tmp_path, system_def, symm_type):
-        from pyscf import scf
-
-        mol, ncore, ncas, name = system_def
-        mf = scf.GHF(mol).run(conv_tol=1e-14)
-        if name == "N2":
-            assert abs(mf.e_tot - -107.49650051179789) < 1e-10
-        elif name == "C2":
-            assert abs(mf.e_tot - -75.386902377706) < 1e-10
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(
-            mf, ncore, ncas
-        )
+    def test_ghf(self, tmp_path, name, symm_type, fd_data):
         symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
         driver = DMRGDriver(
             scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
         )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+
+        if fd_data == "":
+            from pyscf import gto, scf
+
+            if name == "N2":
+                mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="sto3g", symmetry="d2h", verbose=0)
+                mf = scf.GHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -107.49650051179789) < 1e-10
+                ncore, ncas = 0, None
+            elif name == "C2":
+                mol = gto.M(atom="C 0 0 0; C 0 0 1.2425", basis="ccpvdz", symmetry="d2h", verbose=0)
+                mf = scf.GHF(mol).run(conv_tol=1e-14)
+                assert abs(mf.e_tot - -75.386902377706) < 1e-10
+                ncore, ncas = 2, 8
+            else:
+                assert False
+
+            ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_ghf_integrals(mf, ncore, ncas)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym)
+        else:
+            assert name == "N2"
+            driver.read_fcidump(filename=fd_data + '/N2.STO3G.GHF.FCIDUMP', pg='d2h')
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1e, g2e, ecore = driver.h1e, driver.g2e, driver.ecore
+
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
         assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
@@ -235,40 +270,48 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_dhf(self, tmp_path, system_def, dhf_type, symm_type):
-        from pyscf import scf
+    def test_dhf(self, tmp_path, dhf_type, symm_type, fd_data):
 
-        mol, ncore, ncas, name = system_def
-        if dhf_type == "Coulomb":
-            mf = (
-                scf.DHF(mol).set(with_gaunt=False, with_breit=False).run(conv_tol=1e-12)
-            )
-            if name == "N2":
-                assert abs(mf.e_tot - -107.544314972723) < 1e-10
-            elif name == "C2":
-                assert abs(mf.e_tot - -75.419258871568) < 1e-10
-        elif dhf_type == "Gaunt":
-            mf = scf.DHF(mol).set(with_gaunt=True, with_breit=False).run(conv_tol=1e-12)
-            if name == "N2":
-                assert abs(mf.e_tot - -107.535004358049) < 1e-10
-            elif name == "C2":
-                assert abs(mf.e_tot - -75.413568302252) < 1e-10
-        elif dhf_type == "Breit":
-            mf = scf.DHF(mol).set(with_gaunt=True, with_breit=True).run(conv_tol=1e-12)
-            if name == "N2":
-                assert abs(mf.e_tot - -107.535230665795) < 1e-10
-            elif name == "C2":
-                assert abs(mf.e_tot - -75.413692277327) < 1e-10
-        ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_dhf_integrals(
-            mf, ncore, ncas, pg_symm=False
-        )
         symm = SymmetryTypes.SAnySGFCPX if symm_type == "sany" else SymmetryTypes.SGFCPX
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
-        )
-        driver.initialize_system(
-            n_sites=ncas, n_elec=n_elec, spin=spin, orb_sym=orb_sym
-        )
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
+
+        if fd_data == "":
+            from pyscf import gto, scf
+
+            mol = gto.M(atom='O 0 0 0; H 0 -0.757 0.587; H 0 0.757 0.587',
+                basis="sto3g", symmetry=False, verbose=0)
+            ncore, ncas = 0, None
+
+            if dhf_type == "Coulomb":
+                mf = (
+                    scf.DHF(mol).set(with_gaunt=False, with_breit=False).run(conv_tol=1e-12)
+                )
+                assert abs(mf.e_tot - -75.0052749296693) < 1e-10
+            elif dhf_type == "Gaunt":
+                mf = scf.DHF(mol).set(with_gaunt=True, with_breit=False).run(conv_tol=1e-12)
+                assert abs(mf.e_tot - -74.9978573265168) < 1e-10
+            elif dhf_type == "Breit":
+                mf = scf.DHF(mol).set(with_gaunt=True, with_breit=True).run(conv_tol=1e-12)
+                assert abs(mf.e_tot - -74.9980861167505) < 1e-10
+            else:
+                assert False
+            ncas, n_elec, spin, ecore, h1e, g2e, orb_sym = itg.get_dhf_integrals(
+                mf, ncore, ncas, pg_symm=False)
+            driver.initialize_system(n_sites=ncas, n_elec=n_elec, spin=spin,
+                orb_sym=orb_sym)
+        else:
+            if dhf_type == "Coulomb":
+                driver.read_fcidump(filename=fd_data + '/H2O.STO3G.DHF-C.FCIDUMP', pg='d2h')
+            elif dhf_type == "Gaunt":
+                driver.read_fcidump(filename=fd_data + '/H2O.STO3G.DHF-G.FCIDUMP', pg='d2h')
+            elif dhf_type == "Breit":
+                driver.read_fcidump(filename=fd_data + '/H2O.STO3G.DHF-B.FCIDUMP', pg='d2h')
+            else:
+                assert False
+            driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec,
+                spin=driver.spin, orb_sym=driver.orb_sym)
+            h1e, g2e, ecore = driver.h1e, driver.g2e, driver.ecore
+
         h1e[np.abs(h1e) < 1e-7] = 0
         g2e[np.abs(g2e) < 1e-7] = 0
         assert np.linalg.norm(h1e - h1e.transpose(1, 0).conj()) < 1e-7
@@ -291,25 +334,14 @@ class TestDMRG:
             iprint=1,
             dav_max_iter=250,
         )
-        if name == "N2":
-            if dhf_type == "Coulomb":
-                assert abs(energies[0] - -107.701986146895) < 1e-6
-                assert abs(energies[1] - -107.404877016101) < 1e-6
-            elif dhf_type == "Gaunt":
-                assert abs(energies[0] - -107.692699451270) < 1e-6
-                assert abs(energies[1] - -107.395534308264) < 1e-6
-            elif dhf_type == "Breit":
-                assert abs(energies[0] - -107.692920949172) < 1e-6
-                assert abs(energies[1] - -107.395767689285) < 1e-6
-        elif name == "C2":
-            if dhf_type == "Coulomb":
-                assert abs(energies[0] - -75.585051021867) < 1e-6
-                assert abs(energies[1] - -75.568910613425) < 1e-6
-            elif dhf_type == "Gaunt":
-                assert abs(energies[0] - -75.579351391472) < 1e-6
-                assert abs(energies[1] - -75.563183490113) < 1e-6
-            elif dhf_type == "Breit":
-                assert abs(energies[0] - -75.579482776888) < 1e-6
-                assert abs(energies[1] - -75.563315259912) < 1e-6
+        if dhf_type == "Coulomb":
+            assert abs(energies[0] - -75.05489216789145) < 1e-5
+            assert abs(energies[1] - -74.65747761357650) < 1e-5
+        elif dhf_type == "Gaunt":
+            assert abs(energies[0] - -75.04749505314540) < 1e-5
+            assert abs(energies[1] - -74.65008196370529) < 1e-5
+        elif dhf_type == "Breit":
+            assert abs(energies[0] - -75.04772059258008) < 1e-5
+            assert abs(energies[1] - -74.65031023949223) < 1e-5
 
         driver.finalize()

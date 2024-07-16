@@ -416,7 +416,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         const auto shift = (1. - g_factor) * delta_e;
         const auto shift2 = (1. - g_factor2) * delta_e;
         shared_ptr<LinearEffectiveHamiltonian<S, FL>> aqcc_eff;
-        if (not RAS_mode) {
+        if (!RAS_mode) {
             aqcc_eff = h_eff + shift * d_eff1;
             if (ACPF2_mode) {
                 aqcc_eff = h_eff + shift * d_eff1 + shift2 * d_eff2;
@@ -445,12 +445,12 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         d_eff1 =
             ext_mes.at(0)->eff_ham(FuseTypes::FuseLR, forward, true,
                                    me->bra->tensors[i], me->ket->tensors[i]);
-        if (RAS_mode or ACPF2_mode) {
+        if (RAS_mode || ACPF2_mode) {
             d_eff2 = ext_mes.at(1)->eff_ham(FuseTypes::FuseLR, forward, true,
                                             me->bra->tensors[i],
                                             me->ket->tensors[i]);
         }
-        if (RAS_mode and ACPF2_mode) {
+        if (RAS_mode && ACPF2_mode) {
             d_eff3 = ext_mes.at(2)->eff_ham(FuseTypes::FuseLR, forward, true,
                                             me->bra->tensors[i],
                                             me->ket->tensors[i]);
@@ -466,10 +466,10 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         teff += _t.get_time();
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
-        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                             davidson_max_iter, davidson_soft_max_iter, davidson_def_min_size,
-                             davidson_def_max_size, DavidsonTypes::Normal, 0.0,
-                             me->para_rule);
+        pdi = aqcc_eff->eigs(
+            iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
+            davidson_max_iter, davidson_soft_max_iter, davidson_def_min_size,
+            davidson_def_max_size, DavidsonTypes::Normal, 0.0, me->para_rule);
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
             pket = h_eff->perturbative_noise(forward, i, i + 1,
@@ -494,18 +494,18 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
         tuple<FPLS, int, size_t, double> pdi{0., 0, 0,
                                              0.}; // energy, ndav, nflop, tdav
         _t.get_time();
-        const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0) and
+        const auto doAQCC = (i_site == me->n_sites - 1 || i_site == 0) &&
                             abs(davidson_soft_max_iter) > 0;
         shared_ptr<EffectiveHamiltonian<S, FL>> d_eff1, d_eff2, d_eff3, d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
-        if (RAS_mode or ACPF2_mode) {
+        if (RAS_mode || ACPF2_mode) {
             d_eff2 = ext_mes.at(1)->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
         }
-        if (RAS_mode and ACPF2_mode) {
+        if (RAS_mode && ACPF2_mode) {
             d_eff3 = ext_mes.at(2)->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
                 me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -550,11 +550,11 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                 //
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
-                const auto pdi2 =
-                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                   davidson_max_iter, davidson_soft_max_iter,
-                                   davidson_def_min_size, davidson_def_max_size,
-                                   DavidsonTypes::Normal, 0.0, me->para_rule);
+                const auto pdi2 = aqcc_eff->eigs(
+                    iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
+                    davidson_max_iter, davidson_soft_max_iter,
+                    davidson_def_min_size, davidson_def_max_size,
+                    DavidsonTypes::Normal, 0.0, me->para_rule);
                 const FPS energy =
                     (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
@@ -563,7 +563,7 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
                 std::get<2>(pdi) += std::get<2>(pdi2); // nflop
                 std::get<3>(pdi) += std::get<3>(pdi2); // tdav
                 auto converged = smallest_energy < energy;
-                if (not converged) {
+                if (!converged) {
                     smallest_energy = energy;
                     // convergence can be loosely defined here
                     converged = abs(delta_e - last_delta_e) / abs(delta_e) <
@@ -601,10 +601,11 @@ struct DMRGBigSiteAQCC : DMRGBigSite<S, FL, FLS> {
             }
         } else {
             auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
-            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                 davidson_max_iter, davidson_soft_max_iter,
-                                 davidson_def_min_size, davidson_def_max_size,
-                                 DavidsonTypes::Normal, 0.0, me->para_rule);
+            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                                 davidson_rel_conv_thrd, davidson_max_iter,
+                                 davidson_soft_max_iter, davidson_def_min_size,
+                                 davidson_def_max_size, DavidsonTypes::Normal,
+                                 0.0, me->para_rule);
             const FPS energy = (FPS)std::get<0>(pdi) + (FPS)me->mpo->const_e;
             smallest_energy = min(energy, smallest_energy);
             delta_e = smallest_energy - ref_energy;
@@ -679,11 +680,11 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                                              0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC =
-            i_site == me->n_sites - 1 and abs(davidson_soft_max_iter) > 0;
+            i_site == me->n_sites - 1 && abs(davidson_soft_max_iter) > 0;
         shared_ptr<EffectiveHamiltonian<S, FL>> h_eff = me->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
             // vv diag will be computed in aqcc loop
-            not doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
+            !doAQCC, me->bra->tensors[i_site], me->ket->tensors[i_site]);
         shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> diag_info,
             wfn_info; // used if doAQCC
         wfn_info = h_eff->cmat->info->cinfo;
@@ -756,11 +757,11 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 h_eff->cmat->info->cinfo = wfn_info;
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
-                const auto pdi2 =
-                    h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                davidson_max_iter, davidson_soft_max_iter,
-                                davidson_def_min_size, davidson_def_max_size,
-                                DavidsonTypes::Normal, 0.0, me->para_rule);
+                const auto pdi2 = h_eff->eigs(
+                    iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
+                    davidson_max_iter, davidson_soft_max_iter,
+                    davidson_def_min_size, davidson_def_max_size,
+                    DavidsonTypes::Normal, 0.0, me->para_rule);
                 const auto energy =
                     (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
@@ -811,10 +812,11 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 cout.flush();
             }
         } else {
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                              davidson_max_iter, davidson_soft_max_iter,
-                              davidson_def_min_size, davidson_def_max_size,
-                              DavidsonTypes::Normal, 0.0, me->para_rule);
+            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                              davidson_rel_conv_thrd, davidson_max_iter,
+                              davidson_soft_max_iter, davidson_def_min_size,
+                              davidson_def_max_size, DavidsonTypes::Normal, 0.0,
+                              me->para_rule);
         }
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
@@ -895,9 +897,9 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                      ++iRow) { // see mat.trace()
                     MKL_INT rows_end =
                         iRow == mat.m - 1 ? mat.nnz : mat.rows[iRow + 1];
-                    int ic = lower_bound(mat.cols + mat.rows[iRow],
-                                         mat.cols + rows_end, iRow) -
-                             mat.cols;
+                    int ic = (int)(lower_bound(mat.cols + mat.rows[iRow],
+                                               mat.cols + rows_end, iRow) -
+                                   mat.cols);
                     if (ic != rows_end && mat.cols[ic] == iRow) {
                         if (save) {
                             pqn.second.emplace_back(mat.data[ic]);
@@ -909,7 +911,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                     } else if (save)
                         pqn.second.emplace_back(0);
                 }
-                if (nCounts != mat.m and save) { // Do this only once in Ctor!
+                if (nCounts != mat.m && save) { // Do this only once in Ctor!
                     // This is the diagonal so I assume for now that this rarely
                     // appears.
                     cerr << "DMRGBigSiteAQCCOLD: ATTENTION! for qn" << pqn.first

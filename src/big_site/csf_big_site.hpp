@@ -150,7 +150,7 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
         for (int i = 1, cl = 0, pcl; i <= n_max_unpaired; i++) {
             pcl = cl;
             cl += ((i & 7) == 1);
-            const int cidx = csf_idxs[i], pidx = csf_idxs[i - 1];
+            const LL cidx = csf_idxs[i], pidx = csf_idxs[i - 1];
             // j is twos
             for (int j = 0; j <= i; j++) {
                 csf_sub_idxs[cidx + j + 1] = csf_sub_idxs[cidx + j];
@@ -174,7 +174,7 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
         for (int i = 1, cl = 0, pcl; i <= n_max_unpaired; i++) {
             pcl = cl;
             cl += ((i & 7) == 1);
-            int cidx = csf_idxs[i], pidx = csf_idxs[i - 1];
+            const LL cidx = csf_idxs[i], pidx = csf_idxs[i - 1];
             for (int j = 0; j <= i; j++) {
                 LL shift = 0, xshift;
                 if (j > 0) {
@@ -262,8 +262,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
         LL cur = 0;
         for (int i = 0, l = 0; i < n_double; i++) {
             for (; l < n_orbs; l++) {
-                int nn = combinatorics->combination(n_orbs - l - 1,
-                                                    n_double - i - 1);
+                int nn = (int)combinatorics->combination(n_orbs - l - 1,
+                                                         n_double - i - 1);
                 if (cur + nn > icfgd) {
                     r[l >> 2] |= (3 << ((l & 3) << 1));
                     l++;
@@ -279,8 +279,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                     k--;
                     continue;
                 }
-                int nn = combinatorics->combination(n_orbs - k - l - 1,
-                                                    n_unpaired - i - 1);
+                int nn = (int)combinatorics->combination(n_orbs - k - l - 1,
+                                                         n_unpaired - i - 1);
                 if (cur + nn > icfgs) {
                     r[l >> 2] |=
                         (1 << (((l & 3) << 1) +
@@ -856,7 +856,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                         // cout << (*this)[i_abs_row + kb] << " "
                         //      << (*this)[i_abs_col + kk] << "[" << mat.size()
                         //      << "] = " << rr[kb * n_ket + kk] << endl;
-                        mat.emplace_back(make_pair(irow + kb, icol + kk),
+                        mat.emplace_back(make_pair((MKL_INT)(irow + kb),
+                                                   (MKL_INT)(icol + kk)),
                                          rr[kb * n_ket + kk]);
                     }
         }
@@ -1022,8 +1023,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
         LL cur = 0;
         for (int i = 0, l = 0; i < n_double; i++) {
             for (; l < n_orbs; l++) {
-                int nn = combinatorics->combination(n_orbs - l - 1,
-                                                    n_double - i - 1);
+                int nn = (int)combinatorics->combination(n_orbs - l - 1,
+                                                         n_double - i - 1);
                 if (cur + nn > icfgd) {
                     r[l++] = '2';
                     break;
@@ -1038,8 +1039,8 @@ struct CSFSpace<S, FL, typename S::is_su2_t> {
                     k--;
                     continue;
                 }
-                int nn = combinatorics->combination(n_orbs - k - l - 1,
-                                                    n_unpaired - i - 1);
+                int nn = (int)combinatorics->combination(n_orbs - k - l - 1,
+                                                         n_unpaired - i - 1);
                 if (cur + nn > icfgs) {
                     r[l++] = ((csfs[i_csf + icfgc + (i >> 3)] >> (i & 7)) & 1)
                                  ? '+'
@@ -1133,14 +1134,14 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             MKL_INT cur_row = -1;
             for (size_t k = 0; k < idx2.size(); k++) {
                 while (data[idx2[k]].first.first != cur_row)
-                    mat.rows[++cur_row] = k;
+                    mat.rows[++cur_row] = (MKL_INT)k;
                 mat.data[k] = data[idx2[k]].second,
                 mat.cols[k] = data[idx2[k]].first.second;
             }
             while (mat.m != cur_row)
                 mat.rows[++cur_row] = mat.nnz;
         } else if (mat.nnz < mat.size()) {
-            mat.nnz = mat.size();
+            mat.nnz = (MKL_INT)mat.size();
             mat.allocate();
             for (size_t k = 0; k < idx2.size(); k++)
                 mat.data[data[idx2[k]].first.second +
@@ -1181,14 +1182,14 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             MKL_INT cur_row = -1;
             for (size_t k = 0; k < idx2.size(); k++) {
                 while (data[idx2[k]].first.first != cur_row)
-                    mat.rows[++cur_row] = k;
+                    mat.rows[++cur_row] = (MKL_INT)k;
                 mat.data[k] = data_rev[idx2[k]],
                 mat.cols[k] = data[idx2[k]].first.second;
             }
             while (mat.m != cur_row)
                 mat.rows[++cur_row] = mat.nnz;
         } else if (mat.nnz < mat.size()) {
-            mat.nnz = mat.size();
+            mat.nnz = (MKL_INT)mat.size();
             mat.allocate();
             for (size_t k = 0; k < idx2.size(); k++)
                 mat.data[data[idx2[k]].first.second +
@@ -1213,8 +1214,6 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             S ket = mat->info->quanta[i].get_ket();
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             int iket = basis->find_state(ket);
-            const int ka = csf_space->csf_offsets[csf_space->qs_idxs[iket]];
-            const int kb = csf_space->csf_offsets[csf_space->qs_idxs[iket + 1]];
             const LL uka = csf_space->n_unpaired_idxs[csf_space->qs_idxs[iket]];
             const LL ukb =
                 csf_space->n_unpaired_idxs[csf_space->qs_idxs[iket + 1]];
@@ -1256,10 +1255,6 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
             S bra = info->quanta[i].get_bra(info->delta_quantum);
             int iket = basis->find_state(ket);
             int ibra = basis->find_state(bra);
-            const int ba = csf_space->csf_offsets[csf_space->qs_idxs[ibra]];
-            const int bb = csf_space->csf_offsets[csf_space->qs_idxs[ibra + 1]];
-            const int ka = csf_space->csf_offsets[csf_space->qs_idxs[iket]];
-            const int kb = csf_space->csf_offsets[csf_space->qs_idxs[iket + 1]];
             const LL uba = csf_space->n_unpaired_idxs[csf_space->qs_idxs[ibra]];
             const LL ubb =
                 csf_space->n_unpaired_idxs[csf_space->qs_idxs[ibra + 1]];
@@ -1295,7 +1290,7 @@ struct CSFBigSite<S, FL, typename S::is_su2_t> : BigSite<S, FL> {
         uint16_t m,
         unordered_map<shared_ptr<OpExpr<S>>, shared_ptr<SparseMatrix<S, FL>>>
             &ops) const override {
-        uint16_t i, j, k;
+        uint16_t i, j;
         uint8_t s;
         shared_ptr<SparseMatrix<S, FL>> zero =
             make_shared<SparseMatrix<S, FL>>(nullptr);

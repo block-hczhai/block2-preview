@@ -193,7 +193,7 @@ template <typename FL> struct V1Int {
         {
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -204,13 +204,13 @@ template <typename FL> struct V1Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -221,14 +221,14 @@ template <typename FL> struct V1Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
                          xconj(rot_mat[q * n + k]);
                 (*this)(i, j, k, l) = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -239,13 +239,13 @@ template <typename FL> struct V1Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += (*this)(i, q, k, l) * rot_mat[q * n + j];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -256,7 +256,7 @@ template <typename FL> struct V1Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
                          xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
@@ -319,7 +319,7 @@ template <typename FL> struct V4Int {
         {
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -330,13 +330,13 @@ template <typename FL> struct V4Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -347,14 +347,14 @@ template <typename FL> struct V4Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
                          xconj(rot_mat[q * n + k]);
                 tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -365,14 +365,14 @@ template <typename FL> struct V4Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
                          rot_mat[q * n + j];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -385,7 +385,7 @@ template <typename FL> struct V4Int {
                                 continue;
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
                          xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
@@ -449,7 +449,7 @@ template <typename FL> struct V8Int {
         {
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -460,13 +460,13 @@ template <typename FL> struct V8Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += other(i, j, k, q) * rot_mat[q * n + l];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -477,14 +477,14 @@ template <typename FL> struct V8Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)i * n + j) * n + q) * n + l] *
                          xconj(rot_mat[q * n + k]);
                 tmp2[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -495,14 +495,14 @@ template <typename FL> struct V8Int {
                         for (int l = 0; l < n; l++) {
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp2[(((size_t)i * n + q) * n + k) * n + l] *
                          rot_mat[q * n + j];
                 tmp[(((size_t)i * n + j) * n + k) * n + l] = x;
             }
 #ifdef _MSC_VER
 #pragma omp for schedule(dynamic)
-            for (int ijkl = 0; ijkl < n * n * n * n; ijkl++) {
+            for (int ijkl = 0; ijkl < (int)(n * n * n * n); ijkl++) {
                 int i = ijkl / (n * n * n), j = (ijkl / (n * n)) % n,
                     k = (ijkl / n) % n, l = ijkl % n;
 #else
@@ -516,7 +516,7 @@ template <typename FL> struct V8Int {
                                 continue;
 #endif
                 FL x = 0;
-                for (int q = 0; q < n; q++)
+                for (int q = 0; q < (int)n; q++)
                     x += tmp[(((size_t)q * n + j) * n + k) * n + l] *
                          xconj(rot_mat[q * n + i]);
                 (*this)(i, j, k, l) = x;
@@ -895,8 +895,6 @@ template <typename FL> struct FCIDUMP {
                         int_idx[i][3] ==
                     0) {
                     ip++;
-                    if (ip == 6)
-                        ;
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];

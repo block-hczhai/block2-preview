@@ -238,7 +238,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         jds.clear();
         jds.reserve(n_abc);
         for (int k = n_sites - 1, j = 0, p = 0; k >= 0; k--, j++) {
-            p += pabc[j].size();
+            p += (int)pabc[j].size();
             for (auto &abcg : pabc[j]) {
                 array<int, 4> jd;
                 for (int16_t d = 0; d < 4; d++) {
@@ -373,7 +373,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct DRT {
         for (int i = 0; i < n_init_qs; i++) {
             b->quanta[i] =
                 S(abc[i][0] + abc[i][0] + abs(abc[i][1]), abc[i][1], pgs[i]);
-            b->n_states[i] = xs[i][4];
+            b->n_states[i] = (ubond_t)xs[i][4];
         }
         b->sort_states();
         return b;
@@ -588,7 +588,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct HDRT {
         jds.clear();
         jds.reserve(n_qs * nd);
         for (int k = n_sites - 1, j = 0, p = 0; k >= 0; k--, j++) {
-            p += pqs[j].size();
+            p += (int)pqs[j].size();
             for (auto &qg : pqs[j]) {
                 for (int16_t d = 0; d < nd; d++) {
                     const auto &nqg =
@@ -721,6 +721,7 @@ template <typename S, ElemOpTypes T = ElemT<S>::value> struct HDRT {
         int pk = -1;
         for (int i = 0, k; i < n; i++, pk = k) {
             ss << setw(4) << (i + 1);
+            k = qs[i][0];
             if (qs[i][0] == pk)
                 ss << setw(6) << "";
             else
@@ -990,8 +991,14 @@ struct HDRTScheme {
             const string &expr = gfd->exprs[ix];
             const int nn = SpinPermRecoupling::count_cds(expr);
             const map<vector<uint16_t>, int> &xmp = expr_mp.at(expr);
+#ifdef _MSC_VER
 #pragma omp parallel for schedule(static, 100) num_threads(ntg)
-            for (size_t ip = 0; ip < gfd->indices[ix].size(); ip += nn) {
+            for (int ip = 0; ip < (int)gfd->indices[ix].size(); ip += nn)
+#else
+#pragma omp parallel for schedule(static, 100) num_threads(ntg)
+            for (size_t ip = 0; ip < gfd->indices[ix].size(); ip += nn)
+#endif
+            {
                 vector<uint16_t> idx(gfd->indices[ix].begin() + ip,
                                      gfd->indices[ix].begin() + ip + nn);
                 vector<uint16_t> idx_mat(nn);
@@ -1034,7 +1041,7 @@ struct HDRTScheme {
             const string &expr = xmp.first;
             for (const auto &g : xmp.second) {
                 const vector<uint16_t> &idx_pat = g.first;
-                int nn = idx_pat.size(), im = g.second;
+                int nn = (int)idx_pat.size(), im = g.second;
                 shared_ptr<NPDMCounter> counter =
                     make_shared<NPDMCounter>(nn, hdrt->n_sites + 1);
                 uint32_t cnt =
@@ -1136,14 +1143,14 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
             MKL_INT cur_row = -1;
             for (size_t k = 0; k < idx2.size(); k++) {
                 while (coo_idxs[idx2[k]].first != cur_row)
-                    mat.rows[++cur_row] = k;
+                    mat.rows[++cur_row] = (MKL_INT)k;
                 mat.data[k] = values[idx2[k]],
                 mat.cols[k] = coo_idxs[idx2[k]].second;
             }
             while (mat.m != cur_row)
                 mat.rows[++cur_row] = mat.nnz;
         } else if (mat.nnz < mat.size()) {
-            mat.nnz = mat.size();
+            mat.nnz = (MKL_INT)mat.size();
             mat.allocate();
             for (size_t k = 0; k < idx2.size(); k++)
                 mat.data[coo_idxs[idx2[k]].second +
@@ -1181,7 +1188,7 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
             }
             mat.rows[values.size()] = mat.nnz;
         } else {
-            mat.nnz = mat.size();
+            mat.nnz = (MKL_INT)mat.size();
             mat.allocate();
             for (size_t i = 0; i < values.size(); i++)
                 for (size_t j = 0; j < values[i].size(); j++)
@@ -1403,10 +1410,11 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                                 continue;
                             xjb[pj].push_back(jbv);
                             xjk[pj].push_back(jkv);
-                            xpbk[pj].push_back(make_pair(
-                                drt->xs[xjb[pi][j]][dbra] + xpbk[pi][j].first,
-                                drt->xs[xjk[pi][j]][dket] +
-                                    xpbk[pi][j].second));
+                            xpbk[pj].push_back(
+                                make_pair((MKL_INT)drt->xs[xjb[pi][j]][dbra] +
+                                              xpbk[pi][j].first,
+                                          (MKL_INT)drt->xs[xjk[pi][j]][dket] +
+                                              xpbk[pi][j].second));
                             xhv[pj].push_back(f * xhv[pi][j] * smat.data[md]);
                         }
                     ih -= hdrt->xs[jh * (hdrt->nd + 1) + dh];
@@ -1497,8 +1505,14 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                     vector<vector<MKL_INT>>(drt->xs[imb].back()));
                 vector<vector<vector<FL>>> values(
                     dqm.second.size(), vector<vector<FL>>(drt->xs[imb].back()));
+#ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-                for (LL ibra = 0; ibra < drt->xs[imb].back(); ibra++) {
+                for (int ibra = 0; ibra < (int)drt->xs[imb].back(); ibra++)
+#else
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+                for (LL ibra = 0; ibra < drt->xs[imb].back(); ibra++)
+#endif
+                {
                     const int tid = threading->get_thread_id();
                     int pi = 0, pj = pi ^ 1, jbra = imb;
                     vector<vector<int>> &xjh = jh[tid], &xjk = jket[tid];
@@ -1654,10 +1668,16 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
             ntg, vector<vector<pair<MKL_INT, MKL_INT>>>(2));
         vector<vector<vector<FL>>> hv(ntg, vector<vector<FL>>(2));
         vector<vector<ElemMat<S, FL>>> site_matrices = get_site_matrices(hdrt);
+#ifdef _MSC_VER
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < r->size(); i++) {
-            const size_t jx =
-                upper_bound(psum.begin(), psum.end(), i) - psum.begin() - 1;
+        for (int i = 0; i < (int)r->size(); i++)
+#else
+#pragma omp parallel for schedule(dynamic) num_threads(ntg)
+        for (size_t i = 0; i < r->size(); i++)
+#endif
+        {
+            const size_t jx = upper_bound(psum.begin(), psum.end(), (size_t)i) -
+                              psum.begin() - 1;
             const int tid = threading->get_thread_id();
             int pi = 0, pj = pi ^ 1;
             vector<vector<pair<MKL_INT, MKL_INT>>> &xpbk = pbk[tid];
@@ -1722,9 +1742,11 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
                             continue;
                         xjb[pj].push_back(jbv);
                         xjk[pj].push_back(jkv);
-                        xpbk[pj].push_back(make_pair(
-                            drt->xs[xjb[pi][j]][dbra] + xpbk[pi][j].first,
-                            drt->xs[xjk[pi][j]][dket] + xpbk[pi][j].second));
+                        xpbk[pj].push_back(
+                            make_pair((MKL_INT)(drt->xs[xjb[pi][j]][dbra] +
+                                                xpbk[pi][j].first),
+                                      (MKL_INT)(drt->xs[xjk[pi][j]][dket] +
+                                                xpbk[pi][j].second)));
                         xhv[pj].push_back(f * xhv[pi][j] * smat.data[md]);
                     }
                 ih -= hdrt->xs[jh * (hdrt->nd + 1) + dh];
@@ -2136,9 +2158,9 @@ struct DRTBigSite<S, FL, typename S::is_su2_t> : DRTBigSiteBase<S, FL> {
         const FL xf = (FL)(iq == -1 || iq == 0 || !is_right ? 1.0 : -1.0);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < mats.size(); i++) {
-            vector<uint16_t> idx(idxs.begin() + i * nn,
-                                 idxs.begin() + (i + 1) * nn);
+        for (int i = 0; i < (int)mats.size(); i++) {
+            vector<uint16_t> idx(idxs.begin() + (size_t)i * nn,
+                                 idxs.begin() + (size_t)(i + 1) * nn);
             vector<uint16_t> idx_mat(nn), idx_idx(nn);
             for (int j = 0; j < nn; j++)
                 idx_idx[j] = j;
@@ -2584,9 +2606,9 @@ struct DRTBigSite<S, FL, typename S::is_sz_t> : DRTBigSiteBase<S, FL> {
         // const FL xf = (FL)(iq != 2 || !is_right ? 1.0 : -1.0);
         int ntg = threading->activate_global();
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
-        for (size_t i = 0; i < mats.size(); i++) {
-            vector<uint16_t> idx(idxs.begin() + i * nn,
-                                 idxs.begin() + (i + 1) * nn);
+        for (int i = 0; i < (int)mats.size(); i++) {
+            vector<uint16_t> idx(idxs.begin() + (size_t)i * nn,
+                                 idxs.begin() + (size_t)(i + 1) * nn);
             vector<uint16_t> idx_mat(nn), idx_idx(nn);
             for (int j = 0; j < nn; j++)
                 idx_idx[j] = j;

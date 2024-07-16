@@ -533,7 +533,7 @@ template <typename F, int P> struct FactorizedFFT<F, P> {
         for (auto &f : factors) {
             if (f.first <= max_factor)
                 pr.push_back((size_t)Prime::power(f.first, f.second)),
-                    b.push_back(f.first);
+                    b.push_back((int)f.first);
             else
                 for (int i = 0; i < f.second; i++)
                     pr.push_back((size_t)f.first), b.push_back(0);

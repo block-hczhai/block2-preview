@@ -947,7 +947,7 @@ template <typename S, typename FL> struct MPO {
                                    ? this->deep_copy(tag + "@" + new_tag)
                                    : make_shared<MPO>(*this);
         assert(rmpo->middle_operator_exprs.size() != 0);
-        for (size_t ix = 0; ix < rmpo->middle_operator_exprs.size(); ix++) {
+        for (int ix = 0; ix < (int)rmpo->middle_operator_exprs.size(); ix++) {
             rmpo->load_middle_operators(ix);
             auto &x = rmpo->middle_operator_exprs[ix];
             x = x->copy();
@@ -1003,7 +1003,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
         MPO<S, FL>::save_schemer();
         MPO<S, FL>::unload_schemer();
         MPO<S, FL>::left_operator_names = mpo->left_operator_names;
-        for (size_t i = 0; i < MPO<S, FL>::left_operator_names.size(); i++) {
+        for (int i = 0; i < (int)MPO<S, FL>::left_operator_names.size(); i++) {
             mpo->load_left_operators(i);
             MPO<S, FL>::left_operator_names[i] = mpo->left_operator_names[i];
             mpo->unload_left_operators(i);
@@ -1011,7 +1011,7 @@ template <typename S, typename FL> struct DiagonalMPO : MPO<S, FL> {
             MPO<S, FL>::unload_left_operators(i);
         }
         MPO<S, FL>::right_operator_names = mpo->right_operator_names;
-        for (size_t i = 0; i < MPO<S, FL>::right_operator_names.size(); i++) {
+        for (int i = 0; i < (int)MPO<S, FL>::right_operator_names.size(); i++) {
             mpo->load_right_operators(i);
             MPO<S, FL>::right_operator_names[i] = mpo->right_operator_names[i];
             mpo->unload_right_operators(i);
@@ -1513,7 +1513,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
         assert(mpo->right_operator_exprs.size() != 0);
         MPO<S, FL>::tensors = mpo->tensors;
         if (MPO<S, FL>::tag != mpo->tag) {
-            for (size_t i = 0; i < MPO<S, FL>::middle_operator_names.size();
+            for (int i = 0; i < (int)MPO<S, FL>::middle_operator_names.size();
                  i++) {
                 mpo->load_middle_operators(i);
                 MPO<S, FL>::middle_operator_names[i] =
@@ -1536,7 +1536,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
             OpNames::I, SiteIndex(), (mpo->left_vacuum - mpo->left_vacuum)[0]);
         const shared_ptr<OpExpr<S>> i_op_lv = make_shared<OpElement<S, FL>>(
             OpNames::I, SiteIndex(), mpo->left_vacuum);
-        for (size_t m = 0; m < MPO<S, FL>::left_operator_names.size(); m++) {
+        for (int m = 0; m < (int)MPO<S, FL>::left_operator_names.size(); m++) {
             bool found = false;
             auto &x = MPO<S, FL>::left_operator_names[m];
             auto &y = MPO<S, FL>::left_operator_exprs[m];
@@ -1573,7 +1573,7 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
             MPO<S, FL>::save_left_operators(m);
             MPO<S, FL>::unload_left_operators(m);
         }
-        for (size_t m = 0; m < MPO<S, FL>::right_operator_names.size(); m++) {
+        for (int m = 0; m < (int)MPO<S, FL>::right_operator_names.size(); m++) {
             bool found = false;
             auto &x = MPO<S, FL>::right_operator_names[m];
             auto &y = MPO<S, FL>::right_operator_exprs[m];

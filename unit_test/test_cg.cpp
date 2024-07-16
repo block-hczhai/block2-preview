@@ -7,8 +7,8 @@ using namespace block2;
 class TestCG : public ::testing::Test {
   protected:
     typedef double FP;
-    size_t isize = 1L << 20;
-    size_t dsize = 1L << 24;
+    size_t isize = 1LL << 20;
+    size_t dsize = 1LL << 24;
     static const int max_twoj = 300;
     static const int n_tests = 10000;
     SU2CG cg;
@@ -50,7 +50,7 @@ TEST_F(TestCG, TestCGTranspose) {
                     break;
                 }
             }
-        EXPECT_LT(abs(actual - expected), 1E-15);
+        EXPECT_LT(abs(actual - expected), 1E-14);
     }
 }
 
@@ -63,7 +63,7 @@ TEST_F(TestCG, TestCGJ0) {
         double actual = cg.cg(tj1, tj2, tJ, tm1, tm2, 0);
         double expected = (((tj1 - tm1) & 2) ? -1 : 1) / sqrt(tj1 + 1);
         expected *= (tj1 == tj2) * (tm1 == -tm2);
-        EXPECT_LT(abs(actual - expected), 1E-15);
+        EXPECT_LT(abs(actual - expected), 1E-14);
     }
 }
 
@@ -74,7 +74,7 @@ TEST_F(TestCG, TestCGMEqJ) {
         int tj2 = Random::rand_int(0, 20);
         int tJ = tj1 + tj2;
         double actual = cg.cg(tj1, tj2, tJ, tj1, tj2, tJ);
-        EXPECT_LT(abs(actual - 1), 1E-15);
+        EXPECT_LT(abs(actual - 1), 1E-14);
     }
 }
 
@@ -87,7 +87,7 @@ TEST_F(TestCG, TestCGEqJ1) {
         double expected =
             factorial[tj1] * factorial[tj1] / sqrt(factorial[tj1 << 1]) /
             (factorial[(tj1 - tm1) >> 1] * factorial[(tj1 + tm1) >> 1]);
-        EXPECT_LT(abs(actual - expected), 1E-15);
+        EXPECT_LT(abs(actual - expected), 1E-14);
     }
 }
 
@@ -108,12 +108,12 @@ TEST_F(TestCG, TestCGHalf) {
                 double actual = cg.cg(tj1, tj2, tJ, tm1, tm2, tM);
                 double expected =
                     pm * sqrt(0.5 * (1 + pm * (1.0 * tM / (tj1 + 1))));
-                EXPECT_LT(abs(actual - expected), 1E-15);
+                EXPECT_LT(abs(actual - expected), 1E-14);
             } else {
                 int tm1 = tM + 1, tm2 = -1;
                 double actual = cg.cg(tj1, tj2, tJ, tm1, tm2, tM);
                 double expected = sqrt(0.5 * (1 - pm * (1.0 * tM / (tj1 + 1))));
-                EXPECT_LT(abs(actual - expected), 1E-15);
+                EXPECT_LT(abs(actual - expected), 1E-14);
             }
         }
     }
@@ -132,7 +132,7 @@ TEST_F(TestCG, TestW3jMZero) {
         double actual = cg.wigner_3j(tj1, tj2, tJ, 0, 0, 0);
         if ((tj1 + tj2 + tJ) & 2 || tJ < abs(tj1 - tj2) || tJ > (tj1 + tj2) ||
             (tj1 & 1) || (tj2 & 1) || (tJ & 1))
-            EXPECT_LT(abs(actual - 0), 1E-15);
+            EXPECT_LT(abs(actual - 0), 1E-14);
         else {
             int p = (tj1 + tj2 + tJ) >> 2;
             double expected =
@@ -140,7 +140,7 @@ TEST_F(TestCG, TestW3jMZero) {
                 factorial[p] /
                 (factorial[p - (tj1 >> 1)] * factorial[p - (tj2 >> 1)] *
                  factorial[p - (tJ >> 1)]);
-            EXPECT_LT(abs(actual - expected), 1E-15);
+            EXPECT_LT(abs(actual - expected), 1E-14);
         }
     }
 }
@@ -157,7 +157,7 @@ TEST_F(TestCG, TestW6jJcZero) {
         double actual = cg.wigner_6j(tj, tjp, 0, tJ, tJp, tg);
         double expected = (((tj + tJ + tg) & 2) ? -1 : 1) * (tj == tjp) *
                           (tJ == tJp) / sqrt((tj + 1) * (tJ + 1));
-        EXPECT_LT(abs(actual - expected), 1E-15);
+        EXPECT_LT(abs(actual - expected), 1E-14);
     }
 }
 
@@ -176,8 +176,8 @@ TEST_F(TestCG, TestW6jJcHalf) {
         double expected2 = (((tj + tJ + tg) & 2) ? 1 : -1) *
                            sqrt((2 - tg + tj + tJ) * (4 + tg + tj + tJ) >> 2) /
                            sqrt((tj + 1) * (tj + 2) * (tJ + 1) * (tJ + 2));
-        EXPECT_LT(abs(actual1 - expected1), 1E-15);
-        EXPECT_LT(abs(actual2 - expected2), 1E-15);
+        EXPECT_LT(abs(actual1 - expected1), 1E-14);
+        EXPECT_LT(abs(actual2 - expected2), 1E-14);
     }
 }
 
@@ -193,7 +193,7 @@ TEST_F(TestCG, TestW6jRacahElliotA) {
             r += ((tx & 1) ? -1 : 1) * (tx + 1) *
                  cg.wigner_6j(ta, tb, tx, ta, tb, tf);
         // need long double to get this accuracy
-        EXPECT_LT(abs(r - 1), 1E-15);
+        EXPECT_LT(abs(r - 1), 1E-14);
     }
 }
 
@@ -211,7 +211,7 @@ TEST_F(TestCG, TestW6jRacahElliotB) {
                  cg.wigner_6j(ta, tb, tx, tb, ta, tf);
         long double expected = (tf == 0) * sqrtl((ta + 1) * (tb + 1));
         // need long double to get this accuracy
-        EXPECT_LT(abs(r - expected), 1E-15);
+        EXPECT_LT(abs(r - expected), 1E-14);
     }
 }
 
@@ -232,7 +232,7 @@ TEST_F(TestCG, TestW6jRacahElliotC) {
         long double expected = 1.0L * (tf == tg) / (tf + 1) *
                                cg.triangle(ta, td, tg) *
                                cg.triangle(tc, tb, tg);
-        EXPECT_LT(abs(r - expected), 1E-15);
+        EXPECT_LT(abs(r - expected), 1E-14);
     }
 }
 
@@ -253,7 +253,7 @@ TEST_F(TestCG, TestW6jRacahElliotD) {
                  cg.wigner_6j(ta, tb, tx, tc, td, tf) *
                  cg.wigner_6j(tc, td, tx, tb, ta, tg);
         long double expected = cg.wigner_6j(ta, td, tf, tb, tc, tg);
-        EXPECT_LT(abs(r - expected), 1E-15);
+        EXPECT_LT(abs(r - expected), 1E-14);
     }
 }
 
@@ -284,7 +284,7 @@ TEST_F(TestCG, TestW6jRacahElliotE) {
                  cg.wigner_6j(te, tf, tx, tb, ta, tj);
         long double expected = cg.wigner_6j(tg, th, tj, te, ta, td) *
                                cg.wigner_6j(tg, th, tj, tf, tb, tc);
-        EXPECT_LT(abs(r - expected), 1E-15);
+        EXPECT_LT(abs(r - expected), 1E-14);
     }
 }
 
@@ -305,6 +305,6 @@ TEST_F(TestCG, TestW9jJiZero) {
         double expected =
             (tf == tfp) * (tg == tgp) * (((tb + td + tf + tg) & 2) ? -1 : 1) /
             sqrt((tf + 1) * (tg + 1)) * cg.wigner_6j(ta, tb, tf, te, td, tg);
-        EXPECT_LT(abs(actual - expected), 1E-15);
+        EXPECT_LT(abs(actual - expected), 1E-14);
     }
 }

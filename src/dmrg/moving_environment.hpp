@@ -107,9 +107,9 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
         cmat->allocate(mat->info);
         cmat->factor = mat->factor;
         GMatrixFunctions<FL>::fill_complex(
-            GMatrix<FL>(cmat->data, cmat->total_memory, 1),
-            GMatrix<FP>(mat->data, mat->total_memory, 1),
-            GMatrix<FP>(nullptr, mat->total_memory, 1));
+            GMatrix<FL>(cmat->data, (MKL_INT)cmat->total_memory, 1),
+            GMatrix<FP>(mat->data, (MKL_INT)mat->total_memory, 1),
+            GMatrix<FP>(nullptr, (MKL_INT)mat->total_memory, 1));
         return cmat;
     }
     static shared_ptr<SparseMatrixGroup<S, FL>>
@@ -120,9 +120,9 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
             make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
         cwfn->allocate(wfn->infos);
         GMatrixFunctions<FL>::fill_complex(
-            GMatrix<FL>(cwfn->data, cwfn->total_memory, 1),
-            GMatrix<FP>(wfn->data, wfn->total_memory, 1),
-            GMatrix<FP>(nullptr, wfn->total_memory, 1));
+            GMatrix<FL>(cwfn->data, (MKL_INT)cwfn->total_memory, 1),
+            GMatrix<FP>(wfn->data, (MKL_INT)wfn->total_memory, 1),
+            GMatrix<FP>(nullptr, (MKL_INT)wfn->total_memory, 1));
         return cwfn;
     }
     static vector<shared_ptr<SparseMatrixGroup<S, FL>>>
@@ -135,10 +135,11 @@ struct ComplexMixture<S, complex<FP>, FP> : ComplexMixture<S, FP, FP> {
             cwfns[i] = make_shared<SparseMatrixGroup<S, FL>>(d_alloc);
             cwfns[i]->allocate(wfns[i + i]->infos);
             GMatrixFunctions<FL>::fill_complex(
-                GMatrix<FL>(cwfns[i]->data, cwfns[i]->total_memory, 1),
-                GMatrix<FP>(wfns[i + i]->data, wfns[i + i]->total_memory, 1),
+                GMatrix<FL>(cwfns[i]->data, (MKL_INT)cwfns[i]->total_memory, 1),
+                GMatrix<FP>(wfns[i + i]->data,
+                            (MKL_INT)wfns[i + i]->total_memory, 1),
                 GMatrix<FP>(wfns[i + i + 1]->data,
-                            wfns[i + i + 1]->total_memory, 1));
+                            (MKL_INT)wfns[i + i + 1]->total_memory, 1));
         }
         return cwfns;
     }
@@ -2337,7 +2338,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         const vector<shared_ptr<SparseMatrixGroup<S, FLS>>> &psi,
         bool trace_right, const vector<GMatrix<FLS>> &mats,
         const vector<FPS> &weights) {
-        int p = 0, np = psi.size() * psi[0]->n;
+        int p = 0, np = (int)psi.size() * psi[0]->n;
         assert(mats.size() == (weights.size() - 1) * np);
         for (size_t k = 1; k < weights.size(); k++)
             for (size_t i = 0; i < psi.size(); i++)

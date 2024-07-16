@@ -2753,8 +2753,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             me->para_rule->comm->barrier();
         for (auto &mps : ext_mpss) {
             if (ext_mps_bond_dim != -1 &&
-                mps->info->bond_dim < ext_mps_bond_dim)
-                mps->info->bond_dim = ext_mps_bond_dim;
+                (int)mps->info->bond_dim < ext_mps_bond_dim)
+                mps->info->bond_dim = (ubond_t)ext_mps_bond_dim;
             if (mps->canonical_form[i] == 'C') {
                 if (i == 0)
                     mps->canonical_form[i] = 'K';
@@ -3505,8 +3505,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             me->para_rule->comm->barrier();
         for (auto &mps : ext_mpss) {
             if (ext_mps_bond_dim != -1 &&
-                mps->info->bond_dim < ext_mps_bond_dim)
-                mps->info->bond_dim = ext_mps_bond_dim;
+                (int)mps->info->bond_dim < ext_mps_bond_dim)
+                mps->info->bond_dim = (ubond_t)ext_mps_bond_dim;
             if (mps->tensors[i] != nullptr && mps->tensors[i + 1] != nullptr)
                 MovingEnvironment<S, FL, FLS>::contract_two_dot(i, mps);
             else {

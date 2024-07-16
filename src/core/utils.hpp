@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
@@ -44,6 +45,10 @@
 #include <io.h>
 #endif
 #include <vector>
+
+#ifdef _WIN32
+typedef int64_t ssize_t;
+#endif
 
 using namespace std;
 
@@ -327,6 +332,10 @@ struct Parsing {
         }
     }
     static bool rename_file(const string &old_name, const string &new_name) {
+#ifdef _WIN32
+        if (file_exists(old_name) && file_exists(new_name))
+            remove_file(new_name);
+#endif
         return rename(old_name.c_str(), new_name.c_str()) == 0;
     }
     static bool remove_file(const string &name) {

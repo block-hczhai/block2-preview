@@ -1698,7 +1698,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             if (ex_type == ExpectationTypes::Real) {
                 assert(ket.size() == bra.size());
                 for (size_t k = 0; k < ket.size(); k++)
-                    for (size_t j = 0; j < ket[k]->infos.size(); j++) {
+                    for (int j = 0; j < (int)ket[k]->infos.size(); j++) {
                         auto ex = tf->tensor_product_npdm_fragment(
                             npdm_scheme, opdq, npdm_fragment_filename,
                             npdm_n_sites, npdm_center, npdm_parallel_center,
@@ -1726,7 +1726,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 // p = 1 (IM) K=1 B=0 F=1; K=0 B=1 F=-1
                 for (int p = 0; p < 2; p++)
                     for (int k = 0; k < 2; k++)
-                        for (size_t j = 0; j < ket[k]->infos.size(); j++) {
+                        for (int j = 0; j < (int)ket[k]->infos.size(); j++) {
                             auto ex = tf->tensor_product_npdm_fragment(
                                 npdm_scheme, opdq,
                                 npdm_fragment_filename +

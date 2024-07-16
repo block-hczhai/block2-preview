@@ -531,20 +531,22 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     if (length)
                         ppqq.second.second = (uint16_t)(iw * max_term_l + iwl);
                     if (q_map.count(make_pair(ppqq, qq)) == 0) {
-                        q_map[make_pair(ppqq, qq)] = (int)q_map.size();
+                        const int nq = (int)q_map.size();
+                        q_map[make_pair(ppqq, qq)] = nq;
                         map_ls.emplace_back();
                         map_rs.emplace_back();
                         mats.emplace_back();
                         nms.push_back(make_pair(0, 0));
                     }
-                    int iq = q_map.at(make_pair(ppqq, qq)), il = -1, ir = -1;
+                    int iq = q_map.at(make_pair(ppqq, qq));
+                    LL il = -1, ir = -1;
                     LL &nml = nms[iq].first, &nmr = nms[iq].second;
                     auto &mpl = map_ls[iq];
                     auto &mpr = map_rs[iq];
                     if (mpl.count(hl)) {
                         int iq = 0;
                         auto &vq = mpl.at(hl);
-                        for (; iq < vq.size(); iq++) {
+                        for (; iq < (int)vq.size(); iq++) {
                             int vip = vq[iq].first.first, vix;
                             LL vic = vq[iq].first.second, vit;
                             if (vic >= (LL)cur_terms[vip].size()) {
@@ -568,17 +570,17 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                 break;
                         }
                         if (iq == (int)vq.size())
-                            vq.push_back(
-                                make_pair(make_pair(ip, ic), il = nml++));
+                            vq.push_back(make_pair(make_pair(ip, ic),
+                                                   (int)(il = nml++)));
                         else
                             il = vq[iq].second;
                     } else
                         mpl[hl].push_back(
-                            make_pair(make_pair(ip, ic), il = nml++));
+                            make_pair(make_pair(ip, ic), (int)(il = nml++)));
                     if (mpr.count(hr)) {
                         int iq = 0;
                         auto &vq = mpr.at(hr);
-                        for (; iq < vq.size(); iq++) {
+                        for (; iq < (int)vq.size(); iq++) {
                             int vip = vq[iq].first.first, vix;
                             LL vic = vq[iq].first.second, vit;
                             if (vic >= (LL)cur_terms[vip].size()) {
@@ -603,17 +605,18 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                 break;
                         }
                         if (iq == (int)vq.size())
-                            vq.push_back(
-                                make_pair(make_pair(ip, ic), ir = nmr++));
+                            vq.push_back(make_pair(make_pair(ip, ic),
+                                                   (int)(ir = nmr++)));
                         else
                             ir = vq[iq].second;
                     } else
                         mpr[hr].push_back(
-                            make_pair(make_pair(ip, ic), ir = nmr++));
+                            make_pair(make_pair(ip, ic), (int)(ir = nmr++)));
                     // cout << "il = " << il << " ir = " << ir
                     //      << " ql = " << qq.get_bra(qh)
                     //      << " qr = " << -qq.get_ket() << endl;
-                    mats[iq].push_back(make_pair(make_pair(il, ir), itv));
+                    mats[iq].push_back(
+                        make_pair(make_pair((int)il, (int)ir), itv));
                 }
             }
             // cout << "mats size = " << mats.size() << endl;
@@ -637,7 +640,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 int iq = mq.second;
                 auto &matvs = mats[iq];
                 auto &nm = nms[iq];
-                int szl = nm.first, szr = nm.second, szm;
+                int szl = (int)nm.first, szr = (int)nm.second, szm;
                 // cout << "iq = " << iq << " q = " << qs[iq] << " szl = " <<
                 // szl
                 //      << " szr = " << szr << endl;
@@ -780,7 +783,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     }
                     res_s_sum +=
                         accumulate(svds[iq].second.begin(),
-                                   svds[iq].second.end(), 0, plus<FP>());
+                                   svds[iq].second.end(), (FP)0, plus<FP>());
                     res_s_count += svds[iq].second.size();
                     if (!rescale) {
                         for (int i = 0; i < szm; i++)
@@ -820,7 +823,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     int s_kept = 0;
                     int iq = mq.second;
                     auto &nm = nms[iq];
-                    int szl = nm.first, szr = nm.second;
+                    int szl = (int)nm.first, szr = (int)nm.second;
                     int szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     if (delayed_term != -1 && iq == 0)
                         szm =
@@ -844,7 +847,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 for (auto &mq : q_map) {
                     int iq = mq.second;
                     for (size_t i = 0; i < svds[iq].second.size(); i++)
-                        idxs.push_back(make_pair(iq, i));
+                        idxs.push_back(make_pair(iq, (int)i));
                 }
                 if (idxs.size() > max_bond_dim) {
                     s_kept_total = 0;
@@ -878,9 +881,9 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     auto &matvs = mats[iq];
                     if (pqx[iq] < 2)
                         continue;
-                    int szl = nm.first, szr = nm.second;
+                    int szl = (int)nm.first, szr = (int)nm.second;
                     int szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
-                    int rank = svds[iq].second.size();
+                    int rank = (int)svds[iq].second.size();
                     if ((szl == 1 && szr == 1) || rank == 0)
                         continue;
                     vector<FL> mat((size_t)szl * szr, 0);
@@ -932,13 +935,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                     int iq = mq.second;
                     auto &nm = nms[iq];
                     auto &matvs = mats[iq];
-                    int szl = nm.first, szr = nm.second,
+                    int szl = (int)nm.first, szr = (int)nm.second,
                         szm = (int)(min(szl, szr) * eff_disjoint_multiplier);
                     if (delayed_term != -1 && iq == 0)
                         szm =
                             (int)(min(szl - 1, szr) * eff_disjoint_multiplier) +
                             1;
-                    int s_kept = svds[iq].second.size();
+                    int s_kept = (int)svds[iq].second.size();
                     vector<FL> smat(
                         max((size_t)szl * szr, (size_t)s_kept * s_kept),
                         (FL)0.0);
@@ -1053,7 +1056,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 auto &matvs = mats[iq];
                 auto &mpl = map_ls[iq];
                 auto &nm = nms[iq];
-                int szl = nm.first, szr = nm.second, szm;
+                int szl = (int)nm.first, szr = (int)nm.second, szm;
                 if (algo_type & MPOAlgorithmTypes::NC)
                     szm = ii == n_sites - 1 ? szr : szl;
                 else if (algo_type & MPOAlgorithmTypes::CN)
@@ -1327,7 +1330,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 S qq = qs[iq];
                 auto &mpr = map_rs[iq];
                 auto &nm = nms[iq];
-                int szr = nm.second, szl = nm.first;
+                int szr = (int)nm.second, szl = (int)nm.first;
                 vector<pair<int, LL>> vct(szr);
                 for (auto &vrs : mpr)
                     for (auto &vr : vrs.second) {
@@ -1535,11 +1538,11 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                  << (double)(size_total - nnz_total) / size_total << endl
                  << endl;
         }
-        for (size_t i = 0; i < left_operator_names.size(); i++) {
+        for (int i = 0; i < (int)left_operator_names.size(); i++) {
             this->save_left_operators(i);
             this->unload_left_operators(i);
         }
-        for (size_t i = 0; i < right_operator_names.size(); i++) {
+        for (int i = 0; i < (int)right_operator_names.size(); i++) {
             this->save_right_operators(i);
             this->unload_right_operators(i);
         }

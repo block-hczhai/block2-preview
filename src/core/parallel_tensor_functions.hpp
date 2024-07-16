@@ -704,10 +704,16 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                 TensorFunctions<S, FL>::npdm_sort_load_file(filename,
                                                             compressed);
             int ntg = threading->activate_global();
-#pragma omp parallel for schedule(static, 1048576) num_threads(ntg)
-            for (size_t ix = 0; ix < prev->size(); ix++)
-                (*result->data)[ix] =
-                    (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            const size_t plen = (prev->size() + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+            {
+                int tid = threading->get_thread_id();
+                const size_t ixst = plen * tid;
+                const size_t ixed = min(prev->size(), plen * (tid + 1));
+                for (size_t ix = ixst; ix < ixed; ix++)
+                    (*result->data)[ix] =
+                        (*prev->data)[ix] + (*result->data)[ix] * accu_factor;
+            }
             threading->activate_normal();
         }
         string fn = filename + (compressed ? ".fpc" : ".npy");

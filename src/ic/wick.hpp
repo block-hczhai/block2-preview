@@ -1066,7 +1066,7 @@ struct WickString {
                     wi = mp_idxs[wi];
         // change contraction index in b,
         // if it is also free index or contraction index in a
-        for (int i = tensors.size(); i < (int)xtensors.size(); i++)
+        for (int i = (int)tensors.size(); i < (int)xtensors.size(); i++)
             for (auto &wi : xtensors[i].indices)
                 if (mp_idxs.count(wi) && xb_rep.count(wi))
                     wi = mp_idxs[wi];
@@ -1083,7 +1083,8 @@ struct WickString {
                         new_tag++;
                     b_tags[new_tag] = btgv;
                     b_tags.erase(atg.first);
-                    for (int i = tensors.size(); i < (int)xtensors.size(); i++)
+                    for (int i = (int)tensors.size(); i < (int)xtensors.size();
+                         i++)
                         if (xtensors[i].get_spin_tag() == atg.first)
                             xtensors[i].set_spin_tag(new_tag);
                 }
@@ -1202,7 +1203,7 @@ struct WickString {
                            ot_tensors[i].indices.size() !=
                                ot_tensors[i - 1].indices.size()))
                 ot_tensor_groups.push_back(i);
-        ot_tensor_groups.push_back(ot_tensors.size());
+        ot_tensor_groups.push_back((int)ot_tensors.size());
         int kidx = 0;
         vector<WickTensor> ot_sorted(ot_tensors.size());
         vector<pair<map<WickIndex, int>, int>> ctr_maps = {
@@ -1286,7 +1287,7 @@ struct WickString {
             }
             // argsort sf_pri
             for (size_t i = 0; i < sf_ctr_idx.size(); i++)
-                sf_idx_sorted[i] = i;
+                sf_idx_sorted[i] = (int)i;
             stable_sort(
                 sf_idx_sorted.begin(), sf_idx_sorted.end(),
                 [&sf_pri, &sf_ctr_idx](int i, int j) {
@@ -1320,7 +1321,7 @@ struct WickString {
                      cd_tensors[i].indices[0].types !=
                          cd_tensors[i - 1].indices[0].types))
                     cd_tensor_groups.push_back(i);
-            cd_tensor_groups.push_back(cd_tensors.size());
+            cd_tensor_groups.push_back((int)cd_tensors.size());
             // loop over each group
             uint8_t arg_sign = 0;
             int new_spin_tag = 0;
@@ -1331,7 +1332,7 @@ struct WickString {
                                     cd_tensor_groups[ig]);
                 // arg sort within each group
                 for (size_t i = 0; i < arg_idx.size(); i++)
-                    arg_idx[i] = i + cd_tensor_groups[ig];
+                    arg_idx[i] = (int)i + cd_tensor_groups[ig];
                 stable_sort(arg_idx.begin(), arg_idx.end(),
                             [&cd_tensors](int i, int j) {
                                 return cd_tensors[i].indices <
@@ -1823,7 +1824,7 @@ struct WickExpr {
             WickIndexTypes::Inactive, WickIndexTypes::Active,
             WickIndexTypes::Single, WickIndexTypes::External};
         for (int i = 0; i < (int)vidxs.size(); i++) {
-            int k = 0, nk = xctr_idxs.size();
+            int k = 0, nk = (int)xctr_idxs.size();
             for (int j = 0; j < (int)check_types.size(); j++)
                 if ((vidxs[i].types & check_types[j]) != WickIndexTypes::None &&
                     (vidxs[i].types & check_mask) != check_types[j]) {
@@ -1920,14 +1921,14 @@ struct WickExpr {
                 wt.type == WickTensorTypes::DestroyOperator)
                 cd_tensors.push_back(wt);
             else if (wt.type == WickTensorTypes::SpinFreeOperator) {
-                int sf_n = wt.indices.size() / 2;
+                int sf_n = (int)wt.indices.size() / 2;
                 for (int i = 0; i < sf_n; i++) {
                     cd_tensors.push_back(WickTensor::cre(wt.indices[i]));
-                    cd_idx_map.push_back(cd_idx_map.size() + sf_n);
+                    cd_idx_map.push_back((int)cd_idx_map.size() + sf_n);
                 }
                 for (int i = 0; i < sf_n; i++) {
                     cd_tensors.push_back(WickTensor::des(wt.indices[i + sf_n]));
-                    cd_idx_map.push_back(cd_idx_map.size() - sf_n);
+                    cd_idx_map.push_back((int)cd_idx_map.size() - sf_n);
                 }
             } else
                 ot_tensors.push_back(wt);
@@ -1976,7 +1977,7 @@ struct WickExpr {
                 // sign for reordering tensors to the normal order
                 for (int i = 0; i < (int)cd_tensors.size(); i++)
                     for (int j = i + 1; j < (int)cd_tensors.size(); j++)
-                        acc_sign[0] ^= (cd_tensors[j] < cd_tensors[i]);
+                        acc_sign[0] ^= (int)(cd_tensors[j] < cd_tensors[i]);
                 // arg sort of tensors in the normal order
                 stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                             [&cd_tensors](int i, int j) {
@@ -2026,13 +2027,13 @@ struct WickExpr {
                     acc_sign[l + 2] = 0;
                 } else {
                     // remove tensor reorder sign for c/d
-                    acc_sign[l + 2] ^= (cd_tensors[d] < cd_tensors[c]);
+                    acc_sign[l + 2] ^= (int)(cd_tensors[d] < cd_tensors[c]);
                     for (int i = 0; i < (int)cd_tensors.size(); i++)
                         if (!cur_idxs_mask[i]) {
-                            acc_sign[l + 2] ^=
-                                (cd_tensors[max(c, i)] < cd_tensors[min(c, i)]);
-                            acc_sign[l + 2] ^=
-                                (cd_tensors[max(d, i)] < cd_tensors[min(d, i)]);
+                            acc_sign[l + 2] ^= (int)(cd_tensors[max(c, i)] <
+                                                     cd_tensors[min(c, i)]);
+                            acc_sign[l + 2] ^= (int)(cd_tensors[max(d, i)] <
+                                                     cd_tensors[min(d, i)]);
                         }
                 }
                 ot_tensors[ot_count + l] =
@@ -2046,7 +2047,7 @@ struct WickExpr {
             if (max_unctr != -1 && cd_tensors.size() - (l + l + 2) > max_unctr)
                 continue;
             if (sf_type) {
-                int sf_n = cd_tensors.size() / 2, tn = sf_n - l - 1;
+                int sf_n = (int)cd_tensors.size() / 2, tn = sf_n - l - 1;
                 vector<WickIndex> wis(tn * 2);
                 for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
                     if (!cur_idxs_mask[tensor_idxs[i]] &&
@@ -2104,20 +2105,20 @@ struct WickExpr {
                 cd_tensors.push_back(wt);
                 if (sf_type) {
                     cd_idx_map.push_back(-1);
-                    cd_spin_map[wt.get_spin_tag()].push_back(cd_tensors.size() -
-                                                             1);
+                    cd_spin_map[wt.get_spin_tag()].push_back(
+                        (int)cd_tensors.size() - 1);
                 }
             } else if (wt.type == WickTensorTypes::SpinFreeOperator) {
-                int sf_n = wt.indices.size() / 2;
+                int sf_n = (int)wt.indices.size() / 2;
                 // sign from reverse destroy operator
                 init_sign ^= ((sf_n - 1) & 1) ^ (((sf_n - 1) & 2) >> 1);
                 for (int i = 0; i < sf_n; i++) {
                     cd_tensors.push_back(WickTensor::cre(wt.indices[i]));
-                    cd_idx_map.push_back(cd_idx_map.size() + sf_n);
+                    cd_idx_map.push_back((int)cd_idx_map.size() + sf_n);
                 }
                 for (int i = 0; i < sf_n; i++) {
                     cd_tensors.push_back(WickTensor::des(wt.indices[i + sf_n]));
-                    cd_idx_map.push_back(cd_idx_map.size() - sf_n);
+                    cd_idx_map.push_back((int)cd_idx_map.size() - sf_n);
                 }
             } else
                 ot_tensors.push_back(wt);
@@ -2250,7 +2251,7 @@ struct WickExpr {
                 if (sf_type && !no_unctr_sf_inact) {
                     // the previous guarentees that we can sort
                     // the first and the second half separately
-                    int n_sf = tensor_idxs.size() / 2;
+                    int n_sf = (int)tensor_idxs.size() / 2;
                     stable_sort(tensor_idxs.begin(), tensor_idxs.end(),
                                 [&cd_tensors](int i, int j) {
                                     int ki = (cd_tensors[i].indices[0].types &
@@ -2424,7 +2425,7 @@ struct WickExpr {
                 if (n_inact_a < n_inactive_idxs_a[0] &&
                     n_inact_b < n_inactive_idxs_b[0])
                     continue;
-                int sf_n = cd_tensors.size() / 2, tn = sf_n - l - 1;
+                int sf_n = (int)cd_tensors.size() / 2, tn = sf_n - l - 1;
                 vector<WickIndex> wis(tn * 2);
                 for (int i = 0, k = 0; i < (int)tensor_idxs.size(); i++)
                     if (!cur_idxs_mask[tensor_idxs[i]] &&
@@ -2729,7 +2730,7 @@ struct WickGraph {
                 r[m.first] = m.second;
         return r;
     }
-    int n_terms() const { return right.size(); }
+    int n_terms() const { return (int)right.size(); }
     void add_term(const WickTensor &wt, const WickExpr &wx) {
         left.push_back(wt);
         right.push_back(wx);
@@ -3157,7 +3158,7 @@ struct WickGraph {
                     pgw[i] = j;
                 }
                 dup_index_perms[make_pair(left[ix].name,
-                                          left[ix].indices.size())] =
+                                          (int)left[ix].indices.size())] =
                     make_pair(make_pair(ut.first.name, pgw),
                               right[ix].terms[0].factor /
                                   right[ut.second].terms[0].factor *
@@ -3195,10 +3196,10 @@ struct WickGraph {
             for (auto &ws : wx.terms)
                 for (auto &wt : ws.tensors)
                     if (dup_index_perms.count(
-                            make_pair(wt.name, wt.indices.size()))) {
+                            make_pair(wt.name, (int)wt.indices.size()))) {
                         pair<pair<string, vector<int>>, double> &dp =
                             dup_index_perms.at(
-                                make_pair(wt.name, wt.indices.size()));
+                                make_pair(wt.name, (int)wt.indices.size()));
                         wt.name = dp.first.first;
                         ws.factor *= dp.second;
                         vector<WickIndex> nidx = wt.indices;

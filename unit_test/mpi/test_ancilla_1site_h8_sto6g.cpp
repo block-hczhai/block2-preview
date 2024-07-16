@@ -38,8 +38,8 @@ class TestOneSiteAncillaH8STO6G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 22;
-    size_t dsize = 1L << 30;
+    size_t isize = 1LL << 22;
+    size_t dsize = 1LL << 30;
     typedef typename GMatrix<FL>::FP FP;
 
     template <typename S>

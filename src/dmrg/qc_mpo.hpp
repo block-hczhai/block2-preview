@@ -2931,15 +2931,15 @@ struct MPOQC<S, FL, typename S::is_sg_t> : MPO<S, FL> {
         vector<vector<shared_ptr<OpExpr<S>>>> a_op(
             n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
         vector<vector<shared_ptr<OpExpr<S>>>> ad_op(
-            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
         vector<vector<shared_ptr<OpExpr<S>>>> b_op(
-            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
         vector<vector<shared_ptr<OpExpr<S>>>> p_op(
-            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
         vector<vector<shared_ptr<OpExpr<S>>>> pd_op(
-            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
         vector<vector<shared_ptr<OpExpr<S>>>> q_op(
-            n_orbs, vector<vector<shared_ptr<OpExpr<S>>>>(n_orbs));
+            n_orbs, vector<shared_ptr<OpExpr<S>>>(n_orbs));
 #else
         shared_ptr<OpExpr<S>> c_op[n_orbs], d_op[n_orbs];
         shared_ptr<OpExpr<S>> rd_op[n_orbs], r_op[n_orbs];

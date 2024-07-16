@@ -37,8 +37,8 @@ class TestSumMPON2STO3G : public ::testing::Test {
     static bool _mpi;
 
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 28;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 28;
     typedef double FP;
 
     template <typename S, typename FL>

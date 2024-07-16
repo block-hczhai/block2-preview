@@ -2561,8 +2561,8 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
             frame_<FL>() = make_shared<DataFrame<FL>>(
                 isize, dsize, save_dir, dmain_ratio, imain_ratio, n_frames);
         },
-        py::arg("isize") = size_t(1L << 28),
-        py::arg("dsize") = size_t(1L << 30), py::arg("save_dir") = "nodex",
+        py::arg("isize") = size_t(1LL << 28),
+        py::arg("dsize") = size_t(1LL << 30), py::arg("save_dir") = "nodex",
         py::arg("dmain_ratio") = 0.7, py::arg("imain_ratio") = 0.7,
         py::arg("n_frames") = 2);
 
@@ -2605,14 +2605,14 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
                  size_t len = self->encode(arr.mutable_data(), arr.size(), tmp);
                  assert(len <= arr.size() + 2);
                  py::array_t<FL> arx = py::array_t<FL>(len + 1);
-                 arx.mutable_data()[0] = arr.size();
+                 arx.mutable_data()[0] = (FL)arr.size();
                  memcpy(arx.mutable_data() + 1, tmp, len * sizeof(FL));
                  delete[] tmp;
                  return arx;
              })
         .def("decode",
              [](FPCodec<FL> *self, py::array_t<FL> arr) {
-                 size_t arr_len = arr.mutable_data()[0];
+                 size_t arr_len = (size_t)arr.mutable_data()[0];
                  py::array_t<FL> arx = py::array_t<FL>(arr_len);
                  size_t len = self->decode(arr.mutable_data() + 1, arr_len,
                                            arx.mutable_data());
@@ -2626,7 +2626,7 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
                  assert(ss.tellp() % sizeof(FL) == 0);
                  size_t len = ss.tellp() / sizeof(FL);
                  py::array_t<FL> arx = py::array_t<FL>(len + 1);
-                 arx.mutable_data()[0] = arr.size();
+                 arx.mutable_data()[0] = (FL)arr.size();
                  ss.clear();
                  ss.seekg(0);
                  ss.read((char *)(arx.mutable_data() + 1), sizeof(FL) * len);
@@ -2634,7 +2634,7 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
              })
         .def("read_array",
              [](FPCodec<FL> *self, py::array_t<FL> arr) {
-                 size_t arr_len = arr.mutable_data()[0];
+                 size_t arr_len = (size_t)arr.mutable_data()[0];
                  stringstream ss;
                  ss.write((char *)(arr.mutable_data() + 1),
                           (arr.size() - 1) * sizeof(FL));
@@ -2738,8 +2738,8 @@ template <typename FL> void bind_matrix(py::module &m) {
         .def(py::init([](py::array_t<FL> mat) {
                  assert(mat.ndim() == 2);
                  assert(mat.strides()[1] == sizeof(FL));
-                 return GMatrix<FL>(mat.mutable_data(), mat.shape()[0],
-                                    mat.shape()[1]);
+                 return GMatrix<FL>(mat.mutable_data(), (MKL_INT)mat.shape()[0],
+                                    (MKL_INT)mat.shape()[1]);
              }),
              py::keep_alive<0, 1>())
         .def_buffer([](GMatrix<FL> *self) -> py::buffer_info {
@@ -2765,8 +2765,9 @@ template <typename FL> void bind_matrix(py::module &m) {
         .def(py::init([](py::array_t<complex<FL>> mat) {
                  assert(mat.ndim() == 2);
                  assert(mat.strides()[1] == sizeof(complex<FL>));
-                 return GMatrix<complex<FL>>(mat.mutable_data(), mat.shape()[0],
-                                             mat.shape()[1]);
+                 return GMatrix<complex<FL>>(mat.mutable_data(),
+                                             (MKL_INT)mat.shape()[0],
+                                             (MKL_INT)mat.shape()[1]);
              }),
              py::keep_alive<0, 1>())
         .def_buffer([](GMatrix<complex<FL>> *self) -> py::buffer_info {
@@ -2944,13 +2945,16 @@ template <typename FL> void bind_matrix(py::module &m) {
             [](py::array_t<FL> &x, MKL_INT rank, FL au, FL av, int max_iter_pi,
                int max_iter_pocs, FL eps_pi, FL eps_pocs, bool iprint)
                 -> tuple<py::array_t<FL>, py::array_t<FL>, py::array_t<FL>> {
-                GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
+                GMatrix<FL> xx(x.mutable_data(), (MKL_INT)x.shape()[0],
+                               (MKL_INT)x.shape()[1]);
                 py::array_t<FL> l(vector<ssize_t>{x.shape()[0], (ssize_t)rank});
                 py::array_t<FL> s(vector<ssize_t>{(ssize_t)rank});
                 py::array_t<FL> r(vector<ssize_t>{(ssize_t)rank, x.shape()[1]});
-                GMatrix<FL> xl(l.mutable_data(), l.shape()[0], l.shape()[1]);
-                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
-                GMatrix<FL> xr(r.mutable_data(), r.shape()[0], r.shape()[1]);
+                GMatrix<FL> xl(l.mutable_data(), (MKL_INT)l.shape()[0],
+                               (MKL_INT)l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, (MKL_INT)s.shape()[0]);
+                GMatrix<FL> xr(r.mutable_data(), (MKL_INT)r.shape()[0],
+                               (MKL_INT)r.shape()[1]);
                 IterativeMatrixFunctions<FL>::constrained_svd(
                     xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
                     eps_pi, eps_pocs, iprint);
@@ -2964,14 +2968,17 @@ template <typename FL> void bind_matrix(py::module &m) {
             "disjoint_svd",
             [](py::array_t<FL> &x, py::array_t<FL> &levels)
                 -> tuple<py::array_t<FL>, py::array_t<FL>, py::array_t<FL>> {
-                GMatrix<FL> xx(x.mutable_data(), x.shape()[0], x.shape()[1]);
+                GMatrix<FL> xx(x.mutable_data(), (MKL_INT)x.shape()[0],
+                               (MKL_INT)x.shape()[1]);
                 ssize_t k = min(x.shape()[0], x.shape()[1]);
                 py::array_t<FL> l(vector<ssize_t>{x.shape()[0], k});
                 py::array_t<FL> s(vector<ssize_t>{k});
                 py::array_t<FL> r(vector<ssize_t>{k, x.shape()[1]});
-                GMatrix<FL> xl(l.mutable_data(), l.shape()[0], l.shape()[1]);
-                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
-                GMatrix<FL> xr(r.mutable_data(), r.shape()[0], r.shape()[1]);
+                GMatrix<FL> xl(l.mutable_data(), (MKL_INT)l.shape()[0],
+                               (MKL_INT)l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, (MKL_INT)s.shape()[0]);
+                GMatrix<FL> xr(r.mutable_data(), (MKL_INT)r.shape()[0],
+                               (MKL_INT)r.shape()[1]);
                 vector<FL> xlevels(levels.data(),
                                    levels.data() + levels.size());
                 IterativeMatrixFunctions<FL>::disjoint_svd(xx, xl, xs, xr,
@@ -2988,18 +2995,18 @@ template <typename FL> void bind_matrix(py::module &m) {
                int max_iter_pi, int max_iter_pocs, FL eps_pi, FL eps_pocs,
                bool iprint) -> tuple<py::array_t<complex<FL>>, py::array_t<FL>,
                                      py::array_t<complex<FL>>> {
-                GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
-                                        x.shape()[1]);
+                GMatrix<complex<FL>> xx(x.mutable_data(), (MKL_INT)x.shape()[0],
+                                        (MKL_INT)x.shape()[1]);
                 py::array_t<complex<FL>> l(
                     vector<ssize_t>{x.shape()[0], (ssize_t)rank});
                 py::array_t<FL> s(vector<ssize_t>{(ssize_t)rank});
                 py::array_t<complex<FL>> r(
                     vector<ssize_t>{(ssize_t)rank, x.shape()[1]});
-                GMatrix<complex<FL>> xl(l.mutable_data(), l.shape()[0],
-                                        l.shape()[1]);
-                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
-                GMatrix<complex<FL>> xr(r.mutable_data(), r.shape()[0],
-                                        r.shape()[1]);
+                GMatrix<complex<FL>> xl(l.mutable_data(), (MKL_INT)l.shape()[0],
+                                        (MKL_INT)l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, (MKL_INT)s.shape()[0]);
+                GMatrix<complex<FL>> xr(r.mutable_data(), (MKL_INT)r.shape()[0],
+                                        (MKL_INT)r.shape()[1]);
                 IterativeMatrixFunctions<complex<FL>>::constrained_svd(
                     xx, rank, xl, xs, xr, au, av, max_iter_pi, max_iter_pocs,
                     eps_pi, eps_pocs, iprint);
@@ -3014,17 +3021,17 @@ template <typename FL> void bind_matrix(py::module &m) {
             [](py::array_t<complex<FL>> &x, py::array_t<FL> &levels)
                 -> tuple<py::array_t<complex<FL>>, py::array_t<FL>,
                          py::array_t<complex<FL>>> {
-                GMatrix<complex<FL>> xx(x.mutable_data(), x.shape()[0],
-                                        x.shape()[1]);
+                GMatrix<complex<FL>> xx(x.mutable_data(), (MKL_INT)x.shape()[0],
+                                        (MKL_INT)x.shape()[1]);
                 ssize_t k = min(x.shape()[0], x.shape()[1]);
                 py::array_t<complex<FL>> l(vector<ssize_t>{x.shape()[0], k});
                 py::array_t<FL> s(vector<ssize_t>{k});
                 py::array_t<complex<FL>> r(vector<ssize_t>{k, x.shape()[1]});
-                GMatrix<complex<FL>> xl(l.mutable_data(), l.shape()[0],
-                                        l.shape()[1]);
-                GMatrix<FL> xs(s.mutable_data(), 1, s.shape()[0]);
-                GMatrix<complex<FL>> xr(r.mutable_data(), r.shape()[0],
-                                        r.shape()[1]);
+                GMatrix<complex<FL>> xl(l.mutable_data(), (MKL_INT)l.shape()[0],
+                                        (MKL_INT)l.shape()[1]);
+                GMatrix<FL> xs(s.mutable_data(), 1, (MKL_INT)s.shape()[0]);
+                GMatrix<complex<FL>> xr(r.mutable_data(), (MKL_INT)r.shape()[0],
+                                        (MKL_INT)r.shape()[1]);
                 vector<FL> xlevels(levels.data(),
                                    levels.data() + levels.size());
                 IterativeMatrixFunctions<complex<FL>>::disjoint_svd(
@@ -3080,17 +3087,18 @@ template <typename S = void> void bind_post_matrix(py::module &m) {
              [](DyallFCIDUMP *self, py::array_t<double> &dm) {
                  assert(dm.ndim() == 2);
                  assert(dm.strides()[1] == sizeof(double));
-                 GMatrix<double> mr(dm.mutable_data(), dm.shape()[0],
-                                    dm.shape()[1]);
+                 GMatrix<double> mr(dm.mutable_data(), (MKL_INT)dm.shape()[0],
+                                    (MKL_INT)dm.shape()[1]);
                  self->initialize_from_1pdm_su2(mr);
              })
-        .def("initialize_from_1pdm_sz", [](DyallFCIDUMP *self,
-                                           py::array_t<double> &dm) {
-            assert(dm.ndim() == 2);
-            assert(dm.strides()[1] == sizeof(double));
-            GMatrix<double> mr(dm.mutable_data(), dm.shape()[0], dm.shape()[1]);
-            self->initialize_from_1pdm_sz(mr);
-        });
+        .def("initialize_from_1pdm_sz",
+             [](DyallFCIDUMP *self, py::array_t<double> &dm) {
+                 assert(dm.ndim() == 2);
+                 assert(dm.strides()[1] == sizeof(double));
+                 GMatrix<double> mr(dm.mutable_data(), (MKL_INT)dm.shape()[0],
+                                    (MKL_INT)dm.shape()[1]);
+                 self->initialize_from_1pdm_sz(mr);
+             });
 
     py::class_<FinkFCIDUMP, shared_ptr<FinkFCIDUMP>, FCIDUMP<double>>(
         m, "FinkFCIDUMP")
@@ -3654,7 +3662,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                 vector<int> shape(v.ndim());
                 vector<size_t> strides(v.ndim());
                 for (int i = 0; i < v.ndim(); i++)
-                    shape[i] = v.shape()[i],
+                    shape[i] = (int)v.shape()[i],
                     strides[i] = v.strides()[i] / sizeof(FL);
                 vector<uint16_t> rperm(v.ndim());
                 if (perm.size() == 0)

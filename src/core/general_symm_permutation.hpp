@@ -356,9 +356,10 @@ template <typename FL> struct GeneralSymmTensor {
             return vector<uint8_t>();
         vector<uint8_t> r(data[0][0].ops.size(), 0);
         for (int j = 0; j < (int)r.size(); j++)
-            r[j] = ((uint8_t)data[0][0].ops[j].op &
-                    (uint8_t)GeneralSymmOperator::S) |
-                   (data[0][0].ops[j].op & GeneralSymmOperator::C);
+            r[j] = (uint8_t)(((uint8_t)data[0][0].ops[j].op &
+                              (uint8_t)GeneralSymmOperator::S) |
+                             ((uint8_t)data[0][0].ops[j].op &
+                              (uint8_t)GeneralSymmOperator::C));
         return r;
     }
     GeneralSymmTensor operator*(FL d) const {
@@ -856,9 +857,9 @@ template <typename FL> struct GeneralSymmExpr {
         map<string, vector<int>> orb_idx_mp;
         map<char, vector<int>> site_idx_mp;
         for (size_t ix = 0; ix < orb_sym.size(); ix++)
-            orb_idx_mp[orb_sym[ix]].push_back(ix);
+            orb_idx_mp[orb_sym[ix]].push_back((int)ix);
         for (size_t ix = 0; ix < site_sym.size(); ix++)
-            site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
+            site_idx_mp[orb_names()[site_sym[ix]]].push_back((int)ix);
         size_t ml_stride = 1, ml_size = 1;
         int ml_len = data.size() == 0 ? 0 : (int)data[0].second[0].first.size();
         for (int i = 0; i < n_ops; i++)
@@ -911,7 +912,7 @@ template <typename FL> struct GeneralSymmExpr {
         using T = GeneralSymmTensor<FL>;
         map<char, vector<int>> site_idx_mp;
         for (size_t ix = 0; ix < site_sym.size(); ix++)
-            site_idx_mp[orb_names()[site_sym[ix]]].push_back(ix);
+            site_idx_mp[orb_names()[site_sym[ix]]].push_back((int)ix);
         size_t ml_stride = 1, ml_size = 1;
         int ml_len = data.size() == 0 ? 0 : (int)data[0].second[0].first.size();
         for (int i = 0; i < n_ops; i++)
@@ -1143,7 +1144,7 @@ template <typename FL> struct GeneralSymmRecoupling {
         for (int16_t i = 0; i < n; i++)
             for (int16_t j = n - 2; j >= i; j--)
                 if (idx[j] > idx[j + 1]) {
-                    r = exchange(r, n, j, cgs);
+                    r = exchange(r, (int8_t)n, (int8_t)j, cgs);
                     swap(idx[j], idx[j + 1]);
                 }
         return r;
@@ -1152,7 +1153,7 @@ template <typename FL> struct GeneralSymmRecoupling {
     recouple_split(const map<string, FL> &x,
                    const vector<uint16_t> &ref_indices, int split_idx,
                    const vector<shared_ptr<AnyCG<FL>>> &cgs) {
-        int nn = ref_indices.size();
+        int nn = (int)ref_indices.size();
         vector<uint16_t> ref_split_idx;
         int ref_mid = -1;
         for (int i = 1; i < nn; i++)
@@ -1170,28 +1171,29 @@ template <typename FL> struct GeneralSymmRecoupling {
             // handle npdm split
             int ii = 0, ir = 0;
             for (int i = ref_mid; i < (int)ref_split_idx.size(); i++) {
-                r = recouple(r, ii, ref_split_idx[i] - ir, cgs);
+                r = recouple(r, (int8_t)ii, (int8_t)(ref_split_idx[i] - ir),
+                             cgs);
                 ii = T::get_level(r.begin()->first, ii).mid_idx;
                 ir = ref_split_idx[i];
             }
             typename T::Level h = T::get_level(r.begin()->first, 0);
             ii = h.left_idx;
             for (int i = ref_mid - 1; i >= 0; i--) {
-                r = recouple(r, ii, ref_split_idx[i], cgs);
+                r = recouple(r, (int8_t)ii, (int8_t)ref_split_idx[i], cgs);
                 ii = T::get_level(r.begin()->first, ii).left_idx;
             }
         } else if (split_idx == -1) {
             // handle hamiltonian split
             int ii = 0, ir = 0;
             for (auto &rr : ref_split_idx) {
-                r = recouple(r, ii, rr - ir, cgs);
+                r = recouple(r, (int8_t)ii, (int8_t)(rr - ir), cgs);
                 ii = T::get_level(r.begin()->first, ii).mid_idx, ir = rr;
             }
         } else if (split_idx == -2) {
             // handle drt hamiltonian split
             int ii = 0;
             for (int i = (int)ref_split_idx.size() - 1; i >= 0; i--) {
-                r = recouple(r, ii, ref_split_idx[i], cgs);
+                r = recouple(r, (int8_t)ii, (int8_t)ref_split_idx[i], cgs);
                 ii = T::get_level(r.begin()->first, ii).left_idx;
             }
         }
@@ -1224,7 +1226,7 @@ struct GeneralSymmPermPattern {
         // ha = all possible lists of the max one and undetermined ones (maxx)
         for (uint16_t i = 1; i <= pp.back().second; i++) {
             vector<uint16_t> hb;
-            for (int j = 0, k; j < (int)ha.size(); j += x.size()) {
+            for (int j = 0, k; j < (int)ha.size(); j += (int)x.size()) {
                 for (k = (int)x.size() - 1; k >= 0; k--)
                     if (ha[j + k] != maxx)
                         break;
@@ -1243,9 +1245,9 @@ struct GeneralSymmPermPattern {
         vector<uint16_t> r(ha.size() * g.size() /
                            (x.size() - pp.back().second));
         size_t ir = 0;
-        for (int h = 0; h < (int)ha.size(); h += x.size())
+        for (int h = 0; h < (int)ha.size(); h += (int)x.size())
             for (int j = 0; j < (int)g.size();
-                 j += x.size() - pp.back().second) {
+                 j += (int)(x.size() - pp.back().second)) {
                 memcpy(r.data() + ir, ha.data() + h,
                        x.size() * sizeof(uint16_t));
                 for (int k = 0, kk = 0; k < (int)x.size(); k++)
@@ -1368,12 +1370,12 @@ template <typename FL> struct GeneralSymmPermScheme {
         int ntg = threading->activate_global();
         map<vector<uint16_t>, map<string, FL>> ref_ps;
         map<string, FL> p = map<string, FL>{make_pair(spin_str, (FL)1.0)};
-        for (int i = spat.count() - 1; i >= 0; i--) {
+        for (int i = (int)spat.count() - 1; i >= 0; i--) {
             vector<uint16_t> irr = spat[i];
             r.index_patterns[i] = irr;
             vector<uint16_t> rr =
                 GeneralSymmPermPattern::all_reordering(irr, mask);
-            int nj = irr.size() == 0 ? 1 : rr.size() / irr.size();
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
             int iq = is_npdm ? spat.get_split_index(i) : (is_drt ? -2 : -1);
             vector<map<string, FL>> ps(nj);
 #pragma omp parallel for schedule(static, 20) num_threads(ntg)
@@ -1407,8 +1409,8 @@ template <typename FL> struct GeneralSymmPermScheme {
     }
     string to_str() const {
         stringstream ss;
-        int cnt = index_patterns.size();
-        int nn = cnt == 0 ? 0 : index_patterns[0].size();
+        int cnt = (int)index_patterns.size();
+        int nn = cnt == 0 ? 0 : (int)index_patterns[0].size();
         ss << "N = " << nn << " COUNT = " << cnt << endl;
         for (size_t ic = 0; ic < cnt; ic++) {
             for (uint16_t j = 0; j < nn; j++)

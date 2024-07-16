@@ -7,8 +7,8 @@ using namespace block2;
 
 class TestOneSiteITDDMRGH8STO6G : public ::testing::Test {
   protected:
-    size_t isize = 1L << 24;
-    size_t dsize = 1L << 32;
+    size_t isize = 1LL << 24;
+    size_t dsize = 1LL << 32;
     typedef double FP;
 
     template <typename S, typename FL>
@@ -185,7 +185,7 @@ TEST_F(TestOneSiteITDDMRGH8STO6G, TestSU2) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     vector<double> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,
@@ -224,7 +224,7 @@ TEST_F(TestOneSiteITDDMRGH8STO6G, TestSZ) {
     fcidump->read(filename);
     vector<uint8_t> orbsym = fcidump->orb_sym<uint8_t>();
     transform(orbsym.begin(), orbsym.end(), orbsym.begin(),
-              PointGroup::swap_pg(pg));
+              [pg](uint8_t x) { return (uint8_t)PointGroup::swap_pg(pg)(x); });
 
     vector<double> energies_fted = {
         0.3124038410492045,  -0.0273905176813768, -0.3265074932156511,

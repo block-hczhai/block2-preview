@@ -463,7 +463,7 @@ template <typename S, typename FL> struct DMRGDriver {
         return energies;
     }
     FL expectation(shared_ptr<MPS<S, FL>> bra, shared_ptr<MPO<S, FL>> mpo,
-                   shared_ptr<MPS<S, FL>> ket, bool iprint = 0) const {
+                   shared_ptr<MPS<S, FL>> ket, int iprint = 0) const {
         shared_ptr<MPS<S, FL>> mbra = bra->deep_copy("EXPE-BRA@TMP"),
                                mket = mbra;
         if (bra != ket)
