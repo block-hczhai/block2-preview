@@ -212,6 +212,7 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
     vector<shared_ptr<OpExpr<S>>> dops;
     // Symbolic expression of super block operator(s)
     shared_ptr<Symbolic<S>> mat;
+    shared_ptr<Symbolic<S>> stacked_mat = nullptr;
     // SparseMatrix representation of symbols from left and right block
     shared_ptr<OperatorTensor<S, FL>> lopt, ropt;
     DelayedOperatorTensor() : OperatorTensor<S, FL>() {}

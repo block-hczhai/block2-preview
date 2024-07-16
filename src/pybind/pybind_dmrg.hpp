@@ -264,6 +264,7 @@ template <typename S> void bind_mps(py::module &m) {
              &MPSInfo<S>::template swap_multi_wfn_to_fused_right<double>)
         .def("get_filename", &MPSInfo<S>::get_filename, py::arg("left"),
              py::arg("i"), py::arg("dir") = "")
+        .def("flip_twos", &MPSInfo<S>::flip_twos)
         .def("save_mutable", &MPSInfo<S>::save_mutable)
         .def("copy_mutable", &MPSInfo<S>::copy_mutable)
         .def("deallocate_mutable", &MPSInfo<S>::deallocate_mutable)
@@ -378,6 +379,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def(py::init<const vector<
                  vector<pair<pair<S, S>, shared_ptr<GTensor<FL>>>>> &>())
         .def_readwrite("data", &SparseTensor<S, FL>::data)
+        .def("flip_twos", &SparseTensor<S, FL>::flip_twos)
         .def("__repr__", [](SparseTensor<S, FL> *self) {
             stringstream ss;
             ss << *self;
@@ -482,24 +484,32 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def_readwrite("canonical_form", &UnfusedMPS<S, FL>::canonical_form)
         .def_static("forward_left_fused",
                     &UnfusedMPS<S, FL>::forward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
+                    py::arg("info"), py::arg("mat"), py::arg("wfn"))
         .def_static("forward_right_fused",
                     &UnfusedMPS<S, FL>::forward_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("wfn"))
+                    py::arg("info"), py::arg("mat"), py::arg("wfn"))
         .def_static("forward_mps_tensor",
                     &UnfusedMPS<S, FL>::forward_mps_tensor, py::arg("i"),
                     py::arg("mps"))
+        .def_static("forward_multi_mps_tensor",
+                    &UnfusedMPS<S, FL>::forward_multi_mps_tensor, py::arg("i"),
+                    py::arg("mmps"))
         .def_static("backward_left_fused",
                     &UnfusedMPS<S, FL>::backward_left_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+                    py::arg("info"), py::arg("spt"), py::arg("wfn"))
         .def_static("backward_right_fused",
                     &UnfusedMPS<S, FL>::backward_right_fused, py::arg("i"),
-                    py::arg("mps"), py::arg("spt"), py::arg("wfn"))
+                    py::arg("info"), py::arg("spt"), py::arg("wfn"))
         .def_static("backward_mps_tensor",
                     &UnfusedMPS<S, FL>::backward_mps_tensor, py::arg("i"),
                     py::arg("mps"), py::arg("spt"))
+        .def_static("backward_multi_mps_tensor",
+                    &UnfusedMPS<S, FL>::backward_multi_mps_tensor, py::arg("i"),
+                    py::arg("mmps"), py::arg("spt"))
         .def("initialize", &UnfusedMPS<S, FL>::initialize)
-        .def("finalize", &UnfusedMPS<S, FL>::finalize)
+        .def("finalize", &UnfusedMPS<S, FL>::finalize,
+             py::arg("para_rule") = nullptr)
+        .def("flip_twos", &UnfusedMPS<S, FL>::flip_twos)
         .def("resolve_singlet_embedding",
              &UnfusedMPS<S, FL>::resolve_singlet_embedding);
 
@@ -525,7 +535,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("get_state_occupation",
              &DeterminantTRIE<S, FL>::get_state_occupation)
         .def("construct_mps", &DeterminantTRIE<S, FL>::construct_mps,
-             py::arg("info"))
+             py::arg("info"), py::arg("para_rule") = nullptr)
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0, py::arg("max_rank") = -1,
              py::arg("ref") = vector<uint8_t>())
@@ -593,6 +603,8 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("diag", &EffectiveHamiltonian<S, FL>::diag)
         .def_readwrite("cmat", &EffectiveHamiltonian<S, FL>::cmat)
         .def_readwrite("vmat", &EffectiveHamiltonian<S, FL>::vmat)
+        .def_readwrite("context_mask",
+                       &EffectiveHamiltonian<S, FL>::context_mask)
         .def_readwrite("tf", &EffectiveHamiltonian<S, FL>::tf)
         .def_readwrite("hop_mat", &EffectiveHamiltonian<S, FL>::hop_mat)
         .def_readwrite("opdq", &EffectiveHamiltonian<S, FL>::opdq)
@@ -611,6 +623,7 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def_readwrite("npdm_n_sites",
                        &EffectiveHamiltonian<S, FL>::npdm_n_sites)
         .def_readwrite("npdm_center", &EffectiveHamiltonian<S, FL>::npdm_center)
+        .def_readwrite("eff_kernel", &EffectiveHamiltonian<S, FL>::eff_kernel)
         .def("__call__", &EffectiveHamiltonian<S, FL>::operator(), py::arg("b"),
              py::arg("c"), py::arg("idx") = 0, py::arg("factor") = 1.0,
              py::arg("all_reduce") = true)
@@ -620,12 +633,14 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
         .def("expect", &EffectiveHamiltonian<S, FL>::expect)
         .def("rk4_apply", &EffectiveHamiltonian<S, FL>::rk4_apply,
              py::arg("beta"), py::arg("const_e"),
-             py::arg("eval_energy") = false, py::arg("para_rule") = nullptr)
+             py::arg("eval_energy") = false, py::arg("para_rule") = nullptr,
+             py::arg("ortho_bra") = vector<shared_ptr<SparseMatrix<S, FL>>>())
         .def("expo_apply", &EffectiveHamiltonian<S, FL>::expo_apply,
              py::arg("beta"), py::arg("const_e"), py::arg("symmetric"),
              py::arg("iprint") = false, py::arg("para_rule") = nullptr,
              py::arg("conv_thrd") = (typename GMatrix<FL>::FP)5E-6,
-             py::arg("deflation_max_size") = 20)
+             py::arg("deflation_max_size") = 20,
+             py::arg("ortho_bra") = vector<shared_ptr<SparseMatrix<S, FL>>>())
         .def("deallocate", &EffectiveHamiltonian<S, FL>::deallocate);
 
     py::class_<EffectiveFunctions<S, FL>,
@@ -700,6 +715,9 @@ template <typename S, typename FL> void bind_fl_partition(py::module &m) {
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::cmat)
         .def_readwrite("vmat",
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::vmat)
+        .def_readwrite(
+            "context_mask",
+            &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::context_mask)
         .def_readwrite("tf", &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::tf)
         .def_readwrite("hop_mat",
                        &EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>::hop_mat)
@@ -761,6 +779,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def_readwrite("center", &MovingEnvironment<S, FL, FLS>::center)
         .def_readwrite("dot", &MovingEnvironment<S, FL, FLS>::dot)
         .def_readwrite("mpo", &MovingEnvironment<S, FL, FLS>::mpo)
+        .def_readwrite("stacked_mpo",
+                       &MovingEnvironment<S, FL, FLS>::stacked_mpo)
         .def_readwrite("bra", &MovingEnvironment<S, FL, FLS>::bra)
         .def_readwrite("ket", &MovingEnvironment<S, FL, FLS>::ket)
         .def_readwrite("envs", &MovingEnvironment<S, FL, FLS>::envs)
@@ -1022,7 +1042,28 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def_static("propagate_multi_wfn",
                     &MovingEnvironment<S, FL, FLS>::propagate_multi_wfn,
                     py::arg("i"), py::arg("start_site"), py::arg("end_site"),
-                    py::arg("mps"), py::arg("forward"), py::arg("cg"));
+                    py::arg("mps"), py::arg("forward"), py::arg("cg"))
+        .def_static(
+            "symm_context_convert_group",
+            &MovingEnvironment<S, FL, FLS>::symm_context_convert_group,
+            py::arg("i"), py::arg("mps"), py::arg("cmps"), py::arg("dot"),
+            py::arg("fuse_left"), py::arg("mask"), py::arg("forward"),
+            py::arg("is_wfn"), py::arg("infer_info"),
+            py::arg("kets") = vector<shared_ptr<SparseMatrixGroup<S, FLS>>>(),
+            py::arg("ckets") = vector<shared_ptr<SparseMatrixGroup<S, FLS>>>())
+        .def_static("symm_context_convert",
+                    &MovingEnvironment<S, FL, FLS>::symm_context_convert,
+                    py::arg("i"), py::arg("mps"), py::arg("cmps"),
+                    py::arg("dot"), py::arg("fuse_left"), py::arg("mask"),
+                    py::arg("forward"), py::arg("is_wfn"),
+                    py::arg("infer_info"), py::arg("ket") = nullptr,
+                    py::arg("cket") = nullptr)
+        .def_static(
+            "symm_context_convert_perturbative",
+            &MovingEnvironment<S, FL, FLS>::symm_context_convert_perturbative,
+            py::arg("i"), py::arg("mps"), py::arg("cmps"), py::arg("dot"),
+            py::arg("fuse_left"), py::arg("mask"), py::arg("forward"),
+            py::arg("is_wfn"), py::arg("infer_info"), py::arg("pket"));
 
     py::bind_vector<vector<shared_ptr<MovingEnvironment<S, FL, FLS>>>>(
         m, ("Vector" + name).c_str());
@@ -1044,6 +1085,68 @@ template <typename S, typename FL> void bind_fl_qc_hamiltonian(py::module &m) {
         .def("e", &HamiltonianQC<S, FL>::e)
         .def("init_site_ops", &HamiltonianQC<S, FL>::init_site_ops)
         .def("get_site_ops", &HamiltonianQC<S, FL>::get_site_ops);
+}
+
+template <typename FL> void bind_fl_dmrg(py::module &m) {
+
+    struct PyEffectiveKernel : EffectiveKernel<FL> {
+        using EffectiveKernel<FL>::EffectiveKernel;
+        typedef EffectiveKernel<FL> super_t;
+        void compute(FL beta,
+                     const function<void(const GMatrix<FL> &,
+                                         const GMatrix<FL> &, FL)> &f,
+                     const GMatrix<FL> &a, const GMatrix<FL> &b,
+                     const vector<GMatrix<FL>> &xs) const override {
+            py::gil_scoped_acquire gil;
+            py::function py_method = py::get_override(this, "compute");
+            if (py_method) {
+                const function<void(py::array_t<FL> &, py::array_t<FL> &, FL)> &
+                    g = [&f](py::array_t<FL> &a, py::array_t<FL> &b, FL scale) {
+                        py::gil_scoped_release gil;
+                        f(GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1),
+                          GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                          scale);
+                    };
+                py::array_t<FL> aa(a.size(), a.data,
+                                   py::capsule(a.data, [](void *f) {}));
+                py::array_t<FL> bb(b.size(), b.data,
+                                   py::capsule(b.data, [](void *f) {}));
+                py::list zs;
+                for (size_t i = 0; i < xs.size(); i++)
+                    zs.append(py::array_t<FL>(
+                        xs[i].size(), xs[i].data,
+                        py::capsule(xs[i].data, [](void *f) {})));
+                py_method(beta, py::cpp_function(g), aa, bb, zs);
+            } else
+                super_t::compute(beta, f, a, b, xs);
+        }
+    };
+
+    py::class_<EffectiveKernel<FL>, shared_ptr<EffectiveKernel<FL>>,
+               PyEffectiveKernel>(m, "EffectiveKernel")
+        .def(py::init<>())
+        .def("compute", [](EffectiveKernel<FL> *self, FL beta, py::object &f,
+                           py::array_t<FL> &a, py::array_t<FL> &b,
+                           py::list xs) {
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &
+                g = [&f](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                    py::gil_scoped_acquire gil;
+                    py::array_t<FL> aa(a.size(), a.data,
+                                       py::capsule(a.data, [](void *f) {}));
+                    py::array_t<FL> bb(b.size(), b.data,
+                                       py::capsule(b.data, [](void *f) {}));
+                    f(aa, bb, scale);
+                };
+            vector<GMatrix<FL>> zs;
+            for (size_t i = 0; i < xs.size(); i++) {
+                py::array_t<FL> x = xs[i].cast<py::array_t<FL>>();
+                zs.push_back(
+                    GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1));
+            }
+            self->compute(
+                beta, g, GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1),
+                GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1), zs);
+        });
 }
 
 template <typename FL> void bind_partition_weights(py::module &m) {
@@ -1185,9 +1288,12 @@ void bind_fl_dmrg(py::module &m) {
         .def_readwrite("cutoff", &DMRG<S, FL, FLS>::cutoff)
         .def_readwrite("quanta_cutoff", &DMRG<S, FL, FLS>::quanta_cutoff)
         .def_readwrite("me", &DMRG<S, FL, FLS>::me)
+        .def_readwrite("metric_me", &DMRG<S, FL, FLS>::metric_me)
         .def_readwrite("cpx_me", &DMRG<S, FL, FLS>::cpx_me)
         .def_readwrite("ext_mes", &DMRG<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &DMRG<S, FL, FLS>::ext_mpss)
+        .def_readwrite("context_ket", &DMRG<S, FL, FLS>::context_ket)
+        .def_readwrite("eff_kernel", &DMRG<S, FL, FLS>::eff_kernel)
         .def_readwrite("state_specific", &DMRG<S, FL, FLS>::state_specific)
         .def_readwrite("projection_weights",
                        &DMRG<S, FL, FLS>::projection_weights)
@@ -1229,6 +1335,7 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::sweep_max_eff_ham_size)
         .def_readwrite("store_wfn_spectra",
                        &DMRG<S, FL, FLS>::store_wfn_spectra)
+        .def_readwrite("store_seq_data", &DMRG<S, FL, FLS>::store_seq_data)
         .def_readwrite("wfn_spectra", &DMRG<S, FL, FLS>::wfn_spectra)
         .def_readwrite("sweep_wfn_spectra",
                        &DMRG<S, FL, FLS>::sweep_wfn_spectra)
@@ -1357,6 +1464,9 @@ void bind_fl_td_dmrg(py::module &m) {
         .def_readwrite("iprint", &TimeEvolution<S, FL, FLS>::iprint)
         .def_readwrite("cutoff", &TimeEvolution<S, FL, FLS>::cutoff)
         .def_readwrite("me", &TimeEvolution<S, FL, FLS>::me)
+        .def_readwrite("ext_mes", &TimeEvolution<S, FL, FLS>::ext_mes)
+        .def_readwrite("ext_mpss", &TimeEvolution<S, FL, FLS>::ext_mpss)
+        .def_readwrite("eff_kernel", &TimeEvolution<S, FL, FLS>::eff_kernel)
         .def_readwrite("bond_dims", &TimeEvolution<S, FL, FLS>::bond_dims)
         .def_readwrite("noises", &TimeEvolution<S, FL, FLS>::noises)
         .def_readwrite("energies", &TimeEvolution<S, FL, FLS>::energies)
@@ -1454,6 +1564,8 @@ void bind_fl_linear(py::module &m) {
         .def_readwrite("ext_tmes", &Linear<S, FL, FLS>::ext_tmes)
         .def_readwrite("ext_mes", &Linear<S, FL, FLS>::ext_mes)
         .def_readwrite("ext_mpss", &Linear<S, FL, FLS>::ext_mpss)
+        .def_readwrite("leff_kernel", &Linear<S, FL, FLS>::leff_kernel)
+        .def_readwrite("reff_kernel", &Linear<S, FL, FLS>::reff_kernel)
         .def_readwrite("projection_weights",
                        &Linear<S, FL, FLS>::projection_weights)
         .def_readwrite("ext_mps_bond_dim",
@@ -1704,6 +1816,7 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def_readwrite("tread", &MPO<S, FL>::tread)
         .def_readwrite("twrite", &MPO<S, FL>::twrite)
         .def("get_summary", &MPO<S, FL>::get_summary)
+        .def("get_bond_dims", &MPO<S, FL>::get_bond_dims)
         .def("get_filename", &MPO<S, FL>::get_filename)
         .def("load_left_operators", &MPO<S, FL>::load_left_operators)
         .def("save_left_operators", &MPO<S, FL>::save_left_operators)
@@ -1784,6 +1897,15 @@ template <typename S, typename FL> void bind_fl_mpo(py::module &m) {
         .def("simplify_expr", &SimplifiedMPO<S, FL>::simplify_expr)
         .def("simplify_symbolic", &SimplifiedMPO<S, FL>::simplify_symbolic)
         .def("simplify", &SimplifiedMPO<S, FL>::simplify);
+
+    py::class_<StackedMPO<S, FL>, shared_ptr<StackedMPO<S, FL>>, MPO<S, FL>>(
+        m, "StackedMPO")
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<MPO<S, FL>> &>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<MPO<S, FL>> &, int>())
+        .def(py::init<const shared_ptr<MPO<S, FL>> &,
+                      const shared_ptr<MPO<S, FL>> &, int, const string &>());
 
     py::class_<CondensedMPO<S, FL>, shared_ptr<CondensedMPO<S, FL>>,
                MPO<S, FL>>(m, "CondensedMPO")
@@ -2024,6 +2146,8 @@ template <typename S, typename FL> void bind_fl_general(py::module &m) {
         .def_readwrite("disjoint_multiplier",
                        &GeneralMPO<S, FL>::disjoint_multiplier)
         .def_readwrite("block_max_length", &GeneralMPO<S, FL>::block_max_length)
+        .def_readwrite("fast_no_orb_dep_op",
+                       &GeneralMPO<S, FL>::fast_no_orb_dep_op)
         .def(py::init<const shared_ptr<GeneralHamiltonian<S, FL>> &,
                       const shared_ptr<GeneralFCIDUMP<FL>> &,
                       MPOAlgorithmTypes>(),
@@ -2121,6 +2245,13 @@ void bind_trans_mps(py::module &m, const string &aux_name) {
           &TransMPSInfo<S, T>::forward);
 }
 
+template <typename S, typename T>
+void bind_trans_multi_mps(py::module &m, const string &aux_name) {
+
+    m.def(("trans_multi_mps_info_to_" + aux_name).c_str(),
+          &TransMultiMPSInfo<S, T>::forward);
+}
+
 template <typename S, typename FL1, typename FL2>
 void bind_fl_trans_mps(py::module &m, const string &aux_name) {
 
@@ -2135,6 +2266,14 @@ void bind_fl_trans_mps_spin_specific(py::module &m, const string &aux_name) {
           &TransSparseTensor<S, T, FL>::forward);
     m.def(("trans_unfused_mps_to_" + aux_name).c_str(),
           &TransUnfusedMPS<S, T, FL>::forward);
+}
+
+template <typename S, typename T, typename FL>
+void bind_fl_trans_mpo(py::module &m, const string &aux_name) {
+
+    m.def(("trans_mpo_to_" + aux_name).c_str(), &TransMPO<S, T, FL>::forward,
+          py::arg("mpo"), py::arg("hamil"), py::arg("tag") = "",
+          py::arg("left_vacuum") = T(T::invalid));
 }
 
 template <typename S = void> void bind_dmrg_types(py::module &m) {
@@ -2792,6 +2931,18 @@ bind_fl_expect<SAny, double, double, complex<double>>(py::module &m,
 extern template auto bind_fl_spin_specific<SAny, double>(py::module &m)
     -> decltype(typename SAny::is_sany_t());
 
+extern template void bind_trans_mps<SAny, SAny>(py::module &m,
+                                                const string &aux_name);
+extern template void bind_trans_multi_mps<SAny, SAny>(py::module &m,
+                                                      const string &aux_name);
+extern template auto
+bind_fl_trans_mps_spin_specific<SAny, SAny, double>(py::module &m,
+                                                    const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+extern template auto
+bind_fl_trans_mpo<SAny, SAny, double>(py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+
 #ifdef _USE_COMPLEX
 extern template void bind_fl_general<SAny, complex<double>>(py::module &m);
 
@@ -2820,6 +2971,15 @@ bind_fl_expect<SAny, complex<double>, complex<double>, complex<double>>(
     py::module &m, const string &name);
 extern template auto bind_fl_spin_specific<SAny, complex<double>>(py::module &m)
     -> decltype(typename SAny::is_sany_t());
+
+extern template auto
+bind_fl_trans_mps_spin_specific<SAny, SAny, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+extern template auto
+bind_fl_trans_mpo<SAny, SAny, complex<double>>(py::module &m,
+                                               const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
 #endif
 
 #endif

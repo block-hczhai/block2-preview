@@ -413,7 +413,7 @@ class Tensor:
                 r_blocks_map[q_label_r] = svd_r[ik][:, None] * blocks_r[ik]
         return Tensor(blocks=l_blocks), r_blocks_map, error
 
-    def right_compress(self, k=-1, cutoff=0.0):
+    def right_compress(self, k=-1, cutoff=0.0, sv_on_l=True):
         """
         Right compression needs to collect all right indices for each specific left index.
         Bond dimension of leftmost index is compressed.
@@ -424,6 +424,8 @@ class Tensor:
                 If `k == -1`, no restriction in total bond dimension.
             cutoff : double
                 Minimal kept singluar value.
+            sv_on_l : bool
+                If True, merge singular values to left part.
 
         Returns:
             compressed tensor, dict of left blocks, compression error
@@ -459,9 +461,11 @@ class Tensor:
                 for q, b in zip(qs, blocks):
                     mat = q.reshape(
                         (blocks_r[ik].shape[0], ) + b.reduced.shape[1:])
+                    if not sv_on_l:
+                        mat = svd_r[ik][:, None] * mat
                     r_blocks.append(
                         SubTensor(q_labels=b.q_labels, reduced=mat))
-                l_blocks_map[q_label_l] = svd_r[ik][None, :] * blocks_l[ik]
+                l_blocks_map[q_label_l] = svd_r[ik][None, :] * blocks_l[ik] if sv_on_l else blocks_l[ik]
         return Tensor(blocks=r_blocks), l_blocks_map, error
 
     def __mul__(self, other):
@@ -707,6 +711,7 @@ class MPS:
                     left = Tensor.contract(
                         self.tensors[i], other.tensors[i], [0], [0])
             else:
+                # possible error due to SRRR 1-dot MPS
                 lbra = Tensor.contract(left, self.tensors[i], [0], [0])
                 if self.tensors[i].rank == 4 or (
                         i == self.n_sites - 2 and self.tensors[i + 1]

@@ -21,6 +21,7 @@
 #pragma once
 
 #include "matrix_functions.hpp"
+#include "threading.hpp"
 #include "utils.hpp"
 #include <complex>
 
@@ -90,6 +91,12 @@ extern void LFNAME(cgeev)(const char *jobvl, const char *jobvr,
                           complex<float> *vr, const MKL_INT *ldvr,
                           complex<float> *work, const MKL_INT *lwork,
                           float *rwork, MKL_INT *info);
+
+extern void LFNAME(chegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, complex<float> *a,
+                          const MKL_INT *lda, complex<float> *b,
+                          const MKL_INT *ldb, float *w, complex<float> *work,
+                          const MKL_INT *lwork, float *rwork, MKL_INT *info);
 
 // matrix-vector multiplication
 // vec [y] = complex [alpha] * mat [a] * vec [x] + complex [beta] * vec [y]
@@ -209,6 +216,13 @@ extern void LFNAME(zgeev)(const char *jobvl, const char *jobvr,
                           const MKL_INT *lda, complex<double> *w,
                           complex<double> *vl, const MKL_INT *ldvl,
                           complex<double> *vr, const MKL_INT *ldvr,
+                          complex<double> *work, const MKL_INT *lwork,
+                          double *rwork, MKL_INT *info);
+
+extern void LFNAME(zhegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n,
+                          complex<double> *a, const MKL_INT *lda,
+                          complex<double> *b, const MKL_INT *ldb, double *w,
                           complex<double> *work, const MKL_INT *lwork,
                           double *rwork, MKL_INT *info);
 
@@ -585,12 +599,33 @@ inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   MKL_INT *info) {
     LFNAME(cheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
 }
+
 template <>
 inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n,
                   complex<double> *a, const MKL_INT *lda, double *w,
                   complex<double> *work, const MKL_INT *lwork, double *rwork,
                   MKL_INT *info) {
     LFNAME(zheev)(jobz, uplo, n, a, lda, w, work, lwork, rwork, info);
+}
+
+template <>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, complex<float> *a, const MKL_INT *lda,
+                  complex<float> *b, const MKL_INT *ldb, float *w,
+                  complex<float> *work, const MKL_INT *lwork, float *rwork,
+                  MKL_INT *info) {
+    LFNAME(chegv)
+    (itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, rwork, info);
+}
+
+template <>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, complex<double> *a, const MKL_INT *lda,
+                  complex<double> *b, const MKL_INT *ldb, double *w,
+                  complex<double> *work, const MKL_INT *lwork, double *rwork,
+                  MKL_INT *info) {
+    LFNAME(zhegv)
+    (itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, rwork, info);
 }
 
 template <>
@@ -661,6 +696,53 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         const FP scale = -1.0;
         MKL_INT n = a.m * a.n;
         xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
+    }
+    static void elementwise(const string &f, FL alpha, const GMatrix<FL> &a,
+                            FL beta, const GMatrix<FL> &b, const GMatrix<FL> &c,
+                            FL cfactor = (FL)1.0) {
+        MKL_INT nn = a.m * a.n;
+        int ntg = threading->activate_global();
+        MKL_INT pt = (nn + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            MKL_INT ni = tid * pt, nf = min(nn, (MKL_INT)((tid + 1) * pt));
+            if (beta == (FL)0.0) {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + cfactor * c.data[i];
+            } else if (f == "+") {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i] +
+                                    cfactor * c.data[i];
+            } else if (f == "*") {
+                alpha *= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] * b.data[i] + cfactor * c.data[i];
+            } else if (f == "/") {
+                alpha /= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] / b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] / b.data[i] + cfactor * c.data[i];
+            }
+        }
+        threading->activate_normal();
     }
     // a = a + scale * op(b)
     // conj means conj trans
@@ -860,7 +942,9 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
     // conj can be 0 (no conj no trans), 1 (trans), 3 (conj trans)
     static void multiply(const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
-                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+                         const GMatrix<FL> &c, FL scale, FL cfactor,
+                         MKL_INT ldb = 0) {
+        ldb = ldb ? ldb : b.n;
         static const char ntxc[5] = "ntxc";
         // if assertion failes here, check whether it is the case
         // where different bra and ket are used with the transpose rule
@@ -869,48 +953,48 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         if (!(conja & 1) && !(conjb & 1)) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (!(conja & 1) && (conjb & 1)) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && !(conjb & 1)) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && (conjb & 1)) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         }
 #else
         if (!conja && !conjb) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (!conja && conjb != 2) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && !conjb) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.n, &c.m, &b.m, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja != 2 && conjb != 2) {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
             xgemm<FL>(ntxc + conjb, ntxc + conja, &b.m, &c.m, &b.n, &scale,
-                      b.data, &b.n, a.data, &a.n, &cfactor, c.data, &c.n);
+                      b.data, &ldb, a.data, &a.n, &cfactor, c.data, &c.n);
         } else if (conja == 2 && conjb != 2) {
             const MKL_INT one = 1;
             for (MKL_INT k = 0; k < c.m; k++)
                 xgemm<FL>(ntxc + conjb, "c", (conjb & 1) ? &b.m : &b.n, &one,
-                          (conjb & 1) ? &b.n : &b.m, &scale, b.data, &b.n,
+                          (conjb & 1) ? &b.n : &b.m, &scale, b.data, &ldb,
                           &a(k, 0), &one, &cfactor, &c(k, 0), &c.n);
         } else if (conja != 3 && conjb == 2) {
             const MKL_INT one = 1;
             for (MKL_INT k = 0; k < c.m; k++)
                 xgemm<FL>(ntxc + (conja ^ 1), "c", &one, &b.n, &b.m, &scale,
-                          (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &b.n,
+                          (conja & 1) ? &a(0, k) : &a(k, 0), &a.n, b.data, &ldb,
                           &cfactor, &c(k, 0), &one);
         } else
             assert(false);
@@ -1534,6 +1618,67 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                 d_alloc->complex_deallocate(work, mp[i].size() * mp[i].size());
             }
     }
+    static MKL_INT accurate_geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                                  const GDiagonalMatrix<FP> &w,
+                                  FP eps = (FP)1E-12) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        eigs(b, w);
+        conjugate(b);
+        vector<MKL_INT> idx;
+        idx.reserve(a.m);
+        for (MKL_INT i = 0; i < a.m; i++)
+            if (abs(w.data[i]) > eps)
+                idx.push_back(i);
+        MKL_INT xn = (MKL_INT)idx.size();
+        GMatrix<FL> g(nullptr, xn, a.m);
+        g.data = d_alloc->complex_allocate(g.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < xn; j++)
+                g(j, i) = b(idx[j], i) / sqrt(w.data[idx[j]]);
+        GMatrix<FL> tmp(b.data, a.m, xn);
+        GMatrix<FL> tmpa(a.data, xn, a.n);
+        GMatrix<FL> h(nullptr, xn, xn);
+        GDiagonalMatrix<FP> tmpw(w.data, xn);
+        h.data = d_alloc->complex_allocate(h.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = i + 1; j < a.n; j++)
+                a(i, j) = xconj<FL>(a(j, i));
+        multiply(a, 0, g, 3, tmp, (FL)1.0, (FL)0.0);
+        multiply(g, 0, tmp, 0, h, (FL)1.0, (FL)0.0);
+        eigs(h, tmpw);
+        conjugate(g);
+        multiply(h, 0, g, 0, tmpa, (FL)1.0, (FL)0.0);
+        d_alloc->complex_deallocate(h.data, h.size());
+        d_alloc->complex_deallocate(g.data, g.size());
+        return xn;
+    }
+    // eigenvectors are row right vectors
+    // U A^T = W S U
+    static void geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                      const GDiagonalMatrix<FP> &w) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        const FP scale = -1.0;
+        MKL_INT lwork = -1, n = a.m * a.n, incx = 2, info, itype = 1;
+        FL twork;
+        FP *rwork = d_alloc->allocate(max((MKL_INT)1, 3 * a.n - 2));
+        xhegv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  &twork, &lwork, rwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)xreal<FL>(twork);
+        FL *work = d_alloc->complex_allocate(lwork);
+        xhegv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  work, &lwork, rwork, &info);
+        assert((size_t)a.m * a.n == n);
+        xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
+        if (info != 0)
+            cout << "ATTENTION: xhegv info = " << info << endl;
+        d_alloc->complex_deallocate(work, lwork);
+        d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
+    }
     // eigenvectors are row right vectors
     // U A^T = W U
     static void eigs(const GMatrix<FL> &a, const GDiagonalMatrix<FP> &w) {
@@ -1553,7 +1698,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                   &info);
         assert((size_t)a.m * a.n == n);
         xscal<FP>(&n, &scale, (FP *)a.data + 1, &incx);
-        assert(info == 0);
+        if (info != 0)
+            cout << "ATTENTION: xheev info = " << info << endl;
         d_alloc->complex_deallocate(work, lwork);
         d_alloc->deallocate(rwork, max((MKL_INT)1, 3 * a.n - 2));
     }

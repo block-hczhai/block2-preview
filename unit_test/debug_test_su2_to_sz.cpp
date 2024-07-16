@@ -75,7 +75,8 @@ TEST_F(TestDMRG, Test) {
                PointGroup::swap_pg(pg)(fcidump->isym()));
     int norb = fcidump->n_sites();
     bool su2 = !fcidump->uhf;
-    shared_ptr<HamiltonianQC<SU2>> hamil = make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
+    shared_ptr<HamiltonianQC<SU2>> hamil =
+        make_shared<HamiltonianQC<SU2>>(vacuum, norb, orbsym, fcidump);
 
     shared_ptr<MPO<SU2>> mpo =
         make_shared<MPOQC<SU2>>(hamil, QCTypes::Conventional);
@@ -134,7 +135,9 @@ TEST_F(TestDMRG, Test) {
 
     shared_ptr<UnfusedMPS<SU2>> umps = make_shared<UnfusedMPS<SU2>>(mps);
 
-    shared_ptr<MPS<SZ>> gmps = TransUnfusedMPS<SU2, SZ>::forward(umps, "ZKET", mpo->tf->opf->cg)->finalize();
+    shared_ptr<MPS<SZ>> gmps = TransUnfusedMPS<SU2, SZ>::forward(
+                                   umps, "ZKET", mpo->tf->opf->cg, targetz)
+                                   ->finalize();
 
     // deallocate persistent stack memory
     mps_info->deallocate();

@@ -22,6 +22,7 @@
 
 #include "allocator.hpp"
 #include "matrix.hpp"
+#include "threading.hpp"
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -116,6 +117,18 @@ extern void LFNAME(sgeev)(const char *jobvl, const char *jobvr,
                           float *wr, float *wi, float *vl, const MKL_INT *ldvl,
                           float *vr, const MKL_INT *ldvr, float *work,
                           const MKL_INT *lwork, MKL_INT *info);
+
+extern void LFNAME(sgegv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, float *a,
+                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                          float *w, float *work, const MKL_INT *lwork,
+                          MKL_INT *info);
+
+extern void LFNAME(ssygv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, float *a,
+                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                          float *w, float *work, const MKL_INT *lwork,
+                          MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
@@ -220,6 +233,12 @@ extern void LFNAME(dgeev)(const char *jobvl, const char *jobvr,
                           double *wr, double *wi, double *vl,
                           const MKL_INT *ldvl, double *vr, const MKL_INT *ldvr,
                           double *work, const MKL_INT *lwork, MKL_INT *info);
+
+extern void LFNAME(dsygv)(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, double *a,
+                          const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                          double *w, double *work, const MKL_INT *lwork,
+                          MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
@@ -642,6 +661,30 @@ inline void xsyev<float>(const char *jobz, const char *uplo, const MKL_INT *n,
 }
 
 template <typename FL>
+inline void xsygv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, FL *a, const MKL_INT *lda, FL *b,
+                  const MKL_INT *ldb, FL *w, FL *work, const MKL_INT *lwork,
+                  MKL_INT *info);
+
+template <>
+inline void xsygv<double>(const MKL_INT *itype, const char *jobz,
+                          const char *uplo, const MKL_INT *n, double *a,
+                          const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                          double *w, double *work, const MKL_INT *lwork,
+                          MKL_INT *info) {
+    LFNAME(dsygv)(itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, info);
+}
+
+template <>
+inline void xsygv<float>(const MKL_INT *itype, const char *jobz,
+                         const char *uplo, const MKL_INT *n, float *a,
+                         const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                         float *w, float *work, const MKL_INT *lwork,
+                         MKL_INT *info) {
+    LFNAME(ssygv)(itype, jobz, uplo, n, a, lda, b, ldb, w, work, lwork, info);
+}
+
+template <typename FL>
 inline void xgels(const char *trans, const MKL_INT *m, const MKL_INT *n,
                   const MKL_INT *nrhs, FL *a, const MKL_INT *lda, FL *b,
                   const MKL_INT *ldb, FL *work, const MKL_INT *lwork,
@@ -666,6 +709,13 @@ inline void xgels<float>(const char *trans, const MKL_INT *m, const MKL_INT *n,
 template <typename FL>
 inline void xheev(const char *jobz, const char *uplo, const MKL_INT *n, FL *a,
                   const MKL_INT *lda, typename GMatrix<FL>::FP *w, FL *work,
+                  const MKL_INT *lwork, typename GMatrix<FL>::FP *rwork,
+                  MKL_INT *info);
+
+template <typename FL>
+inline void xhegv(const MKL_INT *itype, const char *jobz, const char *uplo,
+                  const MKL_INT *n, FL *a, const MKL_INT *lda, FL *b,
+                  const MKL_INT *ldb, typename GMatrix<FL>::FP *w, FL *work,
                   const MKL_INT *lwork, typename GMatrix<FL>::FP *rwork,
                   MKL_INT *info);
 
@@ -717,6 +767,53 @@ struct GMatrixFunctions<
     }
     static void keep_real(const GMatrix<FL> &a) {}
     static void conjugate(const GMatrix<FL> &a) {}
+    static void elementwise(const string &f, FL alpha, const GMatrix<FL> &a,
+                            FL beta, const GMatrix<FL> &b, const GMatrix<FL> &c,
+                            FL cfactor = (FL)1.0) {
+        MKL_INT nn = a.m * a.n;
+        int ntg = threading->activate_global();
+        MKL_INT pt = (nn + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            MKL_INT ni = tid * pt, nf = min(nn, (MKL_INT)((tid + 1) * pt));
+            if (beta == (FL)0.0) {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + cfactor * c.data[i];
+            } else if (f == "+") {
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] + beta * b.data[i] +
+                                    cfactor * c.data[i];
+            } else if (f == "*") {
+                alpha *= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] * b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] * b.data[i] + cfactor * c.data[i];
+            } else if (f == "/") {
+                alpha /= beta;
+                if (cfactor == (FL)0.0)
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] = alpha * a.data[i] / b.data[i];
+                else
+                    for (MKL_INT i = ni; i < nf; i++)
+                        c.data[i] =
+                            alpha * a.data[i] / b.data[i] + cfactor * c.data[i];
+            }
+        }
+        threading->activate_normal();
+    }
     // a = a + scale * op(b)
     static void iadd(const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale,
                      bool conj = false, FL cfactor = 1.0) {
@@ -842,25 +939,27 @@ struct GMatrixFunctions<
     // c.n is used for ldc; a.n is used for lda
     static void multiply(const GMatrix<FL> &a, uint8_t conja,
                          const GMatrix<FL> &b, uint8_t conjb,
-                         const GMatrix<FL> &c, FL scale, FL cfactor) {
+                         const GMatrix<FL> &c, FL scale, FL cfactor,
+                         MKL_INT ldb = 0) {
+        ldb = ldb ? ldb : b.n;
         // if assertion fails here, check whether it is the case
         // where different bra and ket are used with the transpose rule
         // use no-transpose-rule to fix it
         if (!(conja & 1) && !(conjb & 1)) {
             assert(a.n >= b.m && c.m == a.m && c.n >= b.n);
-            xgemm<FL>("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("n", "n", &b.n, &c.m, &b.m, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else if (!(conja & 1) && (conjb & 1)) {
             assert(a.n >= b.n && c.m == a.m && c.n >= b.m);
-            xgemm<FL>("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("t", "n", &b.m, &c.m, &b.n, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else if ((conja & 1) && !(conjb & 1)) {
             assert(a.m == b.m && c.m <= a.n && c.n >= b.n);
-            xgemm<FL>("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("n", "t", &b.n, &c.m, &b.m, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         } else {
             assert(a.m == b.n && c.m <= a.n && c.n >= b.m);
-            xgemm<FL>("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &b.n, a.data,
+            xgemm<FL>("t", "t", &b.m, &c.m, &b.n, &scale, b.data, &ldb, a.data,
                       &a.n, &cfactor, c.data, &c.n);
         }
     }
@@ -1417,6 +1516,59 @@ struct GMatrixFunctions<
                 d_alloc->deallocate(work, mp[i].size() * mp[i].size());
             }
     }
+    static MKL_INT accurate_geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                                  const GDiagonalMatrix<FL> &w,
+                                  FL eps = (FL)1E-12) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        eigs(b, w);
+        vector<MKL_INT> idx;
+        idx.reserve(a.m);
+        for (MKL_INT i = 0; i < a.m; i++)
+            if (w.data[i] > eps)
+                idx.push_back(i);
+        MKL_INT xn = (MKL_INT)idx.size();
+        GMatrix<FL> g(nullptr, xn, a.m);
+        g.data = d_alloc->allocate(g.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < xn; j++)
+                g(j, i) = b(idx[j], i) / sqrt(abs(w.data[idx[j]]));
+        GMatrix<FL> tmp(b.data, a.m, xn);
+        GMatrix<FL> tmpa(a.data, xn, a.n);
+        GMatrix<FL> h(nullptr, xn, xn);
+        GDiagonalMatrix<FL> tmpw(w.data, xn);
+        h.data = d_alloc->allocate(h.size());
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = i + 1; j < a.n; j++)
+                a(i, j) = a(j, i);
+        multiply(a, 0, g, 3, tmp, (FL)1.0, (FL)0.0);
+        multiply(g, 0, tmp, 0, h, (FL)1.0, (FL)0.0);
+        eigs(h, tmpw);
+        multiply(h, 0, g, 0, tmpa, (FL)1.0, (FL)0.0);
+        d_alloc->deallocate(h.data, h.size());
+        d_alloc->deallocate(g.data, g.size());
+        return xn;
+    }
+    // generalized eigenproblem Ax = wBx
+    static void geigs(const GMatrix<FL> &a, const GMatrix<FL> &b,
+                      const GDiagonalMatrix<FL> &w) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        assert(a.m == a.n && w.n == a.n && b.m == b.n && b.m == w.n);
+        MKL_INT lwork = -1, info, itype = 1;
+        FL twork;
+        xsygv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  &twork, &lwork, &info);
+        assert(info == 0);
+        lwork = (MKL_INT)twork;
+        FL *work = d_alloc->allocate(lwork);
+        xsygv<FL>(&itype, "V", "U", &a.n, a.data, &a.n, b.data, &b.n, w.data,
+                  work, &lwork, &info);
+        if (info != 0)
+            cout << "ATTENTION: xsygv info = " << a.n << " " << info << "\n";
+        d_alloc->deallocate(work, lwork);
+    }
     // eigenvectors are row vectors
     static void eigs(const GMatrix<FL> &a, const GDiagonalMatrix<FL> &w) {
         shared_ptr<VectorAllocator<FL>> d_alloc =
@@ -1431,7 +1583,7 @@ struct GMatrixFunctions<
         FL *work = d_alloc->allocate(lwork);
         xsyev<FL>("V", "U", &a.n, a.data, &a.n, w.data, work, &lwork, &info);
         if (info != 0)
-            cout << "ATTENTION: xsyev info = " << info << endl;
+            cout << "ATTENTION: xsyev info = " << info << "\n";
         // assert(info == 0);
         d_alloc->deallocate(work, lwork);
     }

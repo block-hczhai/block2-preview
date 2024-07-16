@@ -40,6 +40,8 @@ Manual Installation
 
 Dependence: ``pybind11``, ``python3``, and ``mkl`` (or ``blas + lapack``).
 
+The ``pybind11`` library needs to be version 2.12 or higher (see this GitHub issue `#36 <https://github.com/block-hczhai/block2-preview/issues/36>`_).
+
 For distributed parallel calculation, ``mpi`` library is required.
 
 ``cmake`` (version >= 3.0) can be used to compile C++ part of the code, as follows ::
@@ -54,6 +56,11 @@ Which will build the python extension library (using 10 CPU cores) (serial code)
 You may need to add both the repo root directory and the ``build`` directory into ``PYTHONPATH`` so that ``import block2`` and ``import pyblock2`` will work ::
 
     export PYTHONPATH=/path/to/block2/build:/path/to/block2:${PYTHONPATH}
+
+If you encounter issues on ``import block2``, 
+you need to make sure that the Python version printed in the cmake output matches the Python interpreter you are using. 
+If they do not match, you can pass ``-DPYTHON_EXECUTABLE=/path/to/python3`` to ``cmake``.
+
 
 Options
 -------
@@ -93,9 +100,19 @@ For mixed ``openMP/MPI``, use ``mpirun --bind-to none -n ...`` or ``mpirun --bin
 Binary build
 ^^^^^^^^^^^^
 
-To build unit tests and binary executable (instead of python extension), use the following ::
+To build unit tests, use the following ::
 
     cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON
+
+To build the binary executable, use the following ::
+
+    cmake .. -DUSE_MKL=ON -DBUILD_EXE=ON
+
+To build the C++ library, use the following ::
+
+    cmake .. -DUSE_MKL=ON -DBUILD_CLIB=ON
+
+``-DBUILD_LIB=ON``, ``-DBUILD_TEST=ON``, ``-DBUILD_EXE=ON``, and ``-DBUILD_CLIB=ON`` can be used together so that multiple targets will be built.
 
 TBB (Intel Threading Building Blocks)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

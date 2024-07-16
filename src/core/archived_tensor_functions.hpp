@@ -191,7 +191,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
      * processor in the distributed parallel case.
      */
     void tensor_product_partial_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt, bool trace_right,
         const shared_ptr<SparseMatrix<S, FL>> &cmat,
@@ -202,6 +202,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
         const vector<S> &vdqs,
         const shared_ptr<SparseMatrixGroup<S, FL>> &vmats, int &vidx, int tvidx,
         bool do_reduce) const override {
+        assert(xexpr == nullptr);
         const shared_ptr<OpElement<S, FL>> i_op =
             make_shared<OpElement<S, FL>>(OpNames::I, SiteIndex(), S());
         if ((!trace_right && lopt->ops.count(i_op) == 0) ||
@@ -282,9 +283,9 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_partial_multiply(x, lopt, ropt, trace_right,
-                                                cmat, psubsl, cinfos, vdqs,
-                                                vmats, vidx, tvidx, false);
+                tensor_product_partial_multiply(
+                    x, xexpr, lopt, ropt, trace_right, cmat, psubsl, cinfos,
+                    vdqs, vmats, vidx, tvidx, false);
         } break;
         case OpTypes::Zero:
             break;
@@ -297,6 +298,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
      * x cmats. Both cmats and vmats are wavefunctions with multi-target
      * components.
      * @param expr Symbolic expression in form of sum of tensor products.
+     * @param xexpr Symbolic expression from stacked mpo.
      * @param lopt Symbol lookup table for left operands in the tensor products.
      * @param ropt Symbol lookup table for right operands in the tensor
      * products.
@@ -310,7 +312,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
      * broadcast to all processors.
      */
     void tensor_product_multi_multiply(
-        const shared_ptr<OpExpr<S>> &expr,
+        const shared_ptr<OpExpr<S>> &expr, const shared_ptr<OpExpr<S>> &xexpr,
         const shared_ptr<OperatorTensor<S, FL>> &lopt,
         const shared_ptr<OperatorTensor<S, FL>> &ropt,
         const shared_ptr<SparseMatrixGroup<S, FL>> &cmats,
@@ -319,6 +321,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
             S, shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo>>
             &cinfos,
         S opdq, FL factor, bool all_reduce) const override {
+        assert(xexpr == nullptr);
         unordered_map<S, int> vdqs;
         vdqs.reserve(vmats->n);
         for (int iv = 0; iv < vmats->n; iv++)
@@ -334,7 +337,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
             for (int iv = 0; iv < vdq.count(); iv++)
                 if (vdqs.count(vdq[iv])) {
                     pcmat->info->cinfo = cinfos.at(opdq.combine(vdq[iv], cdq));
-                    tensor_product_multiply(expr, lopt, ropt, pcmat,
+                    tensor_product_multiply(expr, xexpr, lopt, ropt, pcmat,
                                             (*vmats)[vdqs[vdq[iv]]], opdq,
                                             false);
                 }
@@ -343,6 +346,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
     /** Tensor product multiplication operation (single-root case): vmat = expr
      * x cmat.
      * @param expr Symbolic expression in form of sum of tensor products.
+     * @param xexpr Symbolic expression from stacked mpo.
      * @param lopt Symbol lookup table for left operands in the tensor products.
      * @param ropt Symbol lookup table for right operands in the tensor
      * products.
@@ -354,11 +358,13 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
      * to all processors.
      */
     void tensor_product_multiply(const shared_ptr<OpExpr<S>> &expr,
+                                 const shared_ptr<OpExpr<S>> &xexpr,
                                  const shared_ptr<OperatorTensor<S, FL>> &lopt,
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &cmat,
                                  const shared_ptr<SparseMatrix<S, FL>> &vmat,
                                  S opdq, bool all_reduce) const override {
+        assert(xexpr == nullptr);
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S, FL>> op =
@@ -383,7 +389,8 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_multiply(x, lopt, ropt, cmat, vmat, opdq, false);
+                tensor_product_multiply(x, xexpr, lopt, ropt, cmat, vmat, opdq,
+                                        false);
         } break;
         case OpTypes::Zero:
             break;
@@ -394,6 +401,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
     }
     /** Extraction of diagonal of a tensor product expression: mat = diag(expr).
      * @param expr Symbolic expression in form of sum of tensor products.
+     * @param xexpr Symbolic expression from stacked mpo.
      * @param lopt Symbol lookup table for left operands in the tensor products.
      * @param ropt Symbol lookup table for right operands in the tensor
      * products.
@@ -401,10 +409,12 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
      * @param opdq The delta quantum number of expr.
      */
     void tensor_product_diagonal(const shared_ptr<OpExpr<S>> &expr,
+                                 const shared_ptr<OpExpr<S>> &xexpr,
                                  const shared_ptr<OperatorTensor<S, FL>> &lopt,
                                  const shared_ptr<OperatorTensor<S, FL>> &ropt,
                                  const shared_ptr<SparseMatrix<S, FL>> &mat,
                                  S opdq) const override {
+        assert(xexpr == nullptr);
         switch (expr->get_type()) {
         case OpTypes::Prod: {
             shared_ptr<OpProduct<S, FL>> op =
@@ -429,7 +439,7 @@ struct ArchivedTensorFunctions : TensorFunctions<S, FL> {
             shared_ptr<OpSum<S, FL>> op =
                 dynamic_pointer_cast<OpSum<S, FL>>(expr);
             for (auto &x : op->strings)
-                tensor_product_diagonal(x, lopt, ropt, mat, opdq);
+                tensor_product_diagonal(x, xexpr, lopt, ropt, mat, opdq);
         } break;
         case OpTypes::Zero:
             break;

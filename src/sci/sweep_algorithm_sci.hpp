@@ -65,7 +65,8 @@ template <typename S> struct DMRGSCI : DMRG<S, double, double> {
             me->ket->canonical_form[i] = 'K';
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S, double, double>::blocking(i, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, double, double>::blocking(i, forward, bond_dim, 0,
+                                              davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             i++;
             if (iprint >= 2) {
@@ -93,8 +94,8 @@ template <typename S> struct DMRGSCI : DMRG<S, double, double> {
                                         (uint8_t)NoiseTypes::Collected);
             decomp_type = DecompositionTypes::SVD;
         }
-        Iteration r =
-            DMRG<S, double, double>::blocking(i, forward, bond_dim, noise, davidson_conv_thrd);
+        Iteration r = DMRG<S, double, double>::blocking(
+            i, forward, bond_dim, noise, davidson_conv_thrd);
         if (last_site_svd && me->dot == 1 && !forward && i == me->n_sites - 1) {
             r.energies[0] = 0;
             davidson_soft_max_iter = dsmi;
@@ -112,7 +113,8 @@ template <typename S> struct DMRGSCI : DMRG<S, double, double> {
             assert(me->dot = 1);
             davidson_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            DMRG<S, double, double>::blocking(i - 1, forward, bond_dim, 0, davidson_conv_thrd);
+            DMRG<S, double, double>::blocking(i - 1, forward, bond_dim, 0,
+                                              davidson_conv_thrd);
             davidson_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -145,20 +147,23 @@ template <typename S> struct LinearSCI : Linear<S, double, double> {
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S, double, double>(rme, bra_bond_dims, ket_bond_dims, noises) {}
+        : Linear<S, double, double>(rme, bra_bond_dims, ket_bond_dims, noises) {
+    }
     LinearSCI(const shared_ptr<MovingEnvironment<S, double, double>> &lme,
               const shared_ptr<MovingEnvironment<S, double, double>> &rme,
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S, double, double>(lme, rme, bra_bond_dims, ket_bond_dims, noises) {}
+        : Linear<S, double, double>(lme, rme, bra_bond_dims, ket_bond_dims,
+                                    noises) {}
     LinearSCI(const shared_ptr<MovingEnvironment<S, double, double>> &lme,
               const shared_ptr<MovingEnvironment<S, double, double>> &rme,
               const shared_ptr<MovingEnvironment<S, double, double>> &tme,
               const vector<ubond_t> &bra_bond_dims,
               const vector<ubond_t> &ket_bond_dims,
               const vector<double> &noises = vector<double>())
-        : Linear<S, double, double>(lme, rme, tme, bra_bond_dims, ket_bond_dims, noises) {}
+        : Linear<S, double, double>(lme, rme, tme, bra_bond_dims, ket_bond_dims,
+                                    noises) {}
     Iteration blocking(int i, bool forward, ubond_t bra_bond_dim,
                        ubond_t ket_bond_dim, double noise,
                        double linear_conv_thrd) override {
@@ -257,8 +262,9 @@ template <typename S> struct LinearSCI : Linear<S, double, double> {
             assert(me->dot = 1);
             linear_soft_max_iter = 0;
             // skip this site (only do canonicalization)
-            Linear<S, double, double>::blocking(i - 1, forward, bra_bond_dim, ket_bond_dim, 0,
-                                linear_conv_thrd);
+            Linear<S, double, double>::blocking(i - 1, forward, bra_bond_dim,
+                                                ket_bond_dim, 0,
+                                                linear_conv_thrd);
             linear_soft_max_iter = dsmi;
             me->envs[i - 1]->right_op_infos.clear();
             me->envs[i - 1]->right = nullptr;
@@ -315,7 +321,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** Frozen/CAS mode: Only one big site at the end
      * => ME + S * SME  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me,
+                double g_factor,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
@@ -331,8 +338,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** Frozen/CAS mode ACPF2: Only one big site at the end
      * => ME + S * SME + S2 * SME2 **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
-                const shared_ptr<MovingEnvironment<S, double, double>> &sme, double g_factor2,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me,
+                double g_factor,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme,
+                double g_factor2,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme2,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
                 double ref_energy)
@@ -350,7 +359,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** RAS mode: Big sites on both ends
      * => ME + S * (SME1 - SME2)  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me,
+                double g_factor,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme1,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme2,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
@@ -368,9 +378,11 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     /** RAS ACPF2 mode: Big sites on both ends
      * => ME + S * (SME1 - SME2) + S2 * (SME3-SME4)  **/
-    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me, double g_factor,
+    DMRGSCIAQCC(const shared_ptr<MovingEnvironment<S, double, double>> &me,
+                double g_factor,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme1,
-                const shared_ptr<MovingEnvironment<S, double, double>> &sme2, double g_factor2,
+                const shared_ptr<MovingEnvironment<S, double, double>> &sme2,
+                double g_factor2,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme3,
                 const shared_ptr<MovingEnvironment<S, double, double>> &sme4,
                 const vector<ubond_t> &bond_dims, const vector<double> &noises,
@@ -420,10 +432,12 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
 
     tuple<double, int, size_t, double> two_dot_eigs_and_perturb(
         const bool forward, const int i, const double davidson_conv_thrd,
-        const double noise, shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
+        const double noise,
+        shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi;
         _t.get_time();
-        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3,
+            d_eff4;
         d_eff1 =
             ext_mes.at(0)->eff_ham(FuseTypes::FuseLR, forward, true,
                                    me->bra->tensors[i], me->ket->tensors[i]);
@@ -448,7 +462,8 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         teff += _t.get_time();
         // TODO: For RAS mode, it might be good to do several iterations
         //       for the first site as well.
-        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd, davidson_max_iter,
+        pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                             davidson_rel_conv_thrd, davidson_max_iter,
                              davidson_soft_max_iter, DavidsonTypes::Normal, 0.0,
                              me->para_rule);
         teig += _t.get_time();
@@ -468,17 +483,17 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
         delta_e = smallest_energy - ref_energy;
         return pdi;
     }
-    tuple<double, int, size_t, double>
-    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
-                             const int i_site, const double davidson_conv_thrd,
-                             const double noise,
-                             shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
+    tuple<double, int, size_t, double> one_dot_eigs_and_perturb(
+        const bool forward, const bool fuse_left, const int i_site,
+        const double davidson_conv_thrd, const double noise,
+        shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi{0., 0, 0,
                                                0.}; // energy, ndav, nflop, tdav
         _t.get_time();
         const auto doAQCC = (i_site == me->n_sites - 1 or i_site == 0) and
                             abs(davidson_soft_max_iter) > 0;
-        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3, d_eff4;
+        shared_ptr<EffectiveHamiltonian<S, double>> d_eff1, d_eff2, d_eff3,
+            d_eff4;
         d_eff1 = ext_mes.at(0)->eff_ham(
             fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true,
             me->bra->tensors[i_site], me->ket->tensors[i_site]);
@@ -532,10 +547,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
                 //
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
-                const auto pdi2 =
-                    aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                   davidson_max_iter, davidson_soft_max_iter,
-                                   DavidsonTypes::Normal, 0.0, me->para_rule);
+                const auto pdi2 = aqcc_eff->eigs(
+                    iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
+                    davidson_max_iter, davidson_soft_max_iter,
+                    DavidsonTypes::Normal, 0.0, me->para_rule);
                 const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
                 std::get<0>(pdi) = std::get<0>(pdi2);
@@ -581,9 +596,10 @@ template <typename S> struct DMRGSCIAQCC : DMRGSCI<S> {
             }
         } else {
             auto aqcc_eff = get_aqcc_eff(h_eff, d_eff1, d_eff2, d_eff3, d_eff4);
-            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                 davidson_max_iter, davidson_soft_max_iter,
-                                 DavidsonTypes::Normal, 0.0, me->para_rule);
+            pdi = aqcc_eff->eigs(iprint >= 3, davidson_conv_thrd,
+                                 davidson_rel_conv_thrd, davidson_max_iter,
+                                 davidson_soft_max_iter, DavidsonTypes::Normal,
+                                 0.0, me->para_rule);
             const auto energy = std::get<0>(pdi) + me->mpo->const_e;
             smallest_energy = min(energy, smallest_energy);
             delta_e = smallest_energy - ref_energy;
@@ -645,11 +661,10 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
         modify_mpo_mats(true, 0.0); // Save diagonals
     }
 
-    tuple<double, int, size_t, double>
-    one_dot_eigs_and_perturb(const bool forward, const bool fuse_left,
-                             const int i_site, const double davidson_conv_thrd,
-                             const double noise,
-                             shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
+    tuple<double, int, size_t, double> one_dot_eigs_and_perturb(
+        const bool forward, const bool fuse_left, const int i_site,
+        const double davidson_conv_thrd, const double noise,
+        shared_ptr<SparseMatrixGroup<S, double>> &pket) override {
         tuple<double, int, size_t, double> pdi{0., 0, 0,
                                                0.}; // energy, ndav, nflop, tdav
         _t.get_time();
@@ -704,8 +719,9 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                     vector<S> msl =
                         Partition<S, double>::get_uniq_labels({h_eff->hop_mat});
                     vector<vector<pair<uint8_t, S>>> msubsl =
-                        Partition<S, double>::get_uniq_sub_labels(h_eff->op->mat,
-                            h_eff->hop_mat, msl, h_eff->hop_left_vacuum);
+                        Partition<S, double>::get_uniq_sub_labels(
+                            h_eff->op->mat, h_eff->hop_mat, msl,
+                            h_eff->hop_left_vacuum);
                     diag_info->initialize_diag(
                         cdq, h_eff->opdq, msubsl[0], h_eff->left_op_infos,
                         h_eff->right_op_infos, h_eff->diag->info,
@@ -731,9 +747,10 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
                 const auto pdi2 =
-                    h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                                davidson_max_iter, davidson_soft_max_iter,
-                                DavidsonTypes::Normal, 0.0, me->para_rule);
+                    h_eff->eigs(nullptr, iprint >= 3, davidson_conv_thrd,
+                                davidson_rel_conv_thrd, davidson_max_iter,
+                                davidson_soft_max_iter, DavidsonTypes::Normal,
+                                0.0, me->para_rule);
                 const auto energy = std::get<0>(pdi2) + me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
                 std::get<0>(pdi) = std::get<0>(pdi2);
@@ -783,9 +800,10 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 cout.flush();
             }
         } else {
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                              davidson_max_iter, davidson_soft_max_iter,
-                              DavidsonTypes::Normal, 0.0, me->para_rule);
+            pdi = h_eff->eigs(nullptr, iprint >= 3, davidson_conv_thrd,
+                              davidson_rel_conv_thrd, davidson_max_iter,
+                              davidson_soft_max_iter, DavidsonTypes::Normal,
+                              0.0, me->para_rule);
         }
         teig += _t.get_time();
         if ((noise_type & NoiseTypes::Perturbative) && noise != 0) {
@@ -815,12 +833,14 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
         }
         auto &ops = me->mpo->tensors.at(me->mpo->n_sites - 1)->ops;
         for (auto &p : ops) {
-            OpElement<S, double> &op = *dynamic_pointer_cast<OpElement<S, double>>(p.first);
+            OpElement<S, double> &op =
+                *dynamic_pointer_cast<OpElement<S, double>>(p.first);
             if (op.name == OpNames::H) {
                 if (p.second->get_type() != SparseMatrixTypes::CSR)
                     throw std::runtime_error(
                         "MRCIAQCC: No CSRSparseMatrix is used?");
-                auto Hop = dynamic_pointer_cast<CSRSparseMatrix<S, double>>(p.second);
+                auto Hop =
+                    dynamic_pointer_cast<CSRSparseMatrix<S, double>>(p.second);
                 modify_H_mats(Hop, save, diag_shift);
                 break;
             }
@@ -842,7 +862,7 @@ template <typename S> struct DMRGSCIAQCCOLD : DMRGSCI<S> {
                 // Not all QNs make sense for H!
                 continue;
             }
-            auto& mat = (*Hop)[idx];
+            auto &mat = (*Hop)[idx];
             assert(mat.m == mat.n);
             if (!save)
                 assert(mat.m == (MKL_INT)pqn.second.size());

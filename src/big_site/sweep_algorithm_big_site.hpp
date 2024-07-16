@@ -739,7 +739,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                         h_eff->tf->opf->cg);
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->mat->data[0], nullptr, h_eff->op->lopt,
                         h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                     if (h_eff->tf->opf->seq->mode == SeqTypes::Auto)
                         h_eff->tf->opf->seq->auto_perform();
@@ -748,7 +748,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                     h_eff->diag->clear();
                     h_eff->diag->info->cinfo = diag_info;
                     h_eff->tf->tensor_product_diagonal(
-                        h_eff->op->mat->data[0], h_eff->op->lopt,
+                        h_eff->op->mat->data[0], nullptr, h_eff->op->lopt,
                         h_eff->op->ropt, h_eff->diag, h_eff->opdq);
                 }
                 //
@@ -757,11 +757,12 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 h_eff->cmat->info->cinfo = wfn_info;
                 // TODO The best would be to do the adaption of the diagonal
                 // directly in eigs
-                const auto pdi2 = h_eff->eigs(
-                    iprint >= 3, davidson_conv_thrd, davidson_rel_conv_thrd,
-                    davidson_max_iter, davidson_soft_max_iter,
-                    davidson_def_min_size, davidson_def_max_size,
-                    DavidsonTypes::Normal, 0.0, me->para_rule);
+                const auto pdi2 =
+                    h_eff->eigs(nullptr, iprint >= 3, davidson_conv_thrd,
+                                davidson_rel_conv_thrd, davidson_max_iter,
+                                davidson_soft_max_iter, davidson_def_min_size,
+                                davidson_def_max_size, DavidsonTypes::Normal,
+                                0.0, me->para_rule);
                 const auto energy =
                     (FPS)std::get<0>(pdi2) + (FPS)me->mpo->const_e;
                 const auto ndav = std::get<1>(pdi2);
@@ -812,7 +813,7 @@ struct DMRGBigSiteAQCCOLD : DMRGBigSite<S, FL, FLS> {
                 cout.flush();
             }
         } else {
-            pdi = h_eff->eigs(iprint >= 3, davidson_conv_thrd,
+            pdi = h_eff->eigs(nullptr, iprint >= 3, davidson_conv_thrd,
                               davidson_rel_conv_thrd, davidson_max_iter,
                               davidson_soft_max_iter, davidson_def_min_size,
                               davidson_def_max_size, DavidsonTypes::Normal, 0.0,

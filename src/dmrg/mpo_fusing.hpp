@@ -35,6 +35,441 @@ using namespace std;
 
 namespace block2 {
 
+// Stack two MPOs vertically, not working for SU(2)
+template <typename S, typename FL> struct StackedMPO : MPO<S, FL> {
+    typedef typename GMatrix<FL>::FP FP;
+    using MPO<S, FL>::n_sites;
+    using MPO<S, FL>::tensors;
+    using MPO<S, FL>::site_op_infos;
+    using MPO<S, FL>::left_operator_names;
+    using MPO<S, FL>::right_operator_names;
+    using MPO<S, FL>::middle_operator_names;
+    using MPO<S, FL>::middle_operator_exprs;
+    using MPO<S, FL>::basis;
+    AncillaTypes ancilla_type;
+    StackedMPO(const shared_ptr<MPO<S, FL>> &mpoa,
+               const shared_ptr<MPO<S, FL>> &mpob, int iprint = 1,
+               const string &tag = "")
+        : MPO<S, FL>(mpoa->n_sites,
+                     tag == "" ? mpoa->tag + "+" + mpob->tag : tag) {
+        assert(mpoa->n_sites == mpob->n_sites);
+        assert(mpoa->left_operator_exprs.size() == 0);
+        assert(mpoa->right_operator_exprs.size() == 0);
+        assert(mpob->left_operator_exprs.size() == 0);
+        assert(mpob->right_operator_exprs.size() == 0);
+        assert(mpoa->const_e == (typename const_fl_type<FL>::FL)0.0 ||
+               mpob->const_e == (typename const_fl_type<FL>::FL)0.0);
+        assert(mpoa->schemer == nullptr && mpob->schemer == nullptr);
+        MPO<S, FL>::const_e = mpoa->const_e + mpob->const_e;
+        MPO<S, FL>::op = mpoa->op;
+        MPO<S, FL>::left_vacuum = (mpoa->left_vacuum + mpob->left_vacuum)[0];
+        MPO<S, FL>::tf = mpoa->tf;
+        assert(mpoa->get_ancilla_type() == mpob->get_ancilla_type());
+        assert(mpoa->sparse_form == mpob->sparse_form);
+        ancilla_type = mpoa->get_ancilla_type();
+        MPO<S, FL>::sparse_form = mpoa->sparse_form;
+        basis = mpoa->basis;
+        if (mpoa->hamil == nullptr)
+            MPO<S, FL>::hamil = mpob->hamil;
+        else if (mpob->hamil == nullptr)
+            MPO<S, FL>::hamil = mpoa->hamil;
+        else if (mpoa->hamil == mpob->hamil)
+            MPO<S, FL>::hamil = mpoa->hamil;
+        else
+            assert(false);
+        tensors = vector<shared_ptr<OperatorTensor<S, FL>>>(n_sites);
+        site_op_infos =
+            vector<vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>>(n_sites);
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<map<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_infos_mp =
+            vector<map<S, shared_ptr<SparseMatrixInfo<S>>>>(n_sites);
+        for (uint16_t m = 0; m < n_sites; m++) {
+            const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> infoa =
+                mpoa->site_op_infos[m];
+            const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> infob =
+                mpob->site_op_infos[m];
+            map<S, shared_ptr<SparseMatrixInfo<S>>> &info = site_op_infos_mp[m];
+            for (const auto &xa : infoa)
+                for (const auto &xb : infob) {
+                    S q = xa.first + xb.first;
+                    for (int iq = 0; iq < q.count(); iq++)
+                        info[q[iq]] = nullptr;
+                }
+            for (auto &p : info) {
+                p.second = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                p.second->initialize(*basis[m], *basis[m], p.first,
+                                     p.first.is_fermion());
+            }
+            site_op_infos[m] = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                info.begin(), info.end());
+        }
+        left_operator_names.resize(n_sites);
+        right_operator_names.resize(n_sites);
+        shared_ptr<OpExpr<S>> zero = make_shared<OpExpr<S>>();
+        const shared_ptr<OpElement<S, FL>> i_op = make_shared<OpElement<S, FL>>(
+            OpNames::I, SiteIndex(),
+            (MPO<S, FL>::left_vacuum - MPO<S, FL>::left_vacuum)[0]);
+        SeqTypes seqt = MPO<S, FL>::tf->opf->seq->mode;
+        MPO<S, FL>::tf->opf->seq->mode = SeqTypes::None;
+        if (iprint) {
+            cout << endl;
+            cout << "Stack MPO | Nsites = " << setw(5) << n_sites << endl;
+        }
+        int ntg = threading->activate_global();
+        Timer _t;
+        double ttotal = 0;
+        int bond_max = 0;
+        for (uint16_t m = 0; m < n_sites; m++) {
+            _t.get_time();
+            if (iprint) {
+                cout << " Site = " << setw(5) << m << " / " << setw(5)
+                     << n_sites << " .. ";
+                cout.flush();
+            }
+            shared_ptr<OperatorTensor<S, FL>> opt =
+                make_shared<OperatorTensor<S, FL>>();
+            mpoa->load_tensor(m);
+            mpoa->load_left_operators(m);
+            mpoa->load_right_operators(m);
+            mpob->load_tensor(m);
+            mpob->load_left_operators(m);
+            mpob->load_right_operators(m);
+            const int xm =
+                mpoa->tensors[m]->lmat->m * mpob->tensors[m]->lmat->m;
+            const int xn =
+                mpoa->tensors[m]->lmat->n * mpob->tensors[m]->lmat->n;
+            left_operator_names[m] = make_shared<SymbolicRowVector<S>>(xn);
+            right_operator_names[m] = make_shared<SymbolicColumnVector<S>>(xm);
+            for (int ima = 0; ima < mpoa->left_operator_names[m]->n; ima++)
+                for (int imb = 0; imb < mpob->left_operator_names[m]->n;
+                     imb++) {
+                    const int imx = ima * mpob->left_operator_names[m]->n + imb;
+                    const auto opxa = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpoa->left_operator_names[m]->data[ima]);
+                    const auto opxb = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpob->left_operator_names[m]->data[imb]);
+                    left_operator_names[m]->data[imx] =
+                        make_shared<OpElement<S, FL>>(
+                            OpNames::XL,
+                            SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                       (uint16_t)(imx / 1000 % 1000),
+                                       (uint16_t)(imx % 1000)},
+                                      {}),
+                            opxa->q_label + opxb->q_label,
+                            opxa->factor * opxb->factor);
+                }
+            for (int ima = 0; ima < mpoa->right_operator_names[m]->m; ima++)
+                for (int imb = 0; imb < mpob->right_operator_names[m]->m;
+                     imb++) {
+                    const int imx =
+                        ima * mpob->right_operator_names[m]->m + imb;
+                    const auto opxa = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpoa->right_operator_names[m]->data[ima]);
+                    const auto opxb = dynamic_pointer_cast<OpElement<S, FL>>(
+                        mpob->right_operator_names[m]->data[imb]);
+                    right_operator_names[m]->data[imx] =
+                        make_shared<OpElement<S, FL>>(
+                            OpNames::XR,
+                            SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                       (uint16_t)(imx / 1000 % 1000),
+                                       (uint16_t)(imx % 1000)},
+                                      {}),
+                            opxa->q_label + opxb->q_label,
+                            opxa->factor * opxb->factor);
+                }
+            if (m == 0) {
+                shared_ptr<SymbolicRowVector<S>> pmata =
+                    dynamic_pointer_cast<SymbolicRowVector<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicRowVector<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicRowVector<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicRowVector<S>> pmat =
+                    make_shared<SymbolicRowVector<S>>(xn);
+                for (int ima = 0; ima < pmata->n; ima++)
+                    for (int imb = 0; imb < pmatb->n; imb++) {
+                        const int imx = ima * pmatb->n + imb;
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else {
+                            shared_ptr<OpElement<S, FL>> opel =
+                                make_shared<OpElement<S, FL>>(
+                                    OpNames::XL,
+                                    SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                               (uint16_t)(imx / 1000 % 1000),
+                                               (uint16_t)(imx % 1000)},
+                                              {}),
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        pmata->data[ima])
+                                            ->q_label +
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            pmatb->data[imb])
+                                            ->q_label);
+                            shared_ptr<SparseMatrix<S, FL>> mata =
+                                mpoa->tensors[m]->ops.at(
+                                    abs_value(pmata->data[ima]));
+                            shared_ptr<SparseMatrix<S, FL>> matb =
+                                mpob->tensors[m]->ops.at(
+                                    abs_value(pmatb->data[imb]));
+                            shared_ptr<SparseMatrix<S, FL>> xmat =
+                                make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            const S q = (mata->info->delta_quantum +
+                                         matb->info->delta_quantum)[0];
+                            const FL phase =
+                                mata->info->delta_quantum.is_fermion() &&
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            mpob->right_operator_names[m]
+                                                ->data[0])
+                                            ->q_label.is_fermion()
+                                    ? -1
+                                    : 1;
+                            xmat->allocate(site_op_infos_mp[m].at(q));
+                            MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
+                                                         phase);
+                            pmat->data[imx] = opel->scalar_multiply(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                    ->factor *
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb])
+                                    ->factor);
+                            opt->ops[opel] = xmat;
+                        }
+                    }
+                opt->lmat = opt->rmat = pmat;
+            } else if (m == n_sites - 1) {
+                shared_ptr<SymbolicColumnVector<S>> pmata =
+                    dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicColumnVector<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicColumnVector<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicColumnVector<S>> pmat =
+                    make_shared<SymbolicColumnVector<S>>(xm);
+                for (int ima = 0; ima < pmata->m; ima++)
+                    for (int imb = 0; imb < pmatb->m; imb++) {
+                        const int imx = ima * pmatb->m + imb;
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Zero)
+                            pmat->data[imx] = zero;
+                        else {
+                            shared_ptr<OpElement<S, FL>> opel =
+                                make_shared<OpElement<S, FL>>(
+                                    OpNames::XR,
+                                    SiteIndex({(uint16_t)(imx / 1000 / 1000),
+                                               (uint16_t)(imx / 1000 % 1000),
+                                               (uint16_t)(imx % 1000)},
+                                              {}),
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        pmata->data[ima])
+                                            ->q_label +
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            pmatb->data[imb])
+                                            ->q_label);
+                            shared_ptr<SparseMatrix<S, FL>> mata =
+                                mpoa->tensors[m]->ops.at(
+                                    abs_value(pmata->data[ima]));
+                            shared_ptr<SparseMatrix<S, FL>> matb =
+                                mpob->tensors[m]->ops.at(
+                                    abs_value(pmatb->data[imb]));
+                            shared_ptr<SparseMatrix<S, FL>> xmat =
+                                make_shared<SparseMatrix<S, FL>>(d_alloc);
+                            const S q = (mata->info->delta_quantum +
+                                         matb->info->delta_quantum)[0];
+                            const FL phase =
+                                mata->info->delta_quantum.is_fermion() &&
+                                        dynamic_pointer_cast<OpElement<S, FL>>(
+                                            mpob->right_operator_names[m]
+                                                ->data[imb])
+                                            ->q_label.is_fermion()
+                                    ? -1
+                                    : 1;
+                            xmat->allocate(site_op_infos_mp[m].at(q));
+                            MPO<S, FL>::tf->opf->product(0, mata, matb, xmat,
+                                                         phase);
+                            pmat->data[imx] = opel->scalar_multiply(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima])
+                                    ->factor *
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb])
+                                    ->factor);
+                            opt->ops[opel] = xmat;
+                        }
+                    }
+                opt->lmat = opt->rmat = pmat;
+            } else {
+                shared_ptr<SymbolicMatrix<S>> pmata =
+                    dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        mpoa->tensors[m]->lmat);
+                shared_ptr<SymbolicMatrix<S>> pmatb =
+                    dynamic_pointer_cast<SymbolicMatrix<S>>(
+                        mpob->tensors[m]->lmat);
+                shared_ptr<SymbolicMatrix<S>> pmat =
+                    make_shared<SymbolicMatrix<S>>(xm, xn);
+                pmat->indices.resize(pmata->indices.size() *
+                                     pmatb->indices.size());
+                pmat->data.resize(pmata->indices.size() *
+                                  pmatb->indices.size());
+                vector<shared_ptr<SparseMatrix<S, FL>>> mats(
+                    pmata->indices.size() * pmatb->indices.size());
+                const size_t nimx = pmat->data.size(),
+                             nimx_pt = (nimx + ntg - 1) / ntg;
+#pragma omp parallel num_threads(ntg)
+                {
+                    shared_ptr<VectorAllocator<FP>> xd_alloc =
+                        make_shared<VectorAllocator<FP>>();
+                    const int tid = threading->get_thread_id();
+                    const size_t imx_st = tid * nimx_pt,
+                                 imx_ed = min(nimx, (tid + 1) * nimx_pt);
+                    for (size_t imx = imx_st; imx < imx_ed; imx++) {
+                        const size_t ima = imx / pmatb->indices.size(),
+                                     imb = imx % pmatb->indices.size();
+                        pmat->indices[imx] =
+                            make_pair(pmata->indices[ima].first * pmatb->m +
+                                          pmatb->indices[imb].first,
+                                      pmata->indices[ima].second * pmatb->n +
+                                          pmatb->indices[imb].second);
+                        if (pmata->data[ima]->get_type() == OpTypes::Zero ||
+                            pmatb->data[imb]->get_type() == OpTypes::Zero) {
+                            pmat->data[imx] = zero;
+                            continue;
+                        }
+                        vector<shared_ptr<OpElement<S, FL>>> ppas;
+                        vector<shared_ptr<OpElement<S, FL>>> ppbs;
+                        if (pmata->data[ima]->get_type() == OpTypes::Elem)
+                            ppas.push_back(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmata->data[ima]));
+                        else if (pmata->data[ima]->get_type() == OpTypes::Sum) {
+                            const auto p = dynamic_pointer_cast<OpSum<S, FL>>(
+                                pmata->data[ima]);
+                            for (size_t j = 0; j < p->strings.size(); j++)
+                                ppas.push_back(
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        p->strings[j]
+                                            ->get_op()
+                                            ->scalar_multiply(
+                                                p->strings[j]->factor)));
+                        } else
+                            assert(false);
+                        if (pmatb->data[imb]->get_type() == OpTypes::Elem)
+                            ppbs.push_back(
+                                dynamic_pointer_cast<OpElement<S, FL>>(
+                                    pmatb->data[imb]));
+                        else if (pmatb->data[imb]->get_type() == OpTypes::Sum) {
+                            const auto p = dynamic_pointer_cast<OpSum<S, FL>>(
+                                pmatb->data[imb]);
+                            for (size_t j = 0; j < p->strings.size(); j++)
+                                ppbs.push_back(
+                                    dynamic_pointer_cast<OpElement<S, FL>>(
+                                        p->strings[j]
+                                            ->get_op()
+                                            ->scalar_multiply(
+                                                p->strings[j]->factor)));
+                        } else
+                            assert(false);
+                        shared_ptr<OpElement<S, FL>> opel =
+                            make_shared<OpElement<S, FL>>(
+                                OpNames::X,
+                                SiteIndex({(uint16_t)(imx / 1000 / 1000 / 1000),
+                                           (uint16_t)(imx / 1000 / 1000 % 1000),
+                                           (uint16_t)(imx / 1000 % 1000),
+                                           (uint16_t)(imx % 1000)},
+                                          {}),
+                                ppas[0]->q_label + ppbs[0]->q_label);
+                        shared_ptr<SparseMatrix<S, FL>> xmat =
+                            make_shared<SparseMatrix<S, FL>>(xd_alloc);
+                        const S q = (ppas[0]->q_label + ppbs[0]->q_label)[0];
+                        xmat->allocate(site_op_infos_mp[m].at(q));
+                        for (const auto xpa : ppas)
+                            for (const auto xpb : ppbs) {
+                                shared_ptr<SparseMatrix<S, FL>> mata =
+                                    mpoa->tensors[m]->ops.at(
+                                        abs_value((shared_ptr<OpExpr<S>>)xpa));
+                                shared_ptr<SparseMatrix<S, FL>> matb =
+                                    mpob->tensors[m]->ops.at(
+                                        abs_value((shared_ptr<OpExpr<S>>)xpb));
+                                const FL phase =
+                                    mata->info->delta_quantum.is_fermion() &&
+                                            dynamic_pointer_cast<
+                                                OpElement<S, FL>>(
+                                                mpob->right_operator_names[m]
+                                                    ->data[pmatb->indices[imb]
+                                                               .first])
+                                                ->q_label.is_fermion()
+                                        ? -1
+                                        : 1;
+                                MPO<S, FL>::tf->opf->product(
+                                    0, mata, matb, xmat,
+                                    phase * xpa->factor * xpb->factor);
+                            }
+                        pmat->data[imx] = opel;
+                        mats[imx] = xmat;
+                    }
+                }
+                opt->ops.reserve(nimx);
+                for (size_t imx = 0; imx < nimx; imx++)
+                    opt->ops[abs_value(pmat->data[imx])] = mats[imx];
+                opt->lmat = opt->rmat = pmat;
+            }
+            if (mpoa->tensors[m]->ops.count(i_op) &&
+                mpob->tensors[m]->ops.count(i_op)) {
+                shared_ptr<SparseMatrix<S, FL>> mata =
+                    mpoa->tensors[m]->ops.at(i_op);
+                shared_ptr<SparseMatrix<S, FL>> matb =
+                    mpob->tensors[m]->ops.at(i_op);
+                shared_ptr<SparseMatrix<S, FL>> xmat =
+                    make_shared<SparseMatrix<S, FL>>(d_alloc);
+                const S q =
+                    (mata->info->delta_quantum + matb->info->delta_quantum)[0];
+                xmat->allocate(site_op_infos_mp[m].at(q));
+                MPO<S, FL>::tf->opf->product(0, mata, matb, xmat, (FL)1.0);
+                opt->ops[i_op] = xmat;
+            }
+            tensors[m] = opt;
+            double tsite = _t.get_time();
+            bond_max = max(xn, bond_max);
+            ttotal += tsite;
+            if (iprint)
+                cout << "Mmpo = " << setw(10) << xn << " T = " << fixed
+                     << setprecision(3) << tsite << endl;
+            mpoa->unload_tensor(m);
+            mpoa->unload_left_operators(m);
+            mpoa->unload_right_operators(m);
+            mpob->unload_tensor(m);
+            mpob->unload_left_operators(m);
+            mpob->unload_right_operators(m);
+            this->save_tensor(m);
+            this->unload_tensor(m);
+            this->save_left_operators(m);
+            this->unload_left_operators(m);
+            this->save_right_operators(m);
+            this->unload_right_operators(m);
+        }
+        if (iprint) {
+            cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
+                 << ttotal;
+            cout << " MPO bond dimension = " << setw(10) << bond_max;
+            cout << endl << endl;
+        }
+        MPO<S, FL>::tf->opf->seq->mode = seqt;
+        threading->activate_normal();
+    }
+    AncillaTypes get_ancilla_type() const override { return ancilla_type; }
+    void deallocate() override {
+        for (int16_t m = this->n_sites - 1; m >= 0; m--)
+            if (this->tensors[m] != nullptr)
+                this->tensors[m]->deallocate();
+    }
+};
+
 // Merge every two adjacent sites into one site
 // Not working for SU(2)
 template <typename S, typename FL> struct CondensedMPO : MPO<S, FL> {

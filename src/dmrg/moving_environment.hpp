@@ -154,6 +154,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     typedef typename GMatrix<FLS>::FC FCS;
     int n_sites, center, dot;
     shared_ptr<MPO<S, FL>> mpo;
+    shared_ptr<MPO<S, FL>> stacked_mpo = nullptr;
     shared_ptr<MPS<S, FLS>> bra, ket;
     // Represent the environments contracted around different center sites
     vector<shared_ptr<Partition<S, FL>>> envs;
@@ -219,6 +220,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                               bool preserve_data = false) {
         mpo->load_left_operators(i - 1);
         mpo->load_tensor(i - 1);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_left_operators(i - 1);
+            stacked_mpo->load_tensor(i - 1);
+        }
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> left_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
@@ -227,19 +232,53 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
+        shared_ptr<Symbolic<S>> stacked_mat =
+            stacked_mpo != nullptr ? stacked_mpo->left_operator_names[i - 1]
+                                   : nullptr;
+        vector<S> sl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            sl = Partition<S, FL>::get_uniq_labels(mats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(mats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_mat});
+            sl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> exprs =
             envs[i - 1]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[i - 1]
                        : envs[i - 1]->left->lmat * mpo->tensors[i - 1]->lmat);
-        vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> subsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            subsl = Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->left_operator_names[i - 1], sl, mpo->left_vacuum);
+            site_op_info = mpo->site_op_infos[i - 1];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    exprs, mpo->left_operator_names[i - 1], psl,
+                    mpo->left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[i - 1]->left == nullptr
+                        ? nullptr
+                        : stacked_mpo->left_operator_exprs[i - 1],
+                    stacked_mpo->left_operator_names[i - 1], xsl,
+                    stacked_mpo->left_vacuum);
+            subsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, sl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[i - 1], stacked_mpo->site_op_infos[i - 1],
+                mpo->basis[i - 1]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         Partition<S, FL>::init_left_op_infos_notrunc(
             i - 1, bra->info, ket->info, sl, subsl, envs[i - 1]->left_op_infos,
-            mpo->site_op_infos[i - 1], left_op_infos_notrunc, mpo->tf->opf->cg);
+            site_op_info, left_op_infos_notrunc, mpo->tf->opf->cg);
         frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_left;
         if (cached_info.first == OpCachingTypes::Left &&
@@ -251,7 +290,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_left = Partition<S, FL>::build_left(
                 {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
-                mpo->sparse_form[i - 1] == 'S');
+                mpo->sparse_form[i - 1] == 'S', stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -267,6 +306,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 left_copy(i - 1, copied_infos, copied_left, false);
                 copied_mem = copied_left->get_total_memory();
             }
+        } else if (stacked_mpo != nullptr) {
+            mpo->tf->left_contract_stacked(
+                envs[i - 1]->left, mpo->tensors[i - 1],
+                stacked_mpo->tensors[i - 1], new_left,
+                mpo->left_operator_exprs[i - 1],
+                stacked_mpo->left_operator_exprs[i - 1], site_op_info_mp);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+            stacked_mpo->unload_tensor(i - 1);
+            stacked_mpo->unload_left_operators(i - 1);
         } else {
             // cached_opt might be partially delayed,
             // so further contraction is still needed
@@ -286,8 +335,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::init_left_op_infos(i - 1, bra->info, ket->info, sl,
                                              envs[i]->left_op_infos);
         frame_<FP>()->activate(1);
-        envs[i]->left =
-            Partition<S, FL>::build_left(mats, envs[i]->left_op_infos);
+        envs[i]->left = Partition<S, FL>::build_left(
+            mats, envs[i]->left_op_infos, false, stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -303,7 +352,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i - 1]);
         if (!fused_contraction_rotation)
             mpo->tf->left_rotate(new_left, fbt, fkt, envs[i]->left);
-        else {
+        else if (stacked_mpo != nullptr) {
+            mpo->tf->left_contract_rotate_stacked(
+                copied_left, mpo->tensors[i - 1], stacked_mpo->tensors[i - 1],
+                fbt, fkt, new_left, envs[i]->left,
+                mpo->left_operator_exprs[i - 1],
+                stacked_mpo->left_operator_exprs[i - 1], site_op_info_mp);
+            mpo->unload_tensor(i - 1);
+            mpo->unload_left_operators(i - 1);
+            stacked_mpo->unload_tensor(i - 1);
+            stacked_mpo->unload_left_operators(i - 1);
+            copied_left = nullptr;
+        } else {
             mpo->tf->left_contract_rotate(copied_left, mpo->tensors[i - 1], fbt,
                                           fkt, new_left, envs[i]->left,
                                           mpo->left_operator_exprs.size() != 0
@@ -363,6 +423,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                                bool preserve_data = false) {
         mpo->load_right_operators(i + dot);
         mpo->load_tensor(i + dot);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_right_operators(i + dot);
+            stacked_mpo->load_tensor(i + dot);
+        }
         vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> right_op_infos_notrunc;
         _t.get_time();
         vector<shared_ptr<Symbolic<S>>> mats = {
@@ -372,7 +436,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             mats.push_back(mpo->schemer->right_new_operator_names);
         }
-        vector<S> sl = Partition<S, FL>::get_uniq_labels(mats);
+        shared_ptr<Symbolic<S>> stacked_mat =
+            stacked_mpo != nullptr ? stacked_mpo->right_operator_names[i + dot]
+                                   : nullptr;
+        vector<S> sl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            sl = Partition<S, FL>::get_uniq_labels(mats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(mats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_mat});
+            sl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> exprs =
             envs[i + 1]->right == nullptr
                 ? nullptr
@@ -380,14 +454,38 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        ? mpo->right_operator_exprs[i + dot]
                        : mpo->tensors[i + dot]->rmat *
                              envs[i + 1]->right->rmat);
-        vector<vector<pair<uint8_t, S>>> subsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> subsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            subsl = Partition<S, FL>::get_uniq_sub_labels(
                 exprs, mpo->right_operator_names[i + dot], sl,
                 ket->info->vacuum);
+            site_op_info = mpo->site_op_infos[i + dot];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    exprs, mpo->right_operator_names[i + dot], psl,
+                    ket->info->vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[i + 1]->right == nullptr
+                        ? nullptr
+                        : stacked_mpo->right_operator_exprs[i + dot],
+                    stacked_mpo->right_operator_names[i + dot], xsl,
+                    ket->info->vacuum);
+            subsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, sl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[i + dot],
+                stacked_mpo->site_op_infos[i + dot], mpo->basis[i + dot]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         Partition<S, FL>::init_right_op_infos_notrunc(
             i + dot, bra->info, ket->info, sl, subsl,
-            envs[i + 1]->right_op_infos, mpo->site_op_infos[i + dot],
-            right_op_infos_notrunc, mpo->tf->opf->cg);
+            envs[i + 1]->right_op_infos, site_op_info, right_op_infos_notrunc,
+            mpo->tf->opf->cg);
         frame_<FP>()->activate(0);
         shared_ptr<OperatorTensor<S, FL>> new_right;
         if (cached_info.first == OpCachingTypes::Right &&
@@ -399,7 +497,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_right = Partition<S, FL>::build_right(
                 {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
-                mpo->sparse_form[i + dot] == 'S');
+                mpo->sparse_form[i + dot] == 'S', stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -415,6 +513,16 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 right_copy(i + dot, copied_infos, copied_right, false);
                 copied_mem = copied_right->get_total_memory();
             }
+        } else if (stacked_mpo != nullptr) {
+            mpo->tf->right_contract_stacked(
+                envs[i + 1]->right, mpo->tensors[i + dot],
+                stacked_mpo->tensors[i + dot], new_right,
+                mpo->right_operator_exprs[i + dot],
+                stacked_mpo->right_operator_exprs[i + dot], site_op_info_mp);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+            stacked_mpo->unload_tensor(i + dot);
+            stacked_mpo->unload_right_operators(i + dot);
         } else {
             // cached_opt might be partially delayed,
             // so further contraction is still needed
@@ -434,8 +542,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::init_right_op_infos(i + dot, bra->info, ket->info, sl,
                                               envs[i]->right_op_infos);
         frame_<FP>()->activate(1);
-        envs[i]->right =
-            Partition<S, FL>::build_right(mats, envs[i]->right_op_infos);
+        envs[i]->right = Partition<S, FL>::build_right(
+            mats, envs[i]->right_op_infos, false, stacked_mat);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -451,7 +559,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 : ComplexMixture<S, FL, FLS>::forward(ket->tensors[i + dot]);
         if (!fused_contraction_rotation)
             mpo->tf->right_rotate(new_right, fbt, fkt, envs[i]->right);
-        else {
+        else if (stacked_mpo != nullptr) {
+            mpo->tf->right_contract_rotate_stacked(
+                copied_right, mpo->tensors[i + dot],
+                stacked_mpo->tensors[i + dot], fbt, fkt, new_right,
+                envs[i]->right, mpo->right_operator_exprs[i + dot],
+                stacked_mpo->right_operator_exprs[i + dot], site_op_info_mp);
+            mpo->unload_tensor(i + dot);
+            mpo->unload_right_operators(i + dot);
+            stacked_mpo->unload_tensor(i + dot);
+            stacked_mpo->unload_right_operators(i + dot);
+            copied_right = nullptr;
+        } else {
             mpo->tf->right_contract_rotate(
                 copied_right, mpo->tensors[i + dot], fbt, fkt, new_right,
                 envs[i]->right,
@@ -1532,6 +1651,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S, FL>> &new_left, bool delayed) {
         mpo->load_left_operators(iL);
         mpo->load_tensor(iL);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_left_operators(iL);
+            stacked_mpo->load_tensor(iL);
+        }
         // left contract infos
         vector<shared_ptr<Symbolic<S>>> lmats = {mpo->left_operator_names[iL]};
         if (mpo->schemer != nullptr && iL == mpo->schemer->left_trans_site &&
@@ -1540,21 +1663,55 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             mpo->load_schemer();
             lmats.push_back(mpo->schemer->left_new_operator_names);
         }
-        vector<S> lsl = Partition<S, FL>::get_uniq_labels(lmats);
+        shared_ptr<Symbolic<S>> stacked_lmat =
+            stacked_mpo != nullptr ? stacked_mpo->left_operator_names[iL]
+                                   : nullptr;
+        vector<S> lsl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            lsl = Partition<S, FL>::get_uniq_labels(lmats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(lmats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_lmat});
+            lsl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> lexprs =
             envs[iL]->left == nullptr
                 ? nullptr
                 : (mpo->left_operator_exprs.size() != 0
                        ? mpo->left_operator_exprs[iL]
                        : envs[iL]->left->lmat * mpo->tensors[iL]->lmat);
-        vector<vector<pair<uint8_t, S>>> lsubsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> lsubsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            lsubsl = Partition<S, FL>::get_uniq_sub_labels(
                 lexprs, mpo->left_operator_names[iL], lsl, mpo->left_vacuum);
+            site_op_info = mpo->site_op_infos[iL];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    lexprs, mpo->left_operator_names[iL], psl,
+                    mpo->left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[iL]->left == nullptr
+                        ? nullptr
+                        : stacked_mpo->left_operator_exprs[iL],
+                    stacked_mpo->left_operator_names[iL], xsl,
+                    stacked_mpo->left_vacuum);
+            lsubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, lsl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[iL], stacked_mpo->site_op_infos[iL],
+                mpo->basis[iL]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         if (envs[iL]->left != nullptr && iL != 0 && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         Partition<S, FL>::init_left_op_infos_notrunc(
             iL, bra->info, ket->info, lsl, lsubsl, envs[iL]->left_op_infos,
-            mpo->site_op_infos[iL], left_op_infos, mpo->tf->opf->cg);
+            site_op_info, left_op_infos, mpo->tf->opf->cg);
         // left contract
         frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Left &&
@@ -1564,14 +1721,21 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 p.second->info = Partition<S, FL>::find_op_info(
                     left_op_infos, p.second->info->delta_quantum);
         } else {
-            new_left = Partition<S, FL>::build_left(
-                lmats, left_op_infos, mpo->sparse_form[iL] == 'S');
-            mpo->tf->left_contract(envs[iL]->left, mpo->tensors[iL], new_left,
-                                   mpo->left_operator_exprs.size() != 0
-                                       ? mpo->left_operator_exprs[iL]
-                                       : nullptr,
-                                   delayed ? delayed_contraction
-                                           : OpNamesSet());
+            new_left = Partition<S, FL>::build_left(lmats, left_op_infos,
+                                                    mpo->sparse_form[iL] == 'S',
+                                                    stacked_lmat);
+            if (stacked_mpo != nullptr)
+                mpo->tf->left_contract_stacked(
+                    envs[iL]->left, mpo->tensors[iL], stacked_mpo->tensors[iL],
+                    new_left, mpo->left_operator_exprs[iL],
+                    stacked_mpo->left_operator_exprs[iL], site_op_info_mp);
+            else
+                mpo->tf->left_contract(
+                    envs[iL]->left, mpo->tensors[iL], new_left,
+                    mpo->left_operator_exprs.size() != 0
+                        ? mpo->left_operator_exprs[iL]
+                        : nullptr,
+                    delayed ? delayed_contraction : OpNamesSet());
             // for conventional scheme this will not be the case
             if (mpo->schemer != nullptr &&
                 iL == mpo->schemer->left_trans_site &&
@@ -1582,6 +1746,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     new_left, lmats[1], mpo->schemer->left_new_operator_exprs);
                 mpo->unload_schemer();
             }
+        }
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->unload_left_operators(iL);
+            stacked_mpo->unload_tensor(iL);
         }
         mpo->unload_tensor(iL);
         mpo->unload_left_operators(iL);
@@ -1608,9 +1776,23 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<OperatorTensor<S, FL>> &new_right, bool delayed) {
         mpo->load_right_operators(iR);
         mpo->load_tensor(iR);
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->load_right_operators(iR);
+            stacked_mpo->load_tensor(iR);
+        }
         // right contract infos
         vector<shared_ptr<Symbolic<S>>> rmats = {mpo->right_operator_names[iR]};
-        vector<S> rsl = Partition<S, FL>::get_uniq_labels(rmats);
+        shared_ptr<Symbolic<S>> stacked_rmat =
+            stacked_mpo != nullptr ? stacked_mpo->right_operator_names[iR]
+                                   : nullptr;
+        vector<S> rsl, psl, xsl;
+        if (stacked_mpo == nullptr)
+            rsl = Partition<S, FL>::get_uniq_labels(rmats);
+        else {
+            psl = Partition<S, FL>::get_uniq_labels(rmats);
+            xsl = Partition<S, FL>::get_uniq_labels({stacked_rmat});
+            rsl = Partition<S, FL>::get_stacked_uniq_labels(psl, xsl);
+        }
         shared_ptr<Symbolic<S>> rexprs =
             envs[iR - dot + 1]->right == nullptr
                 ? nullptr
@@ -1618,16 +1800,40 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                        ? mpo->right_operator_exprs[iR]
                        : mpo->tensors[iR]->rmat *
                              envs[iR - dot + 1]->right->rmat);
-        vector<vector<pair<uint8_t, S>>> rsubsl =
-            Partition<S, FL>::get_uniq_sub_labels(
+        vector<vector<pair<uint8_t, S>>> rsubsl;
+        vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> site_op_info;
+        map<S, shared_ptr<SparseMatrixInfo<S>>> site_op_info_mp;
+        if (stacked_mpo == nullptr) {
+            rsubsl = Partition<S, FL>::get_uniq_sub_labels(
                 rexprs, mpo->right_operator_names[iR], rsl, ket->info->vacuum);
+            site_op_info = mpo->site_op_infos[iR];
+        } else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    rexprs, mpo->right_operator_names[iR], psl,
+                    ket->info->vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    envs[iR - dot + 1]->right == nullptr
+                        ? nullptr
+                        : stacked_mpo->right_operator_exprs[iR],
+                    stacked_mpo->right_operator_names[iR], xsl,
+                    ket->info->vacuum);
+            rsubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                psl, xsl, rsl, psubsl, xsubsl);
+            site_op_info_mp = Partition<S, FL>::get_stacked_op_info(
+                mpo->site_op_infos[iR], stacked_mpo->site_op_infos[iR],
+                mpo->basis[iR]);
+            site_op_info = vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>>(
+                site_op_info_mp.begin(), site_op_info_mp.end());
+        }
         if (envs[iR - dot + 1]->right != nullptr && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         Partition<S, FL>::init_right_op_infos_notrunc(
             iR, bra->info, ket->info, rsl, rsubsl,
-            envs[iR - dot + 1]->right_op_infos, mpo->site_op_infos[iR],
-            right_op_infos, mpo->tf->opf->cg);
+            envs[iR - dot + 1]->right_op_infos, site_op_info, right_op_infos,
+            mpo->tf->opf->cg);
         // right contract
         frame_<FP>()->activate(0);
         if (cached_info.first == OpCachingTypes::Right &&
@@ -1638,13 +1844,25 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     right_op_infos, p.second->info->delta_quantum);
         } else {
             new_right = Partition<S, FL>::build_right(
-                rmats, right_op_infos, mpo->sparse_form[iR] == 'S');
-            mpo->tf->right_contract(
-                envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
-                mpo->right_operator_exprs.size() != 0
-                    ? mpo->right_operator_exprs[iR]
-                    : nullptr,
-                delayed ? delayed_contraction : OpNamesSet());
+                rmats, right_op_infos, mpo->sparse_form[iR] == 'S',
+                stacked_rmat);
+            if (stacked_mpo != nullptr)
+                mpo->tf->right_contract_stacked(
+                    envs[iR - dot + 1]->right, mpo->tensors[iR],
+                    stacked_mpo->tensors[iR], new_right,
+                    mpo->right_operator_exprs[iR],
+                    stacked_mpo->right_operator_exprs[iR], site_op_info_mp);
+            else
+                mpo->tf->right_contract(
+                    envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
+                    mpo->right_operator_exprs.size() != 0
+                        ? mpo->right_operator_exprs[iR]
+                        : nullptr,
+                    delayed ? delayed_contraction : OpNamesSet());
+        }
+        if (stacked_mpo != nullptr) {
+            stacked_mpo->unload_right_operators(iR);
+            stacked_mpo->unload_tensor(iR);
         }
         mpo->unload_tensor(iR);
         mpo->unload_right_operators(iR);
@@ -1812,12 +2030,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 delayed_right_contract(iR, new_right);
         }
         mpo->load_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                      mpo->middle_operator_exprs[iM], delayed_contraction,
+                      stacked_mpo == nullptr
+                          ? nullptr
+                          : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
@@ -1828,6 +2051,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->unload_middle_operators(iM);
         shared_ptr<SparseMatrix<S, FL>> fbw =
             ComplexMixture<S, FL, FLS>::forward(bra_wfn);
         shared_ptr<SparseMatrix<S, FL>> fkw =
@@ -1944,12 +2169,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 delayed_right_contract(iR, new_right);
         }
         mpo->load_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->load_middle_operators(iM);
         // delayed left-right contract
         shared_ptr<DelayedOperatorTensor<S, FL>> op =
             mpo->middle_operator_exprs.size() != 0
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
-                      mpo->middle_operator_exprs[iM], delayed_contraction)
+                      mpo->middle_operator_exprs[iM], delayed_contraction,
+                      stacked_mpo == nullptr
+                          ? nullptr
+                          : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
                                             delayed_contraction);
         tdctr += _t2.get_time();
@@ -1960,6 +2190,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                       mpo->middle_operator_names[iM])
                 : hop_mat;
         mpo->unload_middle_operators(iM);
+        if (stacked_mpo != nullptr)
+            stacked_mpo->unload_middle_operators(iM);
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> fbw =
             ComplexMixture<S, FL, FLS>::forward(mbra->wfns);
         vector<shared_ptr<SparseMatrixGroup<S, FL>>> fkw =
@@ -2031,6 +2263,924 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         mps->unload_tensor(i);
         frame_<FP>()->activate(0);
         mps->tensors[i] = old_wfn;
+    }
+    static shared_ptr<SparseMatrix<S, FLS>>
+    symm_context_convert(int i, const shared_ptr<MPS<S, FLS>> &mps,
+                         const shared_ptr<MPS<S, FLS>> &cmps, int dot,
+                         bool fuse_left, bool mask, bool forward, bool is_wfn,
+                         bool infer_info,
+                         shared_ptr<SparseMatrix<S, FLS>> ket = nullptr,
+                         shared_ptr<SparseMatrix<S, FLS>> cket = nullptr) {
+        if (mps->get_type() & MPSTypes::MultiWfn)
+            mps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(mps->info)->targets[0];
+        if (cmps->get_type() & MPSTypes::MultiWfn)
+            cmps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(cmps->info)->targets[0];
+        return symm_context_convert_impl(
+                   i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                   is_wfn, infer_info, false,
+                   ket == nullptr && !(!forward && infer_info) ? mps->tensors[i]
+                                                               : ket,
+                   cket == nullptr && !(forward && infer_info)
+                       ? cmps->tensors[i]
+                       : cket,
+                   nullptr, nullptr)
+            .first;
+    }
+    static vector<shared_ptr<SparseMatrixGroup<S, FLS>>>
+    symm_context_convert_group(
+        int i, const shared_ptr<MultiMPS<S, FLS>> &mps,
+        const shared_ptr<MultiMPS<S, FLS>> &cmps, int dot, bool fuse_left,
+        bool mask, bool forward, bool is_wfn, bool infer_info,
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> kets =
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>>(),
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> ckets =
+            vector<shared_ptr<SparseMatrixGroup<S, FLS>>>()) {
+        const size_t nw =
+            mask ? 1 : (forward ? mps->wfns.size() : cmps->wfns.size());
+        vector<shared_ptr<SparseMatrixGroup<S, FLS>>> rwfns(nw);
+        for (int iw = 0; iw < (int)nw; iw++) {
+            rwfns[iw] =
+                symm_context_convert_impl(
+                    i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                    is_wfn, infer_info, false, nullptr, nullptr,
+                    kets.size() == 0 && !(!forward && infer_info)
+                        ? mps->wfns[iw]
+                        : (kets.size() == 0 ? nullptr : kets[iw]),
+                    ckets.size() == 0 && !(forward && infer_info)
+                        ? cmps->wfns[iw]
+                        : (ckets.size() == 0 ? nullptr : ckets[iw]))
+                    .second;
+        }
+        return rwfns;
+    }
+    static shared_ptr<SparseMatrixGroup<S, FLS>>
+    symm_context_convert_perturbative(
+        int i, const shared_ptr<MPS<S, FLS>> &mps,
+        const shared_ptr<MPS<S, FLS>> &cmps, int dot, bool fuse_left, bool mask,
+        bool forward, bool is_wfn, bool infer_info,
+        const shared_ptr<SparseMatrixGroup<S, FLS>> &pket) {
+        if (mps->get_type() & MPSTypes::MultiWfn)
+            mps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(mps->info)->targets[0];
+        if (cmps->get_type() & MPSTypes::MultiWfn)
+            cmps->info->target =
+                dynamic_pointer_cast<MultiMPSInfo<S>>(cmps->info)->targets[0];
+        return symm_context_convert_impl(
+                   i, mps->info, cmps->info, dot, fuse_left, mask, forward,
+                   is_wfn, infer_info, true, nullptr, nullptr, pket, nullptr)
+            .second;
+    }
+    // forward = proj to high symmetry
+    static pair<shared_ptr<SparseMatrix<S, FLS>>,
+                shared_ptr<SparseMatrixGroup<S, FLS>>>
+    symm_context_convert_impl(int i, const shared_ptr<MPSInfo<S>> &info,
+                              const shared_ptr<MPSInfo<S>> &cinfo, int dot,
+                              bool fuse_left, bool mask, bool forward,
+                              bool is_wfn, bool infer_info, bool is_pert,
+                              shared_ptr<SparseMatrix<S, FLS>> ket,
+                              shared_ptr<SparseMatrix<S, FLS>> cket,
+                              shared_ptr<SparseMatrixGroup<S, FLS>> pket,
+                              shared_ptr<SparseMatrixGroup<S, FLS>> cpket) {
+        if (is_wfn || fuse_left)
+            info->load_left_dims(i), cinfo->load_left_dims(i);
+        else
+            info->load_right_dims(i), cinfo->load_right_dims(i);
+        if (is_wfn || !fuse_left)
+            info->load_right_dims(i + dot), cinfo->load_right_dims(i + dot);
+        else
+            info->load_left_dims(i + dot), cinfo->load_left_dims(i + dot);
+        StateInfo<S> l = is_wfn || fuse_left ? *info->left_dims[i]
+                                             : *info->right_dims[i],
+                     ml = dot == 0 ? StateInfo<S>() : *info->basis[i],
+                     mr = dot == 0 ? StateInfo<S>() : *info->basis[i + dot - 1],
+                     r = is_wfn || !fuse_left ? *info->right_dims[i + dot]
+                                              : *info->left_dims[i + dot];
+        shared_ptr<StateInfo<S>> ll =
+            dot == 2 || (dot != 0 && fuse_left)
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      l, ml, *info->left_dims_fci[i + 1]))
+                : make_shared<StateInfo<S>>(l);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
+            dot == 2 || (dot != 0 && fuse_left)
+                ? StateInfo<S>::get_connection_info(l, ml, *ll)
+                : nullptr;
+        shared_ptr<StateInfo<S>> rr =
+            dot == 2 || (dot != 0 && !fuse_left)
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      mr, r, *info->right_dims_fci[i + dot - 1]))
+                : make_shared<StateInfo<S>>(r);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
+            dot == 2 || (dot != 0 && !fuse_left)
+                ? StateInfo<S>::get_connection_info(mr, r, *rr)
+                : nullptr;
+        StateInfo<S> lu = is_wfn || fuse_left ? *cinfo->left_dims[i]
+                                              : *cinfo->right_dims[i],
+                     mlu = dot == 0 ? StateInfo<S>() : *cinfo->basis[i],
+                     mru =
+                         dot == 0 ? StateInfo<S>() : *cinfo->basis[i + dot - 1],
+                     ru = is_wfn || !fuse_left ? *cinfo->right_dims[i + dot]
+                                               : *cinfo->left_dims[i + dot];
+        shared_ptr<StateInfo<S>> llu =
+            dot == 2 || (dot != 0 && fuse_left)
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      lu, mlu, *cinfo->left_dims_fci[i + 1]))
+                : make_shared<StateInfo<S>>(lu);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> clmu =
+            dot == 2 || (dot != 0 && fuse_left)
+                ? StateInfo<S>::get_connection_info(lu, mlu, *llu)
+                : nullptr;
+        shared_ptr<StateInfo<S>> rru =
+            dot == 2 || (dot != 0 && !fuse_left)
+                ? make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                      mru, ru, *cinfo->right_dims_fci[i + dot - 1]))
+                : make_shared<StateInfo<S>>(ru);
+        shared_ptr<typename StateInfo<S>::ConnectionInfo> cmru =
+            dot == 2 || (dot != 0 && !fuse_left)
+                ? StateInfo<S>::get_connection_info(mru, ru, *rru)
+                : nullptr;
+        shared_ptr<VectorAllocator<FPS>> d_alloc =
+            make_shared<VectorAllocator<FPS>>();
+        shared_ptr<VectorAllocator<uint32_t>> i_alloc =
+            make_shared<VectorAllocator<uint32_t>>();
+        const S ref = info->vacuum, refu = cinfo->vacuum;
+        const bool is_group = pket != nullptr || cpket != nullptr;
+        shared_ptr<SparseMatrix<S, FLS>> r_wfn =
+            is_group ? nullptr : make_shared<SparseMatrix<S, FLS>>(d_alloc);
+        shared_ptr<SparseMatrixGroup<S, FLS>> gr_wfn =
+            is_group ? make_shared<SparseMatrixGroup<S, FLS>>(d_alloc)
+                     : nullptr;
+        if (is_pert) {
+            assert(is_group && infer_info);
+            // FIXME: multi will have problem
+            vector<S> pket_dqs;
+            for (int iw = 0; iw < pket->n; iw++) {
+                S dq = pket->infos[iw]->delta_quantum;
+                shared_ptr<StateInfo<S>> udqs = TransStateInfo<S, S>::forward(
+                    make_shared<StateInfo<S>>(dq), refu);
+                for (int ir = 0; ir < udqs->n; ir++)
+                    pket_dqs.push_back(udqs->quanta[ir]);
+            }
+            sort(pket_dqs.begin(), pket_dqs.end());
+            pket_dqs.resize(distance(pket_dqs.begin(),
+                                     unique(pket_dqs.begin(), pket_dqs.end())));
+            vector<shared_ptr<SparseMatrixInfo<S>>> infos;
+            infos.reserve(pket_dqs.size());
+            for (size_t j = 0; j < pket_dqs.size(); j++) {
+                shared_ptr<SparseMatrixInfo<S>> info =
+                    make_shared<SparseMatrixInfo<S>>(i_alloc);
+                info->initialize(*llu, *rru, pket_dqs[j], false, true);
+                infos.push_back(info);
+            }
+            gr_wfn->allocate(infos);
+            gr_wfn->clear();
+        } else if (infer_info) {
+            shared_ptr<StateInfo<S>> xll = forward ? llu : ll;
+            shared_ptr<StateInfo<S>> xrr = forward ? rru : rr;
+            if (fuse_left) {
+                xrr = forward ? TransStateInfo<S, S>::forward(rr, refu)
+                              : TransStateInfo<S, S>::forward(rru, ref);
+                if (forward)
+                    rru = xrr, ru = *xrr;
+                else
+                    rr = xrr, r = *xrr;
+            } else {
+                xll = forward ? TransStateInfo<S, S>::forward(ll, refu)
+                              : TransStateInfo<S, S>::forward(llu, ref);
+                if (forward)
+                    llu = xll, lu = *xll;
+                else
+                    ll = xll, l = *xll;
+            }
+            if (is_group) {
+                int nxw = forward ? pket->n : cpket->n;
+                vector<shared_ptr<SparseMatrixInfo<S>>> infos(nxw);
+                for (int iw = 0; iw < nxw; iw++) {
+                    S xdq =
+                        is_wfn
+                            ? (forward
+                                   ? dynamic_pointer_cast<MultiMPSInfo<S>>(
+                                         cinfo)
+                                         ->targets[iw]
+                                   : dynamic_pointer_cast<MultiMPSInfo<S>>(info)
+                                         ->targets[iw])
+                            : (forward ? cinfo->vacuum : info->vacuum);
+                    infos[iw] = make_shared<SparseMatrixInfo<S>>(i_alloc);
+                    infos[iw]->initialize(*xll, *xrr, xdq, false, is_wfn);
+                }
+                gr_wfn->allocate(infos);
+                gr_wfn->clear();
+            } else {
+                S xdq = is_wfn ? (forward ? cinfo->target : info->target)
+                               : (forward ? cinfo->vacuum : info->vacuum);
+                shared_ptr<SparseMatrixInfo<S>> xinfo =
+                    make_shared<SparseMatrixInfo<S>>(i_alloc);
+                xinfo->initialize(*xll, *xrr, xdq, false, is_wfn);
+                r_wfn->allocate(xinfo);
+                r_wfn->clear();
+            }
+        } else if (is_group) {
+            gr_wfn->allocate(forward ? cpket->infos : pket->infos);
+            gr_wfn->clear();
+        } else {
+            r_wfn->allocate(forward ? cket->info : ket->info);
+            r_wfn->clear();
+        }
+        map<array<S, 2>, pair<FLS *, size_t>> mp0;
+        map<array<S, 3>, pair<FLS *, size_t>> mp;
+        map<array<S, 4>, pair<FLS *, size_t>> mp2;
+        int nxw = is_group ? (forward ? pket->n : gr_wfn->n) : 1;
+        for (int iw = 0; iw < nxw; iw++) {
+            shared_ptr<SparseMatrix<S, FLS>> xwfn =
+                forward ? (is_group ? (*pket)[iw] : ket)
+                        : (is_group ? (*gr_wfn)[iw] : r_wfn);
+            for (int k = 0; k < xwfn->info->n; k++) {
+                S pln =
+                    xwfn->info->quanta[k].get_bra(xwfn->info->delta_quantum);
+                S prn = xwfn->info->quanta[k].get_ket();
+                prn = is_wfn ? -prn : prn;
+                if (dot == 1 && fuse_left) {
+                    int ib = ll->find_state(pln);
+                    int bbed = clm->acc_n_states[ib + 1];
+                    size_t p = xwfn->info->n_states_total[k];
+                    for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                        uint32_t ibba = clm->ij_indices[bb].first,
+                                 ibbb = clm->ij_indices[bb].second;
+                        size_t lp = (size_t)l.n_states[ibba] *
+                                    ml.n_states[ibbb] *
+                                    xwfn->info->n_states_ket[k];
+                        S ppl = l.quanta[ibba], ppm = ml.quanta[ibbb],
+                          ppr = prn;
+                        mp[array<S, 3>{ppl, ppm, ppr}] =
+                            make_pair(xwfn->data + p, 0);
+                        p += lp;
+                    }
+                    assert(p == (k != xwfn->info->n - 1
+                                     ? xwfn->info->n_states_total[k + 1]
+                                     : xwfn->total_memory));
+                } else if (dot == 1 && !fuse_left) {
+                    int ik = rr->find_state(prn);
+                    int kked = cmr->acc_n_states[ik + 1];
+                    size_t p = xwfn->info->n_states_total[k];
+                    for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                        uint32_t ikka = cmr->ij_indices[kk].first,
+                                 ikkb = cmr->ij_indices[kk].second;
+                        size_t lp =
+                            (size_t)mr.n_states[ikka] * r.n_states[ikkb];
+                        S ppl = pln, ppm = mr.quanta[ikka],
+                          ppr = r.quanta[ikkb];
+                        mp[array<S, 3>{ppl, ppm, ppr}] = make_pair(
+                            xwfn->data + p, xwfn->info->n_states_ket[k]);
+                        p += lp;
+                    }
+                    assert(p - xwfn->info->n_states_total[k] ==
+                           xwfn->info->n_states_ket[k]);
+                } else if (dot == 0)
+                    mp0[array<S, 2>{pln, prn}] = make_pair(xwfn->data, 0);
+                else if (dot == 2) {
+                    int ib = ll->find_state(pln), ik = rr->find_state(prn);
+                    int bbed = clm->acc_n_states[ib + 1],
+                        kked = cmr->acc_n_states[ik + 1];
+                    size_t p = xwfn->info->n_states_total[k];
+                    size_t ipl = 0;
+                    for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
+                        uint32_t ibba = clm->ij_indices[bb].first,
+                                 ibbb = clm->ij_indices[bb].second;
+                        S ppl = l.quanta[ibba], ppml = ml.quanta[ibbb];
+                        size_t npl = l.n_states[ibba], npml = ml.n_states[ibbb];
+                        size_t ipr = 0;
+                        for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
+                            uint32_t ikka = cmr->ij_indices[kk].first,
+                                     ikkb = cmr->ij_indices[kk].second;
+                            S ppmr = mr.quanta[ikka], ppr = r.quanta[ikkb];
+                            size_t npmr = mr.n_states[ikka],
+                                   npr = r.n_states[ikkb];
+                            mp2[array<S, 4>{ppl, ppml, ppmr, ppr}] =
+                                make_pair(xwfn->data + p + ipl + ipr,
+                                          xwfn->info->n_states_ket[k]);
+                            ipr += (size_t)npmr * npr;
+                        }
+                        assert(ipr == xwfn->info->n_states_ket[k]);
+                        ipl += (size_t)npl * npml * xwfn->info->n_states_ket[k];
+                    }
+                    assert(p + ipl == (k != xwfn->info->n - 1
+                                           ? xwfn->info->n_states_total[k + 1]
+                                           : xwfn->total_memory));
+                } else
+                    assert(false);
+            }
+        }
+        nxw = is_group ? (forward ? gr_wfn->n : cpket->n) : 1;
+        for (int iw = 0; iw < nxw; iw++) {
+            S cptu = cinfo->target, cpt = info->target;
+            if (is_group && !is_pert) {
+                cptu =
+                    dynamic_pointer_cast<MultiMPSInfo<S>>(cinfo)->targets[iw];
+                cpt = dynamic_pointer_cast<MultiMPSInfo<S>>(info)->targets[iw];
+            }
+            shared_ptr<StateInfo<S>> cplu =
+                is_wfn || fuse_left
+                    ? make_shared<StateInfo<S>>(lu)
+                    : make_shared<StateInfo<S>>(
+                          StateInfo<S>::complementary(lu, cptu));
+            shared_ptr<StateInfo<S>> cpl =
+                is_wfn || fuse_left ? make_shared<StateInfo<S>>(l)
+                                    : make_shared<StateInfo<S>>(
+                                          StateInfo<S>::complementary(l, cpt));
+            shared_ptr<StateInfo<S>> cpru =
+                is_wfn || !fuse_left
+                    ? make_shared<StateInfo<S>>(
+                          StateInfo<S>::complementary(ru, cptu))
+                    : make_shared<StateInfo<S>>(ru);
+            shared_ptr<StateInfo<S>> cpr =
+                is_wfn || !fuse_left ? make_shared<StateInfo<S>>(
+                                           StateInfo<S>::complementary(r, cpt))
+                                     : make_shared<StateInfo<S>>(r);
+            shared_ptr<StateInfo<S>> conn_l =
+                TransStateInfo<S, S>::backward_connection(cplu, cpl);
+            shared_ptr<StateInfo<S>> conn_lm =
+                dot == 2 || (dot != 0 && fuse_left)
+                    ? TransStateInfo<S, S>::backward_connection(
+                          make_shared<StateInfo<S>>(mlu),
+                          make_shared<StateInfo<S>>(ml))
+                    : nullptr;
+            shared_ptr<StateInfo<S>> conn_mr =
+                dot == 2 || (dot != 0 && !fuse_left)
+                    ? TransStateInfo<S, S>::backward_connection(
+                          make_shared<StateInfo<S>>(mru),
+                          make_shared<StateInfo<S>>(mr))
+                    : nullptr;
+            shared_ptr<StateInfo<S>> conn_r =
+                TransStateInfo<S, S>::backward_connection(cpru, cpr);
+            shared_ptr<SparseMatrix<S, FLS>> cwfn =
+                forward ? (is_group ? (*gr_wfn)[iw] : r_wfn)
+                        : (is_group ? (*cpket)[iw] : cket);
+            for (int k = 0; k < cwfn->info->n; k++) {
+                S plu =
+                    cwfn->info->quanta[k].get_bra(cwfn->info->delta_quantum);
+                S pru = cwfn->info->quanta[k].get_ket();
+                pru = is_wfn ? -pru : pru;
+                if (dot == 1 && fuse_left) {
+                    int ibu = llu->find_state(plu);
+                    int bbedu = clmu->acc_n_states[ibu + 1];
+                    size_t pu = cwfn->info->n_states_total[k];
+                    for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu;
+                         bbu++) {
+                        uint32_t ibbau = clmu->ij_indices[bbu].first,
+                                 ibbbu = clmu->ij_indices[bbu].second;
+                        size_t lpu = (size_t)lu.n_states[ibbau] *
+                                     mlu.n_states[ibbbu] *
+                                     cwfn->info->n_states_ket[k];
+                        S pplu = lu.quanta[ibbau], ppmu = mlu.quanta[ibbbu],
+                          ppru = pru;
+                        FLS *x = cwfn->data + pu;
+                        pu += lpu;
+                        shared_ptr<StateInfo<S>> mls =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(pplu), ref);
+                        shared_ptr<StateInfo<S>> mms =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppmu), ref);
+                        shared_ptr<StateInfo<S>> mrs =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppru), ref);
+                        S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                        S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                        for (int iln = 0; iln < mls->n; iln++)
+                            for (int imn = 0; imn < mms->n; imn++)
+                                for (int irn = 0; irn < mrs->n; irn++) {
+                                    S lqn = mls->quanta[iln],
+                                      mqn = mms->quanta[imn],
+                                      rqn = mrs->quanta[irn];
+                                    if (!mp.count(array<S, 3>{lqn, mqn, rqn}))
+                                        continue;
+                                    FLS *xr =
+                                        mp.at(array<S, 3>{lqn, mqn, rqn}).first;
+                                    lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                                    rqn =
+                                        is_wfn || !fuse_left ? cpt - rqn : rqn;
+                                    int il = cpl->find_state(lqn);
+                                    int im = ml.find_state(mqn);
+                                    int ir = cpr->find_state(rqn);
+                                    MKL_INT zl = cpl->n_states[il],
+                                            zm = ml.n_states[im],
+                                            zr = cpr->n_states[ir];
+                                    int klst = conn_l->n_states[il];
+                                    int kmst = conn_lm->n_states[im];
+                                    int krst = conn_r->n_states[ir];
+                                    int kled = il == cpl->n - 1
+                                                   ? conn_l->n
+                                                   : conn_l->n_states[il + 1];
+                                    int kmed = im == ml.n - 1
+                                                   ? conn_lm->n
+                                                   : conn_lm->n_states[im + 1];
+                                    int kred = ir == cpr->n - 1
+                                                   ? conn_r->n
+                                                   : conn_r->n_states[ir + 1];
+                                    size_t lsh = 0, msh = 0, rsh = 0;
+                                    for (int ilp = klst;
+                                         ilp < kled &&
+                                         conn_l->quanta[ilp] != xpplu;
+                                         ilp++)
+                                        lsh += cplu->n_states[cplu->find_state(
+                                            conn_l->quanta[ilp])];
+                                    for (int imp = kmst;
+                                         imp < kmed &&
+                                         conn_lm->quanta[imp] != ppmu;
+                                         imp++)
+                                        msh += mlu.n_states[mlu.find_state(
+                                            conn_lm->quanta[imp])];
+                                    for (int irp = krst;
+                                         irp < kred &&
+                                         conn_r->quanta[irp] != xppru;
+                                         irp++)
+                                        rsh += cpru->n_states[cpru->find_state(
+                                            conn_r->quanta[irp])];
+                                    MKL_INT kl =
+                                        (MKL_INT)cplu
+                                            ->n_states[cplu->find_state(xpplu)];
+                                    MKL_INT km =
+                                        (MKL_INT)
+                                            mlu.n_states[mlu.find_state(ppmu)];
+                                    MKL_INT kr =
+                                        (MKL_INT)cpru
+                                            ->n_states[cpru->find_state(xppru)];
+                                    if (mask) {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    xr[(ikl + lsh) * zm * zr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)] = 1.0;
+                                    } else if (forward) {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    x[(size_t)ikl * km * kr +
+                                                      (size_t)ikm * kr +
+                                                      (size_t)ikr] +=
+                                                        xr[(ikl + lsh) * zm *
+                                                               zr +
+                                                           (ikm + msh) * zr +
+                                                           (ikr + rsh)];
+                                    } else {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    xr[(ikl + lsh) * zm * zr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)] =
+                                                        x[(size_t)ikl * km *
+                                                              kr +
+                                                          (size_t)ikm * kr +
+                                                          (size_t)ikr];
+                                    }
+                                }
+                    }
+                    assert(pu == (k != cwfn->info->n - 1
+                                      ? cwfn->info->n_states_total[k + 1]
+                                      : cwfn->total_memory));
+                } else if (dot == 1 && !fuse_left) {
+                    int iku = rru->find_state(pru);
+                    int kkedu = cmru->acc_n_states[iku + 1];
+                    size_t pu = cwfn->info->n_states_total[k];
+                    for (int kku = cmru->acc_n_states[iku]; kku < kkedu;
+                         kku++) {
+                        uint32_t ikkau = cmru->ij_indices[kku].first,
+                                 ikkbu = cmru->ij_indices[kku].second;
+                        size_t lpu =
+                            (size_t)mru.n_states[ikkau] * ru.n_states[ikkbu];
+                        S pplu = plu, ppmu = mru.quanta[ikkau],
+                          ppru = ru.quanta[ikkbu];
+                        FLS *x = cwfn->data + pu;
+                        size_t xstr = cwfn->info->n_states_ket[k];
+                        pu += lpu;
+                        shared_ptr<StateInfo<S>> mls =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(pplu), ref);
+                        shared_ptr<StateInfo<S>> mms =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppmu), ref);
+                        shared_ptr<StateInfo<S>> mrs =
+                            TransStateInfo<S, S>::forward(
+                                make_shared<StateInfo<S>>(ppru), ref);
+                        S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                        S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                        for (int iln = 0; iln < mls->n; iln++)
+                            for (int imn = 0; imn < mms->n; imn++)
+                                for (int irn = 0; irn < mrs->n; irn++) {
+                                    S lqn = mls->quanta[iln],
+                                      mqn = mms->quanta[imn],
+                                      rqn = mrs->quanta[irn];
+                                    if (!mp.count(array<S, 3>{lqn, mqn, rqn}))
+                                        continue;
+                                    FLS *xr =
+                                        mp.at(array<S, 3>{lqn, mqn, rqn}).first;
+                                    size_t rstr =
+                                        mp.at(array<S, 3>{lqn, mqn, rqn})
+                                            .second;
+                                    lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                                    rqn =
+                                        is_wfn || !fuse_left ? cpt - rqn : rqn;
+                                    int il = cpl->find_state(lqn);
+                                    int im = mr.find_state(mqn);
+                                    int ir = cpr->find_state(rqn);
+                                    MKL_INT zl = cpl->n_states[il],
+                                            zm = mr.n_states[im],
+                                            zr = cpr->n_states[ir];
+                                    int klst = conn_l->n_states[il];
+                                    int kmst = conn_mr->n_states[im];
+                                    int krst = conn_r->n_states[ir];
+                                    int kled = il == cpl->n - 1
+                                                   ? conn_l->n
+                                                   : conn_l->n_states[il + 1];
+                                    int kmed = im == mr.n - 1
+                                                   ? conn_mr->n
+                                                   : conn_mr->n_states[im + 1];
+                                    int kred = ir == cpr->n - 1
+                                                   ? conn_r->n
+                                                   : conn_r->n_states[ir + 1];
+                                    size_t lsh = 0, msh = 0, rsh = 0;
+                                    for (int ilp = klst;
+                                         ilp < kled &&
+                                         conn_l->quanta[ilp] != xpplu;
+                                         ilp++)
+                                        lsh += cplu->n_states[cplu->find_state(
+                                            conn_l->quanta[ilp])];
+                                    for (int imp = kmst;
+                                         imp < kmed &&
+                                         conn_mr->quanta[imp] != ppmu;
+                                         imp++)
+                                        msh += mru.n_states[mru.find_state(
+                                            conn_mr->quanta[imp])];
+                                    for (int irp = krst;
+                                         irp < kred &&
+                                         conn_r->quanta[irp] != xppru;
+                                         irp++)
+                                        rsh += cpru->n_states[cpru->find_state(
+                                            conn_r->quanta[irp])];
+                                    MKL_INT kl =
+                                        (MKL_INT)cplu
+                                            ->n_states[cplu->find_state(xpplu)];
+                                    MKL_INT km =
+                                        (MKL_INT)
+                                            mru.n_states[mru.find_state(ppmu)];
+                                    MKL_INT kr =
+                                        (MKL_INT)cpru
+                                            ->n_states[cpru->find_state(xppru)];
+                                    if (mask) {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    xr[(ikl + lsh) * rstr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)] = 1.0;
+                                    } else if (forward) {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    x[(size_t)ikl * xstr +
+                                                      (size_t)ikm * kr +
+                                                      (size_t)ikr] +=
+                                                        xr[(ikl + lsh) * rstr +
+                                                           (ikm + msh) * zr +
+                                                           (ikr + rsh)];
+                                    } else {
+                                        for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                            for (MKL_INT ikm = 0; ikm < km;
+                                                 ikm++)
+                                                for (MKL_INT ikr = 0; ikr < kr;
+                                                     ikr++)
+                                                    xr[(ikl + lsh) * rstr +
+                                                       (ikm + msh) * zr +
+                                                       (ikr + rsh)] =
+                                                        x[(size_t)ikl * xstr +
+                                                          (size_t)ikm * kr +
+                                                          (size_t)ikr];
+                                    }
+                                }
+                    }
+                    assert(pu - cwfn->info->n_states_total[k] ==
+                           cwfn->info->n_states_ket[k]);
+                } else if (dot == 0) {
+                    S pplu = plu, ppru = pru;
+                    FLS *x = cwfn->data;
+                    shared_ptr<StateInfo<S>> mls =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(pplu), ref);
+                    shared_ptr<StateInfo<S>> mrs =
+                        TransStateInfo<S, S>::forward(
+                            make_shared<StateInfo<S>>(ppru), ref);
+                    S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                    S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                    for (int iln = 0; iln < mls->n; iln++)
+                        for (int irn = 0; irn < mrs->n; irn++) {
+                            S lqn = mls->quanta[iln], rqn = mrs->quanta[irn];
+                            if (!mp0.count(array<S, 2>{lqn, rqn}))
+                                continue;
+                            FLS *xr = mp0.at(array<S, 2>{lqn, rqn}).first;
+                            lqn = is_wfn || fuse_left ? lqn : cpt - lqn;
+                            rqn = is_wfn || !fuse_left ? cpt - rqn : rqn;
+                            int il = cpl->find_state(lqn);
+                            int ir = cpr->find_state(rqn);
+                            MKL_INT zl = cpl->n_states[il],
+                                    zr = cpr->n_states[ir];
+                            int klst = conn_l->n_states[il];
+                            int krst = conn_r->n_states[ir];
+                            int kled = il == cpl->n - 1
+                                           ? conn_l->n
+                                           : conn_l->n_states[il + 1];
+                            int kred = ir == cpr->n - 1
+                                           ? conn_r->n
+                                           : conn_r->n_states[ir + 1];
+                            size_t lsh = 0, rsh = 0;
+                            for (int ilp = klst;
+                                 ilp < kled && conn_l->quanta[ilp] != xpplu;
+                                 ilp++)
+                                lsh += cplu->n_states[cplu->find_state(
+                                    conn_l->quanta[ilp])];
+                            for (int irp = krst;
+                                 irp < kred && conn_r->quanta[irp] != xppru;
+                                 irp++)
+                                rsh += cpru->n_states[cpru->find_state(
+                                    conn_r->quanta[irp])];
+                            MKL_INT kl =
+                                (MKL_INT)
+                                    cplu->n_states[cplu->find_state(xpplu)];
+                            MKL_INT kr =
+                                (MKL_INT)
+                                    cpru->n_states[cpru->find_state(xppru)];
+                            if (mask) {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        xr[(ikl + lsh) * zr + (ikr + rsh)] =
+                                            1.0;
+                            } else if (forward) {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        x[(size_t)ikl * kr + (size_t)ikr] +=
+                                            xr[(ikl + lsh) * zr + (ikr + rsh)];
+                            } else {
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        xr[(ikl + lsh) * zr + (ikr + rsh)] =
+                                            x[(size_t)ikl * kr + (size_t)ikr];
+                            }
+                        }
+                } else if (dot == 2) {
+                    int ibu = llu->find_state(plu), iku = rru->find_state(pru);
+                    int bbedu = clmu->acc_n_states[ibu + 1],
+                        kkedu = cmru->acc_n_states[iku + 1];
+                    size_t pu = cwfn->info->n_states_total[k];
+                    size_t iplu = 0;
+                    for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu;
+                         bbu++) {
+                        uint32_t ibbau = clmu->ij_indices[bbu].first,
+                                 ibbbu = clmu->ij_indices[bbu].second;
+                        S pplu = lu.quanta[ibbau], ppmlu = mlu.quanta[ibbbu];
+                        size_t nplu = lu.n_states[ibbau],
+                               npmlu = mlu.n_states[ibbbu];
+                        size_t ipru = 0;
+                        S xpplu = is_wfn || fuse_left ? pplu : cptu - pplu;
+                        for (int kku = cmru->acc_n_states[iku]; kku < kkedu;
+                             kku++) {
+                            uint32_t ikkau = cmru->ij_indices[kku].first,
+                                     ikkbu = cmru->ij_indices[kku].second;
+                            S ppmru = mru.quanta[ikkau],
+                              ppru = ru.quanta[ikkbu];
+                            size_t npmru = mru.n_states[ikkau],
+                                   npru = ru.n_states[ikkbu];
+                            FLS *x = cwfn->data + pu + iplu + ipru;
+                            size_t xstr = cwfn->info->n_states_ket[k];
+                            ipru += (size_t)npmru * npru;
+                            S xppru = is_wfn || !fuse_left ? cptu - ppru : ppru;
+                            shared_ptr<StateInfo<S>> mls =
+                                TransStateInfo<S, S>::forward(
+                                    make_shared<StateInfo<S>>(pplu), ref);
+                            shared_ptr<StateInfo<S>> mmls =
+                                TransStateInfo<S, S>::forward(
+                                    make_shared<StateInfo<S>>(ppmlu), ref);
+                            shared_ptr<StateInfo<S>> mmrs =
+                                TransStateInfo<S, S>::forward(
+                                    make_shared<StateInfo<S>>(ppmru), ref);
+                            shared_ptr<StateInfo<S>> mrs =
+                                TransStateInfo<S, S>::forward(
+                                    make_shared<StateInfo<S>>(ppru), ref);
+                            for (int iln = 0; iln < mls->n; iln++)
+                                for (int imln = 0; imln < mmls->n; imln++)
+                                    for (int imrn = 0; imrn < mmrs->n; imrn++)
+                                        for (int irn = 0; irn < mrs->n; irn++) {
+                                            S lqn = mls->quanta[iln],
+                                              mlqn = mmls->quanta[imln],
+                                              mrqn = mmrs->quanta[imrn],
+                                              rqn = mrs->quanta[irn];
+                                            if (!mp2.count(array<S, 4>{
+                                                    lqn, mlqn, mrqn, rqn}))
+                                                continue;
+                                            FLS *xr =
+                                                mp2.at(array<S, 4>{lqn, mlqn,
+                                                                   mrqn, rqn})
+                                                    .first;
+                                            size_t rstr =
+                                                mp2.at(array<S, 4>{lqn, mlqn,
+                                                                   mrqn, rqn})
+                                                    .second;
+                                            lqn = is_wfn || fuse_left
+                                                      ? lqn
+                                                      : cpt - lqn;
+                                            rqn = is_wfn || !fuse_left
+                                                      ? cpt - rqn
+                                                      : rqn;
+                                            int il = cpl->find_state(lqn);
+                                            int iml = ml.find_state(mlqn);
+                                            int imr = mr.find_state(mrqn);
+                                            int ir = cpr->find_state(rqn);
+                                            MKL_INT zl = cpl->n_states[il],
+                                                    zml = ml.n_states[iml],
+                                                    zmr = mr.n_states[imr],
+                                                    zr = cpr->n_states[ir];
+                                            int klst = conn_l->n_states[il];
+                                            int kmlst = conn_lm->n_states[iml];
+                                            int kmrst = conn_mr->n_states[imr];
+                                            int krst = conn_r->n_states[ir];
+                                            int kled =
+                                                il == cpl->n - 1
+                                                    ? conn_l->n
+                                                    : conn_l->n_states[il + 1];
+                                            int kmled =
+                                                iml == ml.n - 1
+                                                    ? conn_lm->n
+                                                    : conn_lm
+                                                          ->n_states[iml + 1];
+                                            int kmred =
+                                                imr == mr.n - 1
+                                                    ? conn_mr->n
+                                                    : conn_mr
+                                                          ->n_states[imr + 1];
+                                            int kred =
+                                                ir == cpr->n - 1
+                                                    ? conn_r->n
+                                                    : conn_r->n_states[ir + 1];
+                                            size_t lsh = 0, mlsh = 0, mrsh = 0,
+                                                   rsh = 0;
+                                            for (int ilp = klst;
+                                                 ilp < kled &&
+                                                 conn_l->quanta[ilp] != xpplu;
+                                                 ilp++)
+                                                lsh +=
+                                                    cplu->n_states
+                                                        [cplu->find_state(
+                                                            conn_l
+                                                                ->quanta[ilp])];
+                                            for (int imp = kmlst;
+                                                 imp < kmled &&
+                                                 conn_lm->quanta[imp] != ppmlu;
+                                                 imp++)
+                                                mlsh +=
+                                                    mlu.n_states[mlu.find_state(
+                                                        conn_lm->quanta[imp])];
+                                            for (int imp = kmrst;
+                                                 imp < kmred &&
+                                                 conn_mr->quanta[imp] != ppmru;
+                                                 imp++)
+                                                mrsh +=
+                                                    mru.n_states[mru.find_state(
+                                                        conn_mr->quanta[imp])];
+                                            for (int irp = krst;
+                                                 irp < kred &&
+                                                 conn_r->quanta[irp] != xppru;
+                                                 irp++)
+                                                rsh +=
+                                                    cpru->n_states
+                                                        [cpru->find_state(
+                                                            conn_r
+                                                                ->quanta[irp])];
+                                            MKL_INT kl =
+                                                (MKL_INT)cplu
+                                                    ->n_states[cplu->find_state(
+                                                        xpplu)];
+                                            MKL_INT kml =
+                                                (MKL_INT)
+                                                    mlu.n_states[mlu.find_state(
+                                                        ppmlu)];
+                                            MKL_INT kmr =
+                                                (MKL_INT)
+                                                    mru.n_states[mru.find_state(
+                                                        ppmru)];
+                                            MKL_INT kr =
+                                                (MKL_INT)cpru
+                                                    ->n_states[cpru->find_state(
+                                                        xppru)];
+                                            if (mask) {
+                                                for (MKL_INT ikl = 0; ikl < kl;
+                                                     ikl++)
+                                                    for (MKL_INT ikml = 0;
+                                                         ikml < kml; ikml++)
+                                                        for (MKL_INT ikmr = 0;
+                                                             ikmr < kmr; ikmr++)
+                                                            for (MKL_INT ikr =
+                                                                     0;
+                                                                 ikr < kr;
+                                                                 ikr++)
+                                                                xr[(ikl + lsh) *
+                                                                       zml *
+                                                                       rstr +
+                                                                   (ikml +
+                                                                    mlsh) *
+                                                                       rstr +
+                                                                   (ikmr +
+                                                                    mrsh) *
+                                                                       zr +
+                                                                   (ikr +
+                                                                    rsh)] = 1.0;
+                                            } else if (forward) {
+                                                for (MKL_INT ikl = 0; ikl < kl;
+                                                     ikl++)
+                                                    for (MKL_INT ikml = 0;
+                                                         ikml < kml; ikml++)
+                                                        for (MKL_INT ikmr = 0;
+                                                             ikmr < kmr; ikmr++)
+                                                            for (MKL_INT ikr =
+                                                                     0;
+                                                                 ikr < kr;
+                                                                 ikr++)
+                                                                x[(size_t)ikl *
+                                                                      kml *
+                                                                      xstr +
+                                                                  (size_t)ikml *
+                                                                      xstr +
+                                                                  (size_t)ikmr *
+                                                                      kr +
+                                                                  (size_t)
+                                                                      ikr] += xr
+                                                                    [(ikl +
+                                                                      lsh) *
+                                                                         zml *
+                                                                         rstr +
+                                                                     (ikml +
+                                                                      mlsh) *
+                                                                         rstr +
+                                                                     (ikmr +
+                                                                      mrsh) *
+                                                                         zr +
+                                                                     (ikr +
+                                                                      rsh)];
+                                            } else {
+                                                for (MKL_INT ikl = 0; ikl < kl;
+                                                     ikl++)
+                                                    for (MKL_INT ikml = 0;
+                                                         ikml < kml; ikml++)
+                                                        for (MKL_INT ikmr = 0;
+                                                             ikmr < kmr; ikmr++)
+                                                            for (MKL_INT ikr =
+                                                                     0;
+                                                                 ikr < kr;
+                                                                 ikr++)
+                                                                xr[(ikl + lsh) *
+                                                                       zml *
+                                                                       rstr +
+                                                                   (ikml +
+                                                                    mlsh) *
+                                                                       rstr +
+                                                                   (ikmr +
+                                                                    mrsh) *
+                                                                       zr +
+                                                                   (ikr +
+                                                                    rsh)] = x
+                                                                    [(size_t)ikl *
+                                                                         kml *
+                                                                         xstr +
+                                                                     (size_t)ikml *
+                                                                         xstr +
+                                                                     (size_t)ikmr *
+                                                                         kr +
+                                                                     (size_t)
+                                                                         ikr];
+                                            }
+                                        }
+                        }
+                        assert(ipru == cwfn->info->n_states_ket[k]);
+                        iplu +=
+                            (size_t)nplu * npmlu * cwfn->info->n_states_ket[k];
+                    }
+                    assert(pu + iplu == (k != cwfn->info->n - 1
+                                             ? cwfn->info->n_states_total[k + 1]
+                                             : cwfn->total_memory));
+                }
+            }
+        }
+        return make_pair(r_wfn, gr_wfn);
     }
     // Contract two adjcent MPS tensors to one two-site MPS tensor
     static void contract_two_dot(int i, const shared_ptr<MPS<S, FLS>> &mps,

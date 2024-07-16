@@ -823,6 +823,7 @@ struct SparseMatrixInfo<
     }
     void deallocate() {
         assert(n != -1);
+        assert(alloc != nullptr || n == 0);
         alloc->deallocate((uint32_t *)quanta,
                           n * (sizeof(S) >> 2) + n + _DBL_MEM_SIZE(n));
         alloc = nullptr;
@@ -895,11 +896,19 @@ template <typename S, typename FL> struct SparseMatrix {
     virtual void load_data(istream &ifs, bool pointer_only = false) {
         ifs.read((char *)&factor, sizeof(factor));
         ifs.read((char *)&total_memory, sizeof(total_memory));
+        const size_t cps_flag = numeric_limits<size_t>::max();
+        bool cpsd = total_memory == cps_flag;
+        if (cpsd)
+            ifs.read((char *)&total_memory, sizeof(total_memory));
         if (pointer_only && total_memory != 0) {
             size_t psz;
             ifs.read((char *)&psz, sizeof(psz));
             assert(alloc == dalloc_<FP>() || alloc == nullptr);
             data = (FL *)(dalloc_<FP>()->data + psz);
+        } else if (cpsd) {
+            data = (FL *)alloc->allocate(total_memory * cpx_sz);
+            make_shared<FPCodec<FP>>()->read_array(ifs, (FP *)data,
+                                                   total_memory * cpx_sz);
         } else {
             data = (FL *)alloc->allocate(total_memory * cpx_sz);
             ifs.read((char *)data, sizeof(FL) * total_memory);
@@ -926,6 +935,10 @@ template <typename S, typename FL> struct SparseMatrix {
     }
     virtual void save_data(ostream &ofs, bool pointer_only = false) const {
         ofs.write((char *)&factor, sizeof(factor));
+        if (frame_<FP>()->compressed_sparse_tensor_storage) {
+            const size_t cps_flag = numeric_limits<size_t>::max();
+            ofs.write((char *)&cps_flag, sizeof(cps_flag));
+        }
         ofs.write((char *)&total_memory, sizeof(total_memory));
         if (pointer_only && total_memory != 0) {
             // for 1-site case with middle site transition
@@ -934,6 +947,10 @@ template <typename S, typename FL> struct SparseMatrix {
             // assert(alloc == dalloc_<FP>());
             size_t psz = (FP *)data - dalloc_<FP>()->data;
             ofs.write((char *)&psz, sizeof(psz));
+        } else if (frame_<FP>()->compressed_sparse_tensor_storage) {
+            assert(frame_<FP>()->fp_codec != nullptr);
+            frame_<FP>()->fp_codec->write_array(ofs, (FP *)data,
+                                                total_memory * cpx_sz);
         } else
             ofs.write((char *)data, sizeof(FL) * total_memory);
     }
@@ -1949,10 +1966,18 @@ template <typename S, typename FL> struct SparseMatrixGroup {
                 infos[i]->load_data(ifs);
             }
         ifs.read((char *)&total_memory, sizeof(total_memory));
+        const size_t cps_flag = numeric_limits<size_t>::max();
+        bool cpsd = total_memory == cps_flag;
+        if (cpsd)
+            ifs.read((char *)&total_memory, sizeof(total_memory));
         if (alloc == nullptr)
             alloc = dalloc_<FP>();
         data = (FL *)alloc->allocate(total_memory * cpx_sz);
-        ifs.read((char *)data, sizeof(FL) * total_memory);
+        if (cpsd)
+            make_shared<FPCodec<FP>>()->read_array(ifs, (FP *)data,
+                                                   total_memory * cpx_sz);
+        else
+            ifs.read((char *)data, sizeof(FL) * total_memory);
         if (ifs.fail() || ifs.bad())
             throw runtime_error("SparseMatrixGroup::load_data on '" + filename +
                                 "' failed.");
@@ -1970,13 +1995,23 @@ template <typename S, typename FL> struct SparseMatrixGroup {
         if (save_info)
             for (int i = 0; i < n; i++)
                 infos[i]->save_data(ofs);
+        if (frame_<FP>()->compressed_sparse_tensor_storage) {
+            const size_t cps_flag = numeric_limits<size_t>::max();
+            ofs.write((char *)&cps_flag, sizeof(cps_flag));
+        }
         ofs.write((char *)&total_memory, sizeof(total_memory));
+        if (frame_<FP>()->compressed_sparse_tensor_storage) {
+            assert(frame_<FP>()->fp_codec != nullptr);
+            frame_<FP>()->fp_codec->write_array(ofs, (FP *)data,
+                                                total_memory * cpx_sz);
+        }
         ofs.write((char *)data, sizeof(FL) * total_memory);
         if (!ofs.good())
             throw runtime_error("SparseMatrixGroup::save_data on '" + filename +
                                 "' failed.");
         ofs.close();
     }
+    virtual void clear() { memset(data, 0, sizeof(FL) * total_memory); }
     void allocate_like(const shared_ptr<SparseMatrixGroup> &mat) {
         allocate(mat->infos);
     }

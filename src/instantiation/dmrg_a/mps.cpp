@@ -27,3 +27,5 @@ template struct block2::MRCIMPSInfo<block2::SAny>;
 template struct block2::NEVPTMPSInfo<block2::SAny>;
 template struct block2::AncillaMPSInfo<block2::SAny>;
 template struct block2::MPS<block2::SAny, double>;
+
+template struct block2::TransMPSInfo<block2::SAny, block2::SAny>;

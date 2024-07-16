@@ -460,12 +460,19 @@ struct StateProbability<
 template <typename S1, typename S2, typename = void, typename = void>
 struct TransStateInfo {
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
-        return TransStateInfo<S2, S1>::backward(si);
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
+        return TransStateInfo<S2, S1>::backward(si, ref);
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
-        return TransStateInfo<S2, S1>::forward(si);
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
+        return TransStateInfo<S2, S1>::forward(si, ref);
+    }
+    static shared_ptr<StateInfo<S2>>
+    backward_connection(const shared_ptr<StateInfo<S2>> &si,
+                        const shared_ptr<StateInfo<S1>> &bsi) {
+        throw runtime_error(
+            "TransStateInfo::backward_connection: not implemented");
+        return nullptr;
     }
 };
 
@@ -474,7 +481,7 @@ template <typename S1, typename S2>
 struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
     // from sz to su2 is not exact
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
         vector<pair<S2, ubond_t>> vso;
         map<pair<int, int>, vector<S1>> mp;
         for (int i = 0; i < si->n; i++) {
@@ -515,7 +522,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
         return so;
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
         map<S1, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S2 q = si->quanta[i];
@@ -561,7 +568,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sz_t, typename S2::is_su2_t> {
 template <typename S1, typename S2>
 struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
     static shared_ptr<StateInfo<S2>>
-    forward(const shared_ptr<StateInfo<S1>> &si) {
+    forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
         map<S2, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S1 q = si->quanta[i];
@@ -579,7 +586,7 @@ struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
         return so;
     }
     static shared_ptr<StateInfo<S1>>
-    backward(const shared_ptr<StateInfo<S2>> &si) {
+    backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {
         map<S1, ubond_t> mp;
         for (int i = 0; i < si->n; i++) {
             S2 q = si->quanta[i];
@@ -610,6 +617,116 @@ struct TransStateInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t> {
             vector<S2> &v = mp.at(bsi->quanta[ib]);
             so->n_states[ib] = ii;
             memcpy(so->quanta + ii, v.data(), v.size() * sizeof(S2));
+            ii += (int)v.size();
+        }
+        so->reallocate(ii);
+        so->n_states_total = bsi->n;
+        return so;
+    }
+};
+
+// Translation between SAny
+template <typename S>
+struct TransStateInfo<S, S, typename S::is_sany_t, typename S::is_sany_t> {
+    static shared_ptr<StateInfo<S>> forward(const shared_ptr<StateInfo<S>> &si,
+                                            S ref) {
+        using SAnySymmTypes = typename S::symm_t;
+        map<S, ubond_t> mp;
+        for (int i = 0; i < si->n; i++) {
+            S q = si->quanta[i];
+            S z = ref;
+            if (q.symm_len() == 4 && q.types[0] == SAnySymmTypes::U1Fermi &&
+                q.types[1] == SAnySymmTypes::SU2 &&
+                q.types[2] == SAnySymmTypes::SU2 &&
+                q.types[3] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 3 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::U1 &&
+                    ref.types[2] == SAnySymmTypes::AbelianPG) {
+                    assert(q.values[1] == q.values[2]);
+                    z.values[0] = q.values[0];
+                    z.values[2] = q.values[3];
+                    for (int j = -q.values[2]; j <= q.values[2]; j += 2) {
+                        z.values[1] = j;
+                        mp[z] += si->n_states[i];
+                    }
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
+            } else if (q.symm_len() == 3 &&
+                       q.types[0] == SAnySymmTypes::U1Fermi &&
+                       q.types[1] == SAnySymmTypes::U1 &&
+                       q.types[2] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 2 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::AbelianPG) {
+                    z.values[0] = q.values[0];
+                    z.values[1] = q.values[2];
+                    mp[z] += si->n_states[i];
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
+            } else if (q.symm_len() == 2 &&
+                       q.types[0] == SAnySymmTypes::U1Fermi &&
+                       q.types[1] == SAnySymmTypes::AbelianPG) {
+                if (ref.symm_len() == 3 &&
+                    ref.types[0] == SAnySymmTypes::U1Fermi &&
+                    ref.types[1] == SAnySymmTypes::U1 &&
+                    ref.types[2] == SAnySymmTypes::AbelianPG) {
+                    z.values[0] = q.values[0];
+                    z.values[2] = q.values[1];
+                    for (int j = -q.values[0]; j <= q.values[0]; j += 2) {
+                        z.values[1] = j;
+                        mp[z] += si->n_states[i];
+                    }
+                } else
+                    throw runtime_error("TransStateInfo::forward: Unsupported "
+                                        "target symm type: " +
+                                        Parsing::to_string(q) + " -> " +
+                                        Parsing::to_string(ref));
+            } else
+                throw runtime_error(
+                    "TransStateInfo::forward: Unsupported source symm type: " +
+                    Parsing::to_string(q));
+        }
+        shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
+        so->allocate((int)mp.size());
+        int i = 0;
+        for (auto m : mp) {
+            so->quanta[i] = m.first, so->n_states[i] = m.second;
+            i++;
+        }
+        so->sort_states();
+        return so;
+    }
+    static shared_ptr<StateInfo<S>> backward(const shared_ptr<StateInfo<S>> &si,
+                                             S ref) {
+        return forward(si, ref);
+    }
+    static shared_ptr<StateInfo<S>>
+    backward_connection(const shared_ptr<StateInfo<S>> &si,
+                        const shared_ptr<StateInfo<S>> &bsi) {
+        shared_ptr<StateInfo<S>> so = make_shared<StateInfo<S>>();
+        const S ref = bsi->quanta[0];
+        map<S, vector<S>> mp;
+        int nb = 0, ii = 0;
+        for (int i = 0; i < si->n; i++) {
+            S q = si->quanta[i];
+            shared_ptr<StateInfo<S>> zs =
+                forward(make_shared<StateInfo<S>>(q), ref);
+            nb += zs->n;
+            for (int iz = 0; iz < zs->n; iz++)
+                mp[zs->quanta[iz]].push_back(q);
+        }
+        so->allocate(nb);
+        for (int ib = 0; ib < bsi->n; ib++) {
+            vector<S> &v = mp.at(bsi->quanta[ib]);
+            so->n_states[ib] = ii;
+            memcpy(so->quanta + ii, v.data(), v.size() * sizeof(S));
             ii += (int)v.size();
         }
         so->reallocate(ii);

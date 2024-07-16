@@ -187,6 +187,7 @@ template <typename S, typename FL> struct OperatorFunctions {
             return;
         S adq = a->info->delta_quantum, cdq = c->info->delta_quantum;
         // possible assert failure here due to the same bra/ket tag
+        // or due to left/right bond dims larger than fci
         assert(adq == cdq && a->info->n >= c->info->n);
         for (int ic = 0, ia = 0; ic < c->info->n; ia++, ic++) {
             while (a->info->quanta[ia] != c->info->quanta[ic])

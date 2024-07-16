@@ -40,6 +40,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
     using GMatrixFunctions<FL>::iscale;
     using GMatrixFunctions<FL>::eig;
     using GMatrixFunctions<FL>::eigs;
+    using GMatrixFunctions<FL>::accurate_geigs;
     using GMatrixFunctions<FL>::linear;
     using GMatrixFunctions<FL>::multiply;
     using GMatrixFunctions<FL>::inverse;
@@ -506,6 +507,355 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         ndav = xiter;
         return eigvals;
     }
+    // Generalized Davidson algorithm
+    template <typename MatMul, typename PComm>
+    static vector<FP> davidson_generalized(
+        MatMul &op, MatMul &sop, const GDiagonalMatrix<FL> &aa,
+        vector<GMatrix<FL>> &vs, FP shift, DavidsonTypes davidson_type,
+        int &ndav, bool iprint = false, const PComm &pcomm = nullptr,
+        FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0, int max_iter = 5000,
+        int soft_max_iter = -1, int deflation_min_size = 2,
+        int deflation_max_size = 50,
+        const vector<GMatrix<FL>> &ors = vector<GMatrix<FL>>(),
+        const vector<FP> &proj_weights = vector<FP>(),
+        FP imag_cutoff = (FP)1E-3) {
+        assert(!(davidson_type & DavidsonTypes::Harmonic));
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        shared_ptr<VectorAllocator<FP>> x_alloc =
+            make_shared<VectorAllocator<FP>>();
+        int k = (int)vs.size(), nor = (int)ors.size(), nwg = 0;
+        int orig_k = k;
+        assert(!(davidson_type & DavidsonTypes::Exact));
+        assert(!(davidson_type & DavidsonTypes::NonHermitian));
+        // if proj_weights is empty or ElementProj, then projection is done by
+        // (1 - |v><v|). if proj_weights is not empty, projection is done by
+        // change H to (H + w |v><v|)
+        if (davidson_type & DavidsonTypes::ElementProj)
+            ;
+        else if (proj_weights.size() != 0) {
+            assert(proj_weights.size() == ors.size());
+            nwg = (int)ors.size(), nor = 0;
+        }
+        if (deflation_min_size < k)
+            deflation_min_size = k;
+        if (deflation_max_size < k + k / 2)
+            deflation_max_size = k + k / 2;
+        GMatrix<FL> pbs(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()),
+                        1);
+        GMatrix<FL> pss(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()),
+                        1);
+        GMatrix<FL> pts(nullptr, (MKL_INT)(deflation_max_size * vs[0].size()),
+                        1);
+        pbs.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        pss.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        pts.data = d_alloc->allocate(deflation_max_size * vs[0].size());
+        vector<GMatrix<FL>> bs(deflation_max_size,
+                               GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> sigmas(deflation_max_size,
+                                   GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<GMatrix<FL>> taus(deflation_max_size,
+                                 GMatrix<FL>(nullptr, vs[0].m, vs[0].n));
+        vector<FL> or_normsqs(nor);
+        for (int i = 0; i < nor; i++) {
+            for (int j = 0; j < i; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(ors[i], ors[j],
+                         -complex_dot(ors[j], ors[i]) / or_normsqs[j]);
+            or_normsqs[i] = complex_dot(ors[i], ors[i]);
+        }
+        for (int i = 0; i < deflation_max_size; i++) {
+            bs[i].data = pbs.data + bs[i].size() * i;
+            sigmas[i].data = pss.data + sigmas[i].size() * i;
+            taus[i].data = pts.data + taus[i].size() * i;
+        }
+        for (int i = 0; i < k; i++)
+            copy(bs[i], vs[i]);
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < i; j++)
+                iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
+            FL normx = norm(bs[i]);
+            if (abs(normx * normx) < 1E-14) {
+                stringstream ss;
+                ss << "Cannot generate initial guess " << i
+                   << " for Davidson unitary to all given states (you are "
+                      "possibly targeting a global symmetry sector with no "
+                      "states or MPS has zero norm)!";
+                ss << "Space size = " << bs[i].size();
+                if (i > 0) {
+                    k = i;
+                    break;
+                } else
+                    throw runtime_error(ss.str());
+            }
+            iscale(bs[i], (FP)1.0 / normx);
+        }
+        for (int i = 0; i < k; i++) {
+            for (int j = 0; j < nor; j++)
+                if (abs(or_normsqs[j]) > 1E-14)
+                    iadd(bs[i], ors[j],
+                         -complex_dot(ors[j], bs[i]) / or_normsqs[j]);
+            FL normx = norm(bs[i]);
+            if (abs(normx * normx) < 1E-14) {
+                stringstream ss;
+                ss << "Cannot generate initial guess " << i
+                   << " for Davidson unitary to all given states (you are "
+                      "possibly targeting a global symmetry sector with no "
+                      "states or MPS has zero norm)!";
+                ss << "Space size = " << bs[i].size();
+                throw runtime_error(ss.str());
+            }
+            iscale(bs[i], (FP)1.0 / normx);
+        }
+        vector<FP> eigvals(k);
+        vector<int> eigval_idxs(deflation_max_size);
+        GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.allocate(x_alloc);
+        int ck = 0, msig = 0, m = k, xiter = 0, xm = 0;
+        FL qq;
+        if (iprint)
+            cout << endl;
+        while (xiter < max_iter &&
+               (soft_max_iter == -1 || xiter < soft_max_iter)) {
+            xiter++;
+            if (pcomm != nullptr && xiter != 1)
+                pcomm->broadcast(pbs.data + bs[0].size() * msig,
+                                 bs[0].size() * (m - msig), pcomm->root);
+            for (int i = msig; i < m; i++, msig++) {
+                sigmas[i].clear();
+                op(bs[i], sigmas[i]);
+                for (int j = 0; j < nwg; j++)
+                    iadd(sigmas[i], ors[j],
+                         complex_dot(ors[j], bs[i]) * proj_weights[j]);
+                taus[i].clear();
+                sop(bs[i], taus[i]);
+            }
+            if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                GDiagonalMatrix<FP> ld(nullptr, m);
+                GMatrix<FL> alpha(nullptr, m, m), gamma(nullptr, m, m);
+                ld.allocate(x_alloc);
+                alpha.allocate(x_alloc);
+                gamma.allocate(x_alloc);
+                vector<GMatrix<FL>> tmp(m,
+                                        GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
+                for (int i = 0; i < m; i++)
+                    tmp[i].allocate(x_alloc);
+                int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                {
+#ifdef _MSC_VER
+#pragma omp for schedule(dynamic)
+                    for (int ij = 0; ij < m * m; ij++) {
+                        int i = ij / m, j = ij % m;
+#else
+#pragma omp for schedule(dynamic) collapse(2)
+                    for (int i = 0; i < m; i++)
+                        for (int j = 0; j < m; j++) {
+#endif
+                        if (j <= i) {
+                            alpha(i, j) = complex_dot(bs[i], sigmas[j]);
+                            gamma(i, j) = complex_dot(bs[i], taus[j]);
+                        }
+                    }
+#pragma omp single
+                    xm = accurate_geigs(alpha, gamma, ld);
+                    // note alpha row/column is diff from python
+#pragma omp for schedule(static)
+                    // sigma[1:m] = np.dot(sigma[:], alpha[:, 1:m])
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], sigmas[j]);
+                        if (j < xm)
+                            iscale(sigmas[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < xm; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(sigmas[j], tmp[i], alpha(j, i));
+#pragma omp for schedule(static)
+                    // tau[1:m] = np.dot(tau[:], alpha[:, 1:m])
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], taus[j]);
+                        if (j < xm)
+                            iscale(taus[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < xm; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(taus[j], tmp[i], alpha(j, i));
+#pragma omp for schedule(static)
+                    // b[1:m] = np.dot(b[:], alpha[:, 1:m])
+                    for (int j = 0; j < m; j++) {
+                        copy(tmp[j], bs[j]);
+                        if (j < xm)
+                            iscale(bs[j], alpha(j, j));
+                    }
+#pragma omp for schedule(static)
+                    for (int j = 0; j < xm; j++)
+                        for (int i = 0; i < m; i++)
+                            if (i != j)
+                                iadd(bs[j], tmp[i], alpha(j, i));
+                }
+                threading->activate_normal();
+                for (int i = m - 1; i >= 0; i--)
+                    tmp[i].deallocate(x_alloc);
+                gamma.deallocate(x_alloc);
+                alpha.deallocate(x_alloc);
+                for (int i = 0; i < xm; i++)
+                    eigval_idxs[i] = i;
+                if (davidson_type & DavidsonTypes::CloseTo)
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
+                         [&ld, shift](int i, int j) {
+                             return abs(ld.data[i] - shift) <
+                                    abs(ld.data[j] - shift);
+                         });
+                else if (davidson_type & DavidsonTypes::LessThan)
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
+                         [&ld, shift](int i, int j) {
+                             if ((shift >= ld.data[i]) != (shift >= ld.data[j]))
+                                 return shift >= ld.data[i];
+                             else if (shift >= ld.data[i])
+                                 return shift - ld.data[i] < shift - ld.data[j];
+                             else
+                                 return ld.data[i] - shift > ld.data[j] - shift;
+                         });
+                else if (davidson_type & DavidsonTypes::GreaterThan)
+                    sort(eigval_idxs.begin(), eigval_idxs.begin() + xm,
+                         [&ld, shift](int i, int j) {
+                             if ((shift > ld.data[i]) != (shift > ld.data[j]))
+                                 return shift > ld.data[j];
+                             else if (shift > ld.data[i])
+                                 return shift - ld.data[i] > shift - ld.data[j];
+                             else
+                                 return ld.data[i] - shift < ld.data[j] - shift;
+                         });
+                for (int i = 0; i < ck; i++) {
+                    int ii = eigval_idxs[i];
+                    copy(q, sigmas[ii]);
+                    iadd(q, taus[ii], -ld(ii, ii));
+                    if (abs(complex_dot(q, q)) >=
+                        conv_thrd + abs(ld(ii, ii)) * abs(ld(ii, ii)) *
+                                        rel_conv_thrd * rel_conv_thrd) {
+                        ck = i;
+                        break;
+                    }
+                }
+                int ick = eigval_idxs[ck];
+                copy(q, sigmas[ick]);
+                iadd(q, taus[ick], -ld(ick, ick));
+                for (int j = 0; j < nor; j++)
+                    if (abs(or_normsqs[j]) > 1E-14)
+                        iadd(q, ors[j],
+                             -complex_dot(ors[j], q) / or_normsqs[j]);
+                qq = complex_dot(q, q);
+                if (iprint)
+                    cout << setw(6) << xiter << setw(6) << m << setw(6) << xm
+                         << setw(6) << ck << fixed << setw(15)
+                         << setprecision(8) << ld.data[ick] << scientific
+                         << setw(13) << setprecision(2) << abs(qq) << endl;
+                if (davidson_type & DavidsonTypes::DavidsonPrecond)
+                    davidson_precondition(q, ld.data[ick], aa);
+                else if (!(davidson_type & DavidsonTypes::NoPrecond))
+                    olsen_precondition(q, bs[ick], ld.data[ick], aa);
+                eigvals.resize(ck + 1);
+                if (ck + 1 != 0)
+                    for (int i = 0; i <= ck; i++)
+                        eigvals[i] = ld.data[eigval_idxs[i]];
+                ld.deallocate(x_alloc);
+            }
+            if (pcomm != nullptr) {
+                pcomm->broadcast(&qq, 1, pcomm->root);
+                pcomm->broadcast(&ck, 1, pcomm->root);
+                pcomm->broadcast(&xm, 1, pcomm->root);
+            }
+            if (xm != m)
+                msig = m = xm;
+            if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
+                                          rel_conv_thrd * rel_conv_thrd) {
+                ck++;
+                if (ck == k)
+                    break;
+            } else {
+                bool do_deflation = false;
+                if (m >= deflation_max_size) {
+                    m = msig = deflation_min_size;
+                    do_deflation =
+                        (davidson_type & DavidsonTypes::LessThan) ||
+                        (davidson_type & DavidsonTypes::GreaterThan) ||
+                        (davidson_type & DavidsonTypes::CloseTo);
+                }
+                if (pcomm == nullptr || pcomm->root == pcomm->rank) {
+                    if (do_deflation) {
+                        vector<GMatrix<FL>> tmp(
+                            m, GMatrix<FL>(nullptr, bs[0].m, bs[0].n));
+                        for (int i = 0; i < m; i++)
+                            tmp[i].allocate(x_alloc);
+                        int ntg = threading->activate_global();
+#pragma omp parallel num_threads(ntg)
+                        {
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], bs[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(bs[j], tmp[j]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], sigmas[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(sigmas[j], tmp[j]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(tmp[j], taus[eigval_idxs[j]]);
+#pragma omp for schedule(static)
+                            for (int j = 0; j < m; j++)
+                                copy(taus[j], tmp[j]);
+                        }
+                        threading->activate_normal();
+                        for (int i = m - 1; i >= 0; i--)
+                            tmp[i].deallocate(x_alloc);
+                    }
+                    for (int j = 0; j < m; j++)
+                        iadd(q, bs[j],
+                             -complex_dot(bs[j], q) /
+                                 complex_dot(bs[j], bs[j]));
+                    for (int j = 0; j < nor; j++)
+                        if (abs(or_normsqs[j]) > 1E-14)
+                            iadd(q, ors[j],
+                                 -complex_dot(ors[j], q) / or_normsqs[j]);
+                    iscale(q, (FP)1.0 / norm(q));
+                    copy(bs[m], q);
+                }
+                m++;
+            }
+            if (xiter == soft_max_iter)
+                break;
+        }
+        if (xiter == soft_max_iter)
+            eigvals.resize(orig_k, 0);
+        if (xiter == max_iter) {
+            cout << "Error : only " << ck << " converged!" << endl;
+            assert(false);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            for (int i = 0; i < k; i++)
+                copy(vs[i], bs[eigval_idxs[i]]);
+        if (pcomm != nullptr) {
+            pcomm->broadcast(eigvals.data(), eigvals.size(), pcomm->root);
+            for (int j = 0; j < k; j++)
+                pcomm->broadcast(vs[j].data, vs[j].size(), pcomm->root);
+        }
+        if (pcomm == nullptr || pcomm->root == pcomm->rank)
+            q.deallocate(x_alloc);
+        d_alloc->deallocate(pts.data, deflation_max_size * vs[0].size());
+        d_alloc->deallocate(pss.data, deflation_max_size * vs[0].size());
+        d_alloc->deallocate(pbs.data, deflation_max_size * vs[0].size());
+        ndav = xiter;
+        return eigvals;
+    }
     // Davidson algorithm
     // E.R. Davidson, J. Comput. Phys. 17 (1), 87-94 (1975).
     // aa: diag elements of a (for precondition)
@@ -589,7 +939,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 ss << "Cannot generate initial guess " << i
                    << " for Davidson unitary to all given states (you are "
                       "possibly targeting a global symmetry sector with no "
-                      "states)!";
+                      "states or MPS has zero norm)!";
                 throw runtime_error(ss.str());
             }
             iscale(bs[i], (FP)1.0 / normx);
@@ -3330,7 +3680,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                              bool ensure_ortho = true, bool iprint = false) {
         if (x.m == 0 || x.n == 0)
             return;
-        // cout << "x = " << x << endl;
         sort(levels.begin(), levels.end(), greater<FP>());
         vector<DSU> dsus(levels.size() + 1, DSU(x.m + x.n));
         vector<pair<MKL_INT, MKL_INT>> acc_idxs;
@@ -3381,7 +3730,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     xk += min(xl, xr);
                     grt++;
                 }
-            // cout << "il = " << il << " grt = " << grt << endl;
         }
         // number of singular values may exceed the maximal number
         // when needed, remove some levels to avoid this
@@ -3473,14 +3821,9 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 xmats[rmap[ir].first](rmap[ir].second, cmap[ic].second) =
                     x(ir, ic);
             }
-            for (MKL_INT ig = 0; ig < grt; ig++) {
-                // cout << "x = " << xmats[ig] << endl;
+            for (MKL_INT ig = 0; ig < grt; ig++)
                 GMatrixFunctions<FL>::svd(xmats[ig], lmats[ig], smats[ig],
                                           rmats[ig]);
-                // cout << "l = " << lmats[ig] << endl;
-                // cout << "s = " << smats[ig] << endl;
-                // cout << "r = " << rmats[ig] << endl;
-            }
             // fill original matrices
             grt = 0;
             for (auto &r : dsus[il].roots)
@@ -3492,7 +3835,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         else
                             icmap[xr++] = t - x.m;
                     for (MKL_INT ii = 0; ii < lmats[grt].m; ii++) {
-                        // cout << "ii = " << ii << " " << irmap[ii] << endl;
                         GMatrixFunctions<FL>::copy(
                             GMatrix<FL>(&glmat(irmap[ii], gxk), 1,
                                         lmats[grt].n),
@@ -3505,15 +3847,10 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                         xcopy<FL>(&rmats[grt].m, &rmats[grt](0, jj),
                                   &rmats[grt].n, &grmat(gxk, icmap[jj]),
                                   &grmat.n);
-                    // cout << "grt = " << grt << " gxk = " << gxk
-                    //      << " gl = " << glmat << endl;
                     grt++;
                     gxk += min(xl, xr);
                 }
         }
-        // cout << "gl = " << glmat << endl;
-        // cout << "gs = " << gsmat << endl;
-        // cout << "gr = " << grmat << endl;
         assert(gxk <= ssk);
         l.clear(), r.clear(), s.clear();
         vector<MKL_INT> iwork(max(max(x.m, x.n), gxk));
@@ -3600,9 +3937,6 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                  GMatrix<FL>(grmat.data + iwork[ir] * x.n, 1, x.n));
             xcopy<FL>(&x.m, &glmat(0, iwork[ir]), &glmat.n, &l(0, ir), &l.n);
         }
-        // cout << l << endl;
-        // cout << s << endl;
-        // cout << r << endl;
         c_alloc->deallocate(xwork, lwork);
         d_alloc->deallocate(swork, max(x.m, x.n) + ssk);
     }

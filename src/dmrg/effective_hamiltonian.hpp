@@ -78,6 +78,18 @@ enum struct LinearSolverTypes : uint8_t {
     Cheby
 };
 
+template <typename FL> struct EffectiveKernel {
+    EffectiveKernel() {}
+    virtual ~EffectiveKernel() = default;
+    virtual void compute(
+        FL beta,
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f,
+        const GMatrix<FL> &a, const GMatrix<FL> &b,
+        const vector<GMatrix<FL>> &xs) const {
+        f(a, b, beta);
+    }
+};
+
 template <typename S, typename FL, typename = MPS<S, FL>>
 struct EffectiveHamiltonian;
 
@@ -93,6 +105,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // Symbolic expression of effective H
     shared_ptr<DelayedOperatorTensor<S, FL>> op;
     shared_ptr<SparseMatrix<S, FL>> bra, ket, diag, cmat, vmat;
+    shared_ptr<SparseMatrix<S, FL>> context_mask = nullptr;
     shared_ptr<TensorFunctions<S, FL>> tf;
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
@@ -106,6 +119,8 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     shared_ptr<NPDMScheme> npdm_scheme = nullptr;
     string npdm_fragment_filename = "";
     int npdm_n_sites = 0, npdm_center = -1, npdm_parallel_center = -1;
+    shared_ptr<EffectiveKernel<FL>> eff_kernel = nullptr;
+    string seq_filename = "";
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -135,9 +150,21 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
-        vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
-                                                  hop_left_vacuum);
+        vector<vector<pair<uint8_t, S>>> msubsl;
+        if (op->stacked_mat == nullptr)
+            msubsl = Partition<S, FL>::get_uniq_sub_labels(
+                op->mat, hop_mat, msl, hop_left_vacuum);
+        else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                      hop_left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    op->stacked_mat, hop_mat, msl,
+                    (hop_left_vacuum - hop_left_vacuum)[0]);
+            msubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, psubsl, xsubsl);
+        }
         // symbol-free npdm case
         if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
             dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
@@ -165,8 +192,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             diag_info->initialize_diag(cdq, opdq, msubsl[0], left_op_infos,
                                        right_op_infos, diag->info, tf->opf->cg);
             diag->info->cinfo = diag_info;
-            tf->tensor_product_diagonal(op->mat->data[0], op->lopt, op->ropt,
-                                        diag, opdq);
+            tf->tensor_product_diagonal(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, diag, opdq);
             diag_info->deallocate();
         }
         // temp wavefunction
@@ -196,15 +225,21 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
-            tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
-                                        cmat, vmat, opdq, false);
+            tf->tensor_product_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, opdq, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (FL *)0;
             cmat->factor = 1.0;
-            tf->tensor_product_multiply(op->mat->data[0], op->lopt, op->ropt,
-                                        cmat, vmat, opdq, false);
+            tf->tensor_product_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, opdq, false);
+            if (seq_filename != "")
+                tf->opf->seq->save_data(seq_filename);
         }
     }
     void post_precompute() const {
@@ -225,11 +260,31 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             make_shared<VectorAllocator<FP>>();
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
-        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
-        shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
-            1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
+        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0], xexpr = nullptr;
+        vector<pair<uint8_t, S>> psubsl;
+        if (op->stacked_mat == nullptr) {
+            shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            psubsl = Partition<S, FL>::get_uniq_sub_labels(
+                pmat, hop_mat, msl, hop_left_vacuum, true, trace_right,
+                false)[0];
+        } else {
+            xexpr = op->stacked_mat->data[0];
+            shared_ptr<Symbolic<S>> qmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            shared_ptr<Symbolic<S>> xmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{xexpr});
+            vector<vector<pair<uint8_t, S>>> qsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(qmat, hop_mat, msl,
+                                                      hop_left_vacuum, true,
+                                                      trace_right, false);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    xmat, hop_mat, msl, (hop_left_vacuum - hop_left_vacuum)[0],
+                    true, trace_right, false);
+            psubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, qsubsl, xsubsl, true, trace_right, false)[0];
+        }
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         S ket_label = ket->info->delta_quantum;
         for (size_t j = 0; j < psubsl.size(); j++) {
@@ -329,7 +384,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        tf->tensor_product_partial_multiply(pexpr, op->lopt, op->ropt,
+        tf->tensor_product_partial_multiply(pexpr, xexpr, op->lopt, op->ropt,
                                             trace_right, ket, psubsl, cinfos,
                                             perturb_ket_labels, perturb_ket,
                                             vidx, low_mem ? -2 : -1, do_reduce);
@@ -401,13 +456,16 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     operator_quanta.begin();
         assert(ic < operator_quanta.size() && wfn_infos[ic] != nullptr);
         cmat->info->cinfo = wfn_infos[ic];
-        tf->tensor_product_multiply(op->mat->data[idx], op->lopt, op->ropt,
-                                    cmat, vmat, idx_opdq, all_reduce);
+        tf->tensor_product_multiply(
+            op->mat->data[idx],
+            op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+            op->lopt, op->ropt, cmat, vmat, idx_opdq, all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energy, ndav, nflop, tdav
     tuple<typename const_fl_type<FP>::FL, int, size_t, double>
-    eigs(bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+    eigs(const shared_ptr<EffectiveHamiltonian<S, FL, MPS<S, FL>>> &metric,
+         bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
          int max_iter = 5000, int soft_max_iter = -1,
          int deflation_min_size = 2, int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -418,35 +476,73 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         int ndav = 0;
         assert(compute_diag);
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
+        GMatrix<FL> cmask(nullptr, (MKL_INT)ket->total_memory, 1);
+        if (this->context_mask != nullptr)
+            cmask.data = this->context_mask->data;
         vector<GMatrix<FL>> bs = vector<GMatrix<FL>>{
             GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1)};
         if (davidson_type & DavidsonTypes::LeftEigen)
             bs.push_back(GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
-        for (size_t i = 0; i < ortho_bra.size(); i++)
+        for (size_t i = 0; i < ortho_bra.size(); i++) {
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
+            if (cmask.data != nullptr)
+                GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask, (FL)1.0,
+                                                  ors[i], ors[i], (FL)0.0);
+        }
         frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<FP> eners =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights)
-                : IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *this, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b,
+                                              vector<GMatrix<FL>>());
+                if (cmask.data != nullptr)
+                    GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask,
+                                                      (FL)1.0, b, b, (FL)0.0);
+            };
+        vector<FP> eners;
+        if (metric == nullptr)
+            eners = IterativeMatrixFunctions<FL>::harmonic_davidson(
+                g, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+        else {
+            metric->precompute();
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &mg =
+                [metric, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                    if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
+                        (metric->tf->opf->seq->mode & SeqTypes::Tasked))
+                        metric->tf->operator()(a, b, (FL)1.0);
+                    else
+                        (*metric)(a, b, 0, (FL)1.0);
+                    if (cmask.data != nullptr)
+                        GMatrixFunctions<FL>::elementwise(
+                            "*", (FL)1.0, cmask, (FL)1.0, b, b, (FL)0.0);
+                };
+            eners = IterativeMatrixFunctions<FL>::davidson_generalized(
+                g, mg, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+            metric->post_precompute();
+        }
         post_precompute();
         uint64_t nflop = tf->opf->seq->cumulative_nflop;
         if (para_rule != nullptr)
@@ -489,28 +585,36 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 aa.data[i] = diag->data[i] + (FL)const_e;
         }
         precompute();
-        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
-            [this](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
                 if (this->tf->opf->seq->mode == SeqTypes::Auto ||
                     (this->tf->opf->seq->mode & SeqTypes::Tasked))
-                    return this->tf->operator()(a, b);
+                    return this->tf->operator()(a, b, scale);
                 else
-                    return (*this)(a, b);
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b,
+                                              vector<GMatrix<FL>>());
             };
         FL r =
             solver_type == LinearSolverTypes::CG
                 ? IterativeMatrixFunctions<FL>::conjugate_gradient(
-                      f, aa, mbra, mket, nmult, (FL)const_e, iprint,
+                      g, aa, mbra, mket, nmult, (FL)const_e, iprint,
                       para_rule == nullptr ? nullptr : para_rule->comm,
                       conv_thrd, rel_conv_thrd, max_iter, soft_max_iter, ors)
                 : (solver_type == LinearSolverTypes::MinRes
                        ? IterativeMatrixFunctions<FL>::minres(
-                             f, mbra, mket, nmult, (FL)const_e, iprint,
+                             g, mbra, mket, nmult, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
                              conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
                              ors)
                        : IterativeMatrixFunctions<FL>::gcrotmk(
-                             f, aa, mbra, mket, nmult, niter,
+                             g, aa, mbra, mket, nmult, niter,
                              linear_solver_params.first,
                              linear_solver_params.second, (FL)const_e, iprint,
                              para_rule == nullptr ? nullptr : para_rule->comm,
@@ -582,8 +686,19 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                                  ? SeqTypes::Simple
                                  : SeqTypes::None;
         tf->opf->seq->cumulative_nflop = 0;
-        (*this)(GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
-                GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
+        if (this->eff_kernel == nullptr)
+            (*this)(GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
+                    GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
+        else {
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)>
+                &f = [this](const GMatrix<FL> &a, const GMatrix<FL> &b,
+                            FL scale) { return (*this)(a, b, 0, scale); };
+            this->eff_kernel->compute(
+                (FL)1.0, f,
+                GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
+                GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1),
+                vector<GMatrix<FL>>());
+        }
         op->mat->data[0] = expr;
         FP norm = GMatrixFunctions<FL>::norm(
             GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1));
@@ -832,7 +947,9 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     pair<vector<GMatrix<FL>>, tuple<FL, FP, int, size_t, double>>
     rk4_apply(FL beta, typename const_fl_type<FL>::FL const_e,
               bool eval_energy = false,
-              const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+              const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+              const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                  vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
         vector<GMatrix<FL>> k, r;
         Timer t;
@@ -842,6 +959,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             r.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
             r[i].allocate();
         }
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         frame_<FP>()->activate(0);
         for (int i = 0; i < 4; i++) {
             k.push_back(GMatrix<FL>(nullptr, (MKL_INT)ket->total_memory, 1));
@@ -862,14 +984,22 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 else
                     return (*this)(a, b, 0, scale);
             };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &g =
+            [this, &f, &ors](const GMatrix<FL> &a, const GMatrix<FL> &b,
+                             FL scale) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, scale);
+                else
+                    this->eff_kernel->compute(scale, f, a, b, ors);
+            };
         // k0 ~ k3
         for (int i = 0; i < 4; i++) {
             if (i == 0)
-                f(v, k[i], beta);
+                g(v, k[i], beta);
             else {
                 GMatrixFunctions<FL>::copy(r[0], v);
                 GMatrixFunctions<FL>::iadd(r[0], k[i - 1], ks[i]);
-                f(r[0], k[i], beta);
+                g(r[0], k[i], beta);
             }
         }
         // r0 ~ r2
@@ -884,7 +1014,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         FL energy = -(FL)const_e;
         if (eval_energy) {
             k[0].clear();
-            f(r[2], k[0], 1.0);
+            g(r[2], k[0], 1.0);
             energy =
                 GMatrixFunctions<FL>::complex_dot(r[2], k[0]) / (norm * norm);
         }
@@ -905,35 +1035,46 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     expo_apply(FL beta, typename const_fl_type<FL>::FL const_e, bool symmetric,
                bool iprint = false,
                const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
-               FP conv_thrd = 5E-6, int deflation_max_size = 20) {
+               FP conv_thrd = 5E-6, int deflation_max_size = 20,
+               const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                   vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         assert(compute_diag);
         FP anorm = GMatrixFunctions<FL>::norm(
             GMatrix<FL>(diag->data, (MKL_INT)diag->total_memory, 1));
         GMatrix<FL> v(ket->data, (MKL_INT)ket->total_memory, 1);
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        int nexpo =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::expo_apply(
-                      *tf, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, deflation_max_size)
-                : IterativeMatrixFunctions<FL>::expo_apply(
-                      *this, beta, anorm, v, (FL)const_e, symmetric, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, deflation_max_size);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &, FL)> &f =
+            [this](const GMatrix<FL> &a, const GMatrix<FL> &b, FL scale) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    return this->tf->operator()(a, b, scale);
+                else
+                    return (*this)(a, b, 0, scale);
+            };
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
+            [this, &f, &ors](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->eff_kernel == nullptr)
+                    f(a, b, (FL)1.0);
+                else
+                    this->eff_kernel->compute((FL)1.0, f, a, b, ors);
+            };
+        int nexpo = IterativeMatrixFunctions<FL>::expo_apply(
+            g, beta, anorm, v, (FL)const_e, symmetric, iprint,
+            para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+            deflation_max_size);
         FP norm = GMatrixFunctions<FL>::norm(v);
         GMatrix<FL> tmp(nullptr, (MKL_INT)ket->total_memory, 1);
         tmp.allocate();
         tmp.clear();
-        if (tf->opf->seq->mode == SeqTypes::Auto ||
-            (tf->opf->seq->mode & SeqTypes::Tasked))
-            (*tf)(v, tmp);
-        else
-            (*this)(v, tmp);
+        g(v, tmp);
         FL energy = GMatrixFunctions<FL>::complex_dot(v, tmp) / (norm * norm);
         tmp.deallocate();
         post_precompute();
@@ -1122,6 +1263,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     shared_ptr<SparseMatrixGroup<S, FL>> diag;
     vector<shared_ptr<SparseMatrixGroup<S, FL>>> bra, ket;
     shared_ptr<SparseMatrixGroup<S, FL>> cmat, vmat;
+    vector<shared_ptr<SparseMatrixGroup<S, FL>>> context_mask;
     shared_ptr<TensorFunctions<S, FL>> tf;
     shared_ptr<SymbolicColumnVector<S>> hop_mat;
     // Delta quantum of effective H
@@ -1137,6 +1279,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     shared_ptr<NPDMScheme> npdm_scheme = nullptr;
     string npdm_fragment_filename = "";
     int npdm_n_sites = 0, npdm_center = -1, npdm_parallel_center = -1;
+    string seq_filename = "";
     EffectiveHamiltonian(
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
@@ -1169,9 +1312,21 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
         assert(msl[0] == opdq);
-        vector<vector<pair<uint8_t, S>>> msubsl =
-            Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
-                                                  hop_left_vacuum);
+        vector<vector<pair<uint8_t, S>>> msubsl;
+        if (op->stacked_mat == nullptr)
+            msubsl = Partition<S, FL>::get_uniq_sub_labels(
+                op->mat, hop_mat, msl, hop_left_vacuum);
+        else {
+            vector<vector<pair<uint8_t, S>>> psubsl =
+                Partition<S, FL>::get_uniq_sub_labels(op->mat, hop_mat, msl,
+                                                      hop_left_vacuum);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    op->stacked_mat, hop_mat, msl,
+                    (hop_left_vacuum - hop_left_vacuum)[0]);
+            msubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, psubsl, xsubsl);
+        }
         // symbol-free npdm case
         if (npdm_scheme != nullptr && op->mat->data.size() == 1 &&
             dynamic_pointer_cast<OpElement<S, FL>>(op->dops[0])->name ==
@@ -1203,8 +1358,11 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                     left_op_infos, right_op_infos, diag->infos[i], tf->opf->cg);
                 diag->infos[i]->cinfo = diag_info;
                 shared_ptr<SparseMatrix<S, FL>> xdiag = (*diag)[i];
-                tf->tensor_product_diagonal(op->mat->data[0], op->lopt,
-                                            op->ropt, xdiag, opdq);
+                tf->tensor_product_diagonal(op->mat->data[0],
+                                            op->stacked_mat == nullptr
+                                                ? nullptr
+                                                : op->stacked_mat->data[0],
+                                            op->lopt, op->ropt, xdiag, opdq);
                 diag_info->deallocate();
             }
         }
@@ -1244,16 +1402,20 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
     void precompute() const {
         if (tf->opf->seq->mode == SeqTypes::Auto) {
             cmat->data = vmat->data = (FL *)0;
-            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
-                                              op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, 1.0, false);
+            tf->tensor_product_multi_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, wfn_infos[0], opdq, 1.0, false);
             tf->opf->seq->prepare();
             tf->opf->seq->allocate();
         } else if (tf->opf->seq->mode & SeqTypes::Tasked) {
             cmat->data = vmat->data = (FL *)0;
-            tf->tensor_product_multi_multiply(op->mat->data[0], op->lopt,
-                                              op->ropt, cmat, vmat,
-                                              wfn_infos[0], opdq, 1.0, false);
+            tf->tensor_product_multi_multiply(
+                op->mat->data[0],
+                op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+                op->lopt, op->ropt, cmat, vmat, wfn_infos[0], opdq, 1.0, false);
+            if (seq_filename != "")
+                tf->opf->seq->save_data(seq_filename);
         }
     }
     void post_precompute() const {
@@ -1277,11 +1439,31 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
             dynamic_pointer_cast<MultiMPSInfo<S>>(mps_info);
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         assert(msl.size() == 1 && msl[0] == opdq);
-        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0];
-        shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
-            1, vector<shared_ptr<OpExpr<S>>>{pexpr});
-        vector<pair<uint8_t, S>> psubsl = Partition<S, FL>::get_uniq_sub_labels(
-            pmat, hop_mat, msl, hop_left_vacuum, true, trace_right, false)[0];
+        shared_ptr<OpExpr<S>> pexpr = op->mat->data[0], xexpr = nullptr;
+        vector<pair<uint8_t, S>> psubsl;
+        if (op->stacked_mat == nullptr) {
+            shared_ptr<Symbolic<S>> pmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            psubsl = Partition<S, FL>::get_uniq_sub_labels(
+                pmat, hop_mat, msl, hop_left_vacuum, true, trace_right,
+                false)[0];
+        } else {
+            xexpr = op->stacked_mat->data[0];
+            shared_ptr<Symbolic<S>> qmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{pexpr});
+            shared_ptr<Symbolic<S>> xmat = make_shared<SymbolicColumnVector<S>>(
+                1, vector<shared_ptr<OpExpr<S>>>{xexpr});
+            vector<vector<pair<uint8_t, S>>> qsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(qmat, hop_mat, msl,
+                                                      hop_left_vacuum, true,
+                                                      trace_right, false);
+            vector<vector<pair<uint8_t, S>>> xsubsl =
+                Partition<S, FL>::get_uniq_sub_labels(
+                    xmat, hop_mat, msl, (hop_left_vacuum - hop_left_vacuum)[0],
+                    true, trace_right, false);
+            psubsl = Partition<S, FL>::get_stacked_uniq_sub_labels(
+                msl, msl, msl, qsubsl, xsubsl, true, trace_right, false)[0];
+        }
         vector<S> perturb_ket_labels, all_perturb_ket_labels;
         for (int i = 0; i < ket[0]->n; i++) {
             S ket_label = ket[0]->infos[i]->delta_quantum;
@@ -1392,8 +1574,8 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                 FP ket_norm = (*ket[ii])[i]->norm();
                 if (abs(ket_norm) > TINY)
                     tf->tensor_product_partial_multiply(
-                        (weights[ii] / ket_norm) * pexpr, op->lopt, op->ropt,
-                        trace_right, (*ket[ii])[i], psubsl, cinfos[i],
+                        (weights[ii] / ket_norm) * pexpr, xexpr, op->lopt,
+                        op->ropt, trace_right, (*ket[ii])[i], psubsl, cinfos[i],
                         perturb_ket_labels, perturb_ket, vidx,
                         low_mem ? -2 : -1, do_reduce);
             }
@@ -1465,14 +1647,17 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                 idx_opdq) -
                     operator_quanta.begin();
         assert(ic < operator_quanta.size());
-        tf->tensor_product_multi_multiply(op->mat->data[idx], op->lopt,
-                                          op->ropt, cmat, vmat, wfn_infos[ic],
-                                          idx_opdq, factor, all_reduce);
+        tf->tensor_product_multi_multiply(
+            op->mat->data[idx],
+            op->stacked_mat == nullptr ? nullptr : op->stacked_mat->data[0],
+            op->lopt, op->ropt, cmat, vmat, wfn_infos[ic], idx_opdq, factor,
+            all_reduce);
     }
     // Find eigenvalues and eigenvectors of [H_eff]
     // energies, ndav, nflop, tdav
     tuple<vector<typename const_fl_type<FP>::FL>, int, size_t, double>
-    eigs(bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
+    eigs(const shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>> &metric,
+         bool iprint = false, FP conv_thrd = 5E-6, FP rel_conv_thrd = 0.0,
          int max_iter = 5000, int soft_max_iter = -1,
          int deflation_min_size = 2, int deflation_max_size = 50,
          DavidsonTypes davidson_type = DavidsonTypes::Normal, FP shift = 0,
@@ -1483,6 +1668,9 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         int ndav = 0;
         assert(compute_diag);
         GDiagonalMatrix<FL> aa(diag->data, (MKL_INT)diag->total_memory);
+        GMatrix<FL> cmask(nullptr, (MKL_INT)ket[0]->total_memory, 1);
+        if (this->context_mask.size() != 0)
+            cmask.data = this->context_mask[0]->data;
         vector<GMatrix<FL>> bs;
         for (int i = 0; i < (int)min((MKL_INT)ket.size(), (MKL_INT)aa.n); i++)
             bs.push_back(
@@ -1494,29 +1682,56 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                                          (MKL_INT)bra[i]->total_memory, 1));
         vector<GMatrix<FL>> ors =
             vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
-        for (size_t i = 0; i < ortho_bra.size(); i++)
+        for (size_t i = 0; i < ortho_bra.size(); i++) {
             ors[i] = GMatrix<FL>(ortho_bra[i]->data,
                                  (MKL_INT)ortho_bra[i]->total_memory, 1);
+            if (cmask.data != nullptr)
+                GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask, (FL)1.0,
+                                                  ors[i], ors[i], (FL)0.0);
+        }
         frame_<FP>()->activate(0);
         Timer t;
         t.get_time();
         tf->opf->seq->cumulative_nflop = 0;
         precompute();
-        vector<FP> xeners =
-            (tf->opf->seq->mode == SeqTypes::Auto ||
-             (tf->opf->seq->mode & SeqTypes::Tasked))
-                ? IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *tf, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights)
-                : IterativeMatrixFunctions<FL>::harmonic_davidson(
-                      *this, aa, bs, shift, davidson_type, ndav, iprint,
-                      para_rule == nullptr ? nullptr : para_rule->comm,
-                      conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
-                      deflation_min_size, deflation_max_size, ors,
-                      projection_weights);
+        const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &f =
+            [this, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                if (this->tf->opf->seq->mode == SeqTypes::Auto ||
+                    (this->tf->opf->seq->mode & SeqTypes::Tasked))
+                    this->tf->operator()(a, b, (FL)1.0);
+                else
+                    (*this)(a, b, 0, (FL)1.0);
+                if (cmask.data != nullptr)
+                    GMatrixFunctions<FL>::elementwise("*", (FL)1.0, cmask,
+                                                      (FL)1.0, b, b, (FL)0.0);
+            };
+        vector<FP> xeners;
+        if (metric == nullptr)
+            xeners = IterativeMatrixFunctions<FL>::harmonic_davidson(
+                f, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+        else {
+            metric->precompute();
+            const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &mf =
+                [metric, &cmask](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+                    if (metric->tf->opf->seq->mode == SeqTypes::Auto ||
+                        (metric->tf->opf->seq->mode & SeqTypes::Tasked))
+                        metric->tf->operator()(a, b, (FL)1.0);
+                    else
+                        (*metric)(a, b, 0, (FL)1.0);
+                    if (cmask.data != nullptr)
+                        GMatrixFunctions<FL>::elementwise(
+                            "*", (FL)1.0, cmask, (FL)1.0, b, b, (FL)0.0);
+                };
+            xeners = IterativeMatrixFunctions<FL>::davidson_generalized(
+                f, mf, aa, bs, shift, davidson_type, ndav, iprint,
+                para_rule == nullptr ? nullptr : para_rule->comm, conv_thrd,
+                rel_conv_thrd, max_iter, soft_max_iter, deflation_min_size,
+                deflation_max_size, ors, projection_weights);
+            metric->post_precompute();
+        }
         vector<typename const_fl_type<FP>::FL> eners(xeners.size());
         for (size_t i = 0; i < xeners.size(); i++)
             eners[i] = (typename const_fl_type<FP>::FL)xeners[i];

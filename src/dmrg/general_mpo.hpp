@@ -172,7 +172,8 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
     vector<FP> disjoint_levels;
     bool disjoint_all_blocks = false;
     FP disjoint_multiplier = (FP)1.0;
-    bool block_max_length = false; // separate 1e/2e terms
+    bool block_max_length = false;   // separate 1e/2e terms
+    bool fast_no_orb_dep_op = false; // fast mode for no orb_sym case
     static inline size_t expr_index_hash(const string &expr,
                                          const uint16_t *terms, int n,
                                          const uint16_t init = 0) noexcept {
@@ -440,9 +441,14 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                             sub_exprs[ix][make_pair(0, term_l[ix])] =
                                 GeneralHamiltonian<S, FL>::get_sub_expr(
                                     afd->exprs[ix], 0, term_l[ix]);
-                        pair<S, S> pq = hamil->get_string_quanta(
-                            quanta_ref[ix], afd->exprs[ix],
-                            &afd->indices[ix][itt], 0);
+                        pair<S, S> pq =
+                            fast_no_orb_dep_op
+                                ? make_pair(quanta_ref[ix][0],
+                                            quanta_ref[ix].back() -
+                                                quanta_ref[ix][0])
+                                : hamil->get_string_quanta(
+                                      quanta_ref[ix], afd->exprs[ix],
+                                      &afd->indices[ix][itt], 0);
                         q_map[make_pair(make_pair(0, make_pair(0, 0)),
                                         qh.combine(pq.first, -pq.second))] = 0;
                         map_ls.emplace_back();
@@ -502,9 +508,13 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         lstr, afd->indices[ix].data() + itt + ik, k - ik, ip);
                     size_t hr = expr_index_hash(
                         rstr, afd->indices[ix].data() + itt + k, kmax - k, 1);
-                    pair<S, S> pq =
-                        hamil->get_string_quanta(quanta_ref[ix], afd->exprs[ix],
-                                                 &afd->indices[ix][itt], k);
+                    pair<S, S> pq = fast_no_orb_dep_op
+                                        ? make_pair(quanta_ref[ix][k],
+                                                    quanta_ref[ix].back() -
+                                                        quanta_ref[ix][k])
+                                        : hamil->get_string_quanta(
+                                              quanta_ref[ix], afd->exprs[ix],
+                                              &afd->indices[ix][itt], k);
                     S qq = qh.combine(pq.first, -pq.second);
                     // possible error here due to unsymmetrized integral
                     assert(qq != S(S::invalid));
@@ -514,10 +524,10 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         pqq = make_pair((uint16_t)2,
                                         min((uint16_t)k, (uint16_t)(kmax - k)));
                     if (blocked)
-                        pqq =
-                            make_pair(kmax - k == k ? (uint16_t)2
-                                                    : (uint16_t)(kmax - k > k),
-                                      min((uint16_t)k, (uint16_t)(kmax - k)));
+                        pqq = make_pair(kmax - k == k && kmax != 0
+                                            ? (uint16_t)2
+                                            : (uint16_t)(kmax - k > k),
+                                        min((uint16_t)k, (uint16_t)(kmax - k)));
                     if (sum_mpo && kmax - k == k && k != 0)
                         pqq = make_pair(
                             (uint16_t)(2 + (sum_mpo_mod == -1

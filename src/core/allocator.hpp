@@ -382,6 +382,9 @@ template <typename FL> struct DataFrame {
         false; //!< Whether MPO should be build in minimal memory mode by saving
                //!< intermediates to disk. In this mode, MPO should have
                //!< different tags.
+    bool compressed_sparse_tensor_storage =
+        false; //!< Whether block-sparse tensor should be stored in compressed
+               //!< form to save storage (mainly for MPS).
     shared_ptr<FPCodec<FL>> fp_codec =
         nullptr; //!< Floating-point compression codec. If nullptr,
                  //!< floating-point compression will not be used.

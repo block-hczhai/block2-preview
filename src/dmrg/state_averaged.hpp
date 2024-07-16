@@ -227,8 +227,10 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
             MPS<S, FL>::initialize_right(info, center + dot);
     }
     void flip_fused_form(
-        int center, const shared_ptr<CG<S>> &cg,
+        int center, shared_ptr<CG<S>> cg,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) override {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (para_rule == nullptr || para_rule->is_root()) {
             load_wavefunction(center);
             if (canonical_form[center] == 'T')
@@ -584,6 +586,81 @@ template <typename S, typename FL> struct MultiMPS : MPS<S, FL> {
                 tensors[i]->info->deallocate();
         if (nroots != 0)
             wfns[0]->deallocate_infos();
+    }
+};
+
+template <typename S1, typename S2, typename = void, typename = void>
+struct TransMultiMPSInfo {
+    static shared_ptr<MultiMPSInfo<S2>>
+    forward(const shared_ptr<MultiMPSInfo<S1>> &si, const vector<S2> &targets) {
+        return TransMultiMPSInfo<S2, S1>::backward(si, targets);
+    }
+    static shared_ptr<MultiMPSInfo<S1>>
+    backward(const shared_ptr<MultiMPSInfo<S2>> &si,
+             const vector<S1> &targets) {
+        return TransMultiMPSInfo<S2, S1>::forward(si, targets);
+    }
+};
+
+template <typename S> struct TransMultiMPSInfoAnyBase {
+    static shared_ptr<MultiMPSInfo<S>>
+    transform(const shared_ptr<MultiMPSInfo<S>> &si, const vector<S> &targets) {
+        int n_sites = si->n_sites;
+        S vacuum = TransStateInfo<S, S>::forward(
+                       make_shared<StateInfo<S>>(si->vacuum), targets[0])
+                       ->quanta[0];
+        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
+        for (int i = 0; i < n_sites; i++)
+            basis[i] = TransStateInfo<S, S>::forward(si->basis[i], vacuum);
+        shared_ptr<MultiMPSInfo<S>> so =
+            make_shared<MultiMPSInfo<S>>(n_sites, vacuum, targets, basis);
+        // handle the singlet embedding case
+        so->left_dims_fci[0] =
+            TransStateInfo<S, S>::forward(si->left_dims_fci[0], vacuum);
+        for (int i = 0; i < n_sites; i++)
+            so->left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *so->left_dims_fci[i], *basis[i], S(S::invalid)));
+        so->right_dims_fci[n_sites] =
+            TransStateInfo<S, S>::forward(si->right_dims_fci[n_sites], vacuum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            so->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[i], *so->right_dims_fci[i + 1], S(S::invalid)));
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::multi_target_filter(*so->left_dims_fci[i],
+                                              *so->right_dims_fci[i], targets);
+            StateInfo<S>::multi_target_filter(*so->right_dims_fci[i],
+                                              *so->left_dims_fci[i], targets);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims_fci[i]->collect();
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims[i] =
+                TransStateInfo<S, S>::forward(si->left_dims[i], vacuum);
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims[i] =
+                TransStateInfo<S, S>::forward(si->right_dims[i], vacuum);
+        so->check_bond_dimensions();
+        so->bond_dim = so->get_max_bond_dimension();
+        so->tag = si->tag;
+        return so;
+    }
+};
+
+// Translation between SAny MultiMPSInfo
+template <typename S>
+struct TransMultiMPSInfo<S, S, typename S::is_sany_t, typename S::is_sany_t>
+    : TransMultiMPSInfoAnyBase<S> {
+    static shared_ptr<MultiMPSInfo<S>>
+    forward(const shared_ptr<MultiMPSInfo<S>> &si, const vector<S> &targets) {
+        return TransMultiMPSInfoAnyBase<S>::transform(si, targets);
+    }
+    static shared_ptr<MultiMPSInfo<S>>
+    backward(const shared_ptr<MultiMPSInfo<S>> &si, const vector<S> &targets) {
+        return TransMultiMPSInfoAnyBase<S>::transform(si, targets);
     }
 };
 

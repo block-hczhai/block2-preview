@@ -618,6 +618,7 @@ template <typename S, typename FL> void bind_fl_expr(py::module &m) {
         .def_readwrite("conj", &OpProduct<S, FL>::conj)
         .def_readwrite("a", &OpProduct<S, FL>::a)
         .def_readwrite("b", &OpProduct<S, FL>::b)
+        .def("get_op", &OpProduct<S, FL>::get_op)
         .def("__hash__", &OpProduct<S, FL>::hash);
 
     py::class_<OpSumProd<S, FL>, shared_ptr<OpSumProd<S, FL>>,
@@ -1047,6 +1048,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
         .def("randomize", &SparseMatrixGroup<S, FL>::randomize,
              py::arg("a") = 0.0, py::arg("b") = 1.0)
         .def("norm", &SparseMatrixGroup<S, FL>::norm)
+        .def("clear", &SparseMatrixGroup<S, FL>::clear)
         .def("iscale", &SparseMatrixGroup<S, FL>::iscale, py::arg("d"))
         .def("normalize", &SparseMatrixGroup<S, FL>::normalize)
         .def_static("normalize_all", &SparseMatrixGroup<S, FL>::normalize_all)
@@ -1141,6 +1143,8 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
         .def(py::init<>())
         .def_readwrite("dops", &DelayedOperatorTensor<S, FL>::dops)
         .def_readwrite("mat", &DelayedOperatorTensor<S, FL>::mat)
+        .def_readwrite("stacked_mat",
+                       &DelayedOperatorTensor<S, FL>::stacked_mat)
         .def_readwrite("lopt", &DelayedOperatorTensor<S, FL>::lopt)
         .def_readwrite("ropt", &DelayedOperatorTensor<S, FL>::ropt);
 
@@ -1199,7 +1203,8 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<Symbolic<S>> &,
-                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed) const) &
+                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed,
+                 const shared_ptr<Symbolic<S>> &) const) &
                  TensorFunctions<S, FL>::delayed_contract);
 
     py::class_<ArchivedTensorFunctions<S, FL>,
@@ -2125,7 +2130,9 @@ template <typename S = void> void bind_io(py::module &m) {
         .def("transpose_cg", &SU2CG::transpose_cg, py::arg("td"), py::arg("tl"),
              py::arg("tr"))
         .def("phase", &SU2CG::phase, py::arg("ta"), py::arg("tb"),
-             py::arg("tc"));
+             py::arg("tc"))
+        .def("wigner_d", &SU2CG::wigner_d, py::arg("tj"), py::arg("tmp"),
+             py::arg("tms"), py::arg("beta"));
 
     py::class_<SO3RSHCG, shared_ptr<SO3RSHCG>, SU2CG>(m, "SO3RSHCG")
         .def(py::init<>())
@@ -2715,6 +2722,8 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
         .def_readwrite("minimal_disk_usage", &DataFrame<FL>::minimal_disk_usage)
         .def_readwrite("minimal_memory_usage",
                        &DataFrame<FL>::minimal_memory_usage)
+        .def_readwrite("compressed_sparse_tensor_storage",
+                       &DataFrame<FL>::compressed_sparse_tensor_storage)
         .def_readwrite("fp_codec", &DataFrame<FL>::fp_codec)
         .def("update_peak_used_memory", &DataFrame<FL>::update_peak_used_memory)
         .def("reset_peak_used_memory", &DataFrame<FL>::reset_peak_used_memory)
@@ -2791,6 +2800,20 @@ template <typename FL> void bind_matrix(py::module &m) {
              py::arg("alloc") = nullptr);
 
     py::class_<GMatrixFunctions<FL>>(m, "MatrixFunctions")
+        .def_static(
+            "elementwise",
+            [](const string &f, FL alpha, py::array_t<FL> &a, FL beta,
+               py::array_t<FL> &b, py::array_t<FL> &c, FL cfactor) {
+                MKL_INT n = (MKL_INT)a.size();
+                GMatrixFunctions<FL>::elementwise(
+                    f, alpha,
+                    GMatrix<FL>(a.mutable_data(), (MKL_INT)a.size(), 1), beta,
+                    GMatrix<FL>(b.mutable_data(), (MKL_INT)b.size(), 1),
+                    GMatrix<FL>(c.mutable_data(), (MKL_INT)c.size(), 1),
+                    cfactor);
+            },
+            py::arg("f"), py::arg("alpha"), py::arg("a"), py::arg("beta"),
+            py::arg("b"), py::arg("c"), py::arg("cfactor") = (FL)1.0)
         .def_static("det",
                     [](py::array_t<FL> &a) {
                         MKL_INT n = (MKL_INT)Prime::sqrt((Prime::LL)a.size());
@@ -2805,6 +2828,27 @@ template <typename FL> void bind_matrix(py::module &m) {
                             GMatrix<FL>(a.mutable_data(), n, n),
                             GDiagonalMatrix<FL>(w.mutable_data(), n));
                     })
+        .def_static(
+            "geigs",
+            [](py::array_t<FL> &a, py::array_t<FL> &b, py::array_t<FL> &w) {
+                MKL_INT n = (MKL_INT)w.size();
+                GMatrixFunctions<FL>::geigs(
+                    GMatrix<FL>(a.mutable_data(), n, n),
+                    GMatrix<FL>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n));
+            })
+        .def_static(
+            "accurate_geigs",
+            [](py::array_t<FL> &a, py::array_t<FL> &b, py::array_t<FL> &w,
+               FL eps) {
+                MKL_INT n = (MKL_INT)w.size();
+                return GMatrixFunctions<FL>::accurate_geigs(
+                    GMatrix<FL>(a.mutable_data(), n, n),
+                    GMatrix<FL>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n), eps);
+            },
+            py::arg("a"), py::arg("b"), py::arg("w"),
+            py::arg("eps") = (FL)1E-12)
         .def_static("block_eigs", [](py::array_t<FL> &a, py::array_t<FL> &w,
                                      const vector<uint8_t> &x) {
             MKL_INT n = (MKL_INT)w.size();
@@ -2813,7 +2857,54 @@ template <typename FL> void bind_matrix(py::module &m) {
                 GDiagonalMatrix<FL>(w.mutable_data(), n), x);
         });
 
-    py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions");
+    py::class_<GMatrixFunctions<complex<FL>>>(m, "ComplexMatrixFunctions")
+        .def_static(
+            "elementwise",
+            [](const string &f, complex<FL> alpha, py::array_t<complex<FL>> &a,
+               complex<FL> beta, py::array_t<complex<FL>> &b,
+               py::array_t<complex<FL>> &c, complex<FL> cfactor) {
+                MKL_INT n = (MKL_INT)a.size();
+                GMatrixFunctions<complex<FL>>::elementwise(
+                    f, alpha,
+                    GMatrix<complex<FL>>(a.mutable_data(), (MKL_INT)a.size(),
+                                         1),
+                    beta,
+                    GMatrix<complex<FL>>(b.mutable_data(), (MKL_INT)b.size(),
+                                         1),
+                    GMatrix<complex<FL>>(c.mutable_data(), (MKL_INT)c.size(),
+                                         1),
+                    cfactor);
+            },
+            py::arg("f"), py::arg("alpha"), py::arg("a"), py::arg("beta"),
+            py::arg("b"), py::arg("c"), py::arg("cfactor") = (complex<FL>)1.0)
+        .def_static("eigs",
+                    [](py::array_t<complex<FL>> &a, py::array_t<FL> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        GMatrixFunctions<complex<FL>>::eigs(
+                            GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                            GDiagonalMatrix<FL>(w.mutable_data(), n));
+                    })
+        .def_static("geigs",
+                    [](py::array_t<complex<FL>> &a, py::array_t<complex<FL>> &b,
+                       py::array_t<FL> &w) {
+                        MKL_INT n = (MKL_INT)w.size();
+                        GMatrixFunctions<complex<FL>>::geigs(
+                            GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                            GMatrix<complex<FL>>(b.mutable_data(), n, n),
+                            GDiagonalMatrix<FL>(w.mutable_data(), n));
+                    })
+        .def_static(
+            "accurate_geigs",
+            [](py::array_t<complex<FL>> &a, py::array_t<complex<FL>> &b,
+               py::array_t<FL> &w, FL eps) {
+                MKL_INT n = (MKL_INT)w.size();
+                return GMatrixFunctions<complex<FL>>::accurate_geigs(
+                    GMatrix<complex<FL>>(a.mutable_data(), n, n),
+                    GMatrix<complex<FL>>(b.mutable_data(), n, n),
+                    GDiagonalMatrix<FL>(w.mutable_data(), n), eps);
+            },
+            py::arg("a"), py::arg("b"), py::arg("w"),
+            py::arg("eps") = (FL)1E-12);
 
     py::class_<IterativeMatrixFunctions<FL>>(m, "IterativeMatrixFunctions")
         .def_static(
@@ -2850,6 +2941,55 @@ template <typename FL> void bind_matrix(py::module &m) {
                     ndav);
             },
             py::arg("op"), py::arg("diag"), py::arg("kets"),
+            py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
+            py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
+            py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,
+            py::arg("deflation_max_size") = 50)
+        .def_static(
+            "davidson_generalized",
+            [](py::object op, py::object sop, py::array_t<FL> &diag,
+               py::list kets, bool iprint, typename GMatrix<FL>::FP conv_thrd,
+               typename GMatrix<FL>::FP rel_conv_thrd, int max_iter,
+               int soft_max_iter, int deflation_min_size,
+               int deflation_max_size) {
+                const function<void(const GMatrix<FL> &, const GMatrix<FL> &)>
+                    &f = [&op](const GMatrix<FL> &b, const GMatrix<FL> &c) {
+                        py::array_t<FL> x = (py::array_t<FL>)op(
+                            py::array_t<FL>(b.size(), b.data));
+                        GMatrixFunctions<FL>::iadd(
+                            c,
+                            GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                            (FL)1.0);
+                    };
+                const function<void(const GMatrix<FL> &, const GMatrix<FL> &)>
+                    &g = [&sop](const GMatrix<FL> &b, const GMatrix<FL> &c) {
+                        py::array_t<FL> x = (py::array_t<FL>)sop(
+                            py::array_t<FL>(b.size(), b.data));
+                        GMatrixFunctions<FL>::iadd(
+                            c,
+                            GMatrix<FL>(x.mutable_data(), (MKL_INT)x.size(), 1),
+                            (FL)1.0);
+                    };
+                vector<GMatrix<FL>> vs;
+                for (size_t i = 0; i < kets.size(); i++) {
+                    py::array_t<FL> ket = kets[i].cast<py::array_t<FL>>();
+                    vs.push_back(GMatrix<FL>(ket.mutable_data(),
+                                             (MKL_INT)ket.size(), 1));
+                }
+                int ndav = 0;
+                return std::make_pair(
+                    IterativeMatrixFunctions<FL>::davidson_generalized(
+                        f, g,
+                        GDiagonalMatrix<FL>(diag.mutable_data(),
+                                            (MKL_INT)diag.size()),
+                        vs, (typename GMatrix<FL>::FP)0.0,
+                        DavidsonTypes::Normal, ndav, iprint,
+                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
+                        deflation_min_size, deflation_max_size),
+                    ndav);
+            },
+            py::arg("op"), py::arg("sop"), py::arg("diag"), py::arg("kets"),
             py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
             py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
             py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,
@@ -3301,6 +3441,14 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              })
         .def("deallocate", &FCIDUMP<FL>::deallocate)
         .def("truncate_small", &FCIDUMP<FL>::truncate_small)
+        .def("symmetrize",
+             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(const vector<int> &)) &
+                 FCIDUMP<FL>::symmetrize,
+             py::arg("orbsym"),
+             "Remove integral elements that violate point group symmetry. "
+             "Returns summed error in symmetrization\n\n"
+             "    Args:\n"
+             "        orbsym : in XOR convention")
         .def("symmetrize",
              (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
                  const vector<uint8_t> &)) &
@@ -3798,6 +3946,7 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("init_sgb", &SAny::init_sgb, py::arg("n") = 0,
                     py::arg("pg") = 0)
         .def_property("n", &SAny::n, &SAny::set_n)
+        .def_property("u1", &SAny::u1, &SAny::set_u1)
         .def_property("twos", &SAny::twos, &SAny::set_twos)
         .def_property("twos_low", &SAny::twos_low, &SAny::set_twos_low)
         .def_property("pg", &SAny::pg, &SAny::set_pg)
@@ -3809,6 +3958,10 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("pg_combine", &SAny::pg_combine, py::arg("pg"),
                     py::arg("k") = 0, py::arg("kmod") = 0)
         .def_static("pg_equal", &SAny::pg_equal)
+        .def("symm_len", &SAny::symm_len)
+        .def("su2_indices", &SAny::su2_indices)
+        .def("non_abelian_indices", &SAny::non_abelian_indices)
+        .def("u1_indices", &SAny::u1_indices)
         .def("combine", &SAny::combine)
         .def("__getitem__", &SAny::operator[])
         .def(py::self == py::self)

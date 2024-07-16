@@ -18,12 +18,12 @@
  *
  */
 
-#include "../block2_dmrg.hpp"
+#include "../pybind_dmrg.hpp"
 
-template struct block2::StackedMPO<block2::SGF, float>;
-template struct block2::CondensedMPO<block2::SGF, float>;
-template struct block2::FusedMPO<block2::SGF, float>;
-
-template struct block2::StackedMPO<block2::SGB, float>;
-template struct block2::CondensedMPO<block2::SGB, float>;
-template struct block2::FusedMPO<block2::SGB, float>;
+template auto bind_fl_trans_mps_spin_specific<SAny, SAny, complex<double>>(
+    py::module &m, const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));
+template auto
+bind_fl_trans_mpo<SAny, SAny, complex<double>>(py::module &m,
+                                               const string &aux_name)
+    -> decltype(typename SAny::is_sany_t(typename SAny::is_sany_t()));

@@ -301,6 +301,15 @@ template <typename S, typename FL> struct MPO {
         }
         return make_tuple(max(lnnz, rnnz), max(lsz, rsz), bdim);
     }
+    vector<int> get_bond_dims() {
+        vector<int> r;
+        for (int ii = 0; ii < n_sites; ii++) {
+            this->load_left_operators(ii);
+            r.push_back(left_operator_names[ii]->n);
+            this->unload_left_operators(ii);
+        }
+        return r;
+    }
     string get_filename(int i, int ixtag, const string &dir = "") const {
         const static string xtag[] = {"TENSOR", "LEFT.OP", "RIGHT.OP",
                                       "MIDDLE.OP"};
@@ -1613,6 +1622,453 @@ template <typename S, typename FL> struct IdentityAddedMPO : MPO<S, FL> {
             MPO<S, FL>::save_right_operators(m);
             MPO<S, FL>::unload_right_operators(m);
         }
+    }
+};
+
+template <typename S1, typename S2, typename FL> struct TransMPO {
+    typedef typename GMatrix<FL>::FP FP;
+    static shared_ptr<MPO<S2, FL>>
+    forward(const shared_ptr<MPO<S1, FL>> &mpo,
+            const shared_ptr<Hamiltonian<S2, FL>> &hamil,
+            const string &tag = "", S2 left_vacuum = S2(S2::invalid)) {
+        shared_ptr<MPO<S2, FL>> rmpo = make_shared<MPO<S2, FL>>(
+            mpo->n_sites, tag == "" ? "TR-" + mpo->tag : tag);
+        const int n_sites = mpo->n_sites;
+        rmpo->const_e = mpo->const_e;
+        const S2 ref = hamil->vacuum;
+        rmpo->tf = make_shared<TensorFunctions<S2, FL>>(hamil->opf);
+        rmpo->site_op_infos = hamil->site_op_infos;
+        rmpo->basis = hamil->basis;
+        rmpo->hamil = hamil;
+        rmpo->left_operator_names.resize(n_sites, nullptr);
+        rmpo->right_operator_names.resize(n_sites, nullptr);
+        rmpo->tensors.resize(n_sites, nullptr);
+        for (uint16_t m = 0; m < n_sites; m++)
+            rmpo->tensors[m] = make_shared<OperatorTensor<S2, FL>>();
+        rmpo->sparse_form = mpo->sparse_form;
+        rmpo->schemer = nullptr;
+        assert(mpo->schemer == nullptr);
+        shared_ptr<CG<S1>> cg = mpo->hamil->opf->cg;
+        shared_ptr<OpExpr<S2>> zero = make_shared<OpExpr<S2>>();
+        auto trx = [&ref](S1 q) -> shared_ptr<StateInfo<S2>> {
+            return TransStateInfo<S1, S2>::forward(
+                make_shared<StateInfo<S1>>(q), ref);
+        };
+        auto tr_opq = trx(mpo->op->q_label), tr_vac = trx(mpo->left_vacuum);
+        assert(tr_opq->n == 1);
+        rmpo->op =
+            make_shared<OpElement<S2, FL>>(mpo->op->name, mpo->op->site_index,
+                                           tr_opq->quanta[0], mpo->op->factor);
+        if (left_vacuum == S2(S2::invalid)) {
+            assert(tr_vac->n == 1);
+            rmpo->left_vacuum = tr_vac->quanta[0];
+        } else {
+            assert(tr_vac->find_state(left_vacuum) != -1);
+            rmpo->left_vacuum = left_vacuum;
+        }
+        vector<shared_ptr<OpExpr<S2>>> llopd;
+        llopd.push_back(make_shared<OpElement<S2, FL>>(OpNames::I, SiteIndex(),
+                                                       rmpo->left_vacuum));
+        for (int ii = 0; ii < n_sites; ii++) {
+            mpo->load_tensor(ii);
+            mpo->load_left_operators(ii);
+            mpo->load_right_operators(ii);
+            if (ii != 0)
+                mpo->load_left_operators(ii - 1);
+            vector<int> l_multi(mpo->left_operator_names[ii]->n);
+            vector<shared_ptr<OpExpr<S2>>> lopd;
+            lopd.reserve(mpo->left_operator_names[ii]->n);
+            for (int iop = 0, jop = 0; iop < mpo->left_operator_names[ii]->n;
+                 iop++) {
+                const auto p = dynamic_pointer_cast<OpElement<S1, FL>>(
+                    mpo->left_operator_names[ii]->data[iop]);
+                auto xqs = trx(p->q_label);
+                for (int kop = 0; kop < xqs->n; kop++) {
+                    FL factor =
+                        ii == 0 ? (FL)cg->cg(mpo->left_vacuum, p->q_label,
+                                             p->q_label, rmpo->left_vacuum,
+                                             xqs->quanta[kop], xqs->quanta[kop])
+                                : (FL)1.0;
+                    lopd.push_back(make_shared<OpElement<S2, FL>>(
+                        OpNames::XL,
+                        SiteIndex({(uint16_t)(iop / 1000 / 1000),
+                                   (uint16_t)(iop / 1000 % 1000),
+                                   (uint16_t)(iop % 1000), (uint16_t)kop},
+                                  {}),
+                        xqs->quanta[kop], p->factor * factor));
+                }
+                jop += (l_multi[iop] = xqs->n);
+            }
+            vector<int> r_multi(mpo->right_operator_names[ii]->m);
+            vector<shared_ptr<OpExpr<S2>>> ropd;
+            ropd.reserve(mpo->right_operator_names[ii]->m);
+            for (int iop = 0, jop = 0; iop < mpo->right_operator_names[ii]->m;
+                 iop++) {
+                const auto p = dynamic_pointer_cast<OpElement<S1, FL>>(
+                    mpo->right_operator_names[ii]->data[iop]);
+                auto xqs = trx(p->q_label);
+                for (int kop = xqs->n - 1; kop >= 0; kop--) {
+                    FL factor =
+                        ii == n_sites - 1
+                            ? (FL)cg->cg(
+                                  dynamic_pointer_cast<OpElement<S1, FL>>(
+                                      mpo->left_operator_names[ii - 1]
+                                          ->data[iop])
+                                      ->q_label,
+                                  p->q_label, mpo->op->q_label,
+                                  dynamic_pointer_cast<OpElement<S2, FL>>(
+                                      llopd[jop + xqs->n - 1 - kop])
+                                      ->q_label,
+                                  xqs->quanta[kop], tr_opq->quanta[0])
+                            : (FL)1.0;
+                    ropd.push_back(make_shared<OpElement<S2, FL>>(
+                        OpNames::XR,
+                        SiteIndex({(uint16_t)(iop / 1000 / 1000),
+                                   (uint16_t)(iop / 1000 % 1000),
+                                   (uint16_t)(iop % 1000), (uint16_t)kop},
+                                  {}),
+                        xqs->quanta[kop], p->factor * factor));
+                }
+                jop += (r_multi[iop] = xqs->n);
+            }
+            auto lop = make_shared<SymbolicRowVector<S2>>((int)lopd.size());
+            auto rop = make_shared<SymbolicColumnVector<S2>>((int)ropd.size());
+            lop->data = lopd;
+            rop->data = ropd;
+            rmpo->left_operator_names[ii] = lop;
+            rmpo->right_operator_names[ii] = rop;
+            vector<int> l_accu(l_multi.size(), 0);
+            vector<int> r_accu(r_multi.size(), 0);
+            for (size_t iop = 0; iop < l_multi.size() - 1; iop++)
+                l_accu[iop + 1] = l_accu[iop] + l_multi[iop];
+            for (size_t iop = 0; iop < r_multi.size() - 1; iop++)
+                r_accu[iop + 1] = r_accu[iop] + r_multi[iop];
+            shared_ptr<OperatorTensor<S2, FL>> opt = rmpo->tensors[ii];
+            shared_ptr<OperatorTensor<S2, FL>> mopt = mpo->tensors[ii];
+            assert(mopt->lmat == mopt->rmat);
+            shared_ptr<Symbolic<S2>> pmat;
+            if (ii == 0)
+                pmat = make_shared<SymbolicRowVector<S2>>(lop->n);
+            else if (ii == n_sites - 1)
+                pmat = make_shared<SymbolicColumnVector<S2>>(rop->m);
+            else
+                pmat = make_shared<SymbolicMatrix<S2>>(rop->m, lop->n);
+            unordered_map<shared_ptr<OpExpr<S1>>,
+                          vector<shared_ptr<OpElement<S2, FL>>>>
+                op_map;
+            opt->lmat = opt->rmat = pmat;
+            size_t imxx = 0;
+            if (ii == 0 || ii == n_sites - 1) {
+                const vector<int> &xmulti = ii == 0 ? l_multi : r_multi;
+                unordered_map<shared_ptr<OpExpr<S2>>, int> xmap;
+                xmap.reserve(pmat->data.size());
+                for (int iop = 0, jop = 0; iop < mopt->lmat->data.size();
+                     jop += xmulti[iop++])
+                    if (mopt->lmat->data[iop]->get_type() == OpTypes::Zero) {
+                        for (int kop = 0; kop < xmulti[iop]; kop++)
+                            pmat->data[jop + kop] = zero;
+                    } else {
+                        vector<shared_ptr<OpElement<S1, FL>>> pps;
+                        if (mopt->lmat->data[iop]->get_type() == OpTypes::Elem)
+                            pps.push_back(
+                                dynamic_pointer_cast<OpElement<S1, FL>>(
+                                    mopt->lmat->data[iop]));
+                        else if (mopt->lmat->data[iop]->get_type() ==
+                                 OpTypes::Sum) {
+                            const auto p = dynamic_pointer_cast<OpSum<S1, FL>>(
+                                mopt->lmat->data[iop]);
+                            for (size_t j = 0; j < p->strings.size(); j++) {
+                                const auto pp =
+                                    dynamic_pointer_cast<OpElement<S1, FL>>(
+                                        p->strings[j]);
+                            }
+                        } else
+                            assert(false);
+                        const S1 gxll =
+                            ii == 0 ? S1(S1::invalid)
+                                    : dynamic_pointer_cast<OpElement<S1, FL>>(
+                                          mpo->left_operator_names[ii - 1]
+                                              ->data[iop])
+                                          ->q_label;
+                        for (int kop = 0; kop < xmulti[iop]; kop++) {
+                            const size_t imx = jop + kop;
+                            const S1 gx =
+                                dynamic_pointer_cast<OpElement<S1, FL>>(
+                                    ii == 0 ? mpo->left_operator_names[ii]
+                                                  ->data[iop]
+                                            : mpo->right_operator_names[ii]
+                                                  ->data[iop])
+                                    ->q_label;
+                            const S2 gq =
+                                dynamic_pointer_cast<OpElement<S2, FL>>(
+                                    ii == 0 ? lopd[jop + kop] : ropd[jop + kop])
+                                    ->q_label;
+                            const S2 gqll =
+                                ii == 0
+                                    ? S2(S2::invalid)
+                                    : dynamic_pointer_cast<OpElement<S2, FL>>(
+                                          llopd[jop + kop])
+                                          ->q_label;
+                            vector<shared_ptr<OpExpr<S2>>> exprs;
+                            for (const auto &p : pps) {
+                                auto ap = abs_value((shared_ptr<OpExpr<S1>>)p);
+                                auto xqs = trx(p->q_label);
+                                if (!op_map.count(ap)) {
+                                    for (int mop = 0; mop < xqs->n; mop++)
+                                        op_map[ap].push_back(make_shared<
+                                                             OpElement<S2, FL>>(
+                                            ii == 0 ? OpNames::XL : OpNames::XR,
+                                            SiteIndex(
+                                                {(uint16_t)(iop / 1000 / 1000),
+                                                 (uint16_t)(iop / 1000 % 1000),
+                                                 (uint16_t)(iop % 1000),
+                                                 (uint16_t)mop},
+                                                {}),
+                                            xqs->quanta[mop]));
+                                }
+                                for (int mop = 0; mop < xqs->n; mop++) {
+                                    if (ii == 0 && xqs->quanta[mop].combine(
+                                                       gq, rmpo->left_vacuum) ==
+                                                       S2(S2::invalid))
+                                        continue;
+                                    if (ii == n_sites - 1 &&
+                                        xqs->quanta[mop] != gq)
+                                        continue;
+                                    assert(ii == n_sites - 1 || mop == kop);
+                                    FL factor =
+                                        ii == 0
+                                            ? (FL)cg->cg(mpo->left_vacuum,
+                                                         p->q_label, gx,
+                                                         rmpo->left_vacuum,
+                                                         xqs->quanta[mop], gq)
+                                            : (FL)cg->cg(gxll, p->q_label,
+                                                         mpo->op->q_label, gqll,
+                                                         xqs->quanta[mop],
+                                                         tr_opq->quanta[0]);
+                                    if (abs(factor) < TINY)
+                                        continue;
+                                    exprs.push_back(
+                                        op_map.at(ap).at(mop)->scalar_multiply(
+                                            factor * p->factor));
+                                }
+                            }
+                            if (exprs.size() == 0)
+                                pmat->data[jop + kop] = zero;
+                            else if (exprs.size() == 1)
+                                pmat->data[jop + kop] = exprs[0];
+                            else
+                                pmat->data[jop + kop] = sum(exprs);
+                        }
+                    }
+            } else {
+                shared_ptr<SymbolicMatrix<S2>> ppmat =
+                    dynamic_pointer_cast<SymbolicMatrix<S2>>(pmat);
+                shared_ptr<SymbolicMatrix<S1>> mpmat =
+                    dynamic_pointer_cast<SymbolicMatrix<S1>>(mopt->lmat);
+                ppmat->indices.reserve(mpmat->indices.size());
+                ppmat->data.reserve(mpmat->data.size());
+                for (int iiop = 0; iiop < mpmat->data.size(); iiop++) {
+                    const int irop = mpmat->indices[iiop].first;
+                    const int ilop = mpmat->indices[iiop].second;
+                    if (mpmat->data[iiop]->get_type() == OpTypes::Zero)
+                        continue;
+                    vector<shared_ptr<OpElement<S1, FL>>> pps;
+                    if (mpmat->data[iiop]->get_type() == OpTypes::Elem)
+                        pps.push_back(dynamic_pointer_cast<OpElement<S1, FL>>(
+                            mpmat->data[iiop]));
+                    else if (mpmat->data[iiop]->get_type() == OpTypes::Sum) {
+                        const auto p = dynamic_pointer_cast<OpSum<S1, FL>>(
+                            mpmat->data[iiop]);
+                        for (size_t j = 0; j < p->strings.size(); j++)
+                            pps.push_back(
+                                dynamic_pointer_cast<OpElement<S1, FL>>(
+                                    p->strings[j]->get_op()->scalar_multiply(
+                                        p->strings[j]->factor)));
+                    } else
+                        assert(false);
+                    for (int krop = 0; krop < r_multi[irop]; krop++) {
+                        const size_t irmx = r_accu[irop] + krop;
+                        const S1 gxll =
+                            dynamic_pointer_cast<OpElement<S1, FL>>(
+                                mpo->left_operator_names[ii - 1]->data[irop])
+                                ->q_label;
+                        const S2 gqll =
+                            dynamic_pointer_cast<OpElement<S2, FL>>(llopd[irmx])
+                                ->q_label;
+                        for (int klop = 0; klop < l_multi[ilop]; klop++) {
+                            const size_t ilmx = l_accu[ilop] + klop;
+                            const S1 gxl =
+                                dynamic_pointer_cast<OpElement<S1, FL>>(
+                                    mpo->left_operator_names[ii]->data[ilop])
+                                    ->q_label;
+                            const S2 gql =
+                                dynamic_pointer_cast<OpElement<S2, FL>>(
+                                    lopd[ilmx])
+                                    ->q_label;
+                            vector<shared_ptr<OpExpr<S2>>> exprs;
+                            for (const auto &p : pps) {
+                                auto ap = abs_value((shared_ptr<OpExpr<S1>>)p);
+                                auto xqs = trx(p->q_label);
+                                if (!op_map.count(ap)) {
+                                    if (dynamic_pointer_cast<OpElement<S1, FL>>(
+                                            ap)
+                                            ->name == OpNames::I) {
+                                        assert(xqs->n == 1);
+                                        op_map[ap].push_back(
+                                            make_shared<OpElement<S2, FL>>(
+                                                p->name, p->site_index,
+                                                xqs->quanta[0]));
+                                    } else {
+                                        for (int mop = 0; mop < xqs->n; mop++)
+                                            op_map[ap].push_back(
+                                                make_shared<OpElement<S2, FL>>(
+                                                    OpNames::X,
+                                                    SiteIndex(
+                                                        {(uint16_t)(imxx / 4000 /
+                                                                    4000),
+                                                         (uint16_t)(imxx / 4000 %
+                                                                    4000),
+                                                         (uint16_t)(imxx % 4000),
+                                                         (uint16_t)mop},
+                                                        {}),
+                                                    xqs->quanta[mop]));
+                                        imxx++;
+                                    }
+                                }
+                                for (int mop = 0; mop < xqs->n; mop++) {
+                                    if (xqs->quanta[mop].combine(gql, gqll) ==
+                                        S2(S2::invalid))
+                                        continue;
+                                    FL factor =
+                                        (FL)cg->cg(gxll, p->q_label, gxl, gqll,
+                                                   xqs->quanta[mop], gql);
+                                    if (abs(factor) < TINY)
+                                        continue;
+                                    exprs.push_back(
+                                        op_map.at(ap).at(mop)->scalar_multiply(
+                                            factor * p->factor));
+                                }
+                            }
+                            if (exprs.size() != 0)
+                                ppmat->indices.push_back(
+                                    make_pair((int)irmx, (int)ilmx));
+                            if (exprs.size() == 1)
+                                ppmat->data.push_back(exprs[0]);
+                            else if (exprs.size() != 0)
+                                ppmat->data.push_back(sum(exprs));
+                        }
+                    }
+                }
+            }
+            for (const auto &op : mopt->ops) {
+                if (!op_map.count(op.first)) {
+                    const auto p =
+                        dynamic_pointer_cast<OpElement<S1, FL>>(op.first);
+                    auto xqs = trx(op.second->info->delta_quantum);
+                    if (xqs->n == 1 && p->name == OpNames::I)
+                        for (int mop = 0; mop < xqs->n; mop++)
+                            op_map[op.first].push_back(
+                                make_shared<OpElement<S2, FL>>(
+                                    p->name, p->site_index, xqs->quanta[0],
+                                    p->factor));
+                }
+            }
+            shared_ptr<VectorAllocator<FP>> d_alloc =
+                make_shared<VectorAllocator<FP>>();
+            shared_ptr<StateInfo<S1>> conn =
+                TransStateInfo<S2, S1>::backward_connection(mpo->basis[ii],
+                                                            rmpo->basis[ii]);
+            for (const auto &opx : op_map) {
+                const auto p =
+                    dynamic_pointer_cast<OpElement<S1, FL>>(opx.first);
+                const auto pmat = mopt->ops.at(opx.first);
+                for (size_t mop = 0; mop < opx.second.size(); mop++) {
+                    auto q = opx.second[mop];
+                    shared_ptr<SparseMatrix<S2, FL>> xmat =
+                        make_shared<SparseMatrix<S2, FL>>(d_alloc);
+                    xmat->allocate(hamil->find_site_op_info(ii, q->q_label));
+                    xmat->factor = pmat->factor;
+                    for (int k = 0; k < pmat->info->n; k++) {
+                        S1 plu = pmat->info->quanta[k].get_bra(
+                            pmat->info->delta_quantum);
+                        S1 pru = pmat->info->quanta[k].get_ket();
+                        GMatrix<FL> r = (*pmat)[k];
+                        shared_ptr<StateInfo<S2>> mls =
+                            TransStateInfo<S1, S2>::forward(
+                                make_shared<StateInfo<S1>>(plu), ref);
+                        shared_ptr<StateInfo<S2>> mrs =
+                            TransStateInfo<S1, S2>::forward(
+                                make_shared<StateInfo<S1>>(pru), ref);
+                        for (int iln = 0; iln < mls->n; iln++)
+                            for (int irn = 0; irn < mrs->n; irn++) {
+                                S2 lqn = mls->quanta[iln],
+                                   rqn = mrs->quanta[irn];
+                                if (q->q_label.combine(lqn, rqn) ==
+                                    S2(S2::invalid))
+                                    continue;
+                                FL factor = (FL)cg->cg(pru, p->q_label, plu,
+                                                       rqn, q->q_label, lqn);
+                                if (abs(factor) < TINY)
+                                    continue;
+                                GMatrix<FL> xr =
+                                    (*xmat)[q->q_label.combine(lqn, rqn)];
+                                int il = rmpo->basis[ii]->find_state(lqn);
+                                int ir = rmpo->basis[ii]->find_state(rqn);
+                                MKL_INT zl = rmpo->basis[ii]->n_states[il],
+                                        zr = rmpo->basis[ii]->n_states[ir];
+                                int klst = conn->n_states[il];
+                                int krst = conn->n_states[ir];
+                                int kled = il == rmpo->basis[ii]->n - 1
+                                               ? conn->n
+                                               : conn->n_states[il + 1];
+                                int kred = ir == rmpo->basis[ii]->n - 1
+                                               ? conn->n
+                                               : conn->n_states[ir + 1];
+                                size_t lsh = 0, rsh = 0;
+                                for (int ilp = klst;
+                                     ilp < kled && conn->quanta[ilp] != plu;
+                                     ilp++)
+                                    lsh += mpo->basis[ii]->n_states
+                                               [mpo->basis[ii]->find_state(
+                                                   conn->quanta[ilp])];
+                                for (int irp = krst;
+                                     irp < kred && conn->quanta[irp] != pru;
+                                     irp++)
+                                    rsh += mpo->basis[ii]->n_states
+                                               [mpo->basis[ii]->find_state(
+                                                   conn->quanta[irp])];
+                                MKL_INT kl =
+                                    (MKL_INT)mpo->basis[ii]
+                                        ->n_states[mpo->basis[ii]->find_state(
+                                            plu)];
+                                MKL_INT kr =
+                                    (MKL_INT)mpo->basis[ii]
+                                        ->n_states[mpo->basis[ii]->find_state(
+                                            pru)];
+                                for (MKL_INT ikl = 0; ikl < kl; ikl++)
+                                    for (MKL_INT ikr = 0; ikr < kr; ikr++)
+                                        xr(ikl + lsh, ikr + rsh) =
+                                            (FL)factor * r(ikl, ikr);
+                            }
+                    }
+                    assert(q->q_label == xmat->info->delta_quantum);
+                    opt->ops[q] = xmat;
+                }
+            }
+            llopd = lopd;
+            if (ii != 0)
+                mpo->unload_left_operators(ii - 1);
+            mpo->unload_tensor(ii);
+            mpo->unload_left_operators(ii);
+            mpo->unload_right_operators(ii);
+            rmpo->save_tensor(ii);
+            rmpo->unload_tensor(ii);
+            rmpo->save_left_operators(ii);
+            rmpo->unload_left_operators(ii);
+            rmpo->save_right_operators(ii);
+            rmpo->unload_right_operators(ii);
+        }
+        return rmpo;
     }
 };
 

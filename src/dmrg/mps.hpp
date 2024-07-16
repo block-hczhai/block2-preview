@@ -203,6 +203,37 @@ template <typename S> struct MPSInfo {
     virtual vector<S> get_complementary(S q) const {
         return vector<S>{target - q};
     }
+    void flip_twos() {
+        vacuum.set_twos(-vacuum.twos());
+        target.set_twos(-target.twos());
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < left_dims_fci[i]->n; j++)
+                left_dims_fci[i]->quanta[j].set_twos(
+                    -left_dims_fci[i]->quanta[j].twos());
+            left_dims_fci[i]->sort_states();
+        }
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < right_dims_fci[i]->n; j++)
+                right_dims_fci[i]->quanta[j].set_twos(
+                    -right_dims_fci[i]->quanta[j].twos());
+            right_dims_fci[i]->sort_states();
+        }
+        load_mutable();
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < left_dims[i]->n; j++)
+                left_dims[i]->quanta[j].set_twos(
+                    -left_dims[i]->quanta[j].twos());
+            left_dims[i]->sort_states();
+        }
+        for (int i = 0; i <= n_sites; i++) {
+            for (int j = 0; j < right_dims[i]->n; j++)
+                right_dims[i]->quanta[j].set_twos(
+                    -right_dims[i]->quanta[j].twos());
+            right_dims[i]->sort_states();
+        }
+        save_mutable();
+        deallocate_mutable();
+    }
     // normal case is left_vacuum == right_vacuum == vacuum
     // only for singlet embedding left_vacuum is not vacuum
     virtual void set_bond_dimension_full_fci(S left_vacuum = S(S::invalid),
@@ -1032,18 +1063,18 @@ template <typename S1, typename S2> struct TransMPSInfoBase {
         SY vacuum(si->vacuum.n(), abs(si->vacuum.twos()), si->vacuum.pg());
         vector<shared_ptr<StateInfo<SY>>> basis(n_sites);
         for (int i = 0; i < n_sites; i++)
-            basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i]);
+            basis[i] = TransStateInfo<SX, SY>::forward(si->basis[i], target);
         shared_ptr<MPSInfo<SY>> so =
             make_shared<MPSInfo<SY>>(n_sites, vacuum, target, basis);
         // handle the singlet embedding case
         so->left_dims_fci[0] =
-            TransStateInfo<SX, SY>::forward(si->left_dims_fci[0]);
+            TransStateInfo<SX, SY>::forward(si->left_dims_fci[0], target);
         for (int i = 0; i < n_sites; i++)
             so->left_dims_fci[i + 1] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
                     *so->left_dims_fci[i], *basis[i], SY(SY::invalid)));
-        so->right_dims_fci[n_sites] =
-            TransStateInfo<SX, SY>::forward(si->right_dims_fci[n_sites]);
+        so->right_dims_fci[n_sites] = TransStateInfo<SX, SY>::forward(
+            si->right_dims_fci[n_sites], target);
         for (int i = n_sites - 1; i >= 0; i--)
             so->right_dims_fci[i] =
                 make_shared<StateInfo<SY>>(StateInfo<SY>::tensor_product(
@@ -1060,10 +1091,10 @@ template <typename S1, typename S2> struct TransMPSInfoBase {
             so->right_dims_fci[i]->collect();
         for (int i = 0; i <= n_sites; i++)
             so->left_dims[i] =
-                TransStateInfo<SX, SY>::forward(si->left_dims[i]);
+                TransStateInfo<SX, SY>::forward(si->left_dims[i], target);
         for (int i = n_sites; i >= 0; i--)
             so->right_dims[i] =
-                TransStateInfo<SX, SY>::forward(si->right_dims[i]);
+                TransStateInfo<SX, SY>::forward(si->right_dims[i], target);
         so->check_bond_dimensions();
         so->bond_dim = so->get_max_bond_dimension();
         so->tag = si->tag;
@@ -1108,6 +1139,68 @@ struct TransMPSInfo<S1, S2, typename S1::is_sg_t, typename S2::is_sz_t>
     static shared_ptr<MPSInfo<S1>> backward(const shared_ptr<MPSInfo<S2>> &si,
                                             S1 target) {
         return TransMPSInfoBase<S1, S2>::template transform<S2, S1>(si, target);
+    }
+};
+
+template <typename S> struct TransMPSInfoAnyBase {
+    static shared_ptr<MPSInfo<S>> transform(const shared_ptr<MPSInfo<S>> &si,
+                                            S target) {
+        int n_sites = si->n_sites;
+        S vacuum = TransStateInfo<S, S>::forward(
+                       make_shared<StateInfo<S>>(si->vacuum), target)
+                       ->quanta[0];
+        vector<shared_ptr<StateInfo<S>>> basis(n_sites);
+        for (int i = 0; i < n_sites; i++)
+            basis[i] = TransStateInfo<S, S>::forward(si->basis[i], vacuum);
+        shared_ptr<MPSInfo<S>> so =
+            make_shared<MPSInfo<S>>(n_sites, vacuum, target, basis);
+        // handle the singlet embedding case
+        so->left_dims_fci[0] =
+            TransStateInfo<S, S>::forward(si->left_dims_fci[0], vacuum);
+        for (int i = 0; i < n_sites; i++)
+            so->left_dims_fci[i + 1] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *so->left_dims_fci[i], *basis[i], S(S::invalid)));
+        so->right_dims_fci[n_sites] =
+            TransStateInfo<S, S>::forward(si->right_dims_fci[n_sites], vacuum);
+        for (int i = n_sites - 1; i >= 0; i--)
+            so->right_dims_fci[i] =
+                make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
+                    *basis[i], *so->right_dims_fci[i + 1], S(S::invalid)));
+        for (int i = 0; i <= n_sites; i++) {
+            StateInfo<S>::filter(*so->left_dims_fci[i], *so->right_dims_fci[i],
+                                 target);
+            StateInfo<S>::filter(*so->right_dims_fci[i], *so->left_dims_fci[i],
+                                 target);
+        }
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims_fci[i]->collect();
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims_fci[i]->collect();
+        for (int i = 0; i <= n_sites; i++)
+            so->left_dims[i] =
+                TransStateInfo<S, S>::forward(si->left_dims[i], vacuum);
+        for (int i = n_sites; i >= 0; i--)
+            so->right_dims[i] =
+                TransStateInfo<S, S>::forward(si->right_dims[i], vacuum);
+        so->check_bond_dimensions();
+        so->bond_dim = so->get_max_bond_dimension();
+        so->tag = si->tag;
+        return so;
+    }
+};
+
+// Translation between SAny MPSInfo
+template <typename S>
+struct TransMPSInfo<S, S, typename S::is_sany_t, typename S::is_sany_t>
+    : TransMPSInfoAnyBase<S> {
+    static shared_ptr<MPSInfo<S>> forward(const shared_ptr<MPSInfo<S>> &si,
+                                          S target) {
+        return TransMPSInfoAnyBase<S>::transform(si, target);
+    }
+    static shared_ptr<MPSInfo<S>> backward(const shared_ptr<MPSInfo<S>> &si,
+                                           S target) {
+        return TransMPSInfoAnyBase<S>::transform(si, target);
     }
 };
 
@@ -1746,8 +1839,10 @@ template <typename S, typename FL> struct MPS {
             }
     }
     virtual void
-    flip_fused_form(int center, const shared_ptr<CG<S>> &cg,
+    flip_fused_form(int center, shared_ptr<CG<S>> cg,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (para_rule == nullptr || para_rule->is_root()) {
             load_tensor(center);
             if (canonical_form[center] == 'S')
@@ -1901,8 +1996,10 @@ template <typename S, typename FL> struct MPS {
             flip_fused_form(center, cg, para_rule);
     }
     // CC -> KR or K -> S or LS -> KR or LK -> KR
-    void move_left(const shared_ptr<CG<S>> &cg,
+    void move_left(shared_ptr<CG<S>> cg,
                    const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (canonical_form[center] == 'C') {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
@@ -1990,8 +2087,10 @@ template <typename S, typename FL> struct MPS {
             assert(false);
     }
     // CC -> LS or S -> K or KR -> LS or SR -> LS
-    void move_right(const shared_ptr<CG<S>> &cg,
+    void move_right(shared_ptr<CG<S>> cg,
                     const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+        if (cg == nullptr)
+            cg = make_shared<CG<S>>();
         if (canonical_form[center] == 'C') {
             assert(center + 1 < n_sites);
             assert(dot == 2 && tensors[center + 1] == nullptr);
