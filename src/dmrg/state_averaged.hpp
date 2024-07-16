@@ -593,7 +593,8 @@ template <typename S1, typename S2, typename = void, typename = void>
 struct TransMultiMPSInfo {
     static shared_ptr<MultiMPSInfo<S2>>
     forward(const shared_ptr<MultiMPSInfo<S1>> &si, const vector<S2> &targets) {
-        return TransMultiMPSInfo<S2, S1>::backward(si, targets);
+        throw runtime_error("TransMultiMPSInfo for non-SAny not implemented.");
+        return nullptr;
     }
     static shared_ptr<MultiMPSInfo<S1>>
     backward(const shared_ptr<MultiMPSInfo<S2>> &si,

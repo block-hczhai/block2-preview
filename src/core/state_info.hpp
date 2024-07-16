@@ -461,7 +461,12 @@ template <typename S1, typename S2, typename = void, typename = void>
 struct TransStateInfo {
     static shared_ptr<StateInfo<S2>>
     forward(const shared_ptr<StateInfo<S1>> &si, S2 ref) {
-        return TransStateInfo<S2, S1>::backward(si, ref);
+        if (is_same<S1, S2>::value) {
+            throw runtime_error(
+                "TransStateInfo for same symm not implemented.");
+            return nullptr;
+        } else
+            return TransStateInfo<S2, S1>::backward(si, ref);
     }
     static shared_ptr<StateInfo<S1>>
     backward(const shared_ptr<StateInfo<S2>> &si, S1 ref) {

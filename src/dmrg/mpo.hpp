@@ -1923,14 +1923,16 @@ template <typename S1, typename S2, typename FL> struct TransMPO {
                                             op_map[ap].push_back(
                                                 make_shared<OpElement<S2, FL>>(
                                                     OpNames::X,
-                                                    SiteIndex(
-                                                        {(uint16_t)(imxx / 4000 /
-                                                                    4000),
-                                                         (uint16_t)(imxx / 4000 %
-                                                                    4000),
-                                                         (uint16_t)(imxx % 4000),
-                                                         (uint16_t)mop},
-                                                        {}),
+                                                    SiteIndex({(uint16_t)(imxx /
+                                                                          4000 /
+                                                                          4000),
+                                                               (uint16_t)(imxx /
+                                                                          4000 %
+                                                                          4000),
+                                                               (uint16_t)(imxx %
+                                                                          4000),
+                                                               (uint16_t)mop},
+                                                              {}),
                                                     xqs->quanta[mop]));
                                         imxx++;
                                     }
@@ -2024,17 +2026,17 @@ template <typename S1, typename S2, typename FL> struct TransMPO {
                                 int kred = ir == rmpo->basis[ii]->n - 1
                                                ? conn->n
                                                : conn->n_states[ir + 1];
-                                size_t lsh = 0, rsh = 0;
+                                MKL_INT lsh = 0, rsh = 0;
                                 for (int ilp = klst;
                                      ilp < kled && conn->quanta[ilp] != plu;
                                      ilp++)
-                                    lsh += mpo->basis[ii]->n_states
+                                    lsh += (MKL_INT)mpo->basis[ii]->n_states
                                                [mpo->basis[ii]->find_state(
                                                    conn->quanta[ilp])];
                                 for (int irp = krst;
                                      irp < kred && conn->quanta[irp] != pru;
                                      irp++)
-                                    rsh += mpo->basis[ii]->n_states
+                                    rsh += (MKL_INT)mpo->basis[ii]->n_states
                                                [mpo->basis[ii]->find_state(
                                                    conn->quanta[irp])];
                                 MKL_INT kl =

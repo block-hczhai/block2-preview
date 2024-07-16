@@ -501,7 +501,7 @@ IF (${USE_BLIS})
 ENDIF()
 
 IF (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    SET(OPT_FLAG ${OMP_FLAG} -O2 -bigobj -MP "-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING")
+    SET(OPT_FLAG ${OMP_FLAG} -O2 -bigobj -MP -WX "-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING")
 ELSEIF("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     SET(OPT_FLAG -O0 -g ${XPREP} ${OMP_FLAG} -fstack-check -fno-omit-frame-pointer -fno-optimize-sibling-calls
         -Werror -Werror=return-type)
