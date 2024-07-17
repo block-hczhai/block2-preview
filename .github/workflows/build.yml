@@ -58,7 +58,7 @@ jobs:
         if: matrix.os == 'windows-2022'
         run: |
           python -m pip install pip build twine setuptools --upgrade
-          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' ninja pybind11==2.12.0
+          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: Download OpenBLAS (windows)
         if: matrix.os == 'windows-2022'
@@ -339,7 +339,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-12 ]
+        os: [ ubuntu-20.04, macos-12, windows-2022 ]
         python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
@@ -349,6 +349,10 @@ jobs:
             parallel: mpi
           - os: ubuntu-20.04
             plat: arm64
+          - os: windows-2022
+            parallel: mpi
+          - os: windows-2022
+            plat: arm64
       fail-fast: false
 
     steps:
@@ -357,13 +361,52 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: install requirements
+      - name: install requirements (linux / macos)
+        if: matrix.os == 'macos-12' || matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
         run: |
           export PYT=$(which python)
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: install requirements (windows)
+        if: matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
+          $file = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.27/OpenBLAS-0.3.27-x64.zip"
+          Invoke-WebRequest -Uri $file -OutFile "OpenBLAS-0.3.27-x64.zip"
+          Expand-Archive -Path "OpenBLAS-0.3.27-x64.zip" -DestinationPath $env:BLAS_ROOT
+
+      - name: build wheels (windows)
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'windows-2022'
+        env:
+          TAG_STRING: ${{ github.event.ref }}
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          $tagstr = ${env:TAG_STRING}.Substring(11)
+          echo $tagstr
+          sed -i "s/version=.*/version=`"${tagstr}`",/" setup.py
+          sed -i "/mkl/d" setup.py
+          sed -i "/scipy/d" setup.py
+          sed -i "/DUSE_SINGLE_PREC/d" setup.py
+          sed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+          sed -i "/DBUILD_EXE/c \                '-DBUILD_EXE=OFF'," setup.py
+          sed -i "/  `"block2`"/d" setup.py
+          ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
+          cmake --version
+          python -m pip install wheel delvewheel==1.7.1
+          python -m pip wheel . -w ./dist --no-deps
+          $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
+          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          $rr = Get-ChildItem -Path dist/*.whl
+          Write-Output "$($rr[0].FullName)"
+          delvewheel repair "$($rr[0].FullName)" -v -w dist
 
       - name: build wheels (macos-x86_64)
         if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-12' && matrix.plat == 'x86_64'

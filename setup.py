@@ -33,6 +33,8 @@ class BinBuild(build_scripts):
     def copy_scripts(self):
         self.scripts = [x for x in self.scripts if x != "block2"]
         outfiles, updated_files = build_scripts.copy_scripts(self)
+        if os.name == "nt":
+            return outfiles, updated_files
         self.scripts += ["block2"]
         for script in ["block2"]:
             script = os.path.join(self.build_temp, script)
@@ -101,7 +103,6 @@ class CMakeBuild(build_ext):
             if platform.system() == "Windows":
                 plat = "x64" if platform.architecture()[0] == "64bit" else "Win32"
                 cmake_args += [
-                    "-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE",
                     "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_{}={}".format(
                         cfg.upper(), extdir
                     ),
@@ -109,12 +110,17 @@ class CMakeBuild(build_ext):
                 if self.compiler.compiler_type == "msvc":
                     cmake_args += [
                         "-DCMAKE_GENERATOR_PLATFORM=%s" % plat,
+                        "-G",
+                        "Visual Studio 17 2022",
                     ]
                 else:
                     cmake_args += [
                         "-G",
                         "MinGW Makefiles",
                     ]
+                build_args = ["/m:2", "/v:d"]
+            else:
+                build_args = ["--jobs=2"]
 
             if not os.path.exists(self.build_temp):
                 os.makedirs(self.build_temp)
@@ -124,7 +130,7 @@ class CMakeBuild(build_ext):
             )
 
             subprocess.check_call(
-                ["cmake", "--build", ".", "--config", cfg, "--", "--jobs=2"],
+                ["cmake", "--build", ".", "--config", cfg, "--", *build_args],
                 cwd=self.build_temp,
             )
 
