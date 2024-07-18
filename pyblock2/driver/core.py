@@ -656,6 +656,7 @@ class DMRGDriver:
         self.pg = "c1"
         self.orb_sym = None
         self.ghamil = None
+        self.n_elec = None
         self._dmrg = None
         self._sweep_wfn_spectra = None
 
@@ -874,6 +875,7 @@ class DMRGDriver:
                 pg_irrep = self.pg_irrep
             else:
                 pg_irrep = 0
+        self.n_elec = n_elec
 
         if target is None and bw.qargs is not None:
             if bw.qargs == ("U1Fermi", "AbelianPG"):
@@ -3195,6 +3197,7 @@ class DMRGDriver:
         normal_order_ref=None,
         normal_order_single_ref=None,
         normal_order_wick=True,
+        rescale=None,
         symmetrize=True,
         sum_mpo_mod=-1,
         compute_accurate_svd_error=True,
@@ -3319,6 +3322,14 @@ class DMRGDriver:
                 Only have effect if ``normal_order_ref is not None``.
                 If True, will use ``WickNormalOrder`` implementation (via automatic symbolic derivation).
                 Otherwise, will use the manual implementation. Default is True.
+            rescale : None or float or True
+                If None, will not rescale (default).
+                If zero or True, will adjust ``h1e`` and the const energy so that
+                the average diagonal element of ``h1e`` is zero.
+                If non-zero float, will adjust ``h1e`` and the const energy so that
+                the const energy becomes the given ``rescale`` number.
+                After rescale, the integrals will only be correct for the given
+                ``n_elec``.
             symmetrize : bool
                 Only have effect if ``self.orb_sym is not None`` (when point group symmetry is used).
                 If True, will symmetrize integrals so that integral elements violating point group restrictions
@@ -3439,6 +3450,29 @@ class DMRGDriver:
                 x_orb_sym, h1e=h1e, g2e=g2e, k_symm=k_symm, iprint=iprint
             )
 
+        if rescale is not None:
+            assert h1e is not None
+            assert self.n_elec is not None
+            if iprint >= 1:
+                print("original const = ", ecore)
+            if SymmetryTypes.SZ in bw.symm_type:
+                xn = len(h1e[0]) + len(h1e[1])
+                x = np.trace(h1e[0]) + np.trace(h1e[1])
+            else:
+                xn, x = len(h1e), np.trace(h1e)
+            if isinstance(rescale, int) and rescale == 0:
+                x = x / xn
+            else:
+                x = (rescale - ecore) / self.n_elec
+            if SymmetryTypes.SZ in bw.symm_type:
+                h1e[0][np.mgrid[:len(h1e[0])], np.mgrid[:len(h1e[0])]] -= x
+                h1e[1][np.mgrid[:len(h1e[1])], np.mgrid[:len(h1e[1])]] -= x
+            else:
+                h1e[np.mgrid[:len(h1e)], np.mgrid[:len(h1e)]] -= x
+            ecore += x * self.n_elec
+            if iprint >= 1:
+                print("rescaled const = ", ecore)
+
         if integral_cutoff != 0:
             error = 0
             if SymmetryTypes.SZ in bw.symm_type:
@@ -3536,6 +3570,10 @@ class DMRGDriver:
                     self.ghamil = bw.bs.GeneralHamiltonian(
                         self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
                     )
+            if normal_order_ref is not None:
+                normal_order_ref = np.array(normal_order_ref)[idx]
+            if normal_order_single_ref is not None:
+                normal_order_single_ref = np.array(normal_order_single_ref)[idx]
         else:
             self.reorder_idx = None
 
@@ -7157,6 +7195,7 @@ class DMRGDriver:
             mps : MPS
                 The output MPS (normalized).
         """
+        import numpy as np
         bw = self.bw
         if target is None:
             target = self.target
@@ -7201,6 +7240,8 @@ class DMRGDriver:
         else:
             mps_info.set_bond_dimension_fci(left_vacuum, self.vacuum)
         if occs is not None:
+            if self.reorder_idx is not None:
+                occs = np.array(occs)[self.reorder_idx]
             mps_info.set_bond_dimension_using_occ(bond_dim, bw.b.VectorDouble(occs))
         else:
             mps_info.set_bond_dimension(bond_dim)

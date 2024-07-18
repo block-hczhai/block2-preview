@@ -227,7 +227,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     false);
         int mmps = 0;
         FPS error = 0.0;
-        tuple<FPS, int, size_t, double> pdi;
+        tuple<FPLS, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr,
                                               context_pket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> pdm = nullptr;
@@ -839,7 +839,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         }
         int mmps = 0;
         FPS error = 0.0;
-        tuple<FPS, int, size_t, double> pdi;
+        tuple<FPLS, int, size_t, double> pdi;
         shared_ptr<SparseMatrixGroup<S, FLS>> pket = nullptr,
                                               context_pket = nullptr;
         shared_ptr<SparseMatrix<S, FLS>> context_old_ket = nullptr;

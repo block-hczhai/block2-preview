@@ -8,7 +8,7 @@
 
 
 BASIS "ao basis" PRINT
-#BASIS SET: (14s,9p,5d) -> [5s,3p,2d]
+#BASIS SET: (14s,9p,5d) -> [5s,2p,2d]
 Cr    S
   51528.0863490              0.14405823106E-02      
    7737.2103487              0.11036202287E-01      
