@@ -3598,7 +3598,9 @@ class DMRGDriver:
             h1e, g2e, ecore = self.parallelize_integrals(para_type, h1e, g2e, ecore)
 
         if algo_type is not None and MPOAlgorithmTypes.Conventional in algo_type:
+            assert normal_order_ref is None
             assert simple_const is False
+            assert not esptein_nesbet_partition
             fd = self.write_fcidump(h1e, g2e, ecore=ecore)
             return self.get_conventional_qc_mpo(fd, algo_type=algo_type, iprint=iprint)
 
