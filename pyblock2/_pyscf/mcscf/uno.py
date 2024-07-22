@@ -193,6 +193,8 @@ def get_uno(mf, do_loc=True, iprint=True):
     # 2. Sanity check, using orthogonality
 
     ova = mol.intor_symmetric("cint1e_ovlp_sph")
+    if ova.shape == (0, 0):
+        ova = mf.get_ovlp()
     diff = ma.conj().T @ ova @ ma - np.identity(norb)
     assert np.linalg.norm(diff) < 1e-7
     diff = mb.conj().T @ ova @ mb - np.identity(norb)
@@ -227,9 +229,9 @@ def get_uno(mf, do_loc=True, iprint=True):
     if not do_loc:
         mo_occ = eig
         index = np.argsort(-mo_occ)
-        mo_occ  = mo_occ[index]
+        mo_occ = mo_occ[index]
         coeff = coeff[:, index]
-        return coeff, eig
+        return coeff, mo_occ
 
     # 3. Search for active space
 

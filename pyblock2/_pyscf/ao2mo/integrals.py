@@ -27,6 +27,8 @@ def label_orb_symm(mol, irrep_name, symm_orb, mo, s=None, check=True, tol=1e-9):
     nmo = mo.shape[1]
     if s is None:
         s = mol.intor_symmetric('int1e_ovlp')
+        if s.shape == (0, 0):
+            s = np.identity(nmo)
     s_mo = np.dot(s, mo)
     norm = np.zeros((len(irrep_name), nmo))
     for i, csym in enumerate(symm_orb):
