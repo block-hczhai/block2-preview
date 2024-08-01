@@ -1220,18 +1220,18 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
 // Prefix trie structure of determinants (arbitrary symmetry)
 template <typename S, typename FL>
 struct DeterminantTRIE<S, FL, typename S::is_sany_t>
-    : TRIE<DeterminantTRIE<S, FL>, FL> {
+    : TRIE<DeterminantTRIE<S, FL>, FL, 16> {
     typedef typename GMatrix<FL>::FP FP;
-    typedef typename TRIE<DeterminantTRIE<S, FL>, FL>::XIT IT;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::data;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::dets;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::vals;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::invs;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::n_sites;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::enable_look_up;
-    using TRIE<DeterminantTRIE<S, FL>, FL>::sort_dets;
+    typedef typename TRIE<DeterminantTRIE<S, FL>, FL, 16>::XIT IT;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::data;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::dets;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::vals;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::invs;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::n_sites;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::enable_look_up;
+    using TRIE<DeterminantTRIE<S, FL>, FL, 16>::sort_dets;
     DeterminantTRIE(int n_sites, bool enable_look_up = false)
-        : TRIE<DeterminantTRIE<S, FL>, FL>(n_sites, enable_look_up) {}
+        : TRIE<DeterminantTRIE<S, FL>, FL, 16>(n_sites, enable_look_up) {}
     shared_ptr<UnfusedMPS<S, FL>> construct_mps(
         const shared_ptr<MPSInfo<S>> &info,
         const shared_ptr<ParallelRule<S>> &para_rule = nullptr) const {
