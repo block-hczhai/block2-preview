@@ -137,6 +137,7 @@ Features
    tutorial/custom-hamiltonians
    tutorial/hubbard
    tutorial/heisenberg
+   tutorial/vibrational-hamiltonians
 
 .. raw:: latex
 
