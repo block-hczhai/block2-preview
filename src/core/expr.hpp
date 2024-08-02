@@ -118,16 +118,16 @@ enum struct OpTypes : uint8_t {
 };
 
 struct OpNamesSet {
-    uint32_t data;
-    OpNamesSet() : data(0) {}
-    OpNamesSet(uint32_t data) : data(data) {}
-    OpNamesSet(const initializer_list<OpNames> names) : data(0) {
+    uint64_t data;
+    OpNamesSet() : data(0LL) {}
+    OpNamesSet(uint64_t data) : data(data) {}
+    OpNamesSet(const initializer_list<OpNames> names) : data(0LL) {
         for (auto iit = names.begin(); iit != names.end(); iit++)
-            data |= (1 << (uint8_t)*iit);
+            data |= (1LL << (uint8_t)*iit);
     }
     OpNamesSet(const vector<OpNames> &names) : data(0) {
         for (auto iit = names.begin(); iit != names.end(); iit++)
-            data |= (1 << (uint8_t)*iit);
+            data |= (1LL << (uint8_t)*iit);
     }
     static OpNamesSet normal_ops() noexcept {
         return OpNamesSet({OpNames::I, OpNames::N, OpNames::NN, OpNames::C,
@@ -139,12 +139,12 @@ struct OpNamesSet {
                            OpNames::C, OpNames::D, OpNames::A, OpNames::AD,
                            OpNames::B, OpNames::BD, OpNames::R, OpNames::RD,
                            OpNames::P, OpNames::PD, OpNames::Q, OpNames::TR,
-                           OpNames::TS});
+                           OpNames::TS, OpNames::XL, OpNames::XR});
     }
     bool operator()(OpNames name) const noexcept {
-        return data & (1 << (uint8_t)name);
+        return (data & (1LL << (uint8_t)name)) != 0LL;
     }
-    bool empty() const noexcept { return data == 0; }
+    bool empty() const noexcept { return data == 0LL; }
 };
 
 // Expression zero

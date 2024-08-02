@@ -1109,6 +1109,8 @@ template <typename S, typename FL> struct DRTBigSiteBase : BigSite<S, FL> {
             for (int i = 0; i < n_orbs; i++)
                 big_orb_sym[i] = orb_sym[n_orbs - 1 - i];
         drt = make_shared<DRT<S>>(n_orbs, qs, big_orb_sym);
+        if (iprint >= 3)
+            cout << "DRT ::" << endl << drt->to_str() << endl;
         basis = drt->get_basis();
     }
     virtual ~DRTBigSiteBase() = default;
