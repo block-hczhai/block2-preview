@@ -878,7 +878,37 @@ class DMRGDriver:
         self.n_elec = n_elec
 
         if target is None and bw.qargs is not None:
-            if bw.qargs == ("U1Fermi", "AbelianPG"):
+            if bw.qargs == ("U1Fermi", ):
+                self.vacuum = bw.SX(0)
+                self.target = bw.SX(n_elec)
+                self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
+            elif bw.qargs == ("U1Fermi", "U1"):
+                self.vacuum = bw.SX(0, 0)
+                if left_vacuum is None:
+                    self.target = bw.SX(n_elec, spin)
+                    self.left_vacuum = (
+                        self.vacuum if left_vacuum is None else left_vacuum
+                    )
+                else:
+                    self.target = bw.SX(
+                        n_elec + left_vacuum.n, spin - left_vacuum.twos
+                    )
+                    self.left_vacuum = left_vacuum
+            elif bw.qargs == ("U1Fermi", "SU2", "SU2"):
+                self.vacuum = bw.SX(0, 0, 0)
+                if singlet_embedding and left_vacuum is None:
+                    self.target = bw.SX(n_elec + spin % 2, 0, 0)
+                    self.left_vacuum = bw.SX(spin % 2, spin, spin)
+                elif singlet_embedding and left_vacuum is not None:
+                    assert spin == left_vacuum.twos
+                    self.target = bw.SX(n_elec + left_vacuum.n, 0, 0)
+                    self.left_vacuum = left_vacuum
+                else:
+                    self.target = bw.SX(n_elec, spin, spin)
+                    self.left_vacuum = (
+                        self.vacuum if left_vacuum is None else left_vacuum
+                    )
+            elif bw.qargs == ("U1Fermi", "AbelianPG"):
                 self.vacuum = bw.SX(0, 0)
                 self.target = bw.SX(n_elec, pg_irrep)
                 self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
