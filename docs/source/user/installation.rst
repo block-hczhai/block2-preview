@@ -23,6 +23,8 @@ One can install ``block2`` using ``pip``:
   If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source
   (for example, ``pip install block2 --no-binary block2``).
 
+* For very new Python versions (3.12) and Windows, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the developement version of ``block2``.
+
 * One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``,
   but its dependence on mpi library can sometimes be difficult to deal with.
   Some guidance for resolving environment problems can be found in github issue
@@ -33,7 +35,8 @@ One can install ``block2`` using ``pip``:
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.2rc13``. To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
+  where ``<version>`` can be some development version number like ``0.5.2rc17`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed).
+  To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 Manual Installation
 -------------------

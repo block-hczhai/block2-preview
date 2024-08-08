@@ -59,7 +59,7 @@ One can install ``block2`` using ``pip`` (note: for very new Python versions, th
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.3rc15`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
+  where ``<version>`` can be some development version number like ``0.5.3rc17`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
 
 The detailed instructions on manual installation can be found [here](https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation).
 
@@ -77,6 +77,8 @@ For a list of DMRG references for methods implemented in ``block2``, see: https:
 Documentation: https://block2.readthedocs.io/en/latest/
 
 Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
+
+Example script for models: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model).
 
 Source code: https://github.com/block-hczhai/block2-preview
 
