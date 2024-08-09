@@ -215,6 +215,8 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
     shared_ptr<Symbolic<S>> stacked_mat = nullptr;
     // SparseMatrix representation of symbols from left and right block
     shared_ptr<OperatorTensor<S, FL>> lopt, ropt;
+    // For fused_contract_multiply
+    unordered_map<shared_ptr<OpExpr<S>>, pair<size_t, FL>> exprs;
     DelayedOperatorTensor() : OperatorTensor<S, FL>() {}
     OperatorTensorTypes get_type() const override {
         return OperatorTensorTypes::Delayed;
@@ -227,6 +229,16 @@ struct DelayedOperatorTensor : OperatorTensor<S, FL> {
         for (auto it = lopt->ops.cbegin(); it != lopt->ops.cend(); it++)
             if (it->second->data != nullptr)
                 r += it->second->total_memory;
+        if (ropt->get_type() == OperatorTensorTypes::Delayed &&
+            dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(ropt)
+                    ->exprs.size() != 0)
+            r += dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(ropt)
+                     ->get_total_memory();
+        if (lopt->get_type() == OperatorTensorTypes::Delayed &&
+            dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(lopt)
+                    ->exprs.size() != 0)
+            r += dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(lopt)
+                     ->get_total_memory();
         return r;
     }
     void reallocate(bool clean) override {

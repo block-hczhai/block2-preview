@@ -342,6 +342,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         bool do_reduce = !(noise_type & NoiseTypes::Collected);
         bool reduced = noise_type & NoiseTypes::Reduced;
         bool low_mem = noise_type & NoiseTypes::LowMem;
+        bool mid_mem = noise_type & NoiseTypes::MidMem;
+        if ((low_mem && mid_mem) ||
+            (mid_mem && (tf->opf->seq->mode & SeqTypes::Tasked)))
+            throw runtime_error("Invalid NoiseTypes::MidMem.");
         if (reduced)
             perturb_ket->allocate(infos);
         else {
@@ -384,10 +388,10 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         }
         int vidx = reduced ? -1 : 0;
         // perform multiplication
-        tf->tensor_product_partial_multiply(pexpr, xexpr, op->lopt, op->ropt,
-                                            trace_right, ket, psubsl, cinfos,
-                                            perturb_ket_labels, perturb_ket,
-                                            vidx, low_mem ? -2 : -1, do_reduce);
+        tf->tensor_product_partial_multiply(
+            pexpr, xexpr, op->lopt, op->ropt, trace_right, ket, psubsl, cinfos,
+            perturb_ket_labels, perturb_ket, vidx,
+            mid_mem ? -3 : (low_mem ? -2 : -1), do_reduce);
         if (!reduced)
             assert(vidx == perturb_ket->n);
         if (tf->opf->seq->mode == SeqTypes::Auto) {
@@ -1522,6 +1526,10 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
         bool do_reduce = !(noise_type & NoiseTypes::Collected);
         bool reduced = noise_type & NoiseTypes::Reduced;
         bool low_mem = noise_type & NoiseTypes::LowMem;
+        bool mid_mem = noise_type & NoiseTypes::MidMem;
+        if ((low_mem && mid_mem) ||
+            (mid_mem && (tf->opf->seq->mode & SeqTypes::Tasked)))
+            throw runtime_error("Invalid NoiseTypes::MidMem.");
         if (reduced)
             perturb_ket->allocate(infos);
         else {
@@ -1577,7 +1585,7 @@ struct EffectiveHamiltonian<S, FL, MultiMPS<S, FL>> {
                         (weights[ii] / ket_norm) * pexpr, xexpr, op->lopt,
                         op->ropt, trace_right, (*ket[ii])[i], psubsl, cinfos[i],
                         perturb_ket_labels, perturb_ket, vidx,
-                        low_mem ? -2 : -1, do_reduce);
+                        mid_mem ? -3 : (low_mem ? -2 : -1), do_reduce);
             }
         }
         if (!reduced)

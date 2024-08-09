@@ -2541,6 +2541,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
 
         Timer t;
         for (auto i : sweep_range) {
+            callback_()->compute("DMRG::sweep", iprint);
             check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)

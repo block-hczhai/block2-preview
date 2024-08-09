@@ -1114,8 +1114,8 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
     shared_ptr<DelayedOperatorTensor<S, FL>>
     delayed_contract(const shared_ptr<OperatorTensor<S, FL>> &a,
                      const shared_ptr<OperatorTensor<S, FL>> &b,
-                     const shared_ptr<OpExpr<S>> &op,
-                     OpNamesSet delayed) const override {
+                     const shared_ptr<OpExpr<S>> &op, OpNamesSet delayed,
+                     bool substitute) const override {
         shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
             make_shared<DelayedOperatorTensor<S, FL>>();
         dopt->lopt = a, dopt->ropt = b;
@@ -1124,11 +1124,11 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         shared_ptr<Symbolic<S>> exprs = a->lmat * b->rmat;
         assert(exprs->data.size() == 1);
         bool use_orig = !(rule->get_parallel_type() & ParallelTypes::NewScheme);
-        if (a->get_type() == OperatorTensorTypes::Delayed)
+        if (a->get_type() == OperatorTensorTypes::Delayed && substitute)
             dopt->mat = substitute_delayed_exprs(
                 exprs, dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(a),
                 true, delayed, use_orig);
-        else if (b->get_type() == OperatorTensorTypes::Delayed)
+        else if (b->get_type() == OperatorTensorTypes::Delayed && substitute)
             dopt->mat = substitute_delayed_exprs(
                 exprs, dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(b),
                 false, delayed, use_orig);
@@ -1148,17 +1148,18 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         const shared_ptr<OperatorTensor<S, FL>> &b,
         const shared_ptr<Symbolic<S>> &ops,
         const shared_ptr<Symbolic<S>> &exprs, OpNamesSet delayed,
+        bool substitute,
         const shared_ptr<Symbolic<S>> &xexprs = nullptr) const override {
         shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
             make_shared<DelayedOperatorTensor<S, FL>>();
         dopt->lopt = a, dopt->ropt = b;
         dopt->dops = ops->data;
         bool use_orig = !(rule->get_parallel_type() & ParallelTypes::NewScheme);
-        if (a->get_type() == OperatorTensorTypes::Delayed)
+        if (a->get_type() == OperatorTensorTypes::Delayed && substitute)
             dopt->mat = substitute_delayed_exprs(
                 exprs, dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(a),
                 true, delayed, use_orig);
-        else if (b->get_type() == OperatorTensorTypes::Delayed)
+        else if (b->get_type() == OperatorTensorTypes::Delayed && substitute)
             dopt->mat = substitute_delayed_exprs(
                 exprs, dynamic_pointer_cast<DelayedOperatorTensor<S, FL>>(b),
                 false, delayed, use_orig);
@@ -1180,6 +1181,64 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
                             rule->owner(dopt->dops[i]), dleft);
         }
         return dopt;
+    }
+        // c = a x b (dot) (delayed for 3-operator operations)
+     void delayed_left_contract(
+        const shared_ptr<OperatorTensor<S, FL>> &a,
+        const shared_ptr<OperatorTensor<S, FL>> &b,
+        shared_ptr<OperatorTensor<S, FL>> &c,
+        const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+        const shared_ptr<Symbolic<S>> &cnames = nullptr) const override {
+        if (a == nullptr)
+            return left_contract(a, b, c, cexprs);
+        shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
+            make_shared<DelayedOperatorTensor<S, FL>>();
+        dopt->mat = cexprs == nullptr ? a->lmat * b->lmat : cexprs->copy();;
+        dopt->lopt = a, dopt->ropt = b;
+        dopt->ops = c->ops;
+        dopt->lmat = c->lmat, dopt->rmat = c->rmat;
+        if (cnames != nullptr) {
+            assert(rule->get_parallel_type() & ParallelTypes::NewScheme);
+            for (size_t i = 0; i < cnames->data.size(); i++) {
+                shared_ptr<OpElement<S, FL>> cop =
+                    dynamic_pointer_cast<OpElement<S, FL>>(cnames->data[i]);
+                shared_ptr<OpExpr<S>> op = abs_value(cnames->data[i]);
+                dopt->exprs[op] = make_pair(i, (FP)1.0 / cop->factor);
+                assert(dopt->mat->data[i]->get_type() == OpTypes::ExprRef);
+                dopt->mat->data[i] =
+                    dynamic_pointer_cast<OpExprRef<S>>(dopt->mat->data[i])->op;
+            }
+        }
+        c = dopt;
+    }
+    // c = b (dot) x a (delayed for 3-operator operations)
+    void delayed_right_contract(
+        const shared_ptr<OperatorTensor<S, FL>> &a,
+        const shared_ptr<OperatorTensor<S, FL>> &b,
+        shared_ptr<OperatorTensor<S, FL>> &c,
+        const shared_ptr<Symbolic<S>> &cexprs = nullptr,
+        const shared_ptr<Symbolic<S>> &cnames = nullptr) const override {
+        if (a == nullptr)
+            return right_contract(a, b, c, cexprs);
+        shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
+            make_shared<DelayedOperatorTensor<S, FL>>();
+        dopt->mat = cexprs == nullptr ? b->rmat * a->rmat : cexprs->copy();
+        dopt->lopt = b, dopt->ropt = a;
+        dopt->ops = c->ops;
+        dopt->lmat = c->lmat, dopt->rmat = c->rmat;
+        if (cnames != nullptr) {
+            assert(rule->get_parallel_type() & ParallelTypes::NewScheme);
+            for (size_t i = 0; i < cnames->data.size(); i++) {
+                shared_ptr<OpElement<S, FL>> cop =
+                    dynamic_pointer_cast<OpElement<S, FL>>(cnames->data[i]);
+                shared_ptr<OpExpr<S>> op = abs_value(cnames->data[i]);
+                dopt->exprs[op] = make_pair(i, (FP)1.0 / cop->factor);
+                assert(dopt->mat->data[i]->get_type() == OpTypes::ExprRef);
+                dopt->mat->data[i] =
+                    dynamic_pointer_cast<OpExprRef<S>>(dopt->mat->data[i])->op;
+            }
+        }
+        c = dopt;
     }
     // c = a x b (dot)
     void left_contract(const shared_ptr<OperatorTensor<S, FL>> &a,

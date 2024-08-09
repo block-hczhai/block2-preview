@@ -4349,12 +4349,17 @@ class DMRGDriver:
         spectra_with_multiplicity=False,
         store_seq_data=False,
         lowmem_noise=False,
+        midmem_noise=False,
         sweep_start=0,
         forward=None,
         kernel=None,
         metric_mpo=None,
         stacked_mpo=None,
         context_ket=None,
+        delayed_contraction=True,
+        cached_contraction=True,
+        fused_contraction_multiplication=False,
+        fused_contraction_rotation=False,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4456,6 +4461,8 @@ class DMRGDriver:
                 Only useful for developers. Default is False.
             lowmem_noise : bool
                 If True, the noise step will cost less memory. Default is False.
+            midmem_noise : bool
+                If True, the noise step will cost medium memory. Default is False.
             sweep_start : int
                 The starting sweep index in ``bond_dims``, ``noises``, and ``thrds``. Default is 0.
                 This may be useful in restarting, when one wants to skip the sweep parameters
@@ -4473,6 +4480,16 @@ class DMRGDriver:
                 The block2 MPO object stacked with the mpo. Default is None.
             context_ket : None or MPS
                 The block2 MPS object for the symmetry constraint. Default is None (no constraint).
+            delayed_contraction : bool
+                If True, delayed contraction (blocking) is used for saving time. Default is True.
+            cached_contraction : bool
+                If True, cached contraction (blocking) is used for saving time. Default is True.
+            fused_contraction_multiplication : bool
+                If True, fused operation of contraction and multiplication is used for saving memory.
+                Defult is False.
+            fused_contraction_rotation : bool
+                If True, fused operation of contraction and rotation is used for saving memory.
+                Defult is False.
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4494,13 +4511,20 @@ class DMRGDriver:
         else:
             bra = ket
         me = bw.bs.MovingEnvironment(mpo, bra, ket, "DMRG")
-        me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        me.delayed_contraction = bw.b.OpNamesSet.normal_ops() if delayed_contraction else bw.b.OpNamesSet()
         if stacked_mpo is not None:
             if self.mpi is not None:
                 raise NotImplementedError()
             me.stacked_mpo = stacked_mpo
             me.delayed_contraction = bw.b.OpNamesSet()
-        me.cached_contraction = True
+        me.cached_contraction = cached_contraction
+        me.fused_contraction_multiplication = fused_contraction_multiplication
+        me.fused_contraction_rotation = fused_contraction_rotation
+        if fused_contraction_multiplication:
+            assert fused_contraction_rotation
+            assert not cached_contraction
+            assert not delayed_contraction
+            assert bw.b.Global.threading.seq_type != bw.b.SeqTypes.Tasked
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
         metric_me = None
         if metric_mpo is not None:
@@ -4574,7 +4598,11 @@ class DMRGDriver:
             noise_type = "ReducedPerturbativeCollected"
         dmrg.noise_type = getattr(bw.b.NoiseTypes, noise_type)
         if lowmem_noise:
+            assert not midmem_noise
             dmrg.noise_type = dmrg.noise_type | bw.b.NoiseTypes.LowMem
+        if midmem_noise:
+            assert not lowmem_noise
+            dmrg.noise_type = dmrg.noise_type | bw.b.NoiseTypes.MidMem
         if decomp_type is not None:
             dmrg.decomp_type = getattr(bw.b.DecompositionTypes, decomp_type)
         dmrg.davidson_conv_thrds = bw.VectorFP(thrds)

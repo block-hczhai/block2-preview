@@ -176,6 +176,9 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     // left/right_contact is invoked, which is the case for zero-dot expt)
     // fused_contraction_rotation = T conflicts with cached_contraction = T
     bool fused_contraction_rotation = false;
+    // whether contraction and wavefunction multiplication should be done
+    // within one-step, without using large memory for blocking
+    bool fused_contraction_multiplication = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
            tinfo = 0;
     Timer _t, _t2, _t3;
@@ -1724,7 +1727,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_left = Partition<S, FL>::build_left(lmats, left_op_infos,
                                                     mpo->sparse_form[iL] == 'S',
                                                     stacked_lmat);
-            if (stacked_mpo != nullptr)
+            if (fused_contraction_multiplication) {
+                shared_ptr<OperatorTensor<S, FL>> copied_left = nullptr;
+                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;
+                size_t copied_mem = 0;
+                if (envs[iL]->left != nullptr && !delayed) {
+                    left_copy(iL, copied_infos, copied_left, false);
+                    copied_mem = copied_left->get_total_memory();
+                }
+                mpo->tf->delayed_left_contract(
+                    delayed ? envs[iL]->left : copied_left, mpo->tensors[iL],
+                    new_left,
+                    mpo->left_operator_exprs.size() != 0
+                        ? mpo->left_operator_exprs[iL]
+                        : nullptr,
+                    mpo->left_operator_names[iL]);
+            } else if (stacked_mpo != nullptr)
                 mpo->tf->left_contract_stacked(
                     envs[iL]->left, mpo->tensors[iL], stacked_mpo->tensors[iL],
                     new_left, mpo->left_operator_exprs[iL],
@@ -1755,18 +1773,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         mpo->unload_left_operators(iL);
     }
     void delayed_left_contract(int iL,
-                               shared_ptr<OperatorTensor<S, FL>> &new_left) {
+                               shared_ptr<OperatorTensor<S, FL>> &new_left,
+                               bool fused) {
         if (envs[iL]->left != nullptr && iL != 0 && save_environments)
             frame_<FP>()->load_data(1, get_left_partition_filename(iL));
         frame_<FP>()->activate(0);
-        mpo->load_left_operators(iL);
-        mpo->load_tensor(iL);
-        mpo->tf->delayed_left_contract(
-            envs[iL]->left, mpo->tensors[iL], new_left,
-            mpo->left_operator_exprs.size() != 0 ? mpo->left_operator_exprs[iL]
-                                                 : nullptr);
-        mpo->unload_tensor(iL);
-        mpo->unload_left_operators(iL);
+        if (!fused) {
+            mpo->load_left_operators(iL);
+            mpo->load_tensor(iL);
+            mpo->tf->delayed_left_contract(envs[iL]->left, mpo->tensors[iL],
+                                           new_left,
+                                           mpo->left_operator_exprs.size() != 0
+                                               ? mpo->left_operator_exprs[iL]
+                                               : nullptr);
+            mpo->unload_tensor(iL);
+            mpo->unload_left_operators(iL);
+        }
     }
     // Contract right block for constructing effective Hamiltonian
     // site iR is the new site
@@ -1846,7 +1868,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_right = Partition<S, FL>::build_right(
                 rmats, right_op_infos, mpo->sparse_form[iR] == 'S',
                 stacked_rmat);
-            if (stacked_mpo != nullptr)
+            if (fused_contraction_multiplication) {
+                shared_ptr<OperatorTensor<S, FL>> copied_right = nullptr;
+                vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;
+                size_t copied_mem = 0;
+                if (envs[iR - dot + 1]->right != nullptr && !delayed) {
+                    right_copy(iR, copied_infos, copied_right, false);
+                    copied_mem = copied_right->get_total_memory();
+                }
+                mpo->tf->delayed_right_contract(
+                    delayed ? envs[iR - dot + 1]->right : copied_right,
+                    mpo->tensors[iR], new_right,
+                    mpo->right_operator_exprs.size() != 0
+                        ? mpo->right_operator_exprs[iR]
+                        : nullptr,
+                    mpo->right_operator_names[iR]);
+            } else if (stacked_mpo != nullptr)
                 mpo->tf->right_contract_stacked(
                     envs[iR - dot + 1]->right, mpo->tensors[iR],
                     stacked_mpo->tensors[iR], new_right,
@@ -1868,20 +1905,23 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         mpo->unload_right_operators(iR);
     }
     void delayed_right_contract(int iR,
-                                shared_ptr<OperatorTensor<S, FL>> &new_right) {
+                                shared_ptr<OperatorTensor<S, FL>> &new_right,
+                                bool fused) {
         if (envs[iR - dot + 1]->right != nullptr && save_environments)
             frame_<FP>()->load_data(1,
                                     get_right_partition_filename(iR - dot + 1));
         frame_<FP>()->activate(0);
-        mpo->load_right_operators(iR);
-        mpo->load_tensor(iR);
-        mpo->tf->delayed_right_contract(envs[iR - dot + 1]->right,
-                                        mpo->tensors[iR], new_right,
-                                        mpo->right_operator_exprs.size() != 0
-                                            ? mpo->right_operator_exprs[iR]
-                                            : nullptr);
-        mpo->unload_tensor(iR);
-        mpo->unload_right_operators(iR);
+        if (!fused) {
+            mpo->load_right_operators(iR);
+            mpo->load_tensor(iR);
+            mpo->tf->delayed_right_contract(
+                envs[iR - dot + 1]->right, mpo->tensors[iR], new_right,
+                mpo->right_operator_exprs.size() != 0
+                    ? mpo->right_operator_exprs[iR]
+                    : nullptr);
+            mpo->unload_tensor(iR);
+            mpo->unload_right_operators(iR);
+        }
     }
     // Copy left-most left block for constructing effective Hamiltonian
     // block to the left of site iL is copied
@@ -2022,12 +2062,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
         _t2.get_time();
         // make sure that the previous block is still in memory
-        if (!delayed_contraction.empty()) {
+        if (!delayed_contraction.empty() || fused_contraction_multiplication) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
-                delayed_left_contract(iL, new_left);
+                delayed_left_contract(iL, new_left,
+                                      fused_contraction_multiplication);
             else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
                      iR != n_sites - 1)
-                delayed_right_contract(iR, new_right);
+                delayed_right_contract(iR, new_right,
+                                       fused_contraction_multiplication);
         }
         mpo->load_middle_operators(iM);
         if (stacked_mpo != nullptr)
@@ -2038,11 +2080,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
                       mpo->middle_operator_exprs[iM], delayed_contraction,
+                      !fused_contraction_multiplication,
                       stacked_mpo == nullptr
                           ? nullptr
                           : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
-                                            delayed_contraction);
+                                            delayed_contraction,
+                                            !fused_contraction_multiplication);
         tdctr += _t2.get_time();
         frame_<FP>()->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =
@@ -2161,12 +2205,14 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         }
         _t2.get_time();
         // make sure that the previous block is still in memory
-        if (!delayed_contraction.empty()) {
+        if (!delayed_contraction.empty() || fused_contraction_multiplication) {
             if ((fuse_type & FuseTypes::FuseL) && delay_left && iL != 0)
-                delayed_left_contract(iL, new_left);
+                delayed_left_contract(iL, new_left,
+                                      fused_contraction_multiplication);
             else if ((fuse_type & FuseTypes::FuseR) && !delay_left &&
                      iR != n_sites - 1)
-                delayed_right_contract(iR, new_right);
+                delayed_right_contract(iR, new_right,
+                                       fused_contraction_multiplication);
         }
         mpo->load_middle_operators(iM);
         if (stacked_mpo != nullptr)
@@ -2177,11 +2223,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 ? mpo->tf->delayed_contract(
                       new_left, new_right, mpo->middle_operator_names[iM],
                       mpo->middle_operator_exprs[iM], delayed_contraction,
+                      !fused_contraction_multiplication,
                       stacked_mpo == nullptr
                           ? nullptr
                           : stacked_mpo->middle_operator_exprs[iM])
                 : mpo->tf->delayed_contract(new_left, new_right, mpo->op,
-                                            delayed_contraction);
+                                            delayed_contraction,
+                                            !fused_contraction_multiplication);
         tdctr += _t2.get_time();
         frame_<FP>()->activate(0);
         shared_ptr<SymbolicColumnVector<S>> hops =

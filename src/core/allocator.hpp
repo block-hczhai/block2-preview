@@ -388,7 +388,6 @@ template <typename FL> struct DataFrame {
     shared_ptr<FPCodec<FL>> fp_codec =
         nullptr; //!< Floating-point compression codec. If nullptr,
                  //!< floating-point compression will not be used.
-    // isize and dsize are in Bytes
     /** Constructor.
      * @param isize Max size (in bytes) of all integer stacks.
      * @param dsize Max size (in bytes) of all double stacks.
@@ -640,7 +639,7 @@ template <typename FL> struct DataFrame {
             r += dallocs[i]->used * sizeof(FL) + iallocs[i]->used * 4;
         return r;
     }
-    /** Update prak used memory statistics. */
+    /** Update peak used memory statistics. */
     void update_peak_used_memory() const {
         for (int i = 0; i < n_frames; i++) {
             peak_used_memory[i + 0 * n_frames] =
@@ -650,7 +649,7 @@ template <typename FL> struct DataFrame {
                 max(peak_used_memory[i + 1 * n_frames], iallocs[i]->used * 4);
         }
     }
-    /** Reset prak used memory statistics to zero. */
+    /** Reset peak used memory statistics to zero. */
     void reset_peak_used_memory() const {
         memset(peak_used_memory.data(), 0,
                sizeof(size_t) * peak_used_memory.size());
@@ -695,6 +694,25 @@ template <typename FL> inline shared_ptr<DataFrame<FL>> &frame_() {
 inline auto check_signal_() -> void (*&)() {
     static void (*check_signal)() = []() {};
     return check_signal;
+}
+
+/** Callback function wrapper. */
+struct CallbackKernel {
+    /** Constructor.*/
+    CallbackKernel() {}
+    /** Destructor. */
+    virtual ~CallbackKernel() = default;
+    /** Execute callback function.
+     * @param name Stage name.
+     * @param iprint Verbosity.
+     */
+    virtual void compute(const string &name, int iprint) const {}
+};
+
+/** Function pointer for callback. */
+inline shared_ptr<CallbackKernel> &callback_() {
+    static shared_ptr<CallbackKernel> callback = make_shared<CallbackKernel>();
+    return callback;
 }
 
 } // namespace block2

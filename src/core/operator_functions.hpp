@@ -41,6 +41,7 @@ enum struct NoiseTypes : uint16_t {
     Unscaled = 16,
     Collected = 32,
     LowMem = 64,
+    MidMem = 128,
     ReducedPerturbative = 4 | 8,
     PerturbativeUnscaled = 4 | 16,
     ReducedPerturbativeUnscaled = 4 | 8 | 16,

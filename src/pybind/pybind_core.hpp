@@ -126,6 +126,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SZ>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, double>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SZ>>, pair<size_t, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<SZ, shared_ptr<SparseMatrixInfo<SZ>>>>>);
@@ -159,6 +161,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<StateInfo<SU2>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, double>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, double>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SU2>>, pair<size_t, double>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<SU2, shared_ptr<SparseMatrixInfo<SU2>>>>>);
@@ -200,6 +204,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<shared_ptr<OpExpr<SZ>>, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SZ>>, pair<size_t, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -225,6 +231,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<shared_ptr<OpExpr<SU2>>, complex<double>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SU2>>, pair<size_t, complex<double>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<double>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -267,6 +275,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, float>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SZ>>, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SZ>>, pair<size_t, float>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SZ, float>>>);
@@ -287,6 +297,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpProduct<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, float>>);
 PYBIND11_MAKE_OPAQUE(vector<vector<pair<shared_ptr<OpExpr<SU2>>, float>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SU2>>, pair<size_t, float>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, float>>>);
 PYBIND11_MAKE_OPAQUE(map<OpNames, shared_ptr<SparseMatrix<SU2, float>>>);
@@ -320,6 +332,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SZ>>, complex<float>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<shared_ptr<OpExpr<SZ>>, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SZ>>, pair<size_t, complex<float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SZ, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -345,6 +359,8 @@ PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OpElement<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<shared_ptr<OpExpr<SU2>>, complex<float>>>);
 PYBIND11_MAKE_OPAQUE(
     vector<vector<pair<shared_ptr<OpExpr<SU2>>, complex<float>>>>);
+PYBIND11_MAKE_OPAQUE(
+    unordered_map<shared_ptr<OpExpr<SU2>>, pair<size_t, complex<float>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<SparseMatrix<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(vector<shared_ptr<OperatorTensor<SU2, complex<float>>>>);
 PYBIND11_MAKE_OPAQUE(
@@ -584,6 +600,8 @@ template <typename S, typename FL> void bind_fl_expr(py::module &m) {
         m, "VectorPExprDouble");
     py::bind_vector<vector<vector<pair<shared_ptr<OpExpr<S>>, FL>>>>(
         m, "VectorVectorPExprDouble");
+    py::bind_map<unordered_map<shared_ptr<OpExpr<S>>, pair<size_t, FL>>>(
+        m, "MapExprPSizeDouble");
 
     py::class_<OpElement<S, FL>, shared_ptr<OpElement<S, FL>>, OpExpr<S>>(
         m, "OpElement")
@@ -1146,7 +1164,8 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
         .def_readwrite("stacked_mat",
                        &DelayedOperatorTensor<S, FL>::stacked_mat)
         .def_readwrite("lopt", &DelayedOperatorTensor<S, FL>::lopt)
-        .def_readwrite("ropt", &DelayedOperatorTensor<S, FL>::ropt);
+        .def_readwrite("ropt", &DelayedOperatorTensor<S, FL>::ropt)
+        .def_readwrite("exprs", &DelayedOperatorTensor<S, FL>::exprs);
 
     py::bind_vector<vector<shared_ptr<OperatorTensor<S, FL>>>>(
         m, "VectorOpTensor");
@@ -1190,20 +1209,20 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
              &TensorFunctions<S, FL>::post_numerical_transform)
         .def("substitute_delayed_exprs",
              &TensorFunctions<S, FL>::substitute_delayed_exprs)
-        .def("delayed_contract",
-             (shared_ptr<DelayedOperatorTensor<S, FL>>(
-                 TensorFunctions<S, FL>::*)(
-                 const shared_ptr<OperatorTensor<S, FL>> &,
-                 const shared_ptr<OperatorTensor<S, FL>> &,
-                 const shared_ptr<OpExpr<S>> &, OpNamesSet delayed) const) &
-                 TensorFunctions<S, FL>::delayed_contract)
+        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor<S, FL>>(
+                                     TensorFunctions<S, FL>::*)(
+                                     const shared_ptr<OperatorTensor<S, FL>> &,
+                                     const shared_ptr<OperatorTensor<S, FL>> &,
+                                     const shared_ptr<OpExpr<S>> &,
+                                     OpNamesSet delayed, bool) const) &
+                                     TensorFunctions<S, FL>::delayed_contract)
         .def("delayed_contract_simplified",
              (shared_ptr<DelayedOperatorTensor<S, FL>>(
                  TensorFunctions<S, FL>::*)(
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<Symbolic<S>> &,
-                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed,
+                 const shared_ptr<Symbolic<S>> &, OpNamesSet delayed, bool,
                  const shared_ptr<Symbolic<S>> &) const) &
                  TensorFunctions<S, FL>::delayed_contract);
 
@@ -1680,6 +1699,7 @@ template <typename S = void> void bind_types(py::module &m) {
         .value("Reduced", NoiseTypes::Reduced)
         .value("Unscaled", NoiseTypes::Unscaled)
         .value("LowMem", NoiseTypes::LowMem)
+        .value("MidMem", NoiseTypes::MidMem)
         .value("ReducedPerturbative", NoiseTypes::ReducedPerturbative)
         .value("ReducedPerturbativeUnscaled",
                NoiseTypes::ReducedPerturbativeUnscaled)
@@ -1841,6 +1861,29 @@ template <typename S = void> void bind_io(py::module &m) {
             throw runtime_error("cannot set number of omp threads.");
 #endif
     });
+
+    struct PyCallbackKernel : CallbackKernel {
+        using CallbackKernel::CallbackKernel;
+        typedef CallbackKernel super_t;
+        void compute(const string &name, int iprint) const override {
+            py::gil_scoped_acquire gil;
+            py::function py_method = py::get_override(this, "compute");
+            if (py_method)
+                py_method(name, iprint);
+            else
+                super_t::compute(name, iprint);
+        }
+    };
+
+    py::class_<CallbackKernel, shared_ptr<CallbackKernel>, PyCallbackKernel>(
+        m, "CallbackKernel")
+        .def(py::init<>())
+        .def("compute", [](CallbackKernel *self, const string &p, int i) {
+            self->compute(p, i);
+        });
+
+    m.def("set_callback",
+          [](shared_ptr<CallbackKernel> kernel) { callback_() = kernel; });
 
     py::class_<Allocator<uint32_t>, shared_ptr<Allocator<uint32_t>>>(
         m, "IntAllocator")
