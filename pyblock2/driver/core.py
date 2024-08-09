@@ -4311,6 +4311,19 @@ class DMRGDriver:
 
         return np.array(idx, dtype=int)
 
+    def make_callback(self, kernel=None):
+        CK = self.bw.b.CallbackKernel
+
+        class Kernel(CK):
+            def __init__(self, kernel):
+                CK.__init__(self)
+                self.kernel = kernel
+
+            def compute(self, p, i):
+                self.kernel(p, i)
+
+        return Kernel(kernel)
+
     def make_kernel(self, kernel=None):
         EK = self.bw.bx.EffectiveKernel
 
@@ -4323,6 +4336,17 @@ class DMRGDriver:
                 self.kernel(beta, f, a, b, xs)
 
         return Kernel(kernel)
+
+    def set_callback(self, f):
+        """
+        Set a callback function which will be invoked before the iteration at each DMRG site.
+
+        Args:
+            f : Callable[[str, int], None]
+                A function with inputs: stage name and DMRG verbosity.
+        """
+        self.callback_f = self.make_callback(kernel=f)
+        self.bw.b.set_callback(self.callback_f)
 
     def dmrg(
         self,
