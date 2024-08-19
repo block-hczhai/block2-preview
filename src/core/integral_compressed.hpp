@@ -90,7 +90,7 @@ struct CompressedTInt<FL, typename enable_if<is_complex<FL>::value>::type> {
     }
     void clear() { cps_data->clear(); }
     FL &operator()(uint16_t i, uint16_t j) {
-        return (FL &)((*cps_data)[find_index(i, j) * 2]);
+        return reinterpret_cast<FL &>((*cps_data)[find_index(i, j) * 2]);
     }
     FL operator()(uint16_t i, uint16_t j) const {
         return FL(
@@ -170,7 +170,7 @@ struct CompressedV1Int<FL, typename enable_if<is_complex<FL>::value>::type> {
     size_t size() const { return m; }
     void clear() { cps_data->clear(); }
     FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-        return (FL &)(*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2];
+        return reinterpret_cast<FL &>((*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2]);
     }
     FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return FL(
@@ -272,7 +272,7 @@ struct CompressedV4Int<FL, typename enable_if<is_complex<FL>::value>::type> {
     size_t size() const { return (size_t)m * m; }
     void clear() { cps_data->clear(); }
     FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-        return (FL &)(*cps_data)[find_index(i, j, k, l) * 2];
+        return reinterpret_cast<FL &>((*cps_data)[find_index(i, j, k, l) * 2]);
     }
     FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return FL(((const CompressedVector<FP>
@@ -374,7 +374,7 @@ struct CompressedV8Int<FL, typename enable_if<is_complex<FL>::value>::type> {
     size_t size() const { return ((size_t)m * (m + 1) >> 1); }
     void clear() { cps_data->clear(); }
     FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-        return (FL &)(*cps_data)[find_index(i, j, k, l) * 2];
+        return reinterpret_cast<FL &>((*cps_data)[find_index(i, j, k, l) * 2]);
     }
     FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return FL(((const CompressedVector<FP>
