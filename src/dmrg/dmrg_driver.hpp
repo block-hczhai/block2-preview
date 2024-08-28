@@ -522,8 +522,8 @@ template <typename S, typename FL> struct DMRGDriver {
                  ExpectationAlgorithmTypes::SymbolFree |
                  ExpectationAlgorithmTypes::Compressed,
              int iprint = 0, FP cutoff = (FP)1E-24,
-             bool fused_contraction_rotation = true,
-             int max_bond_dim = -1) const {
+             bool fused_contraction_rotation = true, int max_bond_dim = -1,
+             const vector<uint16_t> &mask = vector<uint16_t>()) const {
         if (prule != nullptr)
             prule->comm->barrier();
         shared_ptr<MPS<S, FL>> mket = ket->deep_copy("PDM-KET@TMP"), mbra;
@@ -572,11 +572,12 @@ template <typename S, typename FL> struct DMRGDriver {
         for (const string &op_str : exprs) {
             int n_cds = SpinPermRecoupling::count_cds(op_str);
             if (is_same<S, SU2>::value)
-                perms.push_back(make_shared<SpinPermScheme>(
-                    SpinPermScheme::initialize_su2(n_cds, op_str, true)));
+                perms.push_back(
+                    make_shared<SpinPermScheme>(SpinPermScheme::initialize_su2(
+                        n_cds, op_str, true, false, mask)));
             else
                 perms.push_back(make_shared<SpinPermScheme>(
-                    SpinPermScheme::initialize_sz(n_cds, op_str, true)));
+                    SpinPermScheme::initialize_sz(n_cds, op_str, true, mask)));
             if (iprint >= 1)
                 cout << "npdm string = " << op_str << endl;
         }
