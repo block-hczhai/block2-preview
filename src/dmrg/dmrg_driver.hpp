@@ -569,15 +569,26 @@ template <typename S, typename FL> struct DMRGDriver {
         }
 
         vector<shared_ptr<SpinPermScheme>> perms;
+        size_t imask = 0;
         for (const string &op_str : exprs) {
             int n_cds = SpinPermRecoupling::count_cds(op_str);
+            vector<uint16_t> xmask;
+            if (mask.size() == (size_t)n_cds)
+                xmask = mask;
+            else if (mask.size() != 0) {
+                if (mask.size() < imask + (size_t)n_cds)
+                    throw runtime_error("NPDM mask is too short.");
+                xmask = vector<uint16_t>(mask.begin() + imask,
+                                         mask.begin() + imask + (size_t)n_cds);
+            }
+            imask += (size_t)n_cds;
             if (is_same<S, SU2>::value)
                 perms.push_back(
                     make_shared<SpinPermScheme>(SpinPermScheme::initialize_su2(
-                        n_cds, op_str, true, false, mask)));
+                        n_cds, op_str, true, false, xmask)));
             else
                 perms.push_back(make_shared<SpinPermScheme>(
-                    SpinPermScheme::initialize_sz(n_cds, op_str, true, mask)));
+                    SpinPermScheme::initialize_sz(n_cds, op_str, true, xmask)));
             if (iprint >= 1)
                 cout << "npdm string = " << op_str << endl;
         }
