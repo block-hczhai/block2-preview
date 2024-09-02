@@ -222,7 +222,8 @@ jobs:
           Copy-Item -Path "..\data" -Destination ".\" -Recurse
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
-          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
+          $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
           & $dumpbin /DEPENDENTS .\block2_tests.exe
           .\block2_tests.exe
 
@@ -247,14 +248,15 @@ jobs:
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
-          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
+          $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
           & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
           $xpwd = Get-Location
           $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
-          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          $env:PATH = "$($vcpath[0].FullName)\bin\Hostx64\x64;" + $env:PATH
           python -m pip install pytest
           python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --fd_data=${xpwd}/data
 
@@ -282,14 +284,15 @@ jobs:
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
-          $dumpbin = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64\dumpbin.exe"
+          $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
+          $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
           & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
           $xpwd = Get-Location
           $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
-          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          $env:PATH = "$($vcpath[0].FullName)\bin\Hostx64\x64;" + $env:PATH
           python -m pip install pytest
           python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --symm sany --fd_data=${xpwd}/data
 
@@ -403,7 +406,8 @@ jobs:
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
-          $env:PATH = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC\14.40.33807\bin\Hostx64\x64;" + $env:PATH
+          $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
+          $env:PATH = "$($vcpath[0].FullName)\bin\Hostx64\x64;" + $env:PATH
           $rr = Get-ChildItem -Path dist/*.whl
           Write-Output "$($rr[0].FullName)"
           delvewheel repair "$($rr[0].FullName)" -v -w dist
