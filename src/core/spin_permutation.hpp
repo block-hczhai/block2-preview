@@ -221,6 +221,22 @@ struct SpinPermTensor {
             z[pcnt[x[i]]] = xops[i], perm[i] = pcnt[x[i]]++;
         return make_pair(z, permutation_parity(perm) ? -1 : 1);
     }
+    static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
+                                              const string &xops,
+                                              const string &fermionic_ops) {
+        vector<uint16_t> px = x;
+        string z = xops;
+        int xsign = 1;
+        for (int l = (int)px.size() - 1; l > 0; l--)
+            for (int p = 0; p < l; p++)
+                if (px[p] > px[p + 1]) {
+                    swap(px[p], px[p + 1]), swap(z[p], z[p + 1]);
+                    if (fermionic_ops.find(z[p]) != string::npos &&
+                        fermionic_ops.find(z[p + 1]) != string::npos)
+                        xsign *= -1;
+                }
+        return make_pair(z, xsign);
+    }
     static vector<double> dot_product(const SpinPermTensor &a,
                                       const SpinPermTensor &b) {
         assert(a.data.size() == b.data.size());
@@ -929,6 +945,7 @@ struct SpinPermPattern {
                    const vector<uint16_t> &mask = vector<uint16_t>()) {
         if (x.size() == 0)
             return x;
+        bool mask_sorted = is_sorted(mask.begin(), mask.end());
         vector<pair<uint16_t, uint16_t>> pp;
         for (auto &ix : x)
             if (pp.size() == 0 || ix != pp.back().first)
@@ -971,9 +988,16 @@ struct SpinPermPattern {
                         r[ir + k] = g[j + kk++];
                 if (mask.size() != 0) {
                     bool skip = false;
-                    for (int k = 1; k < (int)x.size(); k++)
-                        skip = skip || (mask[k] == mask[k - 1] &&
-                                        r[ir + k] != r[ir + k - 1]);
+                    if (mask_sorted) {
+                        for (int k = 1; k < (int)x.size(); k++)
+                            skip = skip || (mask[k] == mask[k - 1] &&
+                                            r[ir + k] != r[ir + k - 1]);
+                    } else {
+                        for (int k = 0; k < (int)x.size(); k++)
+                            for (int l = k + 1; l < (int)x.size(); l++)
+                                skip = skip || (mask[k] == mask[l] &&
+                                                r[ir + k] != r[ir + l]);
+                    }
                     if (skip)
                         continue;
                 }
@@ -1179,7 +1203,7 @@ struct SpinPermScheme {
         left_vacuum = r.left_vacuum;
     }
     static SpinPermScheme
-    initialize_sz(int nn, string spin_str, bool is_fermion = true,
+    initialize_sz(int nn, const string &spin_str, bool is_fermion = true,
                   const vector<uint16_t> &mask = vector<uint16_t>()) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
@@ -1204,6 +1228,43 @@ struct SpinPermScheme {
                 auto pis = SpinPermTensor::auto_sort_string(indices, spin_str);
                 rec_formula.push_back(make_pair(
                     is_fermion ? (double)pis.second : 1.0, pis.first));
+            }
+            k += nj != 0;
+        }
+        r.index_patterns.resize(k);
+        r.data.resize(k);
+        r.is_su2 = false;
+        r.left_vacuum = 0;
+        r.mask = mask;
+        return r;
+    }
+    static SpinPermScheme
+    initialize_sany(int nn, const string &spin_str,
+                    const string &fermionic_ops = "cdCD",
+                    const vector<uint16_t> &mask = vector<uint16_t>()) {
+        using T = SpinPermTensor;
+        using R = SpinPermRecoupling;
+        SpinPermPattern spat(nn, mask);
+        vector<double> mptr;
+        SpinPermScheme r;
+        r.index_patterns.resize(spat.count());
+        r.data.resize(spat.count());
+        size_t k = 0;
+        for (size_t i = 0; i < spat.count(); i++) {
+            vector<uint16_t> irr = spat[i];
+            r.index_patterns[k] = irr;
+            vector<uint16_t> rr = SpinPermPattern::all_reordering(irr, mask);
+            int nj = irr.size() == 0 ? 1 : (int)(rr.size() / irr.size());
+            for (int jj = 0; jj < nj; jj++) {
+                vector<uint16_t> indices(rr.begin() + jj * irr.size(),
+                                         rr.begin() + (jj + 1) * irr.size());
+                vector<uint16_t> perm =
+                    SpinPermTensor::find_pattern_perm(indices);
+                r.data[k][perm] = vector<pair<double, string>>();
+                vector<pair<double, string>> &rec_formula = r.data[k].at(perm);
+                auto pis = SpinPermTensor::auto_sort_string(indices, spin_str,
+                                                            fermionic_ops);
+                rec_formula.push_back(make_pair((double)pis.second, pis.first));
             }
             k += nj != 0;
         }

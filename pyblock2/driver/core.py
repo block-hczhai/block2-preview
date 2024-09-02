@@ -2541,7 +2541,8 @@ class DMRGDriver:
                                             ]
                                         blocks.append((q_map[i][1], q_map[j][1], mat))
 
-                            assert dqs is not None
+                            if dqs is None:
+                                dqs = [self.vacuum]
                             assert len(dqs) >= 1
                             dq = dqs[0]
 
@@ -5418,6 +5419,7 @@ class DMRGDriver:
         cutoff=1e-24,
         iprint=0,
         max_bond_dim=None,
+        fermionic_ops=None,
     ):
         """
         Compute the N-Particle Density Matrix (NPDM) for the given MPS.
@@ -5473,6 +5475,11 @@ class DMRGDriver:
             max_bond_dim : None or int
                 If not None, the MPS bond dimension will be restricted during the sweeps.
                 Default is None.
+            fermionic_ops : None or str
+                If not None, the given set of operator names will be treated as Fermion
+                operators (for computing signs for swapping operators).
+                Default is None, and operators like "cdCD" will be treated as Fermion
+                operators.
 
         Returns:
             dms : np.ndarray[flat|complex] or list[np.ndarray[flat|complex]]
@@ -5529,6 +5536,7 @@ class DMRGDriver:
             self.mpi.barrier()
 
         if SymmetryTypes.SU2 in bw.symm_type:
+            assert fermionic_ops is None
             if npdm_expr is not None and "%s" not in npdm_expr:
                 op_str = npdm_expr
             else:
@@ -5556,6 +5564,8 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                        if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops)
                         for cd in op_str
                     ]
                 )
@@ -5568,6 +5578,9 @@ class DMRGDriver:
                     [
                         bw.b.SpinPermScheme.initialize_sz(
                             pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
+                        ) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
                         )
                         for cd, xm, pt in zip(op_str, mask, pts)
                     ]
@@ -5580,6 +5593,9 @@ class DMRGDriver:
                     [
                         bw.b.SpinPermScheme.initialize_sz(
                             pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                        ) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
                         )
                         for cd, pt in zip(op_str, pts)
                     ]
@@ -5595,6 +5611,8 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
+                        if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops)
                         for cd in op_str
                     ]
                 )
@@ -5607,6 +5625,9 @@ class DMRGDriver:
                     [
                         bw.b.SpinPermScheme.initialize_sz(
                             pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
+                        ) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
                         )
                         for cd, xm, pt in zip(op_str, mask, pts)
                     ]
@@ -5619,8 +5640,41 @@ class DMRGDriver:
                     [
                         bw.b.SpinPermScheme.initialize_sz(
                             pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                        ) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
                         )
                         for cd, pt in zip(op_str, pts)
+                    ]
+                )
+        elif SymmetryTypes.SAny in bw.symm_type:
+            assert npdm_expr is not None
+            op_str = [npdm_expr] if isinstance(npdm_expr, str) else npdm_expr
+            fermionic_ops = "cdCD" if fermionic_ops is None else fermionic_ops
+            if mask is None:
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops)
+                        for cd in op_str
+                    ]
+                )
+            elif len(mask) != 0 and not isinstance(mask[0], int):
+                assert len(mask) == len(op_str)
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sany(
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
+                        )
+                        for cd, xm in zip(op_str, mask)
+                    ]
+                )
+            else:
+                perms = bw.b.VectorSpinPermScheme(
+                    [
+                        bw.b.SpinPermScheme.initialize_sany(
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
+                        )
+                        for cd in op_str
                     ]
                 )
 

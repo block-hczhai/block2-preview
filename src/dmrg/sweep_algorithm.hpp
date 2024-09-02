@@ -6541,10 +6541,14 @@ struct Expect {
         for (int i = 0; i < (int)scheme->perms.size(); i++) {
             int n_op = (int)scheme->perms[i]->index_patterns[0].size();
             if (scheme->perms[i]->mask.size() != 0) {
-                n_op = 1;
-                for (int k = 1; k < scheme->perms[i]->mask.size(); k++)
-                    n_op += scheme->perms[i]->mask[k] !=
-                            scheme->perms[i]->mask[k - 1];
+                n_op = 0;
+                for (int k = 0; k < (int)scheme->perms[i]->mask.size(); k++) {
+                    bool ok = true;
+                    for (int j = 0; j < k; j++)
+                        ok = ok && scheme->perms[i]->mask[k] !=
+                                       scheme->perms[i]->mask[j];
+                    n_op += (int)ok;
+                }
             }
             vector<MKL_INT> shape(n_op, n_physical_sites);
             r[i] = make_shared<GTensor<FLX>>(shape);

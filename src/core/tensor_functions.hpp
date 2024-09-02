@@ -1020,9 +1020,13 @@ template <typename S, typename FL> struct TensorFunctions {
                         vector<uint64_t> rmx(rpat.size(), 0);
                         uint64_t mxx = r_step;
                         for (int k = (int)perm.size() - 1; k >= 0; k--) {
-                            if (mask.size() != 0 && k != 0 &&
-                                mask[k] == mask[k - 1])
-                                continue;
+                            if (mask.size() != 0) {
+                                bool ok = true;
+                                for (int kk = 0; kk < k; kk++)
+                                    ok = ok && mask[k] != mask[kk];
+                                if (!ok)
+                                    continue;
+                            }
                             if (perm[k] < lmx.size())
                                 lmx[perm[k]] = mxx;
                             else

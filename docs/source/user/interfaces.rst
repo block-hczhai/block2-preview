@@ -7,7 +7,7 @@ Interfaces
 Input File
 ----------
 
-Like many quantum chemistry packages, ``block2`` can be used by reading parameters and instrutions from a formatted input file.
+Like many quantum chemistry packages, ``block2`` can be used by reading parameters and instructions from a formatted input file.
 This interface is ``StackBlock`` compatible.
 See :ref:`user_basic`, :ref:`user_advanced`, and :ref:`user_keywords`.
 

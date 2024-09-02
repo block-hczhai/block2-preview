@@ -2246,7 +2246,14 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("T", &SpinPermTensor::T)
         .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
         .def_static("find_pattern_perm", &SpinPermTensor::find_pattern_perm)
-        .def_static("auto_sort_string", &SpinPermTensor::auto_sort_string)
+        .def_static("auto_sort_string",
+                    (pair<string, int>(*)(const vector<uint16_t> &,
+                                          const string &, const string &)) &
+                        SpinPermTensor::auto_sort_string)
+        .def_static(
+            "auto_sort_string",
+            (pair<string, int>(*)(const vector<uint16_t> &, const string &)) &
+                SpinPermTensor::auto_sort_string)
         .def_static("mul", (SpinPermTensor(*)(const SpinPermTensor &,
                                               const SpinPermTensor &, int16_t,
                                               const SU2CG &)) &
@@ -2359,6 +2366,10 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("initialize_sz", &SpinPermScheme::initialize_sz,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_fermion") = true,
+                    py::arg("mask") = vector<uint16_t>())
+        .def_static("initialize_sany", &SpinPermScheme::initialize_sany,
+                    py::arg("nn"), py::arg("spin_str"),
+                    py::arg("fermionic_ops") = string("cdCD"),
                     py::arg("mask") = vector<uint16_t>())
         .def_static("initialize_su2_old", &SpinPermScheme::initialize_su2_old,
                     py::arg("nn"), py::arg("spin_str"),
