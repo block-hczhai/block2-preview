@@ -42,6 +42,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace std;
@@ -280,6 +281,30 @@ template <typename T> struct VectorAllocator : Allocator<T> {
     }
 };
 
+#ifdef _USE_GLOBAL_VARIABLE
+
+extern shared_ptr<StackAllocator<uint32_t>> _g_ialloc;
+extern shared_ptr<StackAllocator<double>> _g_dalloc_d;
+extern shared_ptr<StackAllocator<float>> _g_dalloc_f;
+
+/** Implementation of the ``ialloc`` global variable. */
+inline shared_ptr<StackAllocator<uint32_t>> &ialloc_() { return _g_ialloc; }
+
+/** Implementation of the ``dalloc`` global variable. */
+template <typename FL> inline shared_ptr<StackAllocator<FL>> &dalloc_() {
+    return nullptr;
+}
+
+template <> inline shared_ptr<StackAllocator<double>> &dalloc_<double>() {
+    return _g_dalloc_d;
+}
+
+template <> inline shared_ptr<StackAllocator<float>> &dalloc_<float>() {
+    return _g_dalloc_f;
+}
+
+#else
+
 /** Implementation of the ``ialloc`` global variable. */
 inline shared_ptr<StackAllocator<uint32_t>> &ialloc_() {
     static shared_ptr<StackAllocator<uint32_t>> ialloc;
@@ -291,6 +316,8 @@ template <typename FL> inline shared_ptr<StackAllocator<FL>> &dalloc_() {
     static shared_ptr<StackAllocator<FL>> dalloc;
     return dalloc;
 }
+
+#endif
 
 /** Global variable for the integer stack memory allocator. */
 #define ialloc (ialloc_())
@@ -683,6 +710,31 @@ template <typename FL> struct DataFrame {
     }
 };
 
+#ifdef _USE_GLOBAL_VARIABLE
+
+extern shared_ptr<DataFrame<double>> _g_frame_d;
+extern shared_ptr<DataFrame<float>> _g_frame_f;
+extern void (*_g_check_signal)();
+
+/** Global variable for accessing global stack memory and file I/O in scratch
+ * space. */
+template <typename FL> inline shared_ptr<DataFrame<FL>> &frame_() {
+    return nullptr;
+}
+
+template <> inline shared_ptr<DataFrame<double>> &frame_<double>() {
+    return _g_frame_d;
+}
+
+template <> inline shared_ptr<DataFrame<float>> &frame_<float>() {
+    return _g_frame_f;
+}
+
+/** Function pointer for signal checking. */
+inline auto check_signal_() -> void (*&)() { return _g_check_signal; }
+
+#else
+
 /** Global variable for accessing global stack memory and file I/O in scratch
  * space. */
 template <typename FL> inline shared_ptr<DataFrame<FL>> &frame_() {
@@ -695,6 +747,8 @@ inline auto check_signal_() -> void (*&)() {
     static void (*check_signal)() = []() {};
     return check_signal;
 }
+
+#endif
 
 /** Callback function wrapper. */
 struct CallbackKernel {
@@ -709,10 +763,21 @@ struct CallbackKernel {
     virtual void compute(const string &name, int iprint) const {}
 };
 
+#ifdef _USE_GLOBAL_VARIABLE
+
+extern shared_ptr<CallbackKernel> _g_callback;
+
+/** Function pointer for callback. */
+inline shared_ptr<CallbackKernel> &callback_() { return _g_callback; }
+
+#else
+
 /** Function pointer for callback. */
 inline shared_ptr<CallbackKernel> &callback_() {
     static shared_ptr<CallbackKernel> callback = make_shared<CallbackKernel>();
     return callback;
 }
+
+#endif
 
 } // namespace block2

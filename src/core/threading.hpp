@@ -526,11 +526,24 @@ struct Threading {
     }
 };
 
+#ifdef _USE_GLOBAL_VARIABLE
+
+extern shared_ptr<Threading> _g_threading;
+
+/** Implementation of the ``threading`` global variable. */
+inline shared_ptr<Threading> &threading_() {
+    return _g_threading;
+}
+
+#else
+
 /** Implementation of the ``threading`` global variable. */
 inline shared_ptr<Threading> &threading_() {
     static shared_ptr<Threading> threading = make_shared<Threading>();
     return threading;
 }
+
+#endif
 
 /** Global variable containing information for shared-memory parallelism schemes
  * and number of threads used for each threading layer. */
