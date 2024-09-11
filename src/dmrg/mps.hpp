@@ -1381,6 +1381,7 @@ template <typename S> struct CASCIMPSInfo : MPSInfo<S> {
             right_dims_fci[i] =
                 make_shared<StateInfo<S>>(StateInfo<S>::tensor_product(
                     *adj_basis[i], *right_dims_fci[i + 1], S(S::invalid)));
+        basis = adj_basis;
     }
     shared_ptr<MPSInfo<S>> shallow_copy(const string &new_tag) const override {
         shared_ptr<MPSInfo<S>> info = make_shared<CASCIMPSInfo<S>>(*this);

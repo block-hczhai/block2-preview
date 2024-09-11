@@ -7279,6 +7279,7 @@ class DMRGDriver:
         left_vacuum=None,
         casci_ncore=0,
         casci_nvirt=0,
+        casci_mask=None,
         mrci_order=0,
         orig_dot=False,
     ):
@@ -7321,6 +7322,9 @@ class DMRGDriver:
                 If not zero, The number of virtual orbitals in a CASCI MPS.
                 These orbitals will always be kept empty
                 (if ``mrci_order == 0``). Default is zero.
+            casci_mask : str or None
+                If not None, a string of characters 'CAV' for labelling doubly occupied, active,
+                and empty orbitals. The length of the string must be equal to ``n_sites``.
             mrci_order : int
                 If not zero, the core and virtual orbitals will have at most
                 ``mrci_order`` holes and electrons, respectively. Default is zero.
@@ -7340,7 +7344,21 @@ class DMRGDriver:
         if left_vacuum is None:
             left_vacuum = self.left_vacuum
         if nroots == 1:
-            if casci_ncore == 0 and casci_nvirt == 0:
+            if casci_mask is not None:
+                assert mrci_order == 0
+                assert len(casci_mask) == self.n_sites
+                assert casci_mask.count('C') == casci_ncore
+                assert casci_mask.count('V') == casci_nvirt
+                mps_info = bw.brs.CASCIMPSInfo(
+                    self.n_sites,
+                    self.vacuum,
+                    target,
+                    self.ghamil.basis,
+                    bw.b.VectorActTypes([getattr(bw.b.ActiveTypes,
+                        {'C': 'Frozen', 'A': 'Active', 'V': 'Empty'}[x]) for x in casci_mask]),
+                )
+                print(list(mps_info.casci_mask))
+            elif casci_ncore == 0 and casci_nvirt == 0:
                 mps_info = bw.brs.MPSInfo(
                     self.n_sites, self.vacuum, target, self.ghamil.basis
                 )
