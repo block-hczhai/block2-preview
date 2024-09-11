@@ -7357,7 +7357,6 @@ class DMRGDriver:
                     bw.b.VectorActTypes([getattr(bw.b.ActiveTypes,
                         {'C': 'Frozen', 'A': 'Active', 'V': 'Empty'}[x]) for x in casci_mask]),
                 )
-                print(list(mps_info.casci_mask))
             elif casci_ncore == 0 and casci_nvirt == 0:
                 mps_info = bw.brs.MPSInfo(
                     self.n_sites, self.vacuum, target, self.ghamil.basis
@@ -7479,6 +7478,10 @@ class DMRGDriver:
         target=None,
         full_fci=True,
         left_vacuum=None,
+        casci_ncore=0,
+        casci_nvirt=0,
+        casci_mask=None,
+        mrci_order=0,
         iprint=1,
     ):
         """
@@ -7508,6 +7511,20 @@ class DMRGDriver:
                 If not None, this is the left vacuum to be used in SE MPS.
                 If None, ``self.left_vacuum`` will be used.
                 Only has effects in SU2 mode for SE MPS with non-singlet target.
+            casci_ncore : int
+                If not zero, The number of core orbitals in a CASCI MPS.
+                These orbitals will always be kept doubly occupied
+                (if ``mrci_order == 0``). Default is zero.
+            casci_nvirt : int
+                If not zero, The number of virtual orbitals in a CASCI MPS.
+                These orbitals will always be kept empty
+                (if ``mrci_order == 0``). Default is zero.
+            casci_mask : str or None
+                If not None, a string of characters 'CAV' for labelling doubly occupied, active,
+                and empty orbitals. The length of the string must be equal to ``n_sites``.
+            mrci_order : int
+                If not zero, the core and virtual orbitals will have at most
+                ``mrci_order`` holes and electrons, respectively. Default is zero.
             iprint : int
                 Verbosity. Default is 1.
 
@@ -7552,7 +7569,42 @@ class DMRGDriver:
             target = self.target
         if left_vacuum is None:
             left_vacuum = self.left_vacuum
-        mps_info = bw.brs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        if casci_mask is not None:
+            assert mrci_order == 0
+            assert len(casci_mask) == self.n_sites
+            assert casci_mask.count('C') == casci_ncore
+            assert casci_mask.count('V') == casci_nvirt
+            mps_info = bw.brs.CASCIMPSInfo(
+                self.n_sites,
+                self.vacuum,
+                target,
+                self.ghamil.basis,
+                bw.b.VectorActTypes([getattr(bw.b.ActiveTypes,
+                    {'C': 'Frozen', 'A': 'Active', 'V': 'Empty'}[x]) for x in casci_mask]),
+            )
+        elif casci_ncore == 0 and casci_nvirt == 0:
+            mps_info = bw.brs.MPSInfo(self.n_sites, self.vacuum, target, self.ghamil.basis)
+        elif mrci_order == 0:
+            casci_ncas = self.n_sites - casci_ncore - casci_nvirt
+            mps_info = bw.brs.CASCIMPSInfo(
+                self.n_sites,
+                self.vacuum,
+                target,
+                self.ghamil.basis,
+                casci_ncore,
+                casci_ncas,
+                casci_nvirt,
+            )
+        else:
+            mps_info = bw.brs.MRCIMPSInfo(
+                self.n_sites,
+                casci_ncore,
+                casci_nvirt,
+                mrci_order,
+                self.vacuum,
+                target,
+                self.ghamil.basis,
+            )
         mps_info.tag = tag
         if full_fci:
             mps_info.set_bond_dimension_full_fci(left_vacuum, self.vacuum)
