@@ -671,6 +671,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 me->bra->save_data();
             if (context_ket != nullptr)
                 context_ket->save_data();
+            for (auto &mps : ext_mpss)
+                mps->save_data();
         } else {
             if (pdm != nullptr) {
                 pdm->info->deallocate();
@@ -1109,6 +1111,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     me->mpo->tf->opf->cg);
                 context_ket->save_data();
             }
+            for (auto &mps : ext_mpss)
+                mps->save_data();
         } else {
             if (pdm != nullptr) {
                 pdm->info->deallocate();
@@ -1741,6 +1745,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mbra->save_data();
             if (context_ket != nullptr)
                 context_mket->save_data();
+            for (auto &mps : ext_mpss)
+                mps->save_data();
         } else {
             if (pdm != nullptr) {
                 pdm->info->deallocate();
@@ -2250,6 +2256,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                     me->mpo->tf->opf->cg);
                 context_mket->save_data();
             }
+            for (auto &mps : ext_mpss)
+                mps->save_data();
         } else {
             if (pdm != nullptr) {
                 pdm->info->deallocate();
@@ -4098,6 +4106,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
             }
             for (auto &mps : mpss)
                 mps->save_data();
+            for (auto &mps : ext_mpss)
+                mps->save_data();
         } else {
             if (pdm != nullptr) {
                 pdm->info->deallocate();
@@ -4706,6 +4716,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                     me->mpo->tf->opf->cg);
             }
             for (auto &mps : mpss)
+                mps->save_data();
+            for (auto &mps : ext_mpss)
                 mps->save_data();
         } else {
             for (auto &mps : mpss) {
