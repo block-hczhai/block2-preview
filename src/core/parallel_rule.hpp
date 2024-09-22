@@ -346,6 +346,8 @@ template <typename S> struct ParallelRule<S> {
             frame_<float>()->prefix_can_write = is_root();
         } else
             throw runtime_error("DataFrame not defined!");
+        if (comm->para_type & ParallelTypes::Simple)
+            comm->para_type = comm->para_type ^ ParallelTypes::Simple;
     }
     virtual ~ParallelRule() = default;
     ParallelTypes get_parallel_type() const {
