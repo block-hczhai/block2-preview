@@ -2548,8 +2548,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 sweep_range.push_back(it);
 
         Timer t;
+        callback_()->compute("DMRG::sweep.start", iprint);
         for (auto i : sweep_range) {
-            callback_()->compute("DMRG::sweep", iprint);
+            callback_()->compute("DMRG::sweep::iter.start", iprint);
             check_signal_()();
             if (iprint >= 2) {
                 if (me->dot == 2)
@@ -2614,7 +2615,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         me->para_rule->comm->barrier();
                 }
             }
+            callback_()->compute("DMRG::sweep::iter.end", iprint);
         }
+        callback_()->compute("DMRG::sweep.end", iprint);
         size_t idx =
             min_element(sweep_energies.begin(), sweep_energies.end(),
                         [](const vector<FPLS> &x, const vector<FPLS> &y) {
