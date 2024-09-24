@@ -342,7 +342,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-12, windows-2022 ]
+        os: [ ubuntu-20.04, macos-12, windows-2022, macos-14 ]
         python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
@@ -350,6 +350,14 @@ jobs:
         exclude:
           - os: macos-12
             parallel: mpi
+          - os: macos-14
+            parallel: mpi
+          - os: macos-12
+            plat: arm64
+          - os: macos-14
+            plat: x86_64
+          - os: macos-14
+            python: '3.7'
           - os: ubuntu-20.04
             plat: arm64
           - os: windows-2022
@@ -372,6 +380,15 @@ jobs:
           export PYT=$(which python)
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: install requirements (linux / macos)
+        if: matrix.os == 'macos-14'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          export PYT=$(which python)
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (windows)
         if: matrix.os == 'windows-2022'
@@ -446,7 +463,7 @@ jobs:
           delocate-wheel -k dist/*.whl
 
       - name: build wheels (macos-arm64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-12' && matrix.plat == 'arm64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-14' && matrix.plat == 'arm64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -454,29 +471,23 @@ jobs:
         run: |
           brew update
           brew install libomp
-          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
           brew install gnu-sed
-          export PATH=/usr/local/opt/gnu-sed/bin:$PATH
+          export PATH=/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH
           echo ${TAG_STRING:11}
+          export OMPROOT=$(brew --prefix libomp)
+          echo ${OMPROOT}
           gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DARCH_ARM64=ON'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
+          gsed -i "/DUSE_MKL/a \                '-DCMAKE_CXX_FLAGS=-I${OMPROOT}/include'," setup.py
           gsed -i "/mkl/d" setup.py
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
-          git clone https://github.com/Homebrew/brew arm-brew
-          cd arm-brew && git checkout 3.6.16 && cd ..
-          ./arm-brew/bin/brew update
-          OMPGZ=$(./arm-brew/bin/brew fetch --force --bottle-tag=arm64_monterey libomp | grep "Downloaded to" | awk '{print $3}')
-          ./arm-brew/bin/brew install ${OMPGZ}
-          export OMPROOT=$(./arm-brew/bin/brew --prefix libomp)
-          echo ${OMPROOT}
           cmake --version
           python -m pip install wheel delocate==0.10.7
-          export _PYTHON_HOST_PLATFORM="macosx-12.0-arm64"
-          export SDKROOT=/Applications/Xcode_13.2.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.1.sdk
-          export CROSS_COMPILE=1
+          export _PYTHON_HOST_PLATFORM="macosx-14.0-arm64"
+          export SDKROOT=/Applications/Xcode_14.3.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
           export PLAT="arm64"
           python -m pip wheel . -w ./dist --no-deps
           delocate-wheel --require-archs=arm64 -k dist/*.whl
