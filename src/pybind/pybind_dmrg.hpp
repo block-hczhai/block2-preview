@@ -408,6 +408,7 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
         .def("canonicalize", &MPS<S, FL>::canonicalize)
         .def("dynamic_canonicalize", &MPS<S, FL>::dynamic_canonicalize)
         .def("random_canonicalize", &MPS<S, FL>::random_canonicalize)
+        .def("iscale", &MPS<S, FL>::iscale)
         .def("set_inact_ext_identity", &MPS<S, FL>::set_inact_ext_identity)
         .def("from_singlet_embedding_wfn",
              &MPS<S, FL>::from_singlet_embedding_wfn, py::arg("cg"),

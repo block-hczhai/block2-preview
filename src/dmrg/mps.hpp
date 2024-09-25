@@ -2385,6 +2385,12 @@ template <typename S, typename FL> struct MPS {
         for (int i = 0; i < n_sites; i++)
             random_canonicalize_tensor(i);
     }
+    virtual void iscale(FL d) {
+        load_tensor(center);
+        tensors[center]->iscale(d);
+        save_tensor(center);
+        unload_tensor(center);
+    }
     virtual void set_inact_ext_identity(int n_inactive, int n_external) {
         for (int i = 0; i < n_inactive; i++)
             if (tensors[i] != nullptr && i < center) {
