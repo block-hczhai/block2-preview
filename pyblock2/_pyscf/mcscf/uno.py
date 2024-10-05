@@ -23,6 +23,8 @@ Partially adapted from
     https://github.com/pyscf/dmrgscf/blob/master/examples/32-dmrg_casscf_nevpt2_for_FeS.py
     Author: Zhendong Li <zhendongli2008@gmail.com>
             Qiming Sun <osirpt.sun@gmail.com>
+    Revised pmloc for mol as partition list:
+            Huanchen Zhai, Oct 5, 2024
 """
 
 import numpy as np
@@ -39,22 +41,26 @@ def lowdin(s):
     return np.dot(v / np.sqrt(e), v.T.conj())
 
 
-def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
-    part = {}
-    for iatom in range(mol.natm):
-        part[iatom] = []
-    ncgto = 0
-    for binfo in mol._bas:
-        atom_id = binfo[0]
-        lang = binfo[1]
-        ncntr = binfo[3]
-        nbas = ncntr * (2 * lang + 1)
-        part[atom_id] += range(ncgto, ncgto + nbas)
-        ncgto += nbas
-    partition = []
-    for iatom in range(mol.natm):
-        partition.append(part[iatom])
-    ova = mol.intor_symmetric("cint1e_ovlp_sph")
+def pmloc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
+    if not isinstance(mol, list):
+        part = {}
+        for iatom in range(mol.natm):
+            part[iatom] = []
+        ncgto = 0
+        for binfo in mol._bas:
+            atom_id = binfo[0]
+            lang = binfo[1]
+            ncntr = binfo[3]
+            nbas = ncntr * (2 * lang + 1)
+            part[atom_id] += range(ncgto, ncgto + nbas)
+            ncgto += nbas
+        partition = []
+        for iatom in range(mol.natm):
+            partition.append(part[iatom])
+        ova = mol.intor_symmetric("cint1e_ovlp_sph")
+    else:
+        ova, partition = None, mol
+        assert iop == 1
     if iprint:
         print()
         print("[pm_loc_kernel]")
@@ -62,16 +68,24 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
         print(" tol=", tol)
         print(" maxcycle=", maxcycle)
         print(" partition=", len(partition), "\\n", partition)
-    k = mocoeff.shape[0]
     n = mocoeff.shape[1]
     natom = len(partition)
 
-    def genPaij(mol, mocoeff, ova, partition, iop):
+    def gen_paij_part(mocoeff, partition):
+        s12c = mocoeff.copy()
+        # Lowdin
+        pija = np.zeros((natom, n, n))
+        for iatom in range(natom):
+            idx = partition[iatom]
+            pija[iatom] = np.dot(s12c[idx, :].T, s12c[idx, :])
+        pija = pija.transpose(1, 2, 0).copy()
+        return pija
+
+    def gen_paij(mol, mocoeff, ova, partition, iop):
         c = mocoeff.copy()
         # Mulliken matrix
         if iop == 0:
             cts = c.T.dot(ova)
-            natom = len(partition)
             pija = np.zeros((natom, n, n))
             for iatom in range(natom):
                 idx = partition[iatom]
@@ -81,7 +95,6 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
         elif iop == 1:
             s12 = sqrtm(ova)
             s12c = s12.T.dot(c)
-            natom = len(partition)
             pija = np.zeros((natom, n, n))
             for iatom in range(natom):
                 idx = partition[iatom]
@@ -97,7 +110,10 @@ def loc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
         return pija
 
     u = np.identity(n)
-    pija = genPaij(mol, mocoeff, ova, partition, iop)
+    if not isinstance(mol, list):
+        pija = gen_paij(mol, mocoeff, ova, partition, iop)
+    else:
+        pija = gen_paij_part(mocoeff, partition)
 
     # Start
     def funval(pija):
@@ -294,8 +310,8 @@ def get_uno(mf, do_loc=True, iprint=True):
 
     clmo = c_orbs
     almo = a_orbs
-    uc = loc(mol, clmo, iprint=iprint)[1]
-    ua = loc(mol, almo, iprint=iprint)[1]
+    uc = pmloc(mol, clmo, iprint=iprint)[1]
+    ua = pmloc(mol, almo, iprint=iprint)[1]
     clmo = clmo.dot(uc)
     almo = almo.dot(ua)
 
@@ -456,7 +472,7 @@ def sort_orbitals(
 
         actmo = coeff[:, np.array(cas_list, dtype=int)]
         if do_loc:
-            ua = loc(mol, actmo, iprint=iprint)[1]
+            ua = pmloc(mol, actmo, iprint=iprint)[1]
             actmo = actmo.dot(ua)
         actmo, actocc, acte = psort(ova, fav, pav, actmo)
 
@@ -478,7 +494,7 @@ def sort_orbitals(
         if len(actmo[:, lidx]) != 0:
             if iprint:
                 print("low orbs = ", np.array(list(range(len(lidx))))[lidx])
-            ua = loc(mol, actmo[:, lidx], iprint=iprint)[1]
+            ua = pmloc(mol, actmo[:, lidx], iprint=iprint)[1]
             actmo[:, lidx] = actmo[:, lidx].dot(ua)
             actmo[:, lidx], actocc[lidx], acte[lidx] = psort(
                 ova, fav, pav, actmo[:, lidx]
@@ -487,7 +503,7 @@ def sort_orbitals(
         if len(actmo[:, midx]) != 0:
             if iprint:
                 print("mid orbs = ", np.array(list(range(len(midx))))[midx])
-            ua = loc(mol, actmo[:, midx], iprint=iprint)[1]
+            ua = pmloc(mol, actmo[:, midx], iprint=iprint)[1]
             actmo[:, midx] = actmo[:, midx].dot(ua)
             actmo[:, midx], actocc[midx], acte[midx] = psort(
                 ova, fav, pav, actmo[:, midx]
@@ -496,7 +512,7 @@ def sort_orbitals(
         if len(actmo[:, hidx]) != 0:
             if iprint:
                 print("high orbs = ", np.array(list(range(len(hidx))))[hidx])
-            ua = loc(mol, actmo[:, hidx], iprint=iprint)[1]
+            ua = pmloc(mol, actmo[:, hidx], iprint=iprint)[1]
             actmo[:, hidx] = actmo[:, hidx].dot(ua)
             actmo[:, hidx], actocc[hidx], acte[hidx] = psort(
                 ova, fav, pav, actmo[:, hidx]
