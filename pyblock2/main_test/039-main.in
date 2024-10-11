@@ -1,0 +1,21 @@
+# DMRG SE SU2 to SZ Expectation (odd sweeps)
+#DEP 37 38
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin -2
+irrep 1
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+num_thrds 4
+sweep_tol 1E-14
+
+irrep_reorder
+mps_tags ZKETM2
+restart_oh
+nonspinadapted

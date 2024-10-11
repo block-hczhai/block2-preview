@@ -1,0 +1,20 @@
+# Time-dependent DMRG (step 3 - root 0 td)
+#DEP 44 45
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+hf_occ integral
+schedule
+0 40 0 0
+end
+maxiter 10
+num_thrds 4
+sweep_tol 1E-14
+
+read_mps_tags KET-CPX-0
+mps_tags BRA
+delta_t 0.05i
+target_t 0.20i
+complex_mps
+noreorder

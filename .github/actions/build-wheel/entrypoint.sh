@@ -21,6 +21,8 @@ elif [ "${PYTHON_VERSION}" = "3.11" ]; then
     PY_VER=cp311-cp311
 elif [ "${PYTHON_VERSION}" = "3.12" ]; then
     PY_VER=cp312-cp312
+elif [ "${PYTHON_VERSION}" = "3.13-dev" ]; then
+    PY_VER=cp313-cp313
 fi
 
 PY_EXE=/opt/python/"${PY_VER}"/bin/python3
@@ -35,9 +37,9 @@ $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install set
 
 if [ "${PARALLEL}" = "mpi" ]; then
     yum install -y wget openssh-clients openssh-server
-    wget https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.6.tar.gz
-    tar zxf openmpi-4.1.6.tar.gz
-    cd openmpi-4.1.6
+    wget https://download.open-mpi.org/release/open-mpi/v5.0/openmpi-5.0.5.tar.gz
+    tar zxf openmpi-5.0.5.tar.gz
+    cd openmpi-5.0.5
     ./configure --prefix=/usr/local |& tee config.out
     make -j 4 |& tee make.out
     make install |& tee install.out
