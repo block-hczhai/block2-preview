@@ -1,0 +1,19 @@
+# Time-dependent DMRG (step 5 - overlap)
+#DEP 44 45 46 47
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+hf_occ integral
+schedule
+0 40 0 0
+end
+maxiter 10
+num_thrds 4
+sweep_tol 1E-14
+
+mps_tags KET-CPX-0 BRA KET-CPX-1 BRAEX
+restart_tran_oh
+complex_mps
+overlap
+noreorder

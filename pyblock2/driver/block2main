@@ -26,6 +26,14 @@ Author:
     Zhi-Hao Cui
 """
 
+import os
+import sys
+
+if os.name == "nt" and sys.version_info[1] >= 8:
+    for path in os.environ["PATH"].split(";"):
+        if path != "" and os.path.exists(os.path.abspath(path)):
+            os.add_dll_directory(os.path.abspath(path))
+
 from block2 import SZ, SU2, SZK, SU2K, SGF, DoubleFPCodec as FPCodec
 from block2 import Global, OpNamesSet, NoiseTypes, DecompositionTypes, Threading, ThreadingTypes
 from block2 import init_memory, release_memory, set_mkl_num_threads, read_occ, TruncationTypes
@@ -1431,7 +1439,7 @@ if "statespecific" in dic and "proj_weights" in dic:
 
 # prepare mps
 if len(mps_tags) > 1 or ("compression" in dic and "random_mps_init" not in dic) \
-   or "stopt_sampling" in dic:
+   or "stopt_sampling" in dic or "delta_t" in dic:
     nroots = len(mps_tags)
     mps = None
     mps_info = None
@@ -2599,7 +2607,7 @@ if not pre_run:
                          '--', linewidth=1, color='#5FA8AB')
                 plt.plot(ext_dws, ext_eners, 'o', color='#38686A',
                          markerfacecolor='white', markersize=5)
-                plt.text(ddw / 12, emax, "$E(M=\\infty) = %.6f \pm %.6f \\mathrm{\\ Hartree}$" %
+                plt.text(ddw / 12, emax, "$E(M=\\infty) = %.6f \\pm %.6f \\mathrm{\\ Hartree}$" %
                          (reg.intercept, abs(reg.intercept - emin) / 5), color='#38686A', fontsize=12)
                 plt.text(ddw / 12, emax - de / 12, "$R^2 = %.6f$" % (reg.rvalue ** 2),
                          color='#38686A', fontsize=12)
@@ -4366,9 +4374,34 @@ if not pre_run:
                 "A tag name must be given for the keyword copy_mps/restart_copy_mps!")
         if "trans_mps_to_sz" in dic:
             assert "nonspinadapted" not in dic
-            mps.info.load_mutable()
-            mps.load_mutable()
-            cp_mps = trans_mps(UnfusedMPS(mps), copy_tag, mpo.tf.opf.cg)
+
+            if mps.center != 0:
+                xmps = mps.deep_copy(copy_tag + "@TMP")
+                _print('change canonical form ...')
+                cf = str(xmps.canonical_form)
+                ime = MovingEnvironment(impo, xmps, xmps, "IEX")
+                ime.delayed_contraction = OpNamesSet.normal_ops()
+                ime.cached_contraction = cached_contraction
+                ime.init_environments(False)
+                if not complex_mps:
+                    expect = Expect(ime, xmps.info.bond_dim, xmps.info.bond_dim)
+                else:
+                    expect = ComplexExpect(ime, xmps.info.bond_dim, xmps.info.bond_dim)
+                expect.iprint = max(min(outputlevel, 3), 0)
+                expect.solve(True, xmps.center == 0)
+                if MPI is not None:
+                    MPI.barrier()
+                xmps.save_data()
+                if MPI is not None:
+                    MPI.barrier()
+                _print(cf + ' -> ' + xmps.canonical_form)
+            else:
+                xmps = mps
+
+            xmps.info.load_mutable()
+            xmps.load_mutable()
+            targetz = TrSX(xmps.info.target.n, xmps.info.target.twos, xmps.info.target.pg)
+            cp_mps = trans_mps(UnfusedMPS(xmps), copy_tag, mpo.tf.opf.cg, targetz)
             if "resolve_twosz" in dic:
                 res_twosz = int(dic["resolve_twosz"])
                 cp_mps.resolve_singlet_embedding(res_twosz)

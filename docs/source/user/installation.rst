@@ -15,7 +15,7 @@ One can install ``block2`` using ``pip``:
 
       pip install block2
 
-* Hybrid openMP/MPI version (requiring openMPI 4.1.x) ::
+* Hybrid openMP/MPI version (requiring openMPI 5.0.x for ``block2-mpi >= 0.5.3`` or 4.1.x for ``block2-mpi <= 0.5.2`` and ``block2-mpi <= 0.5.3rc19``) ::
 
       pip install block2-mpi
 

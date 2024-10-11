@@ -1,0 +1,23 @@
+# Ground State DMRG (custom schedule)
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule
+0  100  1E-4  1E-3
+4  250  1E-4  1E-3
+8  400  1E-5  1E-4
+10 600  1E-6  1E-5
+12 800  1E-7  1E-6
+14 1000 1E-8  1E-7
+16 1000 1E-8  0E+0
+end
+twodot_to_onedot 18
+maxiter 100
+num_thrds 4
+sweep_tol 1E-14

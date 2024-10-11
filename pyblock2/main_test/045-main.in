@@ -1,0 +1,19 @@
+# Time-dependent DMRG (step 2 - split)
+#DEP 44
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nroots 2
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+num_thrds 4
+sweep_tol 1E-14
+
+restart_copy_mps
+split_states
+trans_mps_to_complex
+noreorder

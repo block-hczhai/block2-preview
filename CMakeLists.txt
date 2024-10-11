@@ -27,6 +27,7 @@ OPTION(USE_PCH "Build precompiled headers" ON)
 OPTION(FORCE_LIB_ABS_PATH "Using absolute path when linking libraries" ON)
 # For BUILD_CLIB, local static variables may vaiolate ODR in .so and .exe.
 OPTION(USE_GLOBAL_VARIABLE "Use global variable instead of local static ones" ON)
+OPTION(SIMPLE_TEST "Only compile basic unit tests" OFF)
 
 IF (NOT ${USE_DMRG})
     SET(USE_BIG_SITE OFF)
@@ -785,7 +786,11 @@ IF (${BUILD_TEST})
     FIND_PACKAGE(GTest REQUIRED)
     INCLUDE_DIRECTORIES(${GTEST_INCLUDE_DIRS})
 
-    FILE(GLOB TSRCS unit_test/test_*.cpp)
+    IF (${SIMPLE_TEST})
+        FILE(GLOB TSRCS unit_test/test_wick_*.cpp unit_test/test_npdm_*.cpp unit_test/test_dmrg_*.cpp)
+    ELSE()
+        FILE(GLOB TSRCS unit_test/test_*.cpp)
+    ENDIF()
     MESSAGE(STATUS "TSRCS = ${TSRCS}")
 
     IF ((NOT APPLE) AND (NOT WIN32))
