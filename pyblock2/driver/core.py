@@ -5544,12 +5544,11 @@ class DMRGDriver:
                 op_str = "(C+D)0"
                 for _ in range(pdm_type - 1):
                     op_str = su2_coupling % op_str
-            if mask is None:
-                perm = bw.b.SpinPermScheme.initialize_su2(pdm_type * 2, op_str, True)
-            else:
-                perm = bw.b.SpinPermScheme.initialize_su2(
-                    pdm_type * 2, op_str, True, mask=bw.b.VectorUInt16(mask)
-                )
+            perm = bw.b.SpinPermScheme.initialize_su2(
+                pdm_type * 2, op_str, True,
+                mask=bw.b.VectorUInt16() if mask is None else bw.b.VectorUInt16(mask),
+                max_n_sites=ket.n_sites,
+            )
             perms = bw.b.VectorSpinPermScheme([perm])
         elif SymmetryTypes.SZ in bw.symm_type:
             if npdm_expr is not None and isinstance(npdm_expr, str):
@@ -5563,10 +5562,10 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
-                        if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops)
-                        for cd in op_str
+                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True,
+                            mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops,
+                            mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
@@ -5577,10 +5576,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
                         for cd, xm, pt in zip(op_str, mask, pts)
                     ]
@@ -5592,10 +5591,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         )
                         for cd, pt in zip(op_str, pts)
                     ]
@@ -5610,10 +5609,10 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True)
-                        if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops)
-                        for cd in op_str
+                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True,
+                            mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
+                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops,
+                            mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
@@ -5624,10 +5623,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm)
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
                         for cd, xm, pt in zip(op_str, mask, pts)
                     ]
@@ -5639,10 +5638,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask)
+                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
+                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         )
                         for cd, pt in zip(op_str, pts)
                     ]
@@ -5654,8 +5653,8 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops)
-                        for cd in op_str
+                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
+                            mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
@@ -5663,7 +5662,7 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm)
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
                         for cd, xm in zip(op_str, mask)
                     ]
@@ -5672,7 +5671,7 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask)
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         )
                         for cd in op_str
                     ]
@@ -5914,6 +5913,20 @@ class DMRGDriver:
         """
         return self.get_npdm(ket, pdm_type=4, *args, **kwargs)
 
+    def get_5pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 5-Particle Density Matrix (5PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
+        return self.get_npdm(ket, pdm_type=5, *args, **kwargs)
+
+    def get_6pdm(self, ket, *args, **kwargs):
+        """
+        Compute the 6-Particle Density Matrix (6PDM) for the given MPS.
+        See ``DMRGDriver.get_npdm``.
+        """
+        return self.get_npdm(ket, pdm_type=6, *args, **kwargs)
+
     def get_trans_1pdm(self, bra, ket, *args, **kwargs):
         """
         Compute the Transition 1-Particle Density Matrix (T-1PDM)
@@ -5949,6 +5962,24 @@ class DMRGDriver:
         See ``DMRGDriver.get_npdm``.
         """
         return self.get_npdm(ket, pdm_type=4, bra=bra, *args, **kwargs)
+
+    def get_trans_5pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 5-Particle Density Matrix (T-5PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
+        return self.get_npdm(ket, pdm_type=5, bra=bra, *args, **kwargs)
+
+    def get_trans_6pdm(self, bra, ket, *args, **kwargs):
+        """
+        Compute the Transition 6-Particle Density Matrix (T-6PDM)
+        between the given bra and ket MPSs.
+        Note that there can be an overall phase uncertainty for transition NPDMs.
+        See ``DMRGDriver.get_npdm``.
+        """
+        return self.get_npdm(ket, pdm_type=6, bra=bra, *args, **kwargs)
 
     def get_csf_coefficients(
         self, ket, cutoff=0.1, given_dets=None, max_print=200, fci_conv=False, iprint=1
