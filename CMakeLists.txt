@@ -25,7 +25,7 @@ OPTION(BUILD_EXE "Build executable block2" OFF)
 OPTION(REUSE_OBJS "Reuse core objects" ON)
 OPTION(USE_PCH "Build precompiled headers" ON)
 OPTION(FORCE_LIB_ABS_PATH "Using absolute path when linking libraries" ON)
-# For BUILD_CLIB, local static variables may vaiolate ODR in .so and .exe.
+# For BUILD_CLIB, local static variables may violate ODR in .so and .exe.
 OPTION(USE_GLOBAL_VARIABLE "Use global variable instead of local static ones" ON)
 OPTION(SIMPLE_TEST "Only compile basic unit tests" OFF)
 
