@@ -2386,7 +2386,7 @@ class DMRGDriver:
             site_basis : list[list[tuple[SX, int]]]
                 The set of quantum numbers (SX) and number of states (int) in the local
                 Hilbert space at each site.
-            site_ops : list[dict[str, np.ndarray[float|complex]]]
+            site_ops : list[dict[str, np.ndarray[float|complex]]] or list[dict[str, tuple[SX, np.ndarray[float|complex]]]]
                 The matrix representation of elementary operators in the local Hilbert space
                 at each site. Matrices must have ``ndim == 2``. The indices of rows and columns
                 correspond to the list given in ``site_basis``. For example,
@@ -2394,6 +2394,9 @@ class DMRGDriver:
                 ``site_ops[0]`` should have shape ``(6, 6)`` where the first 2 rows/columns
                 correspond to the Q1 block, the next 3 rows/columns correspond to the Q2 block, etc.
                 The operator name can only have one character.
+                The dict value can optionally be (q, arr) where q is the delta quantum of the operator
+                and arr is the matrix representation, which may be used in the SU2 mode when the delta
+                quantum cannot be uniquely determined by the non-zero matrix elements.
             orb_dependent_ops : str
                 List of operator names that can have point group irrep.
                 If point group or ``orb_sym`` is not used, this can be empty.
@@ -2513,7 +2516,11 @@ class DMRGDriver:
                                 q_map[pv + iv] = (iv, k, pv + v)
                             pv += v
 
-                        for name, op in ops.items():
+                        for name, xop in ops.items():
+                            if isinstance(xop, tuple) and len(xop) == 2 and isinstance(xop[1], np.ndarray):
+                                xdq, op = xop[0], xop[1]
+                            else:
+                                xdq, op = None, xop
                             assert op.shape == (pv, pv)
                             blocks = []
                             dqs = None
@@ -2541,10 +2548,13 @@ class DMRGDriver:
                                             ]
                                         blocks.append((q_map[i][1], q_map[j][1], mat))
 
-                            if dqs is None:
-                                dqs = [self.vacuum]
-                            assert len(dqs) >= 1
-                            dq = dqs[0]
+                            if xdq is not None:
+                                dq = xdq
+                            else:
+                                if dqs is None:
+                                    dqs = [self.vacuum]
+                                assert len(dqs) >= 1
+                                dq = dqs[0]
 
                             mat = super_self.bw.bs.SparseMatrix(d_alloc)
                             info = self.find_site_op_info(m, dq)
