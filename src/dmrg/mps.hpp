@@ -667,9 +667,9 @@ template <typename S> struct MPSInfo {
     }
     ubond_t get_max_bond_dimension() const {
         total_bond_t max_bdim = 0;
-        for (int i = 0; i <= n_sites; i++)
+        for (int i = 0; i < n_sites; i++)
             max_bdim = max(left_dims[i]->n_states_total, max_bdim);
-        for (int i = n_sites; i >= 0; i--)
+        for (int i = n_sites; i > 0; i--)
             max_bdim = max(right_dims[i]->n_states_total, max_bdim);
         return (ubond_t)min((uint64_t)max_bdim,
                             (uint64_t)numeric_limits<ubond_t>::max());
@@ -2384,6 +2384,12 @@ template <typename S, typename FL> struct MPS {
     virtual void random_canonicalize() {
         for (int i = 0; i < n_sites; i++)
             random_canonicalize_tensor(i);
+    }
+    virtual void iscale(FL d) {
+        load_tensor(center);
+        tensors[center]->iscale(d);
+        save_tensor(center);
+        unload_tensor(center);
     }
     virtual void set_inact_ext_identity(int n_inactive, int n_external) {
         for (int i = 0; i < n_inactive; i++)

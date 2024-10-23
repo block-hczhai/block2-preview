@@ -1,0 +1,31 @@
+# MPS Compression
+#DEP 40
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule
+0  250  0 0
+2  125  0 0
+4   62  0 0
+6   31  0 0
+8   15  0 0
+10   7  0 0
+12   3  0 0
+14   1  0 0
+end
+maxiter 16
+num_thrds 4
+sweep_tol 0
+
+compression
+overlap
+read_mps_tags KET
+mps_tags BRA
+
+irrep_reorder

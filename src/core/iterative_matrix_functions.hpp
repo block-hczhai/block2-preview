@@ -923,12 +923,21 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         }
         for (int i = 0; i < k; i++)
             copy(bs[i], vs[i]);
+        int m = k;
         for (int i = 0; i < k; i++) {
             for (int j = 0; j < i; j++)
                 iadd(bs[i], bs[j], -complex_dot(bs[j], bs[i]));
-            iscale(bs[i], (FP)1.0 / norm(bs[i]));
+            FL normx = norm(bs[i]);
+            if (abs(normx * normx) < 1E-14 && i > 0) {
+                m = i;
+                if (iprint)
+                    cout << "Davidson: keeping only " << m << " initials."
+                         << endl;
+                break;
+            }
+            iscale(bs[i], (FP)1.0 / normx);
         }
-        for (int i = 0; i < k; i++) {
+        for (int i = 0; i < m; i++) {
             for (int j = 0; j < nor; j++)
                 if (abs(or_normsqs[j]) > 1E-14)
                     iadd(bs[i], ors[j],
@@ -949,7 +958,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         GMatrix<FL> q(nullptr, bs[0].m, bs[0].n);
         if (pcomm == nullptr || pcomm->root == pcomm->rank)
             q.allocate(x_alloc);
-        int ck = 0, msig = 0, m = k, xiter = 0;
+        int ck = 0, msig = 0, xiter = 0;
         FL qq;
         if (iprint)
             cout << endl;
@@ -1087,7 +1096,8 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 pcomm->broadcast(&ck, 1, pcomm->root);
             }
             if (abs(qq) < conv_thrd + abs(eigvals[ck]) * abs(eigvals[ck]) *
-                                          rel_conv_thrd * rel_conv_thrd) {
+                                          rel_conv_thrd * rel_conv_thrd &&
+                m >= k) {
                 ck++;
                 if (ck == k)
                     break;

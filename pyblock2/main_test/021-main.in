@@ -1,0 +1,21 @@
+# DMRG tran 2pdm (diff irrep, step 3)
+#DEP 19 20
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+mps_tags BRA KET
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+num_thrds 4
+sweep_tol 1E-14
+
+restart_tran_onepdm
+restart_tran_twopdm
+conventional_npdm

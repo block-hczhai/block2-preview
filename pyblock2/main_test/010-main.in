@@ -1,0 +1,20 @@
+# DMRG Mixed with State-Average (step 3)
+#DEP 8 9
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+mps_tags EXXKET
+num_thrds 4
+sweep_tol 1E-14
+
+proj_mps_tags KET-0 KET-1 EXKET-0 EXKET-1 EXKET-2
+proj_weights 5 5 5 5 5

@@ -1,0 +1,19 @@
+# DMRG Singlet-embedding (odd sweeps)
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 2
+irrep 1
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 29
+num_thrds 4
+sweep_tol 0
+
+irrep_reorder
+mps_tags SEKET
+singlet_embedding

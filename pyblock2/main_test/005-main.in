@@ -1,0 +1,16 @@
+# Direct level-shift DMRG ground state
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+mps_tags KET1
+num_thrds 4
+sweep_tol 1E-14

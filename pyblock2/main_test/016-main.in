@@ -1,0 +1,22 @@
+# DMRG restart (second step)
+#DEP 15
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule
+0   70  1E-4  1E-3
+4  200  1E-5  1E-6
+8  500  1E-8  0E+0
+end
+twodot_to_onedot 10
+maxiter 16
+num_thrds 4
+sweep_tol 1E-14
+
+fullrestart

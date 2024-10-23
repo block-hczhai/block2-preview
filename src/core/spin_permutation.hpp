@@ -938,8 +938,9 @@ struct SpinPermPattern {
     vector<uint16_t> mask;
     vector<uint16_t> data;
     SpinPermPattern(uint16_t n,
-                    const vector<uint16_t> &mask = vector<uint16_t>())
-        : n(n), mask(mask), data(initialize(n, mask)) {}
+                    const vector<uint16_t> &mask = vector<uint16_t>(),
+                    int max_n_sites = 0)
+        : n(n), mask(mask), data(initialize(n, mask, max_n_sites)) {}
     static vector<uint16_t>
     all_reordering(const vector<uint16_t> &x,
                    const vector<uint16_t> &mask = vector<uint16_t>()) {
@@ -1007,13 +1008,16 @@ struct SpinPermPattern {
         return r;
     }
     static vector<uint16_t>
-    initialize(uint16_t n, const vector<uint16_t> &mask = vector<uint16_t>()) {
+    initialize(uint16_t n, const vector<uint16_t> &mask = vector<uint16_t>(),
+               int max_n_sites = 0) {
         int mi = n;
         if (mask.size() != 0) {
             mi = 1;
             for (uint16_t j = 1; j < n; j++)
                 mi += mask[j] != mask[j - 1];
         }
+        if (max_n_sites != 0)
+            mi = mi < max_n_sites ? mi : max_n_sites;
         map<pair<uint16_t, uint16_t>, vector<vector<uint16_t>>> mp;
         for (uint16_t i = 0; i <= n; i++)
             mp[make_pair(0, i)] = vector<vector<uint16_t>>();
@@ -1190,12 +1194,14 @@ struct SpinPermScheme {
     SpinPermScheme() {}
     SpinPermScheme(string spin_str, bool su2 = true, bool is_fermion = true,
                    bool is_npdm = false, bool is_drt = false,
-                   const vector<uint16_t> &mask = vector<uint16_t>()) {
+                   const vector<uint16_t> &mask = vector<uint16_t>(),
+                   int max_n_sites = 0) {
         int nn = SpinPermRecoupling::count_cds(spin_str);
         SpinPermScheme r =
             su2 ? SpinPermScheme::initialize_su2(nn, spin_str, is_npdm, is_drt,
-                                                 mask)
-                : SpinPermScheme::initialize_sz(nn, spin_str, is_fermion, mask);
+                                                 mask, max_n_sites)
+                : SpinPermScheme::initialize_sz(nn, spin_str, is_fermion, mask,
+                                                max_n_sites);
         index_patterns = r.index_patterns;
         this->mask = r.mask;
         data = r.data;
@@ -1204,10 +1210,11 @@ struct SpinPermScheme {
     }
     static SpinPermScheme
     initialize_sz(int nn, const string &spin_str, bool is_fermion = true,
-                  const vector<uint16_t> &mask = vector<uint16_t>()) {
+                  const vector<uint16_t> &mask = vector<uint16_t>(),
+                  int max_n_sites = 0) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
-        SpinPermPattern spat(nn, mask);
+        SpinPermPattern spat(nn, mask, max_n_sites);
         vector<double> mptr;
         SpinPermScheme r;
         r.index_patterns.resize(spat.count());
@@ -1241,10 +1248,11 @@ struct SpinPermScheme {
     static SpinPermScheme
     initialize_sany(int nn, const string &spin_str,
                     const string &fermionic_ops = "cdCD",
-                    const vector<uint16_t> &mask = vector<uint16_t>()) {
+                    const vector<uint16_t> &mask = vector<uint16_t>(),
+                    int max_n_sites = 0) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
-        SpinPermPattern spat(nn, mask);
+        SpinPermPattern spat(nn, mask, max_n_sites);
         vector<double> mptr;
         SpinPermScheme r;
         r.index_patterns.resize(spat.count());
@@ -1463,7 +1471,8 @@ struct SpinPermScheme {
     static SpinPermScheme
     initialize_su2(int nn, const string &spin_str, bool is_npdm = false,
                    bool is_drt = false,
-                   const vector<uint16_t> &mask = vector<uint16_t>()) {
+                   const vector<uint16_t> &mask = vector<uint16_t>(),
+                   int max_n_sites = 0) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg;
@@ -1473,7 +1482,7 @@ struct SpinPermScheme {
         string spin_pat_str = R::split_cds(spin_str, cds);
         bool heis = cds.size() != 0 && cds[0] == 2;
         int target_twos = R::get_target_twos(spin_pat_str);
-        SpinPermPattern spat(nn, mask);
+        SpinPermPattern spat(nn, mask, max_n_sites);
         SpinPermScheme r;
         r.index_patterns.resize(spat.count());
         r.data.resize(spat.count());
@@ -1523,7 +1532,8 @@ struct SpinPermScheme {
     static SpinPermScheme
     initialize_su2_old2(int nn, string spin_str, bool is_npdm = false,
                         bool is_drt = false,
-                        const vector<uint16_t> &mask = vector<uint16_t>()) {
+                        const vector<uint16_t> &mask = vector<uint16_t>(),
+                        int max_n_sites = 0) {
         using T = SpinPermTensor;
         using R = SpinPermRecoupling;
         SU2CG cg;
@@ -1533,7 +1543,7 @@ struct SpinPermScheme {
         spin_str = R::split_cds(spin_str, cds);
         bool heis = cds.size() != 0 && cds[0] == 2;
         int target_twos = R::get_target_twos(spin_str);
-        SpinPermPattern spat(nn, mask);
+        SpinPermPattern spat(nn, mask, max_n_sites);
         SpinPermScheme r;
         r.index_patterns.resize(spat.count());
         r.data.resize(spat.count());

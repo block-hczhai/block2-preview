@@ -104,6 +104,7 @@ The following input file is used for this step: ::
     spin 0
     irrep 1
 
+    hf_occ integral
     schedule
         0 1000 0 0
     end

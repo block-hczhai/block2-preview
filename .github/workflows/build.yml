@@ -23,12 +23,14 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-12, windows-2022 ]
-        python: [ 3.12 ]
+        os: [ ubuntu-20.04, macos-13, macos-14, windows-2022 ]
+        python: [ '3.13-dev' ]
         plat: [ x86_64 ]
-        parallel: [ mpi, serial, serial-pytest, any-symm-pytest ]
+        parallel: [ mpi, serial, serial-pytest, any-symm-pytest, main-test ]
         exclude:
-          - os: macos-12
+          - os: macos-13
+            parallel: mpi
+          - os: macos-14
             parallel: mpi
           - os: windows-2022
             parallel: mpi
@@ -41,12 +43,18 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-12' || matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: install requirements (linux / macos)
+        if: matrix.os == 'macos-14'
+        run: |
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (linux / mpi)
         if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-20.04'
@@ -110,7 +118,7 @@ jobs:
           getconf LONG_BIT
 
       - name: build gtest (macos)
-        if: matrix.os == 'macos-12'
+        if: matrix.os == 'macos-13'
         env:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
@@ -123,11 +131,25 @@ jobs:
           brew install libomp
           cp /usr/local/opt/libomp/include/*.h /usr/local/include/
 
+      - name: build gtest (macos)
+        if: matrix.os == 'macos-14'
+        env:
+          GTESTROOT: ~/gtest
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          git clone -b release-1.8.0 https://github.com/google/googletest
+          cd googletest
+          cmake CMakeLists.txt -DCMAKE_INSTALL_PREFIX=${GTESTROOT}
+          make
+          make install
+          brew update
+          brew install libomp
+
       - name: build test (serial-pytest, linux | macos)
-        if: matrix.parallel == 'serial-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-12')
+        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13')
         env:
           MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '10.9'
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
           CC: gcc-9
           CXX: g++-9
         run: |
@@ -137,8 +159,24 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 2
 
+      - name: build test (serial-pytest, macos-arm64)
+        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'macos-14'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+          CC: gcc-9
+          CXX: g++-9
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          export OMPROOT=$(brew --prefix libomp)
+          cmake .. -DUSE_MKL=OFF -DARCH_ARM64=ON -DCMAKE_CXX_FLAGS=-I${OMPROOT}/include -DOMP_LIB=OMP \
+            -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON -DFORCE_LIB_ABS_PATH=OFF \
+            -DAPPLE_ACC_SINGLE_PREC=OFF
+          make -j 2
+
       - name: build test (serial-pytest, windows)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'windows-2022'
+        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'windows-2022'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -150,10 +188,10 @@ jobs:
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (any-symm-pytest, linux | macos)
-        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-12')
+        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13')
         env:
           MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '10.9'
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
           CC: gcc-9
           CXX: g++-9
         run: |
@@ -161,6 +199,22 @@ jobs:
           cd build
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
+          make -j 2
+
+      - name: build test (any-symm-pytest, macos-arm64)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-14'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+          CC: gcc-9
+          CXX: g++-9
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          export OMPROOT=$(brew --prefix libomp)
+          cmake .. -DUSE_MKL=OFF -DARCH_ARM64=ON -DCMAKE_CXX_FLAGS=-I${OMPROOT}/include -DBUILD_LIB=ON -DOMP_LIB=OMP \
+            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON -DFORCE_LIB_ABS_PATH=OFF \
+            -DAPPLE_ACC_SINGLE_PREC=OFF
           make -j 2
 
       - name: build test (any-symm-pytest, windows)
@@ -201,15 +255,30 @@ jobs:
           make -j 2
 
       - name: build test (serial, macos)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-12'
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-13'
         env:
           MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '10.9'
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: |
           mkdir build_test
           cd build_test
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
+          make -j 2
+
+      - name: build test (serial, macos-arm64)
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-14'
+        env:
+          GTESTROOT: ~/gtest
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+        run: |
+          mkdir build_test
+          cd build_test
+          cmake --version
+          export OMPROOT=$(brew --prefix libomp)
+          cmake .. -DUSE_MKL=OFF -DARCH_ARM64=ON -DCMAKE_CXX_FLAGS=-I${OMPROOT}/include -DBUILD_TEST=ON -DOMP_LIB=OMP \
+            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=OFF -DUSE_SG=ON -DGTEST_ROOT=${GTESTROOT} \
+            -DFORCE_LIB_ABS_PATH=OFF -DSIMPLE_TEST=ON
           make -j 2
 
       - name: run test (serial, windows)
@@ -238,7 +307,7 @@ jobs:
           ./block2_tests
 
       - name: run test (serial, macos)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-12'
+        if: matrix.parallel == 'serial' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
         run: |
           cd build_test
           ./block2_tests
@@ -250,7 +319,7 @@ jobs:
         run: |
           $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
           $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
-          & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
+          & $dumpbin /DEPENDENTS .\build\Release\block2.cp313-win_amd64.pyd
           $xpwd = Get-Location
           $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
@@ -263,7 +332,7 @@ jobs:
       - name: run test (serial-pytest, linux)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
-          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
@@ -273,11 +342,53 @@ jobs:
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-12'
+        if: matrix.parallel == 'serial-pytest' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
         run: |
-          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
+
+      - name: run test (main-test, windows)
+        if: matrix.parallel == 'main-test' && matrix.os == 'windows-2022'
+        env:
+          BLAS_ROOT: D:\a\openblas
+        run: |
+          $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
+          $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
+          & $dumpbin /DEPENDENTS .\build\Release\block2.cp313-win_amd64.pyd
+          $xpwd = Get-Location
+          $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
+          $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
+          $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
+          $env:PATH = "$($vcpath[0].FullName)\bin\Hostx64\x64;" + $env:PATH
+          $env:block2main = "${xpwd}\pyblock2\driver\block2main"
+          python -m pip install 'scipy==1.14.1'
+          cd pyblock2\main_test
+          .\run-test.ps1
+
+      - name: run test (main-test, linux)
+        if: matrix.parallel == 'main-test' && matrix.os == 'ubuntu-20.04'
+        run: |
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          export PATH=$(pwd)/pyblock2/driver:$PATH
+          export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
+          if [ "$CPUTYPE" = "AuthenticAMD" ]; then
+            export LD_PRELOAD=$PWD/libfixcpu.so
+          fi
+          echo $LD_PRELOAD
+          cd pyblock2/main_test
+          ./run-test.sh
+
+      - name: run test (main-test, macos)
+        if: matrix.parallel == 'main-test' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+        run: |
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          export PATH=$(pwd)/pyblock2/driver:$PATH
+          cd pyblock2/main_test
+          ./run-test.sh
 
       - name: run test (any-symm-pytest, windows)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2022'
@@ -286,7 +397,7 @@ jobs:
         run: |
           $vcpath = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC'
           $dumpbin = "$($vcpath[0].FullName)\bin\Hostx64\x64\dumpbin.exe"
-          & $dumpbin /DEPENDENTS .\build\Release\block2.cp312-win_amd64.pyd
+          & $dumpbin /DEPENDENTS .\build\Release\block2.cp313-win_amd64.pyd
           $xpwd = Get-Location
           $env:PYTHONPATH = "${xpwd};${xpwd}\build\Release;" + $env:PYTHONPATH
           $env:PATH = "${env:BLAS_ROOT}\bin;" + $env:PATH
@@ -299,7 +410,7 @@ jobs:
       - name: run test (any-symm-pytest, linux)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-20.04'
         run: |
-          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
@@ -309,9 +420,9 @@ jobs:
           py.test -s pyblock2/unit_test/*.py --symm sany
 
       - name: run test (any-symm-pytest, macos)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-12'
+        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
         run: |
-          python -m pip install pytest 'pyscf==2.5.0' 'scipy==1.12.0'
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py --symm sany
 
@@ -342,14 +453,22 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-12, windows-2022 ]
-        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
+        os: [ ubuntu-20.04, macos-13, windows-2022, macos-14 ]
+        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13-dev' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
         exclude:
-          - os: macos-12
+          - os: macos-13
             parallel: mpi
+          - os: macos-14
+            parallel: mpi
+          - os: macos-13
+            plat: arm64
+          - os: macos-14
+            plat: x86_64
+          - os: macos-14
+            python: '3.7'
           - os: ubuntu-20.04
             plat: arm64
           - os: windows-2022
@@ -365,13 +484,22 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-12' || matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04'
         env:
           MKLROOT: ~/.local
         run: |
           export PYT=$(which python)
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: install requirements (linux / macos)
+        if: matrix.os == 'macos-14'
+        env:
+          MKLROOT: ~/.local
+        run: |
+          export PYT=$(which python)
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (windows)
         if: matrix.os == 'windows-2022'
@@ -413,10 +541,10 @@ jobs:
           delvewheel repair "$($rr[0].FullName)" -v -w dist
 
       - name: build wheels (macos-x86_64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-12' && matrix.plat == 'x86_64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-13' && matrix.plat == 'x86_64'
         env:
           TAG_STRING: ${{ github.event.ref }}
-          MACOSX_DEPLOYMENT_TARGET: '10.9'
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
           brew update
@@ -446,7 +574,7 @@ jobs:
           delocate-wheel -k dist/*.whl
 
       - name: build wheels (macos-arm64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-12' && matrix.plat == 'arm64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-14' && matrix.plat == 'arm64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -454,29 +582,23 @@ jobs:
         run: |
           brew update
           brew install libomp
-          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
           brew install gnu-sed
-          export PATH=/usr/local/opt/gnu-sed/bin:$PATH
+          export PATH=/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH
           echo ${TAG_STRING:11}
+          export OMPROOT=$(brew --prefix libomp)
+          echo ${OMPROOT}
           gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
           gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DARCH_ARM64=ON'," setup.py
           gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
+          gsed -i "/DUSE_MKL/a \                '-DCMAKE_CXX_FLAGS=-I${OMPROOT}/include'," setup.py
           gsed -i "/mkl/d" setup.py
           gsed -i "/intel-openmp/d" setup.py
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
-          git clone https://github.com/Homebrew/brew arm-brew
-          cd arm-brew && git checkout 3.6.16 && cd ..
-          ./arm-brew/bin/brew update
-          OMPGZ=$(./arm-brew/bin/brew fetch --force --bottle-tag=arm64_monterey libomp | grep "Downloaded to" | awk '{print $3}')
-          ./arm-brew/bin/brew install ${OMPGZ}
-          export OMPROOT=$(./arm-brew/bin/brew --prefix libomp)
-          echo ${OMPROOT}
           cmake --version
           python -m pip install wheel delocate==0.10.7
-          export _PYTHON_HOST_PLATFORM="macosx-12.0-arm64"
-          export SDKROOT=/Applications/Xcode_13.2.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX12.1.sdk
-          export CROSS_COMPILE=1
+          export _PYTHON_HOST_PLATFORM="macosx-14.0-arm64"
+          export SDKROOT=/Applications/Xcode_14.3.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
           export PLAT="arm64"
           python -m pip wheel . -w ./dist --no-deps
           delocate-wheel --require-archs=arm64 -k dist/*.whl
@@ -523,7 +645,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: '3.13-dev'
 
       - name: build source dist (serial)
         env:
@@ -585,7 +707,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: '3.13-dev'
 
       - name: build source dist (serial)
         env:

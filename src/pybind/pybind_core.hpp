@@ -874,6 +874,7 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
              py::arg("length"))
         .def("trace", &SparseMatrix<S, FL>::trace)
         .def("norm", &SparseMatrix<S, FL>::norm)
+        .def("iscale", &SparseMatrix<S, FL>::iscale)
         .def("conjugate", &SparseMatrix<S, FL>::conjugate)
         .def("__getitem__",
              [](SparseMatrix<S, FL> *self, int idx) { return (*self)[idx]; })
@@ -2322,10 +2323,12 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("data", &SpinPermPattern::data)
         .def(py::init<uint16_t>())
         .def(py::init<uint16_t, const vector<uint16_t> &>())
+        .def(py::init<uint16_t, const vector<uint16_t> &, int>())
         .def_static("all_reordering", &SpinPermPattern::all_reordering,
                     py::arg("x"), py::arg("mask") = vector<uint16_t>())
         .def_static("initialize", &SpinPermPattern::initialize, py::arg("n"),
-                    py::arg("mask") = vector<uint16_t>())
+                    py::arg("mask") = vector<uint16_t>(),
+                    py::arg("max_n_sites") = 0)
         .def_static("get_unique", &SpinPermPattern::get_unique)
         .def_static("make_matrix", &SpinPermPattern::make_matrix)
         .def("count", &SpinPermPattern::count)
@@ -2358,30 +2361,34 @@ template <typename S = void> void bind_io(py::module &m) {
         .def(py::init<string, bool, bool, bool, bool>())
         .def(py::init<string, bool, bool, bool, bool,
                       const vector<uint16_t> &>())
+        .def(py::init<string, bool, bool, bool, bool, const vector<uint16_t> &,
+                      int>())
         .def_readwrite("index_patterns", &SpinPermScheme::index_patterns)
         .def_readwrite("data", &SpinPermScheme::data)
         .def_readwrite("is_su2", &SpinPermScheme::is_su2)
         .def_readwrite("left_vacuum", &SpinPermScheme::left_vacuum)
         .def_readwrite("mask", &SpinPermScheme::mask)
-        .def_static("initialize_sz", &SpinPermScheme::initialize_sz,
-                    py::arg("nn"), py::arg("spin_str"),
-                    py::arg("is_fermion") = true,
-                    py::arg("mask") = vector<uint16_t>())
-        .def_static("initialize_sany", &SpinPermScheme::initialize_sany,
-                    py::arg("nn"), py::arg("spin_str"),
-                    py::arg("fermionic_ops") = string("cdCD"),
-                    py::arg("mask") = vector<uint16_t>())
+        .def_static(
+            "initialize_sz", &SpinPermScheme::initialize_sz, py::arg("nn"),
+            py::arg("spin_str"), py::arg("is_fermion") = true,
+            py::arg("mask") = vector<uint16_t>(), py::arg("max_n_sites") = 0)
+        .def_static(
+            "initialize_sany", &SpinPermScheme::initialize_sany, py::arg("nn"),
+            py::arg("spin_str"), py::arg("fermionic_ops") = string("cdCD"),
+            py::arg("mask") = vector<uint16_t>(), py::arg("max_n_sites") = 0)
         .def_static("initialize_su2_old", &SpinPermScheme::initialize_su2_old,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false)
         .def_static("initialize_su2", &SpinPermScheme::initialize_su2,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false, py::arg("is_drt") = false,
-                    py::arg("mask") = vector<uint16_t>())
+                    py::arg("mask") = vector<uint16_t>(),
+                    py::arg("max_n_sites") = 0)
         .def_static("initialize_su2_old2", &SpinPermScheme::initialize_su2_old2,
                     py::arg("nn"), py::arg("spin_str"),
                     py::arg("is_npdm") = false, py::arg("is_drt") = false,
-                    py::arg("mask") = vector<uint16_t>())
+                    py::arg("mask") = vector<uint16_t>(),
+                    py::arg("max_n_sites") = 0)
         .def("to_str", &SpinPermScheme::to_str);
 
     py::bind_vector<vector<shared_ptr<SpinPermScheme>>>(m,

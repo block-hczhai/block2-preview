@@ -1,0 +1,21 @@
+# Orbital Rotation (step 2)
+#DEP 25
+
+sym d2h
+
+nelec 14
+spin 0
+irrep 1
+
+hf_occ integral
+schedule
+    0 1000 0 0
+end
+num_thrds 4
+
+mps_tags BRA
+orbital_rotation
+delta_t 0.05
+outputlevel 1
+noreorder
+

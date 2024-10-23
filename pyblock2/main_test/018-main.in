@@ -1,0 +1,21 @@
+# State-Averaged DMRG restart for tran 2pdm
+#DEP 2
+
+sym d2h
+orbitals ../../data/N2.STO3G.FCIDUMP
+
+nelec 14
+spin 0
+irrep 1
+nroots 2
+weights 0.5 0.5
+
+hf_occ integral
+schedule default
+maxM 500
+maxiter 30
+num_thrds 4
+sweep_tol 1E-14
+
+restart_tran_onepdm
+restart_tran_twopdm
