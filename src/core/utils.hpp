@@ -65,6 +65,12 @@ namespace block2 {
 
 #define FNAME(X) LFNAME(X)
 
+#ifdef __EMSCRIPTEN__
+#define VRETT int
+#else
+#define VRETT void
+#endif
+
 #ifdef _APPLE_ACC_SINGLE_PREC
 #define FRETT double
 #else

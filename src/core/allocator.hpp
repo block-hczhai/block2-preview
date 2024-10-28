@@ -29,8 +29,10 @@
 #include "tbb/scalable_allocator.h"
 #endif
 #include <algorithm>
+#ifndef __EMSCRIPTEN__
 #ifdef __unix__
 #include <execinfo.h>
+#endif
 #endif
 #include <cassert>
 #include <complex>
@@ -54,6 +56,7 @@ namespace block2 {
  * Not working for non-unix systems.
  */
 inline void print_trace() {
+#ifndef __EMSCRIPTEN__
 #ifdef __unix__
     void *array[32];
     size_t size = backtrace(array, 32);
@@ -61,6 +64,7 @@ inline void print_trace() {
 
     for (size_t i = 0; i < size; i++)
         fprintf(stderr, "%s\n", strings[i]);
+#endif
 #endif
     abort();
 }

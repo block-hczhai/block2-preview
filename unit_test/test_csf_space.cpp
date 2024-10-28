@@ -9,7 +9,11 @@ class TestCSFSpace : public ::testing::Test {
     typedef double FP;
     static const int n_tests = 200;
     size_t isize = 1LL << 24;
+#ifndef __EMSCRIPTEN__
     size_t dsize = 1LL << 32;
+#else
+    size_t dsize = 1LL << 30;
+#endif
     double norm(const vector<pair<pair<MKL_INT, MKL_INT>, double>> &mat) const {
         double normsq = 0;
         for (auto &mmat : mat)

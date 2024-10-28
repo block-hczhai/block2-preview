@@ -462,6 +462,9 @@ struct Threading {
         }
         assert(n_threads_global != -1 && n_threads_op != -1 &&
                n_threads_quanta != -1 && n_threads_mkl != -1);
+#ifdef __EMSCRIPTEN__
+        n_threads_global = n_threads_op = n_threads_quanta = n_threads_mkl = 1;
+#endif
         if (type & ThreadingTypes::BatchedGEMM) {
 #ifdef _HAS_BLIS
             bli_thread_set_num_threads(n_threads_mkl);
@@ -531,9 +534,7 @@ struct Threading {
 extern shared_ptr<Threading> _g_threading;
 
 /** Implementation of the ``threading`` global variable. */
-inline shared_ptr<Threading> &threading_() {
-    return _g_threading;
-}
+inline shared_ptr<Threading> &threading_() { return _g_threading; }
 
 #else
 

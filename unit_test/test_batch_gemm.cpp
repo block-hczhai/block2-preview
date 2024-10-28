@@ -215,6 +215,8 @@ TYPED_TEST(TestBatchGEMM, TestTensorProduct) {
     }
 }
 
+#ifdef _USE_COMPLEX
+
 TYPED_TEST(TestBatchGEMM, TestComplexRotate) {
     using FL = TypeParam;
     typedef typename GMatrix<FL>::FP FP;
@@ -408,3 +410,4 @@ TYPED_TEST(TestBatchGEMM, TestComplexTensorProduct) {
         dalloc_<FP>()->complex_deallocate(a.data, ma * na * nbatch);
     }
 }
+#endif

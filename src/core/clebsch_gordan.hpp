@@ -107,7 +107,11 @@ struct SU2CG {
             rst = sqrt_fact[t] * sqrt_fact[t - alpha1] * sqrt_fact[t - alpha2] *
                   sqrt_fact[beta1 - t] * sqrt_fact[beta2 - t] *
                   sqrt_fact[beta3 - t];
+#ifndef __EMSCRIPTEN__
             r += factor / (rst * rst);
+#else
+            r += factor / (rst * rst + 1E-33L);
+#endif
         }
         return r;
     }
@@ -139,7 +143,12 @@ struct SU2CG {
                   sqrt_fact[t - alpha3] * sqrt_fact[t - alpha4] *
                   sqrt_fact[beta1 - t] * sqrt_fact[beta2 - t] *
                   sqrt_fact[beta3 - t];
+#ifndef __EMSCRIPTEN__
             r += factor * sqrt_fact[t + 1] * sqrt_fact[t + 1] / (rst * rst);
+#else
+            r += factor * sqrt_fact[t + 1] * sqrt_fact[t + 1] /
+                 (rst * rst + 1E-33L);
+#endif
         }
         return r;
     }
@@ -191,7 +200,11 @@ struct SU2CG {
         for (int s = min_s; s <= max_s; ++s, factor *= rr) {
             rst = sqrt_fact[jps - s] * sqrt_fact[s] * sqrt_fact[jpp - jps + s] *
                   sqrt_fact[jmp - s];
+#ifndef __EMSCRIPTEN__
             r += factor / (rst * rst);
+#else
+            r += factor / (rst * rst + 1E-33L);
+#endif
         }
         return r * sqrt_fact[jpp] * sqrt_fact[jmp] * sqrt_fact[jps] *
                sqrt_fact[jms];

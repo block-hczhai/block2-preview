@@ -8,7 +8,11 @@ using namespace block2;
 class TestNPDMN2STO3GSA : public ::testing::Test {
   protected:
     size_t isize = 1LL << 24;
+#ifndef __EMSCRIPTEN__
     size_t dsize = 1LL << 32;
+#else
+    size_t dsize = 1LL << 28;
+#endif
     typedef double FP;
 
     template <typename S, typename FL>

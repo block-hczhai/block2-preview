@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   test:
-    name: test ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.parallel }}
+    name: test ${{ matrix.python }} ${{ matrix.os }} ${{ matrix.parallel }} ${{ matrix.plat }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -34,6 +34,11 @@ jobs:
             parallel: mpi
           - os: windows-2022
             parallel: mpi
+        include:
+          - os: ubuntu-20.04
+            python: '3.12'
+            plat: wasm
+            parallel: serial
       fail-fast: false
 
     steps:
@@ -43,12 +48,31 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04'
+        if: (matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04') && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: install requirements (linux emscripten)
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        run: |
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install pyodide-build numpy 'cmake>=3.19' pybind11==2.12.0
+
+      - name: setup emscripten (linux emscripten)
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        run: |
+          git clone -b main https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          PYODIDE_EMSCRIPTEN_VERSION=$(pyodide config get emscripten_version)
+          echo $PYODIDE_EMSCRIPTEN_VERSION
+          ./emsdk install ${PYODIDE_EMSCRIPTEN_VERSION}
+          ./emsdk activate ${PYODIDE_EMSCRIPTEN_VERSION}
+          source ./emsdk_env.sh
+          cd ..
+          em++ -v
 
       - name: install requirements (linux / macos)
         if: matrix.os == 'macos-14'
@@ -68,6 +92,25 @@ jobs:
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
 
+      - name: Download OpenBLAS (linux emscripten)
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        run: |
+          wget -q https://github.com/pyodide/pyodide/releases/download/0.26.3/xbuildenv-0.26.3.tar.bz2
+          tar xjf xbuildenv-0.26.3.tar.bz2
+
+      - name: build gtest (linux emscripten)
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        env:
+          GTESTROOT: ~/gtest
+        run: |
+          source emsdk/emsdk_env.sh
+          git clone -b release-1.8.0 https://github.com/google/googletest
+          cd googletest
+          export GTEST_ROOT=$PWD/googletest/install
+          CC=emcc CXX=em++ emcmake cmake CMakeLists.txt -DCMAKE_INSTALL_PREFIX=${GTESTROOT} -Dgtest_disable_pthreads=ON
+          emmake make -j 4
+          emmake make install
+
       - name: Download OpenBLAS (windows)
         if: matrix.os == 'windows-2022'
         env:
@@ -83,14 +126,14 @@ jobs:
           GTEST_ROOT: D:\a\gtest
         run: |
           Get-WmiObject -Class Win32_Processor
-          git clone  -b release-1.8.0 https://github.com/google/googletest.git
+          git clone -b release-1.8.0 https://github.com/google/googletest.git
           cd googletest
           cmake -G "Visual Studio 17 2022" -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" -Dgtest_force_shared_crt=ON
           cmake --build . -j 2 --config Release
           cmake --install . --prefix $env:GTEST_ROOT
 
       - name: build gtest (linux)
-        if: matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
         env:
           CC: gcc-9
           CXX: g++-9
@@ -103,7 +146,7 @@ jobs:
           sudo cp lib/*.a /usr/lib
 
       - name: fix mkl for amd cpu
-        if: matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
         env:
           CC: gcc-9
           CXX: g++-9
@@ -146,7 +189,9 @@ jobs:
           brew install libomp
 
       - name: build test (serial-pytest, linux | macos)
-        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13')
+        if: |
+          (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') &&
+          (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13') && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -188,7 +233,7 @@ jobs:
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (any-symm-pytest, linux | macos)
-        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13')
+        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13') && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -241,8 +286,23 @@ jobs:
           cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           cmake --build . -j 2 --config Release -- '/v:d'
 
+      - name: build test (serial, linux emscripten)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        env:
+          GTESTROOT: ~/gtest
+        run: |
+          source emsdk/emsdk_env.sh
+          export BLAS_ROOT=$PWD/xbuildenv/pyodide-root/packages/.libs
+          mkdir build_test
+          cd build_test
+          cmake --version
+          CC=emcc CXX=em++ cmake .. -DUSE_MKL=OFF -DARCH_EMSCRIPTEN=ON -DF77UNDERSCORE=ON -DBUILD_TEST=ON \
+              -DGTEST_ROOT=${GTESTROOT} -DLARGE_BOND=ON -DUSE_COMPLEX=OFF -DUSE_DMRG=ON \
+              -DSIMPLE_TEST=ON -DCMAKE_BUILD_TYPE=Release -DOMP_LIB=NONE
+          emmake make -j 2
+
       - name: build test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
           CC: gcc-9
@@ -296,8 +356,15 @@ jobs:
           & $dumpbin /DEPENDENTS .\block2_tests.exe
           .\block2_tests.exe
 
+      - name: run test (serial, linux emscripten)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        run: |
+          source emsdk/emsdk_env.sh
+          cd build_test
+          node block2_tests.js
+
       - name: run test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
         run: |
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then

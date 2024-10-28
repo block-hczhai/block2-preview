@@ -8,7 +8,11 @@ using namespace block2;
 template <typename FL> class TestDMRGN2STO3GSA : public ::testing::Test {
   protected:
     size_t isize = 1LL << 24;
+#ifndef __EMSCRIPTEN__
     size_t dsize = 1LL << 32;
+#else
+    size_t dsize = 1LL << 29;
+#endif
     typedef typename GMatrix<FL>::FP FP;
     typedef typename GMatrix<FL>::FL FLL;
 
@@ -98,6 +102,7 @@ void TestDMRGN2STO3GSA<FL>::test_dmrg(
 
     // deallocate persistent stack memory
     mps_info->deallocate();
+    me->remove_partition_files();
 
     for (size_t i = 0; i < dmrg->energies.back().size(); i++) {
         cout << "== " << name << " (SA) =="

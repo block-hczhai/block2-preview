@@ -40,19 +40,20 @@ extern "C" {
 
 // vector scale
 // vector [sx] = float [sa] * vector [sx]
-extern void FNAME(sscal)(const MKL_INT *n, const float *sa, float *sx,
-                         const MKL_INT *incx) noexcept;
+extern VRETT FNAME(sscal)(const MKL_INT *n, const float *sa, float *sx,
+                          const MKL_INT *incx) noexcept;
 
 // vector copy
 // vector [dy] = [dx]
-extern void FNAME(scopy)(const MKL_INT *n, const float *dx, const MKL_INT *incx,
-                         float *dy, const MKL_INT *incy) noexcept;
+extern VRETT FNAME(scopy)(const MKL_INT *n, const float *dx,
+                          const MKL_INT *incx, float *dy,
+                          const MKL_INT *incy) noexcept;
 
 // vector addition
 // vector [sy] = vector [sy] + float [sa] * vector [sx]
-extern void FNAME(saxpy)(const MKL_INT *n, const float *sa, const float *sx,
-                         const MKL_INT *incx, float *sy,
-                         const MKL_INT *incy) noexcept;
+extern VRETT FNAME(saxpy)(const MKL_INT *n, const float *sa, const float *sx,
+                          const MKL_INT *incx, float *sy,
+                          const MKL_INT *incy) noexcept;
 
 // vector dot product
 extern FRETT FNAME(sdot)(const MKL_INT *n, const float *dx, const MKL_INT *incx,
@@ -64,108 +65,112 @@ extern FRETT FNAME(snrm2)(const MKL_INT *n, const float *x,
 
 // matrix multiplication
 // mat [c] = float [alpha] * mat [a] * mat [b] + float [beta] * mat [c]
-extern void FNAME(sgemm)(const char *transa, const char *transb,
-                         const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                         const float *alpha, const float *a, const MKL_INT *lda,
-                         const float *b, const MKL_INT *ldb, const float *beta,
-                         float *c, const MKL_INT *ldc) noexcept;
+extern VRETT FNAME(sgemm)(const char *transa, const char *transb,
+                          const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                          const float *alpha, const float *a,
+                          const MKL_INT *lda, const float *b,
+                          const MKL_INT *ldb, const float *beta, float *c,
+                          const MKL_INT *ldc) noexcept;
 
 // matrix-vector multiplication
 // vec [y] = float [alpha] * mat [a] * vec [x] + float [beta] * vec [y]
-extern void FNAME(sgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const float *alpha, const float *a, const MKL_INT *lda,
-                         const float *x, const MKL_INT *incx, const float *beta,
-                         float *y, const MKL_INT *incy) noexcept;
+extern VRETT FNAME(sgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const float *alpha, const float *a,
+                          const MKL_INT *lda, const float *x,
+                          const MKL_INT *incx, const float *beta, float *y,
+                          const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void LFNAME(sgesv)(const MKL_INT *n, const MKL_INT *nrhs, float *a,
-                          const MKL_INT *lda, MKL_INT *ipiv, float *b,
-                          const MKL_INT *ldb, MKL_INT *info);
+extern VRETT LFNAME(sgesv)(const MKL_INT *n, const MKL_INT *nrhs, float *a,
+                           const MKL_INT *lda, MKL_INT *ipiv, float *b,
+                           const MKL_INT *ldb, MKL_INT *info);
 
 // QR factorization
-extern void LFNAME(sgeqrf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                           const MKL_INT *lda, float *tau, float *work,
-                           const MKL_INT *lwork, MKL_INT *info);
-extern void LFNAME(sorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                           float *a, const MKL_INT *lda, const float *tau,
-                           float *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgeqrf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                            const MKL_INT *lda, float *tau, float *work,
+                            const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sorgqr)(const MKL_INT *m, const MKL_INT *n,
+                            const MKL_INT *k, float *a, const MKL_INT *lda,
+                            const float *tau, float *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 
 // LQ factorization
-extern void LFNAME(sgelqf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                           const MKL_INT *lda, float *tau, float *work,
-                           const MKL_INT *lwork, MKL_INT *info);
-extern void LFNAME(sorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                           float *a, const MKL_INT *lda, const float *tau,
-                           float *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgelqf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                            const MKL_INT *lda, float *tau, float *work,
+                            const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sorglq)(const MKL_INT *m, const MKL_INT *n,
+                            const MKL_INT *k, float *a, const MKL_INT *lda,
+                            const float *tau, float *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 
 // LU factorization
-extern void LFNAME(sgetrf)(const MKL_INT *m, const MKL_INT *n, float *a,
-                           const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+extern VRETT LFNAME(sgetrf)(const MKL_INT *m, const MKL_INT *n, float *a,
+                            const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
 
 // matrix inverse
-extern void LFNAME(sgetri)(const MKL_INT *m, float *a, const MKL_INT *lda,
-                           MKL_INT *ipiv, float *work, const MKL_INT *lwork,
-                           MKL_INT *info);
+extern VRETT LFNAME(sgetri)(const MKL_INT *m, float *a, const MKL_INT *lda,
+                            MKL_INT *ipiv, float *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 
 // eigenvalue problem
-extern void LFNAME(ssyev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                          float *a, const MKL_INT *lda, float *w, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(ssyev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                           float *a, const MKL_INT *lda, float *w, float *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
-extern void LFNAME(sgeev)(const char *jobvl, const char *jobvr,
-                          const MKL_INT *n, float *a, const MKL_INT *lda,
-                          float *wr, float *wi, float *vl, const MKL_INT *ldvl,
-                          float *vr, const MKL_INT *ldvr, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgeev)(const char *jobvl, const char *jobvr,
+                           const MKL_INT *n, float *a, const MKL_INT *lda,
+                           float *wr, float *wi, float *vl, const MKL_INT *ldvl,
+                           float *vr, const MKL_INT *ldvr, float *work,
+                           const MKL_INT *lwork, MKL_INT *info);
 
-extern void LFNAME(sgegv)(const MKL_INT *itype, const char *jobz,
-                          const char *uplo, const MKL_INT *n, float *a,
-                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
-                          float *w, float *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern VRETT LFNAME(sgegv)(const MKL_INT *itype, const char *jobz,
+                           const char *uplo, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                           float *w, float *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
-extern void LFNAME(ssygv)(const MKL_INT *itype, const char *jobz,
-                          const char *uplo, const MKL_INT *n, float *a,
-                          const MKL_INT *lda, float *b, const MKL_INT *ldb,
-                          float *w, float *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern VRETT LFNAME(ssygv)(const MKL_INT *itype, const char *jobz,
+                           const char *uplo, const MKL_INT *n, float *a,
+                           const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                           float *w, float *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void LFNAME(sgesvd)(const char *jobu, const char *jobvt,
-                           const MKL_INT *m, const MKL_INT *n, float *a,
-                           const MKL_INT *lda, float *s, float *u,
-                           const MKL_INT *ldu, float *vt, const MKL_INT *ldvt,
-                           float *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgesvd)(const char *jobu, const char *jobvt,
+                            const MKL_INT *m, const MKL_INT *n, float *a,
+                            const MKL_INT *lda, float *s, float *u,
+                            const MKL_INT *ldu, float *vt, const MKL_INT *ldvt,
+                            float *work, const MKL_INT *lwork, MKL_INT *info);
 
 // least squares problem a * x = b
-extern void LFNAME(sgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                          const MKL_INT *nrhs, float *a, const MKL_INT *lda,
-                          float *b, const MKL_INT *ldb, float *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgels)(const char *trans, const MKL_INT *m,
+                           const MKL_INT *n, const MKL_INT *nrhs, float *a,
+                           const MKL_INT *lda, float *b, const MKL_INT *ldb,
+                           float *work, const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void LFNAME(slacpy)(const char *uplo, const int *m, const int *n,
-                           const float *a, const int *lda, float *b,
-                           const int *ldb);
+extern VRETT LFNAME(slacpy)(const char *uplo, const int *m, const int *n,
+                            const float *a, const int *lda, float *b,
+                            const int *ldb);
 
 // vector scale
 // vector [sx] = float [sa] * vector [sx]
-extern void FNAME(dscal)(const MKL_INT *n, const double *sa, double *sx,
-                         const MKL_INT *incx) noexcept;
+extern VRETT FNAME(dscal)(const MKL_INT *n, const double *sa, double *sx,
+                          const MKL_INT *incx) noexcept;
 
 // vector copy
 // vector [dy] = [dx]
-extern void FNAME(dcopy)(const MKL_INT *n, const double *dx,
-                         const MKL_INT *incx, double *dy,
-                         const MKL_INT *incy) noexcept;
+extern VRETT FNAME(dcopy)(const MKL_INT *n, const double *dx,
+                          const MKL_INT *incx, double *dy,
+                          const MKL_INT *incy) noexcept;
 
 // vector addition
 // vector [sy] = vector [sy] + double [sa] * vector [sx]
-extern void FNAME(daxpy)(const MKL_INT *n, const double *sa, const double *sx,
-                         const MKL_INT *incx, double *sy,
-                         const MKL_INT *incy) noexcept;
+extern VRETT FNAME(daxpy)(const MKL_INT *n, const double *sa, const double *sx,
+                          const MKL_INT *incx, double *sy,
+                          const MKL_INT *incy) noexcept;
 
 // vector dot product
 extern double FNAME(ddot)(const MKL_INT *n, const double *dx,
@@ -178,87 +183,89 @@ extern double FNAME(dnrm2)(const MKL_INT *n, const double *x,
 
 // matrix multiplication
 // mat [c] = double [alpha] * mat [a] * mat [b] + double [beta] * mat [c]
-extern void FNAME(dgemm)(const char *transa, const char *transb,
-                         const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                         const double *alpha, const double *a,
-                         const MKL_INT *lda, const double *b,
-                         const MKL_INT *ldb, const double *beta, double *c,
-                         const MKL_INT *ldc) noexcept;
+extern VRETT FNAME(dgemm)(const char *transa, const char *transb,
+                          const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
+                          const double *alpha, const double *a,
+                          const MKL_INT *lda, const double *b,
+                          const MKL_INT *ldb, const double *beta, double *c,
+                          const MKL_INT *ldc) noexcept;
 
 // matrix-vector multiplication
 // vec [y] = double [alpha] * mat [a] * vec [x] + double [beta] * vec [y]
-extern void FNAME(dgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                         const double *alpha, const double *a,
-                         const MKL_INT *lda, const double *x,
-                         const MKL_INT *incx, const double *beta, double *y,
-                         const MKL_INT *incy) noexcept;
+extern VRETT FNAME(dgemv)(const char *trans, const MKL_INT *m, const MKL_INT *n,
+                          const double *alpha, const double *a,
+                          const MKL_INT *lda, const double *x,
+                          const MKL_INT *incx, const double *beta, double *y,
+                          const MKL_INT *incy) noexcept;
 
 // linear system a * x = b
-extern void LFNAME(dgesv)(const MKL_INT *n, const MKL_INT *nrhs, double *a,
-                          const MKL_INT *lda, MKL_INT *ipiv, double *b,
-                          const MKL_INT *ldb, MKL_INT *info);
+extern VRETT LFNAME(dgesv)(const MKL_INT *n, const MKL_INT *nrhs, double *a,
+                           const MKL_INT *lda, MKL_INT *ipiv, double *b,
+                           const MKL_INT *ldb, MKL_INT *info);
 
 // QR factorization
-extern void LFNAME(dgeqrf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                           const MKL_INT *lda, double *tau, double *work,
-                           const MKL_INT *lwork, MKL_INT *info);
-extern void LFNAME(dorgqr)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                           double *a, const MKL_INT *lda, const double *tau,
-                           double *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgeqrf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                            const MKL_INT *lda, double *tau, double *work,
+                            const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dorgqr)(const MKL_INT *m, const MKL_INT *n,
+                            const MKL_INT *k, double *a, const MKL_INT *lda,
+                            const double *tau, double *work,
+                            const MKL_INT *lwork, MKL_INT *info);
 
 // LQ factorization
-extern void LFNAME(dgelqf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                           const MKL_INT *lda, double *tau, double *work,
-                           const MKL_INT *lwork, MKL_INT *info);
-extern void LFNAME(dorglq)(const MKL_INT *m, const MKL_INT *n, const MKL_INT *k,
-                           double *a, const MKL_INT *lda, const double *tau,
-                           double *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgelqf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                            const MKL_INT *lda, double *tau, double *work,
+                            const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dorglq)(const MKL_INT *m, const MKL_INT *n,
+                            const MKL_INT *k, double *a, const MKL_INT *lda,
+                            const double *tau, double *work,
+                            const MKL_INT *lwork, MKL_INT *info);
 
 // LU factorization
-extern void LFNAME(dgetrf)(const MKL_INT *m, const MKL_INT *n, double *a,
-                           const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
+extern VRETT LFNAME(dgetrf)(const MKL_INT *m, const MKL_INT *n, double *a,
+                            const MKL_INT *lda, MKL_INT *ipiv, MKL_INT *info);
 
 // matrix inverse
-extern void LFNAME(dgetri)(const MKL_INT *m, double *a, const MKL_INT *lda,
-                           MKL_INT *ipiv, double *work, const MKL_INT *lwork,
-                           MKL_INT *info);
+extern VRETT LFNAME(dgetri)(const MKL_INT *m, double *a, const MKL_INT *lda,
+                            MKL_INT *ipiv, double *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 
 // eigenvalue problem
-extern void LFNAME(dsyev)(const char *jobz, const char *uplo, const MKL_INT *n,
-                          double *a, const MKL_INT *lda, double *w,
-                          double *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dsyev)(const char *jobz, const char *uplo, const MKL_INT *n,
+                           double *a, const MKL_INT *lda, double *w,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
-extern void LFNAME(dgeev)(const char *jobvl, const char *jobvr,
-                          const MKL_INT *n, double *a, const MKL_INT *lda,
-                          double *wr, double *wi, double *vl,
-                          const MKL_INT *ldvl, double *vr, const MKL_INT *ldvr,
-                          double *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgeev)(const char *jobvl, const char *jobvr,
+                           const MKL_INT *n, double *a, const MKL_INT *lda,
+                           double *wr, double *wi, double *vl,
+                           const MKL_INT *ldvl, double *vr, const MKL_INT *ldvr,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
-extern void LFNAME(dsygv)(const MKL_INT *itype, const char *jobz,
-                          const char *uplo, const MKL_INT *n, double *a,
-                          const MKL_INT *lda, double *b, const MKL_INT *ldb,
-                          double *w, double *work, const MKL_INT *lwork,
-                          MKL_INT *info);
+extern VRETT LFNAME(dsygv)(const MKL_INT *itype, const char *jobz,
+                           const char *uplo, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                           double *w, double *work, const MKL_INT *lwork,
+                           MKL_INT *info);
 
 // SVD
 // mat [a] = mat [u] * vector [sigma] * mat [vt]
-extern void LFNAME(dgesvd)(const char *jobu, const char *jobvt,
-                           const MKL_INT *m, const MKL_INT *n, double *a,
-                           const MKL_INT *lda, double *s, double *u,
-                           const MKL_INT *ldu, double *vt, const MKL_INT *ldvt,
-                           double *work, const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgesvd)(const char *jobu, const char *jobvt,
+                            const MKL_INT *m, const MKL_INT *n, double *a,
+                            const MKL_INT *lda, double *s, double *u,
+                            const MKL_INT *ldu, double *vt, const MKL_INT *ldvt,
+                            double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // least squares problem a * x = b
-extern void LFNAME(dgels)(const char *trans, const MKL_INT *m, const MKL_INT *n,
-                          const MKL_INT *nrhs, double *a, const MKL_INT *lda,
-                          double *b, const MKL_INT *ldb, double *work,
-                          const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgels)(const char *trans, const MKL_INT *m,
+                           const MKL_INT *n, const MKL_INT *nrhs, double *a,
+                           const MKL_INT *lda, double *b, const MKL_INT *ldb,
+                           double *work, const MKL_INT *lwork, MKL_INT *info);
 
 // matrix copy
 // mat [b] = mat [a]
-extern void LFNAME(dlacpy)(const char *uplo, const int *m, const int *n,
-                           const double *a, const int *lda, double *b,
-                           const int *ldb);
+extern VRETT LFNAME(dlacpy)(const char *uplo, const int *m, const int *n,
+                            const double *a, const int *lda, double *b,
+                            const int *ldb);
 
 #endif
 }
@@ -327,12 +334,10 @@ inline void xgemm<double>(const char *transa, const char *transb,
     trans_t blis_transa, blis_transb;
     map_char_to_blis_trans(*transa, &blis_transa);
     map_char_to_blis_trans(*transb, &blis_transb);
-    return bli_dgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
-                     alpha, a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1,
-                     (inc_t)*ldc);
+    bli_dgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k, alpha,
+              a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1, (inc_t)*ldc);
 #else
-    return FNAME(dgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
-                        ldc);
+    FNAME(dgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 #endif
 }
 
@@ -346,12 +351,10 @@ inline void xgemm<float>(const char *transa, const char *transb,
     trans_t blis_transa, blis_transb;
     map_char_to_blis_trans(*transa, &blis_transa);
     map_char_to_blis_trans(*transb, &blis_transb);
-    return bli_sgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k,
-                     alpha, a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1,
-                     (inc_t)*ldc);
+    bli_sgemm(blis_transa, blis_transb, (dim_t)*m, (dim_t)*n, (dim_t)*k, alpha,
+              a, 1, (inc_t)*lda, b, 1, (inc_t)*ldb, beta, c, 1, (inc_t)*ldc);
 #else
-    return FNAME(sgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,
-                        ldc);
+    FNAME(sgemm)(transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc);
 #endif
 }
 

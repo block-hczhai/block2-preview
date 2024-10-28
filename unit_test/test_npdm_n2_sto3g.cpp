@@ -8,7 +8,11 @@ using namespace block2;
 class TestNPDM : public ::testing::Test {
   protected:
     size_t isize = 1LL << 24;
+#ifndef __EMSCRIPTEN__
     size_t dsize = 1LL << 32;
+#else
+    size_t dsize = 1LL << 28;
+#endif
     typedef double FP;
 
     void SetUp() override {
@@ -853,6 +857,10 @@ TEST_F(TestNPDM, TestSU2) {
 
         // deallocate persistent stack memory
         mps_info->deallocate();
+        me->remove_partition_files();
+        pme->remove_partition_files();
+        p2me->remove_partition_files();
+        nme->remove_partition_files();
     }
 
     nmpo->deallocate();
@@ -1294,6 +1302,10 @@ TEST_F(TestNPDM, TestSZ) {
 
         // deallocate persistent stack memory
         mps_info->deallocate();
+        me->remove_partition_files();
+        pme->remove_partition_files();
+        p2me->remove_partition_files();
+        nme->remove_partition_files();
     }
 
     nmpo->deallocate();
@@ -1470,6 +1482,8 @@ TEST_F(TestNPDM, TestSGF) {
 
         // deallocate persistent stack memory
         mps_info->deallocate();
+        me->remove_partition_files();
+        pme->remove_partition_files();
     }
 
     pmpo->deallocate();

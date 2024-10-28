@@ -17,6 +17,7 @@ OPTION(USE_SG "General Spin Symmetry" OFF)
 OPTION(USE_SINGLE_PREC "Single Precision" OFF)
 OPTION(USE_BLIS "BLIS" OFF)
 OPTION(ARCH_ARM64 "MacOS arch arm64" OFF)
+OPTION(ARCH_EMSCRIPTEN "Build for WebAssembly" OFF)
 OPTION(APPLE_ACC_SINGLE_PREC "Fix Apple Accelerate single prec" ON)
 OPTION(BUILD_LIB "Build python block2.so" OFF)
 OPTION(BUILD_CLIB "Build C++ block2.so" OFF)
@@ -419,6 +420,11 @@ IF (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         FIND_LIBRARY(OMP_LIB_NAME NAMES iomp5md PATHS $ENV{OMPROOT} $ENV{OMPROOT}/lib $ENV{OMPROOT}/lib/intel64_win)
         SET(MKL_OMP_VALUE 2)
     ENDIF()
+ELSEIF ("${OMP_LIB}" STREQUAL "NONE")
+    SET(OMP_LIB_NAME "")
+    SET(OMP_FLAG "")
+    UNSET(OMP_LIB_NAME)
+    SET(MKL_OMP_VALUE 4)
 ELSEIF (WIN32)
     SET(OMP_LIB_NAME "")
     SET(PTHREAD "")
@@ -518,6 +524,13 @@ ENDIF()
 
 IF ((NOT APPLE) AND (NOT WIN32) AND (CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM"))
     SET(OPT_FLAG ${OPT_FLAG} -Wno-unused-command-line-argument -Wno-tautological-constant-compare)
+ENDIF()
+
+IF (${ARCH_EMSCRIPTEN})
+    SET(CMAKE_EXECUTABLE_SUFFIX ".js")
+    SET(WASM_LINK_FLAGS "-sALLOW_MEMORY_GROWTH -sSTACK_SIZE=64mb -sSTACK_OVERFLOW_CHECK --preload-file ${CMAKE_SOURCE_DIR}/data@data")
+ELSE()
+    SET(WASM_LINK_FLAGS "")
 ENDIF()
 
 IF (${ARCH_ARM64})
@@ -769,7 +782,7 @@ FOREACH (target ${TARGETS})
     SET_TARGET_PROPERTIES(${target} PROPERTIES POSITION_INDEPENDENT_CODE 1)
     TARGET_LINK_LIBRARIES(${target} PRIVATE ${OMP_LIB_NAME} ${PTHREAD})
     TARGET_LINK_LIBRARIES(${target} PRIVATE ${PTHREAD} ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES} ${MKL_LIBS} ${MPI_LIBS} ${TBB_LIBS} ${BLIS_LIBS})
-    SET_TARGET_PROPERTIES(${target} PROPERTIES LINK_FLAGS "${ARCH_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+    SET_TARGET_PROPERTIES(${target} PROPERTIES LINK_FLAGS "${ARCH_LINK_FLAGS} ${WASM_LINK_FLAGS} ${MPI_LINK_FLAGS}")
 
     TARGET_INCLUDE_DIRECTORIES(${target} PUBLIC ${PYTHON_INCLUDE_DIRS} ${PYBIND_INCLUDE_DIRS}
         ${MKL_INCLUDE_DIR} ${MPI_INCLUDE_DIR} ${TBB_INCLUDE_DIR} ${BLIS_INCLUDE_DIR})
@@ -787,13 +800,20 @@ IF (${BUILD_TEST})
     INCLUDE_DIRECTORIES(${GTEST_INCLUDE_DIRS})
 
     IF (${SIMPLE_TEST})
-        FILE(GLOB TSRCS unit_test/test_wick_*.cpp unit_test/test_npdm_*.cpp unit_test/test_dmrg_*.cpp)
+        FILE(GLOB TSRCS unit_test/test_batch_gemm.cpp unit_test/test_matrix.cpp
+            unit_test/test_cg.cpp unit_test/test_dmrg_n2_sto3g.cpp
+            unit_test/test_dmrg_1site_n2_sto3g.cpp unit_test/test_dmrg_sa_1site_n2_sto3g.cpp
+            unit_test/test_dmrg_sa_n2_sto3g.cpp unit_test/test_dmrg_sa_tto_n2_sto3g.cpp
+            unit_test/test_csf_space.cpp unit_test/test_det_n2_sto3g.cpp
+            unit_test/test_wick_ccsd.cpp unit_test/test_wick_ghf.cpp 
+            unit_test/test_wick_ic_nevpt2.cpp unit_test/test_wick_sc_nevpt2.cpp
+            unit_test/test_wick_uga_ccsd.cpp unit_test/test_npdm_*.cpp)
     ELSE()
         FILE(GLOB TSRCS unit_test/test_*.cpp)
     ENDIF()
     MESSAGE(STATUS "TSRCS = ${TSRCS}")
 
-    IF ((NOT APPLE) AND (NOT WIN32))
+    IF ((NOT APPLE) AND (NOT WIN32) AND (NOT ${ARCH_EMSCRIPTEN}))
         SET(OPT_FLAG ${OPT_FLAG} -fcompare-debug-second)
     ENDIF()
 
@@ -804,7 +824,7 @@ IF (${BUILD_TEST})
         ${TMPL_FLAG} ${BOND_FLAG} ${SCI_FLAG} ${CORE_FLAG} ${DMRG_FLAG} ${BIG_SITE_FLAG}
         ${SP_DMRG_FLAG} ${IC_FLAG} ${KSYMM_FLAG} ${SG_FLAG} ${COMPLEX_FLAG} ${SINGLE_PREC_FLAG} ${TBB_FLAG} ${BLIS_FLAG}
         ${SU2SZ_FLAG} ${SANY_FLAG})
-    SET_TARGET_PROPERTIES(${PROJECT_NAME}_tests PROPERTIES LINK_FLAGS "${ARCH_LINK_FLAGS} ${MPI_LINK_FLAGS}")
+    SET_TARGET_PROPERTIES(${PROJECT_NAME}_tests PROPERTIES LINK_FLAGS "${ARCH_LINK_FLAGS} ${WASM_LINK_FLAGS} ${MPI_LINK_FLAGS}")
 
     IF ((NOT APPLE) AND (NOT WIN32))
         TARGET_LINK_LIBRARIES(${PROJECT_NAME}_tests rt)

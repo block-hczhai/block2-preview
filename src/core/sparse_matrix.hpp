@@ -883,7 +883,7 @@ template <typename S, typename FL> struct SparseMatrix {
     size_t total_memory;
     struct pair_uint32_t_hasher {
         size_t operator()(const pair<uint32_t, uint32_t> &p) const {
-            return (((size_t)p.first) << 32) | p.second;
+            return (((size_t)p.first) << (sizeof(size_t) << 2)) | p.second;
         }
     };
     SparseMatrix(const shared_ptr<Allocator<FP>> &alloc = nullptr)
