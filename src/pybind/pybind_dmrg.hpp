@@ -1340,6 +1340,11 @@ void bind_fl_dmrg(py::module &m) {
                        &DMRG<S, FL, FLS>::sweep_max_pket_size)
         .def_readwrite("sweep_max_eff_ham_size",
                        &DMRG<S, FL, FLS>::sweep_max_eff_ham_size)
+        .def_readwrite("sweep_max_eff_wfn_size",
+                       &DMRG<S, FL, FLS>::sweep_max_eff_wfn_size)
+        .def_readwrite("current_eff_ham", &DMRG<S, FL, FLS>::current_eff_ham)
+        .def_readwrite("current_multi_eff_ham",
+                       &DMRG<S, FL, FLS>::current_multi_eff_ham)
         .def_readwrite("store_wfn_spectra",
                        &DMRG<S, FL, FLS>::store_wfn_spectra)
         .def_readwrite("store_seq_data", &DMRG<S, FL, FLS>::store_seq_data)

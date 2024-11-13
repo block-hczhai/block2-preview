@@ -113,6 +113,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     size_t sweep_max_pket_size = 0;
     size_t sweep_max_eff_ham_size = 0;
     size_t sweep_max_eff_wfn_size = 0;
+    shared_ptr<EffectiveHamiltonian<S, FL>> current_eff_ham = nullptr;
+    shared_ptr<EffectiveHamiltonian<S, FL, MultiMPS<S, FL>>>
+        current_multi_eff_ham = nullptr;
     int davidson_def_min_size = 2;
     int davidson_def_max_size = 50;
     double tprt = 0, teig = 0, teff = 0, tmve = 0, tblk = 0, tdm = 0, tsplt = 0,
@@ -767,13 +770,18 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
             h_eff->seq_filename = ss.str();
         }
+        size_t current_eff_ham_size =
+            metric_me == nullptr
+                ? h_eff->op->get_total_memory()
+                : m_eff->op->get_total_memory() + h_eff->op->get_total_memory();
         sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size,
-                metric_me == nullptr ? h_eff->op->get_total_memory()
-                                     : m_eff->op->get_total_memory() +
-                                           h_eff->op->get_total_memory());
+            max(sweep_max_eff_ham_size, current_eff_ham_size);
+        size_t current_eff_wfn_size = h_eff->ket->total_memory;
         sweep_max_eff_wfn_size =
-            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
+            max(sweep_max_eff_wfn_size, current_eff_wfn_size);
+        current_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham", iprint);
+        current_eff_ham = nullptr;
         teff += _t.get_time();
         pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                           davidson_rel_conv_thrd, davidson_max_iter,
@@ -1212,13 +1220,18 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
             h_eff->seq_filename = ss.str();
         }
+        size_t current_eff_ham_size =
+            metric_me == nullptr
+                ? h_eff->op->get_total_memory()
+                : m_eff->op->get_total_memory() + h_eff->op->get_total_memory();
         sweep_max_eff_ham_size =
-            max(sweep_max_eff_ham_size,
-                metric_me == nullptr ? h_eff->op->get_total_memory()
-                                     : m_eff->op->get_total_memory() +
-                                           h_eff->op->get_total_memory());
+            max(sweep_max_eff_ham_size, current_eff_ham_size);
+        size_t current_eff_wfn_size = h_eff->ket->total_memory;
         sweep_max_eff_wfn_size =
-            max(sweep_max_eff_wfn_size, h_eff->ket->total_memory);
+            max(sweep_max_eff_wfn_size, current_eff_wfn_size);
+        current_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham", iprint);
+        current_eff_ham = nullptr;
         teff += _t.get_time();
         pdi = h_eff->eigs(m_eff, iprint >= 3, davidson_conv_thrd,
                           davidson_rel_conv_thrd, davidson_max_iter,
@@ -1841,21 +1854,23 @@ template <typename S, typename FL, typename FLS> struct DMRG {
             // create h_eff last to allow delayed contraction
             h_eff = me->multi_eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, true);
+            size_t current_eff_ham_size =
+                h_eff->op->get_total_memory() + x_eff->op->get_total_memory();
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
-                                                x_eff->op->get_total_memory());
-            sweep_max_eff_wfn_size = max(
-                sweep_max_eff_wfn_size,
+                max(sweep_max_eff_ham_size, current_eff_ham_size);
+            size_t current_eff_wfn_size =
                 accumulate(
                     h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
                     [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
                         return x + y->total_memory;
                     }) +
-                    accumulate(
-                        x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
-                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
-                            return x + y->total_memory;
-                        }));
+                accumulate(
+                    x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
+                    [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
+                        return x + y->total_memory;
+                    });
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size, current_eff_wfn_size);
         } else {
             if (metric_me != nullptr)
                 m_eff = metric_me->multi_eff_ham(fuse_left ? FuseTypes::FuseL
@@ -1869,19 +1884,23 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         i, mket,
                         dynamic_pointer_cast<MultiMPS<S, FLS>>(context_ket), 1,
                         fuse_left, true, false, true, false);
+            size_t current_eff_ham_size =
+                metric_me == nullptr ? h_eff->op->get_total_memory()
+                                     : m_eff->op->get_total_memory() +
+                                           h_eff->op->get_total_memory();
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size,
-                    metric_me == nullptr ? h_eff->op->get_total_memory()
-                                         : m_eff->op->get_total_memory() +
-                                               h_eff->op->get_total_memory());
+                max(sweep_max_eff_ham_size, current_eff_ham_size);
+            size_t current_eff_wfn_size = accumulate(
+                h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                    return x + y->total_memory;
+                });
             sweep_max_eff_wfn_size =
-                max(sweep_max_eff_wfn_size,
-                    accumulate(
-                        h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
-                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
-                            return x + y->total_memory;
-                        }));
+                max(sweep_max_eff_wfn_size, current_eff_wfn_size);
         }
+        current_multi_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham", iprint);
+        current_multi_eff_ham = nullptr;
         teff += _t.get_time();
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
@@ -2367,21 +2386,23 @@ template <typename S, typename FL, typename FLS> struct DMRG {
         if (cpx_me != nullptr) {
             x_eff = cpx_me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
             h_eff = me->multi_eff_ham(FuseTypes::FuseLR, forward, true);
+            size_t current_eff_ham_size =
+                h_eff->op->get_total_memory() + x_eff->op->get_total_memory();
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size, h_eff->op->get_total_memory() +
-                                                x_eff->op->get_total_memory());
-            sweep_max_eff_wfn_size = max(
-                sweep_max_eff_wfn_size,
+                max(sweep_max_eff_ham_size, current_eff_ham_size);
+            size_t current_eff_wfn_size =
                 accumulate(
                     h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
                     [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
                         return x + y->total_memory;
                     }) +
-                    accumulate(
-                        x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
-                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
-                            return x + y->total_memory;
-                        }));
+                accumulate(
+                    x_eff->ket.begin(), x_eff->ket.end(), (size_t)0,
+                    [](size_t x, shared_ptr<SparseMatrixGroup<S, FC>> y) {
+                        return x + y->total_memory;
+                    });
+            sweep_max_eff_wfn_size =
+                max(sweep_max_eff_wfn_size, current_eff_wfn_size);
         } else {
             if (metric_me != nullptr)
                 m_eff =
@@ -2393,19 +2414,23 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         i, mket,
                         dynamic_pointer_cast<MultiMPS<S, FLS>>(context_ket), 2,
                         true, true, false, true, false);
+            size_t current_eff_ham_size =
+                metric_me == nullptr ? h_eff->op->get_total_memory()
+                                     : m_eff->op->get_total_memory() +
+                                           h_eff->op->get_total_memory();
             sweep_max_eff_ham_size =
-                max(sweep_max_eff_ham_size,
-                    metric_me == nullptr ? h_eff->op->get_total_memory()
-                                         : m_eff->op->get_total_memory() +
-                                               h_eff->op->get_total_memory());
+                max(sweep_max_eff_ham_size, current_eff_ham_size);
+            size_t current_eff_wfn_size = accumulate(
+                h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
+                [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
+                    return x + y->total_memory;
+                });
             sweep_max_eff_wfn_size =
-                max(sweep_max_eff_wfn_size,
-                    accumulate(
-                        h_eff->ket.begin(), h_eff->ket.end(), (size_t)0,
-                        [](size_t x, shared_ptr<SparseMatrixGroup<S, FL>> y) {
-                            return x + y->total_memory;
-                        }));
+                max(sweep_max_eff_wfn_size, current_eff_wfn_size);
         }
+        current_multi_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham", iprint);
+        current_multi_eff_ham = nullptr;
         teff += _t.get_time();
         if (x_eff != nullptr)
             pdi = EffectiveFunctions<S, FL>::eigs_mixed(
@@ -3126,6 +3151,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                         uint64_t tt[2] = {(uint64_t)sweep_max_eff_ham_size_pm,
                                           (uint64_t)sweep_max_eff_wfn_size_pm};
                         comm->reduce_max_optional(&tt[0], 2, comm->root);
+                        sweep_max_eff_ham_size_pm = tt[0];
+                        sweep_max_eff_wfn_size_pm = tt[1];
                     }
                     size_t dmain = frame_<FPS>()->peak_used_memory[0];
                     size_t dseco = frame_<FPS>()->peak_used_memory[1];
@@ -5118,6 +5145,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                                           (uint64_t)sweep_max_eff_wfn_size_pm};
                         lme->para_rule->comm->reduce_max_optional(
                             &tt[0], 2, lme->para_rule->comm->root);
+                        sweep_max_eff_ham_size_pm = tt[0];
+                        sweep_max_eff_wfn_size_pm = tt[1];
                     }
                     size_t dmain = frame_<FPS>()->peak_used_memory[0];
                     size_t dseco = frame_<FPS>()->peak_used_memory[1];
@@ -6442,6 +6471,8 @@ struct Expect {
                     uint64_t tt[2] = {(uint64_t)sweep_max_eff_ham_size_pm,
                                       (uint64_t)sweep_max_eff_wfn_size_pm};
                     comm->reduce_max_optional(&tt[0], 2, comm->root);
+                    sweep_max_eff_ham_size_pm = tt[0];
+                    sweep_max_eff_wfn_size_pm = tt[1];
                 }
                 size_t dmain = frame_<FPS>()->peak_used_memory[0];
                 size_t dseco = frame_<FPS>()->peak_used_memory[1];
