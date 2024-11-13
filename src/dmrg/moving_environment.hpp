@@ -388,13 +388,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (lowmem_numerical_transform && dot == 2 && !preserve_data) {
                 shared_ptr<VectorAllocator<FP>> d_alloc =
                     make_shared<VectorAllocator<FP>>();
-                for (auto &p : envs[i]->left->ops)
-                    if (envs[i]->left->ops.at(p.first)->alloc !=
-                        dalloc_<FP>()) {
-                        envs[i]->left->ops.at(p.first)->alloc = d_alloc;
-                        envs[i]->left->ops.at(p.first)->allocate(
-                            envs[i]->left->ops.at(p.first)->info);
+                for (auto &p : envs[i]->left->ops) {
+                    const auto &xop = envs[i]->left->ops.at(p.first);
+                    if (xop->alloc != dalloc_<FP>() && xop->data != nullptr) {
+                        xop->alloc = d_alloc;
+                        xop->allocate(xop->info);
                     }
+                }
             }
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
@@ -609,13 +609,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (lowmem_numerical_transform && dot == 2 && !preserve_data) {
                 shared_ptr<VectorAllocator<FP>> d_alloc =
                     make_shared<VectorAllocator<FP>>();
-                for (auto &p : envs[i]->right->ops)
-                    if (envs[i]->right->ops.at(p.first)->alloc !=
-                        dalloc_<FP>()) {
-                        envs[i]->right->ops.at(p.first)->alloc = d_alloc;
-                        envs[i]->right->ops.at(p.first)->allocate(
-                            envs[i]->right->ops.at(p.first)->info);
+                for (auto &p : envs[i]->right->ops) {
+                    const auto &xop = envs[i]->right->ops.at(p.first);
+                    if (xop->alloc != dalloc_<FP>() && xop->data != nullptr) {
+                        xop->alloc = d_alloc;
+                        xop->allocate(xop->info);
                     }
+                }
             }
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
