@@ -807,6 +807,9 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
         .def_readwrite(
             "fused_contraction_multiplication",
             &MovingEnvironment<S, FL, FLS>::fused_contraction_multiplication)
+        .def_readwrite(
+            "lowmem_numerical_transform",
+            &MovingEnvironment<S, FL, FLS>::lowmem_numerical_transform)
         .def_readwrite("save_environments",
                        &MovingEnvironment<S, FL, FLS>::save_environments)
         .def("left_contract_rotate",

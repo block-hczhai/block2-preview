@@ -179,6 +179,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     // whether contraction and wavefunction multiplication should be done
     // within one-step, without using large memory for blocking
     bool fused_contraction_multiplication = false;
+    // whether numerical transform should be done with copy
+    bool lowmem_numerical_transform = false;
     double tctr = 0, trot = 0, tint = 0, tmid = 0, tdiag = 0, tdctr = 0,
            tinfo = 0;
     Timer _t, _t2, _t3;
@@ -293,7 +295,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_left = Partition<S, FL>::build_left(
                 {mpo->left_operator_names[i - 1]}, left_op_infos_notrunc,
-                mpo->sparse_form[i - 1] == 'S', stacked_mat);
+                mpo->sparse_form[i - 1] == 'S', stacked_mat, false);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -339,7 +341,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                              envs[i]->left_op_infos);
         frame_<FP>()->activate(1);
         envs[i]->left = Partition<S, FL>::build_left(
-            mats, envs[i]->left_op_infos, false, stacked_mat);
+            mats, envs[i]->left_op_infos, false, stacked_mat,
+            lowmem_numerical_transform && dot == 2 && !preserve_data);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -382,6 +385,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_left->deallocate();
         trot += _t.get_time();
         if (mpo->schemer != nullptr && i - 1 == mpo->schemer->left_trans_site) {
+            if (lowmem_numerical_transform && dot == 2 && !preserve_data) {
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
+                for (auto &p : envs[i]->left->ops) {
+                    const auto &xop = envs[i]->left->ops.at(p.first);
+                    if (xop->alloc != dalloc_<FP>() && xop->data != nullptr) {
+                        xop->alloc = d_alloc;
+                        xop->allocate(xop->info);
+                    }
+                }
+            }
             mpo->tf->numerical_transform(envs[i]->left, mats[1],
                                          mpo->schemer->left_new_operator_exprs);
             mpo->unload_schemer();
@@ -500,7 +514,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else
             new_right = Partition<S, FL>::build_right(
                 {mpo->right_operator_names[i + dot]}, right_op_infos_notrunc,
-                mpo->sparse_form[i + dot] == 'S', stacked_mat);
+                mpo->sparse_form[i + dot] == 'S', stacked_mat, false);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -546,7 +560,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                               envs[i]->right_op_infos);
         frame_<FP>()->activate(1);
         envs[i]->right = Partition<S, FL>::build_right(
-            mats, envs[i]->right_op_infos, false, stacked_mat);
+            mats, envs[i]->right_op_infos, false, stacked_mat,
+            lowmem_numerical_transform && dot == 2 && !preserve_data);
         tinfo += _t.get_time();
         if (mpo->tf->get_type() == TensorFunctionsTypes::Archived) {
             dynamic_pointer_cast<ArchivedTensorFunctions<S, FL>>(mpo->tf)
@@ -591,6 +606,17 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         trot += _t.get_time();
         if (mpo->schemer != nullptr &&
             i + dot == mpo->schemer->right_trans_site) {
+            if (lowmem_numerical_transform && dot == 2 && !preserve_data) {
+                shared_ptr<VectorAllocator<FP>> d_alloc =
+                    make_shared<VectorAllocator<FP>>();
+                for (auto &p : envs[i]->right->ops) {
+                    const auto &xop = envs[i]->right->ops.at(p.first);
+                    if (xop->alloc != dalloc_<FP>() && xop->data != nullptr) {
+                        xop->alloc = d_alloc;
+                        xop->allocate(xop->info);
+                    }
+                }
+            }
             mpo->tf->numerical_transform(
                 envs[i]->right, mats[1],
                 mpo->schemer->right_new_operator_exprs);
@@ -1726,7 +1752,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else {
             new_left = Partition<S, FL>::build_left(lmats, left_op_infos,
                                                     mpo->sparse_form[iL] == 'S',
-                                                    stacked_lmat);
+                                                    stacked_lmat, false);
             if (fused_contraction_multiplication) {
                 shared_ptr<OperatorTensor<S, FL>> copied_left = nullptr;
                 vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;
@@ -1867,7 +1893,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         } else {
             new_right = Partition<S, FL>::build_right(
                 rmats, right_op_infos, mpo->sparse_form[iR] == 'S',
-                stacked_rmat);
+                stacked_rmat, false);
             if (fused_contraction_multiplication) {
                 shared_ptr<OperatorTensor<S, FL>> copied_right = nullptr;
                 vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> copied_infos;

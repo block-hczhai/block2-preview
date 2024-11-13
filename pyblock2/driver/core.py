@@ -4395,6 +4395,7 @@ class DMRGDriver:
         cached_contraction=True,
         fused_contraction_multiplication=False,
         fused_contraction_rotation=False,
+        lowmem_numerical_transform=False,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4525,6 +4526,9 @@ class DMRGDriver:
             fused_contraction_rotation : bool
                 If True, fused operation of contraction and rotation is used for saving memory.
                 Defult is False.
+            lowmem_numerical_transform : bool
+                If True, numerical transform will be done with copying to save peak memory.
+                Defult is False.
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4555,6 +4559,7 @@ class DMRGDriver:
         me.cached_contraction = cached_contraction
         me.fused_contraction_multiplication = fused_contraction_multiplication
         me.fused_contraction_rotation = fused_contraction_rotation
+        me.lowmem_numerical_transform = lowmem_numerical_transform
         if fused_contraction_multiplication:
             assert fused_contraction_rotation
             assert not cached_contraction

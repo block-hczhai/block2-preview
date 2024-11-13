@@ -1182,8 +1182,8 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
         }
         return dopt;
     }
-        // c = a x b (dot) (delayed for 3-operator operations)
-     void delayed_left_contract(
+    // c = a x b (dot) (delayed for 3-operator operations)
+    void delayed_left_contract(
         const shared_ptr<OperatorTensor<S, FL>> &a,
         const shared_ptr<OperatorTensor<S, FL>> &b,
         shared_ptr<OperatorTensor<S, FL>> &c,
@@ -1193,7 +1193,7 @@ struct ParallelTensorFunctions : TensorFunctions<S, FL> {
             return left_contract(a, b, c, cexprs);
         shared_ptr<DelayedOperatorTensor<S, FL>> dopt =
             make_shared<DelayedOperatorTensor<S, FL>>();
-        dopt->mat = cexprs == nullptr ? a->lmat * b->lmat : cexprs->copy();;
+        dopt->mat = cexprs == nullptr ? a->lmat * b->lmat : cexprs->copy();
         dopt->lopt = a, dopt->ropt = b;
         dopt->ops = c->ops;
         dopt->lmat = c->lmat, dopt->rmat = c->rmat;
