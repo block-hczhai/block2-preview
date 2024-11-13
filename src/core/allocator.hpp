@@ -196,13 +196,16 @@ template <typename T> struct TemporaryAllocator : StackAllocator<T> {
     /** Constructor.
      * @param max_size Total size of the stack (in number of elements).
      */
-    TemporaryAllocator(size_t max_size)
-        : StackAllocator<T>(new T[max_size], max_size) {}
+    const bool own_data; //!< Whether the allocator owns pointer.
     /** Default constructor. */
-    TemporaryAllocator() : StackAllocator<T>() {}
+    TemporaryAllocator() : StackAllocator<T>(), own_data(true) {}
+    TemporaryAllocator(size_t max_size)
+        : StackAllocator<T>(new T[max_size], max_size), own_data(true) {}
+    TemporaryAllocator(T *ptr, size_t max_size)
+        : StackAllocator<T>(ptr, max_size), own_data(false) {}
     /** Default destructor. */
     virtual ~TemporaryAllocator() {
-        if (StackAllocator<T>::data != nullptr)
+        if (StackAllocator<T>::data != nullptr && own_data)
             delete[] StackAllocator<T>::data;
     }
 };

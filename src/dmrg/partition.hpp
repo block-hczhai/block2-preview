@@ -152,7 +152,8 @@ template <typename S, typename FL> struct Partition {
     static shared_ptr<OperatorTensor<S, FL>> build_left(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &left_op_infos,
-        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr) {
+        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr,
+        bool snd_ext_alloc = false) {
         shared_ptr<OperatorTensor<S, FL>> opt =
             make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
@@ -183,14 +184,28 @@ template <typename S, typename FL> struct Partition {
                 }
             }
         }
-        for (auto &mat : mats)
+        shared_ptr<TemporaryAllocator<FP>> d_alloc;
+        if (snd_ext_alloc) {
+            frame_<FP>()->activate(0);
+            d_alloc = make_shared<TemporaryAllocator<FP>>(
+                dalloc_<FP>()->data + dalloc_<FP>()->used,
+                dalloc_<FP>()->size - dalloc_<FP>()->used);
+            frame_<FP>()->activate(1);
+        }
+        for (size_t im = 0; im < mats.size(); im++) {
+            auto &mat = mats[im];
             if (stacked_mat == nullptr) {
                 for (size_t i = 0; i < mat->data.size(); i++)
                     if (mat->data[i]->get_type() != OpTypes::Zero) {
                         shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
+                        const bool has_op = opt->ops.count(op) != 0;
                         opt->ops[op] =
                             csr ? make_shared<CSRSparseMatrix<S, FL>>()
                                 : make_shared<SparseMatrix<S, FL>>();
+                        if (im != 0 && snd_ext_alloc && !has_op)
+                            opt->ops[op]->alloc =
+                                make_shared<TemporaryAllocator<FP>>(
+                                    d_alloc->data, d_alloc->size);
                     }
             } else {
                 for (size_t j = 0; j < stacked_mat->data.size(); j++)
@@ -212,6 +227,7 @@ template <typename S, typename FL> struct Partition {
                             }
                     }
             }
+        }
         if (stacked_mat == nullptr) {
             for (auto &p : opt->ops) {
                 shared_ptr<OpElement<S, FL>> op =
@@ -233,7 +249,8 @@ template <typename S, typename FL> struct Partition {
     static shared_ptr<OperatorTensor<S, FL>> build_right(
         const vector<shared_ptr<Symbolic<S>>> &mats,
         const vector<pair<S, shared_ptr<SparseMatrixInfo<S>>>> &right_op_infos,
-        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr) {
+        bool csr = false, shared_ptr<Symbolic<S>> stacked_mat = nullptr,
+        bool snd_ext_alloc = false) {
         shared_ptr<OperatorTensor<S, FL>> opt =
             make_shared<OperatorTensor<S, FL>>();
         assert(mats[0] != nullptr);
@@ -264,14 +281,28 @@ template <typename S, typename FL> struct Partition {
                 }
             }
         }
-        for (auto &mat : mats)
+        shared_ptr<TemporaryAllocator<FP>> d_alloc;
+        if (snd_ext_alloc) {
+            frame_<FP>()->activate(0);
+            d_alloc = make_shared<TemporaryAllocator<FP>>(
+                dalloc_<FP>()->data + dalloc_<FP>()->used,
+                dalloc_<FP>()->size - dalloc_<FP>()->used);
+            frame_<FP>()->activate(1);
+        }
+        for (size_t im = 0; im < mats.size(); im++) {
+            auto &mat = mats[im];
             if (stacked_mat == nullptr) {
                 for (size_t i = 0; i < mat->data.size(); i++)
                     if (mat->data[i]->get_type() != OpTypes::Zero) {
                         shared_ptr<OpExpr<S>> op = abs_value(mat->data[i]);
+                        const bool has_op = opt->ops.count(op) != 0;
                         opt->ops[op] =
                             csr ? make_shared<CSRSparseMatrix<S, FL>>()
                                 : make_shared<SparseMatrix<S, FL>>();
+                        if (im != 0 && snd_ext_alloc && !has_op)
+                            opt->ops[op]->alloc =
+                                make_shared<TemporaryAllocator<FP>>(
+                                    d_alloc->data, d_alloc->size);
                     }
             } else {
                 for (size_t j = 0; j < stacked_mat->data.size(); j++)
@@ -293,6 +324,7 @@ template <typename S, typename FL> struct Partition {
                             }
                     }
             }
+        }
         if (stacked_mat == nullptr) {
             for (auto &p : opt->ops) {
                 shared_ptr<OpElement<S, FL>> op =

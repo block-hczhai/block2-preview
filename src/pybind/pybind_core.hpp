@@ -397,8 +397,8 @@ size_t printable(const T &p, const Args &...) {
 }
 
 template <typename T>
-auto printable(const T &p)
-    -> decltype(declval<ostream &>() << declval<T>(), T()) {
+auto printable(const T &p) -> decltype(declval<ostream &>() << declval<T>(),
+                                       T()) {
     return p;
 }
 
@@ -580,9 +580,7 @@ template <typename S> void bind_expr(py::module &m) {
         .def_readwrite("indices", &SymbolicMatrix<S>::indices)
         .def("__setitem__",
              [](SymbolicMatrix<S> *self, int i, int j,
-                const shared_ptr<OpExpr<S>> &v) {
-                 (*self)[{i, j}] = v;
-             })
+                const shared_ptr<OpExpr<S>> &v) { (*self)[{i, j}] = v; })
         .def("copy", &SymbolicMatrix<S>::copy);
 
     py::bind_vector<vector<shared_ptr<Symbolic<S>>>>(m, "VectorSymbolic");
@@ -2658,7 +2656,10 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
 
     py::class_<TemporaryAllocator<FL>, shared_ptr<TemporaryAllocator<FL>>,
                StackAllocator<FL>>(m, (name + "TemporaryAllocator").c_str())
-        .def(py::init<>());
+        .def_readonly("own_data", &TemporaryAllocator<FL>::own_data)
+        .def(py::init<>())
+        .def(py::init<size_t>())
+        .def(py::init<FL *, size_t>());
 
     py::class_<FPCodec<FL>, shared_ptr<FPCodec<FL>>>(m,
                                                      (name + "FPCodec").c_str())
