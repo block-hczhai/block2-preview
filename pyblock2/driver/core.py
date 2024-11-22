@@ -2555,6 +2555,7 @@ class DMRGDriver:
                                     dqs = [self.vacuum]
                                 assert len(dqs) >= 1
                                 dq = dqs[0]
+                            assert dq.count == 1
 
                             mat = super_self.bw.bs.SparseMatrix(d_alloc)
                             info = self.find_site_op_info(m, dq)
