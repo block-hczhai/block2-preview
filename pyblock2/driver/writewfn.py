@@ -264,12 +264,10 @@ def swap_order_left(idx):
     l, m, r = mps.info.left_dims[idx], hamil.basis[idx], mps.info.left_dims[idx + 1]
     clm = B2StateInfo.get_connection_info(l, m, r)
     for ik in range(r.n):
-        bbed = clm.n if ik == r.n - 1 else clm.n_states[ik + 1]
         dx = []
         g = 0
-        for bb in range(clm.n_states[ik], bbed):
-            ibba = clm.quanta[bb].data >> 16
-            ibbb = clm.quanta[bb].data & 0xFFFF
+        for bb in range(clm.acc_n_states[ik], clm.acc_n_states[ik + 1]):
+            ibba, ibbb = clm.ij_indices[bb]
             nx = l.n_states[ibba] * m.n_states[ibbb]
             dx.append((l.quanta[ibba], m.quanta[ibbb], g, g + nx))
             g += nx
@@ -289,12 +287,10 @@ def swap_order_right(idx):
     l, m, r = mps.info.right_dims[idx], hamil.basis[idx], mps.info.right_dims[idx + 1]
     clm = B2StateInfo.get_connection_info(m, r, l)
     for ik in range(l.n):
-        bbed = clm.n if ik == l.n - 1 else clm.n_states[ik + 1]
         dx = []
         g = 0
-        for bb in range(clm.n_states[ik], bbed):
-            ibba = clm.quanta[bb].data >> 16
-            ibbb = clm.quanta[bb].data & 0xFFFF
+        for bb in range(clm.acc_n_states[ik], clm.acc_n_states[ik + 1]):
+            ibba, ibbb = clm.ij_indices[bb]
             nx = m.n_states[ibba] * r.n_states[ibbb]
             dx.append((m.quanta[ibba], r.quanta[ibbb], g, g + nx))
             g += nx
