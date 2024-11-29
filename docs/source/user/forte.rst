@@ -45,8 +45,8 @@ To save compiling time, one may install ``libint2`` using ``conda install conda-
 Then we can build ``Psi4`` as follows: ::
 
     git clone -b v1.9 https://github.com/psi4/psi4
-    git pull origin master --tags
     cd psi4
+    git pull origin master --tags
     mkdir build
     cd build
     export MATH_ROOT=${CONDA_PREFIX}
