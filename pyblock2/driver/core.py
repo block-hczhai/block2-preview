@@ -558,6 +558,7 @@ class DMRGDriver:
         clean_scratch=True,
         restart_dir=None,
         restart_dir_per_sweep=None,
+        mps_dir=None,
         n_threads=None,
         n_mkl_threads=1,
         symm_type=SymmetryTypes.SU2,
@@ -580,6 +581,8 @@ class DMRGDriver:
                 The symmetry/floating point number mode. Default: ``SymmetryTypes.SU2``.
             scratch : str
                 The working directory (scratch space). Default is "./nodex".
+                For parallel calculations, when this is a local directory, one needs to additionally set
+                "mps_dir" to a global directory.
             clean_scratch : bool
                 If True, large temporary files in the scratch space will be removed once the DMRG finishes successfully.
                 MPS files will not be removed. Default is True.
@@ -590,6 +593,9 @@ class DMRGDriver:
                 If not None, MPS will be copied to the given directory after each DMRG sweep,
                 and the MPSs from different sweeps will be kept in separate directories.
                 Default is None (MPS will not be copied).
+            mps_dir : None or str
+                If not None, MPS will be stored in the given directory instead of the scratch directory.
+                Default is None (MPS will be stored in the scratch directory).
             n_threads : None or int
                 Number of threads. When MPI is used, this is the number of threads for each MPI processor.
                 Default is None, and the max number of threads available on this node will be used.
@@ -627,6 +633,7 @@ class DMRGDriver:
             self.prule = None
 
         self._scratch = scratch
+        self._mps_dir = mps_dir
         self._restart_dir = restart_dir
         self._restart_dir_per_sweep = restart_dir_per_sweep
         self.stack_mem = stack_mem
@@ -673,7 +680,7 @@ class DMRGDriver:
     @property
     def scratch(self):
         """The working directory (scratch space)."""
-        return self._scratch
+        return self._scratch if self._mps_dir is None else self._mps_dir
 
     @scratch.setter
     def scratch(self, scratch):
@@ -705,6 +712,16 @@ class DMRGDriver:
         self._restart_dir_per_sweep = restart_dir_per_sweep
         self.frame.restart_dir_per_sweep = restart_dir_per_sweep
 
+    @property
+    def mps_dir(self):
+        """If not None, MPS will be stored in the given directory instead of the scratch directory."""
+        return self._mps_dir
+
+    @mps_dir.setter
+    def mps_dir(self, mps_dir):
+        self._mps_dir = mps_dir
+        self.frame.mps_dir = mps_dir
+
     def set_symm_type(self, symm_type, reset_frame=True):
         """
         Change the symmetry type of this :class:`DMRGDriver`.
@@ -725,7 +742,7 @@ class DMRGDriver:
                 bw.b.Global.frame = bw.b.DoubleDataFrame(
                     int(self.stack_mem * 0.1),
                     int(self.stack_mem * 0.9),
-                    self.scratch,
+                    self._scratch,
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
@@ -739,7 +756,7 @@ class DMRGDriver:
                 bw.b.Global.frame_float = bw.b.FloatDataFrame(
                     int(self.stack_mem * 0.1),
                     int(self.stack_mem * 0.9),
-                    self.scratch,
+                    self._scratch,
                     self.stack_mem_ratio,
                     self.stack_mem_ratio,
                 )
@@ -769,6 +786,16 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             self.frame.restart_dir = self.restart_dir
+
+        if self.mps_dir is not None:
+            import os
+
+            if self.mpi is None or self.mpi.rank == self.mpi.root:
+                if not os.path.isdir(self.mps_dir):
+                    os.makedirs(self.mps_dir)
+            if self.mpi is not None:
+                self.mpi.barrier()
+            self.frame.mps_dir = self.mps_dir
 
         if self.restart_dir_per_sweep is not None:
             self.frame.restart_dir_per_sweep = self.restart_dir_per_sweep
