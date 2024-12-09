@@ -354,6 +354,8 @@ template <typename FL> struct DataFrame {
     string restart_dir_optimal_mps_per_sweep =
         ""; //!< If not empty, save the optimal MPS from each sweep to this dir
             //!< with sweep index as suffix.
+    size_t save_dir_quota = 0; //!< Disk quota for save_dir (in bytes).
+    string alt_save_dir = ""; //!< Alternative scartch folder.
     string prefix = "F", //!< Filename prefix for common scratch files (such as
                          //!< MPS tensors).
         prefix_distri =

@@ -3178,8 +3178,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                          << " | Twrite = " << frame_<FPS>()->twrite
                          << " | Tfpread = " << frame_<FPS>()->fpread
                          << " | Tfpwrite = " << frame_<FPS>()->fpwrite
-                         << " | Tmporead = " << me->mpo->tread
-                         << " | Tasync = " << frame_<FPS>()->tasync << endl;
+                         << " | Tmporead = " << me->mpo->tread << endl;
                     if (frame_<FPS>()->fp_codec != nullptr)
                         sout
                             << " | data = "
@@ -3187,8 +3186,13 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                                    frame_<FPS>()->fp_codec->ndata * sizeof(FPS))
                             << " | cpsd = "
                             << Parsing::to_size_string(
-                                   frame_<FPS>()->fp_codec->ncpsd * sizeof(FPS))
-                            << endl;
+                                   frame_<FPS>()->fp_codec->ncpsd *
+                                   sizeof(FPS));
+                    if (frame_<FPS>()->save_dir_quota != 0)
+                        sout << " | quota-used = "
+                             << Parsing::to_size_string(
+                                    me->get_used_save_dir_size());
+                    sout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                     sout << " | Trot = " << me->trot << " | Tctr = " << me->tctr
                          << " | Tint = " << me->tint << " | Tmid = " << me->tmid
                          << " | Tdctr = " << me->tdctr
@@ -5181,6 +5185,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             << Parsing::to_size_string(
                                    frame_<FPS>()->fp_codec->ncpsd *
                                    sizeof(FPS));
+                    if (frame_<FPS>()->save_dir_quota != 0)
+                        cout << " | quota-used = "
+                             << Parsing::to_size_string(
+                                    lme->get_used_save_dir_size());
                     cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                     if (lme != nullptr)
                         cout << " | Trot = " << lme->trot
@@ -6506,6 +6514,10 @@ struct Expect {
                          << " | cpsd = "
                          << Parsing::to_size_string(
                                 frame_<FPS>()->fp_codec->ncpsd * sizeof(FPS));
+                if (frame_<FPS>()->save_dir_quota != 0)
+                    cout << " | quota-used = "
+                         << Parsing::to_size_string(
+                                me->get_used_save_dir_size());
                 cout << " | Tasync = " << frame_<FPS>()->tasync << endl;
                 if (me != nullptr)
                     cout << " | Trot = " << me->trot << " | Tctr = " << me->tctr

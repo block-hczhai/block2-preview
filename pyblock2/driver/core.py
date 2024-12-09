@@ -559,6 +559,8 @@ class DMRGDriver:
         restart_dir=None,
         restart_dir_per_sweep=None,
         mps_dir=None,
+        scratch_quota=None,
+        alt_scratch=None,
         n_threads=None,
         n_mkl_threads=1,
         symm_type=SymmetryTypes.SU2,
@@ -596,6 +598,11 @@ class DMRGDriver:
             mps_dir : None or str
                 If not None, MPS will be stored in the given directory instead of the scratch directory.
                 Default is None (MPS will be stored in the scratch directory).
+            scratch_quota : None or int
+                If not None, will save intermediates to "alt_scratch" when the intermediate size in "scratch" is
+                above or equal to this number (in bytes). Default is None (no disk quota).
+            alt_scratch : None or str
+                Alternative scratch directory. Default is None.
             n_threads : None or int
                 Number of threads. When MPI is used, this is the number of threads for each MPI processor.
                 Default is None, and the max number of threads available on this node will be used.
@@ -636,6 +643,8 @@ class DMRGDriver:
         self._mps_dir = mps_dir
         self._restart_dir = restart_dir
         self._restart_dir_per_sweep = restart_dir_per_sweep
+        self._scratch_quota = 0 if scratch_quota is None else scratch_quota
+        self._alt_scratch = alt_scratch
         self.stack_mem = stack_mem
         self.stack_mem_ratio = stack_mem_ratio
         self.fp_codec_cutoff = fp_codec_cutoff
@@ -770,6 +779,7 @@ class DMRGDriver:
         self.frame.use_main_stack = False
         self.frame.compressed_sparse_tensor_storage = self.compressed_mps_storage
         self.frame.minimal_memory_usage = self.min_mpo_mem
+        self.frame.save_dir_quota = self._scratch_quota
 
         if self.mpi:
             self.mpi = bw.brs.MPICommunicator()
@@ -796,6 +806,19 @@ class DMRGDriver:
             if self.mpi is not None:
                 self.mpi.barrier()
             self.frame.mps_dir = self.mps_dir
+
+        if self._alt_scratch is not None:
+            import os
+
+            if self.mpi is None or self.mpi.rank == self.mpi.root:
+                if not os.path.isdir(self._alt_scratch):
+                    os.makedirs(self._alt_scratch)
+            if self.mpi is not None:
+                self.mpi.barrier()
+                if not os.path.isdir(self._alt_scratch):
+                    os.makedirs(self._alt_scratch)
+                self.mpi.barrier()
+            self.frame.alt_save_dir = self._alt_scratch
 
         if self.restart_dir_per_sweep is not None:
             self.frame.restart_dir_per_sweep = self.restart_dir_per_sweep

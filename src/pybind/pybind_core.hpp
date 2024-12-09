@@ -71,6 +71,7 @@ PYBIND11_MAKE_OPAQUE(vector<pair<long long int, long long int>>);
 PYBIND11_MAKE_OPAQUE(unordered_map<int, int>);
 PYBIND11_MAKE_OPAQUE(vector<unordered_map<int, int>>);
 PYBIND11_MAKE_OPAQUE(unordered_map<int, pair<int, int>>);
+PYBIND11_MAKE_OPAQUE(map<int, pair<string, size_t>>);
 PYBIND11_MAKE_OPAQUE(vector<unordered_map<int, pair<int, int>>>);
 PYBIND11_MAKE_OPAQUE(vector<pair<SpinOperator, uint16_t>>);
 PYBIND11_MAKE_OPAQUE(vector<SpinPermTerm>);
@@ -1503,6 +1504,7 @@ template <typename S = void> void bind_data(py::module &m) {
     py::bind_map<unordered_map<int, int>>(m, "MapIntInt");
     py::bind_vector<vector<unordered_map<int, int>>>(m, "VectorMapIntInt");
     py::bind_map<unordered_map<int, pair<int, int>>>(m, "MapIntPIntInt");
+    py::bind_map<map<int, pair<string, size_t>>>(m, "MapIntPStrULLInt");
     py::bind_vector<vector<unordered_map<int, pair<int, int>>>>(
         m, "VectorMapIntPIntInt");
     py::bind_vector<vector<pair<double, string>>>(m, "VectorPDoubleStr");
@@ -2668,6 +2670,7 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
         .def(py::init<FL, size_t>())
         .def_readwrite("ndata", &FPCodec<FL>::ndata)
         .def_readwrite("ncpsd", &FPCodec<FL>::ncpsd)
+        .def_readwrite("ncpsd_last", &FPCodec<FL>::ncpsd_last)
         .def("encode",
              [](FPCodec<FL> *self, py::array_t<FL> arr) {
                  FL *tmp = new FL[arr.size() + 2];
@@ -2761,6 +2764,8 @@ template <typename FL> void bind_fl_io(py::module &m, const string &name) {
                        &DataFrame<FL>::restart_dir_optimal_mps)
         .def_readwrite("restart_dir_optimal_mps_per_sweep",
                        &DataFrame<FL>::restart_dir_optimal_mps_per_sweep)
+        .def_readwrite("save_dir_quota", &DataFrame<FL>::save_dir_quota)
+        .def_readwrite("alt_save_dir", &DataFrame<FL>::alt_save_dir)
         .def_readwrite("prefix", &DataFrame<FL>::prefix)
         .def_readwrite("prefix_distri", &DataFrame<FL>::prefix_distri)
         .def_readwrite("prefix_can_write", &DataFrame<FL>::prefix_can_write)

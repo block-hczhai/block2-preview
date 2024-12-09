@@ -812,6 +812,10 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
             &MovingEnvironment<S, FL, FLS>::lowmem_numerical_transform)
         .def_readwrite("save_environments",
                        &MovingEnvironment<S, FL, FLS>::save_environments)
+        .def_readwrite("left_part_files",
+                       &MovingEnvironment<S, FL, FLS>::left_part_files)
+        .def_readwrite("right_part_files",
+                       &MovingEnvironment<S, FL, FLS>::right_part_files)
         .def("left_contract_rotate",
              &MovingEnvironment<S, FL, FLS>::left_contract_rotate)
         .def("right_contract_rotate",
@@ -879,6 +883,8 @@ void bind_fl_moving_environment(py::module &m, const string &name) {
              &MovingEnvironment<S, FL, FLS>::get_middle_archive_filename)
         .def("get_right_archive_filename",
              &MovingEnvironment<S, FL, FLS>::get_right_archive_filename)
+        .def("get_used_save_dir_size",
+             &MovingEnvironment<S, FL, FLS>::get_used_save_dir_size)
         .def("get_left_partition_filename",
              &MovingEnvironment<S, FL, FLS>::get_left_partition_filename)
         .def("get_right_partition_filename",

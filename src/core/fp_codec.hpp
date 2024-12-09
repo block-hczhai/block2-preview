@@ -165,7 +165,9 @@ struct FPCodec {
     mutable size_t
         ndata =
             0, //!< Length of the array of the data that has been compressed.
-        ncpsd = 0;            //!< Length of the array for the compressed data.
+        ncpsd = 0; //!< Length of the array for the compressed data.
+    mutable size_t ncpsd_last =
+        0;                    //!< Length of the array written in the last call.
     size_t chunk_size = 4096; //!< Length of the array elements that should be
                               //!< processed at one time.
     size_t n_parallel_chunks =
@@ -269,6 +271,7 @@ struct FPCodec {
         T *pdata = new T[(chunk_size + 1) * min(nchunk, n_parallel_chunks)];
         vector<size_t> cplens(n_parallel_chunks);
         int ntg = threading->activate_global();
+        ncpsd_last = 0;
 #pragma omp parallel num_threads(ntg)
         for (size_t ib = 0; ib < nbatch; ib++) {
             size_t n_this_chunk =
@@ -288,9 +291,10 @@ struct FPCodec {
                 size_t cplen = cplens[ic];
                 ofs.write((char *)&cplen, sizeof(cplen));
                 ofs.write((char *)(pdata + offset + ic), sizeof(T) * cplen);
-                ncpsd += cplen;
+                ncpsd_last += cplen;
             }
         }
+        ncpsd += ncpsd_last;
         delete[] pdata;
         threading->activate_normal();
         ofs.write((char *)tail.c_str(), 4);

@@ -190,6 +190,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
     int fuse_center;
     // Set this to false for non-propagate expectation
     bool save_environments = true;
+    mutable map<int, pair<string, size_t>> left_part_files;
+    mutable map<int, pair<string, size_t>> right_part_files;
     MovingEnvironment(const shared_ptr<MPO<S, FL>> &mpo,
                       const shared_ptr<MPS<S, FLS>> &bra,
                       const shared_ptr<MPS<S, FLS>> &ket,
@@ -425,6 +427,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         if (save_environments) {
             frame_<FP>()->save_data(1, get_left_partition_filename(i));
+            left_part_files[i] = make_pair(get_left_partition_filename(i),
+                                           renormal_mem * sizeof(FL));
+            if (frame_<FP>()->fp_codec != nullptr)
+                left_part_files[i].second =
+                    frame_<FPS>()->fp_codec->ncpsd_last * sizeof(FP);
             if (save_partition_info) {
                 frame_<FP>()->activate(1);
                 envs[i]->save_data(true, get_left_partition_filename(i, true));
@@ -648,6 +655,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         Partition<S, FL>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         if (save_environments) {
             frame_<FP>()->save_data(1, get_right_partition_filename(i));
+            right_part_files[i] = make_pair(get_right_partition_filename(i),
+                                            renormal_mem * sizeof(FL));
+            if (frame_<FP>()->fp_codec != nullptr)
+                right_part_files[i].second =
+                    frame_<FPS>()->fp_codec->ncpsd_last * sizeof(FP);
             if (save_partition_info) {
                 frame_<FP>()->activate(1);
                 envs[i]->save_data(false,
@@ -831,17 +843,39 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
            << ".AR." << tag << ".RIGHT." << Parsing::to_string(i);
         return ss.str();
     }
+    size_t get_used_save_dir_size() const {
+        size_t used = 0;
+        const string xdir = frame_<FP>()->save_dir + "/";
+        for (const auto &p : left_part_files)
+            if (p.second.first.rfind(xdir, 0) == 0)
+                used += p.second.second;
+        for (const auto &p : right_part_files)
+            if (p.second.first.rfind(xdir, 0) == 0)
+                used += p.second.second;
+        return used;
+    }
     string get_left_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
-           << ".PART." << (info ? "INFO." : "") << tag << ".LEFT."
-           << Parsing::to_string(i);
+        string xdir = frame_<FP>()->save_dir;
+        if (!info && left_part_files.count(i))
+            return left_part_files.at(i).first;
+        else if (!info && frame_<FP>()->save_dir_quota != 0 &&
+                 get_used_save_dir_size() >= frame_<FP>()->save_dir_quota)
+            xdir = frame_<FP>()->alt_save_dir;
+        ss << xdir << "/" << frame_<FP>()->prefix_distri << ".PART."
+           << (info ? "INFO." : "") << tag << ".LEFT." << Parsing::to_string(i);
         return ss.str();
     }
     string get_right_partition_filename(int i, bool info = false) const {
         stringstream ss;
-        ss << frame_<FP>()->save_dir << "/" << frame_<FP>()->prefix_distri
-           << ".PART." << (info ? "INFO." : "") << tag << ".RIGHT."
+        string xdir = frame_<FP>()->save_dir;
+        if (!info && right_part_files.count(i))
+            return right_part_files.at(i).first;
+        else if (!info && frame_<FP>()->save_dir_quota != 0 &&
+                 get_used_save_dir_size() >= frame_<FP>()->save_dir_quota)
+            xdir = frame_<FP>()->alt_save_dir;
+        ss << xdir << "/" << frame_<FP>()->prefix_distri << ".PART."
+           << (info ? "INFO." : "") << tag << ".RIGHT."
            << Parsing::to_string(i);
         return ss.str();
     }
@@ -856,12 +890,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             me->envs[i] = make_shared<Partition<S, FL>>(*envs[i]);
             me->envs[i]->left_op_infos = envs[i]->left_op_infos;
             me->envs[i]->right_op_infos = envs[i]->right_op_infos;
-            if (envs[i]->left != nullptr)
+            if (envs[i]->left != nullptr) {
                 Parsing::link_file(get_left_partition_filename(i),
                                    me->get_left_partition_filename(i));
-            if (envs[i]->right != nullptr)
+                if (left_part_files.count(i))
+                    me->left_part_files[i] =
+                        make_pair(me->get_left_partition_filename(i),
+                                  left_part_files[i].second);
+            }
+            if (envs[i]->right != nullptr) {
                 Parsing::link_file(get_right_partition_filename(i),
                                    me->get_right_partition_filename(i));
+                if (right_part_files.count(i))
+                    me->right_part_files[i] =
+                        make_pair(me->get_right_partition_filename(i),
+                                  right_part_files[i].second);
+            }
         }
     }
     virtual shared_ptr<MovingEnvironment>
@@ -869,6 +913,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         shared_ptr<MovingEnvironment> me =
             make_shared<MovingEnvironment>(*this);
         me->tag = new_tag;
+        me->left_part_files.clear();
+        me->right_part_files.clear();
         shallow_copy_to(me);
         return me;
     }
@@ -1417,10 +1463,15 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 left_contract_rotate(center);
             }
             for (int i = n_sites - 1; i >= center; i--)
-                if (envs[i]->right != nullptr)
+                if (envs[i]->right != nullptr) {
                     frame_<FP>()->rename_data(
                         get_right_partition_filename(i),
                         get_right_partition_filename(i + 1));
+                    if (right_part_files.count(i))
+                        right_part_files[i + 1] =
+                            make_pair(get_right_partition_filename(i + 1),
+                                      right_part_files[i].second);
+                }
             for (int i = n_sites - 1; i >= 0; i--) {
                 envs[i]->middle.resize(1);
                 if (i > start_site) {
@@ -1470,9 +1521,13 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 string left_data_name = get_left_partition_filename(i, info);
                 if (Parsing::file_exists(left_data_name))
                     Parsing::remove_file(left_data_name);
+                if (info == 0 && left_part_files.count(i))
+                    left_part_files.erase(i);
                 string right_data_name = get_right_partition_filename(i, info);
                 if (Parsing::file_exists(right_data_name))
                     Parsing::remove_file(right_data_name);
+                if (info == 0 && right_part_files.count(i))
+                    right_part_files.erase(i);
             }
     }
     // Move the center site by one
@@ -1503,6 +1558,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 string old_data_name = get_right_partition_filename(center - 1);
                 if (Parsing::file_exists(old_data_name))
                     Parsing::remove_file(old_data_name);
+                if (right_part_files.count(center - 1))
+                    right_part_files.erase(center - 1);
             }
         } else if (i < center) {
             if (envs[center]->right != nullptr &&
@@ -1519,6 +1576,8 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 string old_data_name = get_left_partition_filename(center + 1);
                 if (Parsing::file_exists(old_data_name))
                     Parsing::remove_file(old_data_name);
+                if (left_part_files.count(center + 1))
+                    left_part_files.erase(center + 1);
             }
         }
         if (para_rule != nullptr)
