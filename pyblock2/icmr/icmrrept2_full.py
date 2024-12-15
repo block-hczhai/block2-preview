@@ -270,16 +270,14 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None):
         xw, xu = np.linalg.eigh(xn)
         idx = xw > ic.trunc_thrds
         xf = xu[:, idx] * (xw[idx] ** (-0.5))
-        xb = xu[:, idx] * (xw[idx] ** 0.5)
-        th = xf.T @ xh @ xb
+        th = xf.T @ xh @ xf
         tr = xf.T @ xr
         tx = _linear_solve(th, tr)
-        xx = xb @ tx
         if skey not in ic.sub_eners:
-            ic.sub_eners[skey] = -(xx * xr).sum()
+            ic.sub_eners[skey] = -np.dot(tx, tr)
             ic.sub_times[skey] = time.perf_counter() - t
         else:
-            ic.sub_eners[skey] += -(xx * xr).sum()
+            ic.sub_eners[skey] += -np.dot(tx, tr)
             ic.sub_times[skey] += time.perf_counter() - t
         if key[-1] in "-1*":
             lib.logger.note(ic, "E(%s-%4s) = %20.14f",

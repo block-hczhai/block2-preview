@@ -169,12 +169,12 @@ def _key_idx(key):
     t = [WickIndexTypes.Inactive, WickIndexTypes.Active, WickIndexTypes.External]
     return [t.index(wi.types) for wi in PT("x[%s]" % key).indices]
 
-def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, iprint=False):
+def _conjugate_gradient(axop, x, b, max_iter=1000, conv_thrd=5E-4, iprint=False):
     r = -axop(x) + b
     p = r.copy()
-    error = xdot(p, r)
+    error = np.dot(p, r)
     if np.sqrt(np.abs(error)) < conv_thrd:
-        func = xdot(x, b)
+        func = np.dot(x, b)
         if iprint:
             print("%5d %15.8f %9.2E" % (0, func, error))
         return func, x, 1
@@ -184,12 +184,12 @@ def _conjugate_gradient(axop, x, b, xdot=np.dot, max_iter=1000, conv_thrd=5E-4, 
         t = time.perf_counter()
         xiter += 1
         hp = axop(p)
-        alpha = old_error / xdot(p, hp)
+        alpha = old_error / np.dot(p, hp)
         x += alpha * p
         r -= alpha * hp
         z = r.copy()
-        error = xdot(z, r)
-        func = xdot(x, b)
+        error = np.dot(z, r)
+        func = np.dot(x, b)
         if iprint:
             print("%5d %15.8f %9.2E T = %.3f" % (xiter, func, error, time.perf_counter() - t))
         if np.sqrt(np.abs(error)) < conv_thrd:
@@ -288,15 +288,12 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sw, su = np.linalg.eigh(ss.reshape((ns * 2, ns * 2)))
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
-            sb = su[:, idx] * (sw[idx] ** 0.5)
             sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], -1))
-            sb = sb.reshape((2, *s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("v%s,v%sx->x" % (rkey, rkey), g, sf, optimize=True)
-            def trans_back(g, sb=sb):
-                return np.einsum("x,v%sx->v%s" % (rkey, rkey), g, sb, optimize=True)
-            xdot = lambda a, b: (trans_back(a) * trans_back(b)).sum()
+            def trans_back(g, sf=sf):
+                return np.einsum("x,v%sx->v%s" % (rkey, rkey), g, sf, optimize=True)
             def axop(ppx, eqs=pt2_axeqs, xid=xindex):
                 px = trans_back(ppx)
                 pax = np.zeros_like(px)
@@ -312,22 +309,19 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sw, su = np.linalg.eigh(s.reshape((ns, ns)))
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
-            sb = su[:, idx] * (sw[idx] ** 0.5)
             sf = sf.reshape((*s.shape[:len(s.shape) // 2], -1))
-            sb = sb.reshape((*s.shape[:len(s.shape) // 2], -1))
             exec(pt2_beqs, globals(), { "b": b, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("%s,%sx->x" % (rkey, rkey), g, sf, optimize=True)
-            def trans_back(g, sb=sb):
-                return np.einsum("x,%sx->%s" % (rkey, rkey), g, sb, optimize=True)
-            xdot = lambda a, b: (trans_back(a) * trans_back(b)).sum()
+            def trans_back(g, sf=sf):
+                return np.einsum("x,%sx->%s" % (rkey, rkey), g, sf, optimize=True)
             def axop(px, eqs=pt2_axeqs, xid=xindex):
                 x = trans_back(px)
                 ax = np.zeros_like(x)
                 exec(eqs, globals(), { "x" + xid: x, "ax": ax, **mdict })
                 return trans_forth(ax)
             pb = trans_forth(b)
-        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, xdot, iprint=iprint)
+        func, _, niterx = _conjugate_gradient(axop, pb.copy(), pb, iprint=iprint)
         niter += niterx
         if skey not in ic.sub_eners:
             ic.sub_eners[skey] = -func
