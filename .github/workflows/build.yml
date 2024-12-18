@@ -665,7 +665,7 @@ jobs:
           cmake --version
           python -m pip install wheel delocate==0.10.7
           export _PYTHON_HOST_PLATFORM="macosx-14.0-arm64"
-          export SDKROOT=/Applications/Xcode_14.3.1.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+          export SDKROOT=/Applications/Xcode_15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
           export PLAT="arm64"
           python -m pip wheel . -w ./dist --no-deps
           delocate-wheel --require-archs=arm64 -k dist/*.whl

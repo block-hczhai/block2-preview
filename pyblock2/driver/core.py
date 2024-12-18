@@ -3514,7 +3514,15 @@ class DMRGDriver:
             if g2e is not None and isinstance(g2e, np.ndarray) and g2e.ndim == 4:
                 g2e = (g2e, g2e, g2e)
         elif SymmetryTypes.SGF in bw.symm_type or SymmetryTypes.SGB in bw.symm_type:
-            if (
+            if h1e is not None and (
+                (isinstance(h1e, np.ndarray) and h1e.ndim == 3) or
+                (isinstance(h1e, tuple) and len(h1e) == 2)
+            ):
+                gh1e = np.zeros((len(h1e[0]) * 2,) * 2)
+                gh1e[0::2, 0::2] = h1e[0]
+                gh1e[1::2, 1::2] = h1e[1]
+                h1e = gh1e
+            elif (
                 h1e is not None
                 and hasattr(self, "n_sites")
                 and len(h1e) * 2 == self.n_sites
@@ -3522,7 +3530,17 @@ class DMRGDriver:
                 gh1e = np.zeros((len(h1e) * 2,) * 2)
                 gh1e[0::2, 0::2] = gh1e[1::2, 1::2] = h1e
                 h1e = gh1e
-            if (
+            if g2e is not None and (
+                (isinstance(g2e, np.ndarray) and h1e.ndim == 5) or
+                (isinstance(g2e, tuple) and len(g2e) == 3)
+            ):
+                gg2e = np.zeros((len(g2e[0]) * 2,) * 4)
+                gg2e[0::2, 0::2, 0::2, 0::2] = g2e[0]
+                gg2e[0::2, 0::2, 1::2, 1::2] = g2e[1]
+                gg2e[1::2, 1::2, 0::2, 0::2] = g2e[1].transpose(2, 3, 0, 1)
+                gg2e[1::2, 1::2, 1::2, 1::2] = g2e[2]
+                g2e = gg2e
+            elif (
                 g2e is not None
                 and hasattr(self, "n_sites")
                 and len(g2e) * 2 == self.n_sites
