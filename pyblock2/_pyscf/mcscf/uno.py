@@ -190,7 +190,7 @@ def pmloc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
     return ierr, u
 
 
-def get_uno(mf, do_loc=True, iprint=True):
+def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False):
 
     mol = mf.mol
 
@@ -265,13 +265,15 @@ def get_uno(mf, do_loc=True, iprint=True):
 
     thresh = 0.05
     active = (thresh <= nocc) & (nocc <= 2 - thresh)
+    act_core_idx = np.where(thresh <= nocc)[0]
+    act_virt_idx = np.where(nocc <= 2 - thresh)[0]
     act_idx = np.where(active)[0]
     if iprint:
         print("active orbital indices %s" % act_idx)
         print("Num active orbitals %d" % len(act_idx))
-    c_orbs = coeff[:, : act_idx[0]]
+    c_orbs = coeff[:, : act_virt_idx[0]]
     a_orbs = coeff[:, act_idx]
-    v_orbs = coeff[:, act_idx[-1] + 1 :]
+    v_orbs = coeff[:, act_core_idx[-1] + 1 :]
     norb = c_orbs.shape[0]
     nc = c_orbs.shape[1]
     na = a_orbs.shape[1]
@@ -327,10 +329,13 @@ def get_uno(mf, do_loc=True, iprint=True):
     def psort(ova, fav, pt, s12, coeff):
         ptnew = 2.0 * (coeff.conj().T @ s12 @ pt @ s12 @ coeff)
         nocc = np.diag(ptnew)
-        index = np.argsort(-nocc)
+        enorb = np.diag(coeff.conj().T @ ova @ fav @ ova @ coeff)
+        if sort_by_ener:
+            index = np.argsort(enorb)
+        else:
+            index = np.argsort(-nocc)
         ncoeff = coeff[:, index]
         nocc = nocc[index]
-        enorb = np.diag(coeff.conj().T @ ova @ fav @ ova @ coeff)
         enorb = enorb[index]
         return ncoeff, nocc, enorb
 
