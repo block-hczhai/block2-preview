@@ -190,7 +190,7 @@ def pmloc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
     return ierr, u
 
 
-def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False):
+def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False, dmaos=None):
 
     mol = mf.mol
 
@@ -216,9 +216,13 @@ def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False):
     diff = mb.conj().T @ ova @ mb - np.identity(norb)
     assert np.linalg.norm(diff) < 1e-7
 
-    pta = np.dot(ma[:, :nalpha], ma[:, :nalpha].conj().T)
-    ptb = np.dot(mb[:, :nbeta], mb[:, :nbeta].conj().T)
-    pt = 0.5 * (pta + ptb)
+    if dmaos is not None:
+        assert dmaos[0].ndim == 2
+        pt = 0.5 * (dmaos[0] + dmaos[1])
+    else:
+        pta = np.dot(ma[:, :nalpha], ma[:, :nalpha].conj().T)
+        ptb = np.dot(mb[:, :nbeta], mb[:, :nbeta].conj().T)
+        pt = 0.5 * (pta + ptb)
 
     # Lowdin basis
     s12 = sqrtm(ova)
