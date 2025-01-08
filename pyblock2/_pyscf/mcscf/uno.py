@@ -549,3 +549,39 @@ def sort_orbitals(
     mo_occ = np.hstack((mo_occ[idx[:ncore]], mo_occ[cas_list], mo_occ[idx[ncore:]]))
 
     return coeff, mo_occ, mo_energy, nactorb, nactelec
+
+
+def get_rcasscf_orb_opt_energy(ncas, n_elec, spin, ecore, h1e, g2e, pdm1, pdm2):
+    from pyscf import gto, ao2mo
+    from pyscf.mcscf.mc1step import CASSCF
+    r0 = None
+    max_stepsize = 10
+    nmo, nelec = ncas, ((n_elec + spin) // 2, (n_elec - spin) // 2)
+    mo = np.identity(nmo)
+
+    mol = gto.M(verbose=0)
+    mol.nelectron = sum(nelec)
+    mol.spin = nelec[0] - nelec[1]
+    mf = mol.RHF()
+    mf._eri = ao2mo.restore(4, g2e, nmo)
+    mf.get_hcore = lambda *args: h1e
+    mf.get_ovlp = lambda *args: np.identity(nmo)
+    mf.mo_coeff = np.identity(nmo)
+
+    mc = CASSCF(mf, nmo, nelec)
+    mc.ah_max_cycle = 5000
+    mc.canonicalization = False
+    mc.natorb = False
+    mc.ah_start_tol = 1e-7
+    mc.max_stepsize = 1.5
+    mc.ah_grad_trust_region = 1e6
+    mc.internal_rotation = True
+    conv_tol_grad = 1E-7
+    eris = mc.ao2mo(mo)
+    rota = mc.rotate_orb_cc(mo, lambda:0, lambda:pdm1, lambda:pdm2,
+        eris, r0, conv_tol_grad * 0.3, max_stepsize, None)
+    u = next(rota)[0]
+    h1x = np.einsum('jk,ji,kl->il', h1e, u, u, optimize=True)
+    h2x = np.einsum('ijkl,ia,jb,kc,ld->abcd', ao2mo.restore(1, g2e, nmo), u, u, u, u, optimize=True)
+    e_totx = np.einsum('ij,ij->', h1x, pdm1, optimize=True) + 0.5 * np.einsum('ijkl,ijkl->', h2x, pdm2, optimize=True)
+    return e_totx + ecore

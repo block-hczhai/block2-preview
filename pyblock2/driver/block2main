@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 #  block2: Efficient MPO implementation of quantum chemistry DMRG
 #  Copyright (C) 2023 Huanchen Zhai <hczhai@caltech.edu>
