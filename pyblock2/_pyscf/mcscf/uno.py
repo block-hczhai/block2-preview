@@ -562,6 +562,7 @@ def get_rcasscf_orb_opt_energy(ncas, n_elec, spin, ecore, h1e, g2e, pdm1, pdm2):
     mol = gto.M(verbose=0)
     mol.nelectron = sum(nelec)
     mol.spin = nelec[0] - nelec[1]
+    mol.incore_anyway = True
     mf = mol.RHF()
     mf._eri = ao2mo.restore(4, g2e, nmo)
     mf.get_hcore = lambda *args: h1e
