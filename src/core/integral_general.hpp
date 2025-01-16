@@ -257,7 +257,7 @@ template <typename FL> struct GeneralFCIDUMP {
                       FL factor = (FL)1.0,
                       const vector<int> &orb_sym = vector<int>(),
                       vector<uint16_t> rperm = vector<uint16_t>(),
-                      int target_irrep = 0) {
+                      int target_irrep = 0, size_t start_stride = 0) {
         int ntg = threading->activate_global();
         vector<size_t> lens(ntg + 1, 0);
         const size_t plen = len / ntg + !!(len % ntg);
@@ -284,7 +284,8 @@ template <typename FL> struct GeneralFCIDUMP {
                     if (abs(factor * vals[i]) > cutoff) {
                         for (int j = 0; j < (int)shape.size(); j++)
                             indices.back()[istart * shape.size() + rperm[j]] =
-                                (uint16_t)(i / strides[j] % shape[j]);
+                                (uint16_t)((i + start_stride) / strides[j] %
+                                           shape[j]);
                         data.back()[istart] = factor * vals[i];
                         istart++;
                     }
@@ -294,8 +295,10 @@ template <typename FL> struct GeneralFCIDUMP {
                         int irrep = target_irrep;
                         for (int j = 0; j < (int)shape.size(); j++) {
                             indices.back()[istart * shape.size() + rperm[j]] =
-                                (uint16_t)(i / strides[j] % shape[j]);
-                            irrep ^= orb_sym[i / strides[j] % shape[j]];
+                                (uint16_t)((i + start_stride) / strides[j] %
+                                           shape[j]);
+                            irrep ^= orb_sym[(i + start_stride) / strides[j] %
+                                             shape[j]];
                         }
                         data.back()[istart] = factor * vals[i] * (FL)(!irrep);
                         istart++;
