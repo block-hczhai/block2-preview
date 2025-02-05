@@ -138,6 +138,7 @@ Features
    tutorial/hubbard
    tutorial/heisenberg
    tutorial/vibrational-hamiltonians
+   tutorial/mpo-mps-quimb
 
 .. raw:: latex
 

@@ -3,8 +3,8 @@
 
 .. _user_mps_io:
 
-MPS Import/Export
-=================
+MPS Import/Export (StackBlock)
+==============================
 
 The ``block2`` MPS can be translated into ``StackBlock`` format for restarting the calculation in ``StackBlock``.
 Alternatively, the ``StackBlock`` rotation matrices and wavefunction can be translated into ``block2`` MPS.
