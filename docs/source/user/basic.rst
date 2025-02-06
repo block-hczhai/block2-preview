@@ -30,11 +30,11 @@ The following python script is used as the "block2 executable": ::
 
     ${BLOCK2HOME}/pyblock2/driver/block2main
 
-where ``${BLOCK2HOME}`` is the ``block2`` root directory. The ``build`` directory under ``block2``
+where ``${BLOCK2HOME}`` is the ``block2`` root directory. The root directory and ``build`` directory under ``block2``
 root directory should be in ``PYTHONPATH``. You can add the following line in your environemnt
 (such as ``~/.bashrc``) or submission script: ::
 
-    export PYTHONPATH=${BLOCK2HOME}/build:${PYTHONPATH}
+    export PYTHONPATH=${BLOCK2HOME}:${BLOCK2HOME}/build:${PYTHONPATH}
 
 Then you can run a DMRG calculation using the following command: ::
 

@@ -59,6 +59,7 @@ Time-Dependent DMRG
 
 * Feiguin, A. E., White, S. R. Time-step targeting methods for real-time dynamics using the density matrix renormalization group. *Physical Review B* 2005, **72**, 020404. doi: `10.1103/PhysRevB.72.020404 <https://doi.org/10.1103/PhysRevB.72.020404>`_
 * Haegeman, J., Lubich, C., Oseledets, I., Vandereycken, B., Verstraete, F. Unifying time evolution and optimization with matrix product states. *Physical Review B* 2016, **94**, 165116. doi: `10.1103/PhysRevB.94.165116 <https://doi.org/10.1103/PhysRevB.94.165116>`_
+* Wahyutama, I. S., Larsson, H. R. Simulating real-time molecular electron dynamics efficiently using the time-dependent density matrix renormalization group. *Journal of Chemical Theory and Computation* 2024, **20**, 9814-9831. doi: `10.1021/acs.jctc.4c01185 <https://doi.org/10.1021/acs.jctc.4c01185>`_
 
 Linear Response
 ---------------
@@ -128,3 +129,20 @@ Orbital Reordering
 ------------------
 
 * Olivares-Amaya, R.; Hu, W.; Nakatani, N.; Sharma, S.; Yang, J.;Chan, G. K.-L. The ab-initio density  matrix renormalization group in practice. *The Journal of Chemical Physics* 2015, **142**, 034102. doi: `10.1063/1.4905329 <https://doi.org/10.1063/1.4905329>`_
+
+Excited States
+--------------
+
+* Dorando, J. J.; Hachmann, J.; Chan, G. K.-L. Targeted excited state algorithms. *The Journal of chemical physics* 2007, **127**, 084109. doi: `10.1063/1.2768360 <https://doi.org/10.1063/1.2768360>`_
+* Liao, K.; Zhai, H.; Christlmaier, E. M. C.; Schraivogel, T.; Ríos, P. L.; Kats, D.; Alavi, A. Density matrix renormalization group for transcorrelated Hamiltonians: Ground and excited states in molecules. *Journal of Chemical Theory and Computation* 2023, **19**, 1734-1743. doi: `10.1021/acs.jctc.2c01207 <https://doi.org/10.1021/acs.jctc.2c01207>`_
+
+MPO Construction
+----------------
+
+* Chan, G. K.-L.; Keselman, A.; Nakatani, N.; Li, Z.; White, S. R. Matrix product operators, matrix product states, and ab initio density matrix renormalization group algorithms. *The Journal of Chemical Physics* 2016, **145**, 014102. doi: `10.1063/1.4955108 <https://doi.org/10.1063/1.4955108>`_
+* Ren, J.; Li, W.; Jiang, T.; Shuai, Z. A general automatic method for optimal construction of matrix product operators using bipartite graph theory. *The Journal of Chemical Physics* 2020, **153** 084118. doi: `10.1063/5.0018149 <https://doi.org/10.1063/5.0018149>`_
+
+Orbital Entropy
+---------------
+
+* Boguslawski, K.; Tecmer, P.; Barcza, G.; Legeza, O.; Reiher, M. Orbital entanglement in bond-formation processes. *Journal of Chemical Theory and Computation* 2013, **9**, 2959-2973. doi: `10.1021/ct400247p <https://doi.org/10.1021/ct400247p>`_
