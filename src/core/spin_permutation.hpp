@@ -1189,6 +1189,7 @@ struct SpinPermScheme {
     vector<vector<uint16_t>> index_patterns;
     vector<map<vector<uint16_t>, vector<pair<double, string>>>> data;
     vector<uint16_t> mask;
+    vector<vector<uint16_t>> index_mask;
     bool is_su2;
     int8_t left_vacuum;
     SpinPermScheme() {}
@@ -1840,33 +1841,101 @@ struct NPDMCounter {
 };
 
 struct NPDMScheme {
-    vector<pair<pair<vector<uint16_t>, string>, bool>> left_terms, right_terms;
+    vector<pair<pair<vector<uint16_t>, pair<string, vector<uint8_t>>>, bool>>
+        left_terms, right_terms;
     vector<vector<uint32_t>> left_blocking, right_blocking;
     vector<vector<uint16_t>> middle_perm_patterns;
-    vector<vector<string>> middle_terms;
+    vector<vector<pair<string, vector<uint8_t>>>> middle_terms;
     vector<vector<pair<uint32_t, uint32_t>>> middle_blocking;
-    vector<pair<pair<vector<uint16_t>, string>, bool>> last_right_terms;
+    vector<pair<pair<vector<uint16_t>, pair<string, vector<uint8_t>>>, bool>>
+        last_right_terms;
     vector<vector<uint32_t>> last_right_blocking;
     vector<vector<pair<uint32_t, uint32_t>>> last_middle_blocking;
-    vector<string> local_terms;
+    vector<pair<string, vector<uint8_t>>> local_terms;
     vector<shared_ptr<SpinPermScheme>> perms;
+    vector<vector<uint16_t>> index_mask;
+    vector<vector<uint8_t>> index_mask_tags;
+    bool has_index_mask;
     int n_max_ops;
     NPDMScheme(const shared_ptr<SpinPermScheme> &perm)
         : NPDMScheme(vector<shared_ptr<SpinPermScheme>>{perm}) {}
     NPDMScheme(const vector<shared_ptr<SpinPermScheme>> &perms) : perms(perms) {
-        n_max_ops = 0;
-        for (auto perm : perms)
+        n_max_ops = 0, has_index_mask = false;
+        for (auto perm : perms) {
+            has_index_mask = has_index_mask || perm->index_mask.size() != 0;
             for (int i = 0; i < (int)perm->index_patterns.size(); i++)
                 n_max_ops = max(n_max_ops, (int)perm->index_patterns[i].size());
+        }
+        if (has_index_mask) {
+            for (auto perm : perms) {
+                if (perm->index_patterns.size() == 0)
+                    continue;
+                if (perm->index_mask.size() != perm->index_patterns[0].size())
+                    throw runtime_error(
+                        "Invalid index_mask in SpinPermScheme: expected "
+                        "length " +
+                        Parsing::to_string(perm->index_patterns[0].size()) +
+                        ", actual length " +
+                        Parsing::to_string(perm->index_mask.size()) + ".");
+                for (size_t k = 0; k < perm->index_mask.size(); k++)
+                    for (size_t i = 0; i < perm->index_mask[k].size(); i++)
+                        for (size_t j = i + 1; j < perm->index_mask[k].size();
+                             j++)
+                            if (perm->index_mask[k][i] ==
+                                perm->index_mask[k][j])
+                                throw runtime_error(
+                                    "Repeated index " +
+                                    Parsing::to_string(perm->index_mask[k][i]) +
+                                    " in index_mask at op index " +
+                                    Parsing::to_string(k) + ".");
+                if (perm->mask.size() != 0)
+                    for (size_t i = 0; i < perm->mask.size(); i++)
+                        for (size_t j = i + 1; j < perm->mask.size(); j++)
+                            if (perm->mask[i] == perm->mask[j] &&
+                                perm->index_mask[i] != perm->index_mask[j])
+                                throw runtime_error(
+                                    "Inconsistent mask and index_mask at op "
+                                    "index " +
+                                    Parsing::to_string(i) + " and " +
+                                    Parsing::to_string(j) + ".");
+            }
+        }
         initialize();
     }
+    pair<string, vector<uint8_t>>
+    get_sub_expr(const pair<string, vector<uint8_t>> &x, int i, int j) const {
+        return make_pair(SpinPermRecoupling::get_sub_expr(x.first, i, j),
+                         has_index_mask ? vector<uint8_t>(x.second.begin() + i,
+                                                          x.second.begin() + j)
+                                        : vector<uint8_t>());
+    }
     void initialize() {
-        set<string> locals;
-        map<vector<uint16_t>, map<string, int>> left_patterns, right_patterns;
-        map<vector<uint16_t>, map<string, int>> last_right_patterns;
-        left_patterns[vector<uint16_t>()][""] = true;
-        right_patterns[vector<uint16_t>()][""] = true;
-        locals.insert("");
+        if (has_index_mask) {
+            index_mask_tags.resize(perms.size());
+            for (size_t ip = 0; ip < perms.size(); ip++) {
+                for (size_t iq = 0; iq < perms[ip]->index_mask.size(); iq++) {
+                    int found = -1;
+                    for (size_t im = 0; im < index_mask.size() && found == -1;
+                         im++)
+                        if (index_mask[im] == perms[ip]->index_mask[iq])
+                            found = (int)im;
+                    if (found == -1)
+                        index_mask.push_back(perms[ip]->index_mask[iq]),
+                            found = (int)(index_mask.size() - 1);
+                    index_mask_tags[ip].push_back((uint8_t)found);
+                }
+            }
+        }
+        set<pair<string, vector<uint8_t>>> locals;
+        map<vector<uint16_t>, map<pair<string, vector<uint8_t>>, int>>
+            left_patterns, right_patterns;
+        map<vector<uint16_t>, map<pair<string, vector<uint8_t>>, int>>
+            last_right_patterns;
+        left_patterns[vector<uint16_t>()][make_pair("", vector<uint8_t>())] =
+            true;
+        right_patterns[vector<uint16_t>()][make_pair("", vector<uint8_t>())] =
+            true;
+        locals.insert(make_pair("", vector<uint8_t>()));
         map<vector<uint16_t>, vector<pair<int, int>>> middle_patterns;
         for (int i = 0; i < (int)perms.size(); i++)
             for (int j = 0; j < (int)perms[i]->index_patterns.size(); j++)
@@ -1880,20 +1949,31 @@ struct NPDMScheme {
              [](const vector<uint16_t> &a, const vector<uint16_t> &b) {
                  return a.size() != b.size() ? a.size() < b.size() : a < b;
              });
-        vector<set<string>> cds(middle_perm_patterns.size());
+        vector<set<pair<string, vector<uint8_t>>>> cds(
+            middle_perm_patterns.size());
         for (int i = 0; i < (int)middle_perm_patterns.size(); i++)
             for (auto &r : middle_patterns.at(middle_perm_patterns[i]))
                 for (auto &dt : perms[r.first]->data[r.second])
                     for (auto x : dt.second)
-                        cds[i].insert(x.second);
+                        if (has_index_mask) {
+                            vector<uint8_t> imk(dt.first.size());
+                            for (size_t k = 0; k < dt.first.size(); k++)
+                                imk[dt.first[k]] = index_mask_tags[r.first][k];
+                            cds[i].insert(make_pair(x.second, imk));
+                        } else
+                            cds[i].insert(
+                                make_pair(x.second, vector<uint8_t>()));
         middle_terms.clear();
         for (int i = 0; i < (int)cds.size(); i++) {
-            middle_terms.push_back(
-                vector<string>(cds[i].begin(), cds[i].end()));
+            middle_terms.push_back(vector<pair<string, vector<uint8_t>>>(
+                cds[i].begin(), cds[i].end()));
             sort(middle_terms[i].begin(), middle_terms[i].end(),
-                 [](const string &a, const string &b) {
-                     return a.length() != b.length() ? a.length() < b.length()
-                                                     : a < b;
+                 [](const pair<string, vector<uint8_t>> &a,
+                    const pair<string, vector<uint8_t>> &b) {
+                     return a.first.length() != b.first.length()
+                                ? a.first.length() < b.first.length()
+                                : (a.first != b.first ? a.first < b.first
+                                                      : a.second < b.second);
                  });
         }
         // find required left / right terms
@@ -1914,10 +1994,9 @@ struct NPDMScheme {
                 while (kk > 0 && pat[kk - 1] == pat[kk])
                     kk--;
                 for (auto &cd : cds[i]) {
-                    locals.insert(
-                        SpinPermRecoupling::get_sub_expr(cd, kk, k.first));
-                    string xcd =
-                        SpinPermRecoupling::get_sub_expr(cd, 0, k.first);
+                    locals.insert(get_sub_expr(cd, kk, k.first));
+                    pair<string, vector<uint8_t>> xcd =
+                        get_sub_expr(cd, 0, k.first);
                     if (left_patterns[spat].count(xcd) == 0 || !k.second)
                         left_patterns[spat][xcd] = k.second;
                 }
@@ -1926,14 +2005,13 @@ struct NPDMScheme {
             const uint16_t rref = rpat.size() == 0 ? 0 : rpat[0];
             for (auto &r : rpat)
                 r -= rref;
-            kk = ii + 1;
+            kk = min(ii + 1, n_ops - 1);
             while (kk < n_ops - 1 && pat[kk] == pat[kk + 1])
                 kk++;
             for (auto &cd : cds[i]) {
-                locals.insert(
-                    SpinPermRecoupling::get_sub_expr(cd, ii + 1, kk + 1));
-                string xcd =
-                    SpinPermRecoupling::get_sub_expr(cd, ii + 1, n_ops);
+                locals.insert(get_sub_expr(cd, ii + 1, kk + 1));
+                pair<string, vector<uint8_t>> xcd =
+                    get_sub_expr(cd, ii + 1, n_ops);
                 right_patterns[rpat][xcd] = true;
             }
             if (ii == n_ops - 1 && n_ops != 0) {
@@ -1944,8 +2022,8 @@ struct NPDMScheme {
                 for (auto &r : rpat)
                     r -= rref;
                 for (auto &cd : cds[i]) {
-                    string xcd =
-                        SpinPermRecoupling::get_sub_expr(cd, ii, n_ops);
+                    pair<string, vector<uint8_t>> xcd =
+                        get_sub_expr(cd, ii, n_ops);
                     locals.insert(xcd);
                     last_right_patterns[rpat][xcd] = true;
                 }
@@ -1957,11 +2035,15 @@ struct NPDMScheme {
                     if (right_patterns.at(lr.first).count(llr.first))
                         llr.second = false;
         // local sorting
-        local_terms = vector<string>(locals.begin(), locals.end());
+        local_terms =
+            vector<pair<string, vector<uint8_t>>>(locals.begin(), locals.end());
         sort(local_terms.begin(), local_terms.end(),
-             [](const string &a, const string &b) {
-                 return a.length() != b.length() ? a.length() < b.length()
-                                                 : a < b;
+             [](const pair<string, vector<uint8_t>> &a,
+                const pair<string, vector<uint8_t>> &b) {
+                 return a.first.length() != b.first.length()
+                            ? a.first.length() < b.first.length()
+                            : (a.first != b.first ? a.first < b.first
+                                                  : a.second < b.second);
              });
         // left terms sorting
         vector<vector<uint16_t>> map_keys;
@@ -2030,12 +2112,10 @@ struct NPDMScheme {
             for (auto &r : rpat)
                 r -= rref;
             for (int j = 0; j < (int)middle_terms[i].size(); j++) {
-                uint32_t lp =
-                    left_patterns.at(lpat).at(SpinPermRecoupling::get_sub_expr(
-                        middle_terms[i][j], 0, ii + 1));
-                uint32_t rp =
-                    right_patterns.at(rpat).at(SpinPermRecoupling::get_sub_expr(
-                        middle_terms[i][j], ii + 1, n_ops));
+                uint32_t lp = left_patterns.at(lpat).at(
+                    get_sub_expr(middle_terms[i][j], 0, ii + 1));
+                uint32_t rp = right_patterns.at(rpat).at(
+                    get_sub_expr(middle_terms[i][j], ii + 1, n_ops));
                 middle_blocking[i][j] = make_pair(lp, rp);
             }
         }
@@ -2062,16 +2142,14 @@ struct NPDMScheme {
                     r -= rref;
                 for (int j = 0; j < (int)middle_terms[i].size(); j++) {
                     uint32_t lp = left_patterns.at(lpat).at(
-                        SpinPermRecoupling::get_sub_expr(middle_terms[i][j], 0,
-                                                         ii));
+                        get_sub_expr(middle_terms[i][j], 0, ii));
                     uint32_t rp = last_right_patterns.at(rpat).at(
-                        SpinPermRecoupling::get_sub_expr(middle_terms[i][j], ii,
-                                                         n_ops));
+                        get_sub_expr(middle_terms[i][j], ii, n_ops));
                     last_middle_blocking[i][j] = make_pair(lp, rp);
                 }
             }
         }
-        map<string, uint32_t> local_map;
+        map<pair<string, vector<uint8_t>>, uint32_t> local_map;
         for (int i = 0; i < (int)local_terms.size(); i++)
             local_map[local_terms[i]] = i;
         // left blocking
@@ -2081,7 +2159,8 @@ struct NPDMScheme {
             left_blocking[ir].clear();
             if (!r.second || r.first.first.size() == 0) {
                 left_blocking[ir].push_back(ir);
-                left_blocking[ir].push_back(local_map.at(""));
+                left_blocking[ir].push_back(
+                    local_map.at(make_pair("", vector<uint8_t>())));
             }
             if (r.first.first.size() != 0) {
                 int kk = (int)r.first.first.size() - 1;
@@ -2090,10 +2169,9 @@ struct NPDMScheme {
                 vector<uint16_t> ppat(r.first.first.begin(),
                                       r.first.first.begin() + kk);
                 left_blocking[ir].push_back(left_patterns.at(ppat).at(
-                    SpinPermRecoupling::get_sub_expr(r.first.second, 0, kk)));
-                left_blocking[ir].push_back(
-                    local_map.at(SpinPermRecoupling::get_sub_expr(
-                        r.first.second, kk, (int)r.first.first.size())));
+                    get_sub_expr(r.first.second, 0, kk)));
+                left_blocking[ir].push_back(local_map.at(get_sub_expr(
+                    r.first.second, kk, (int)r.first.first.size())));
             }
         }
         // right blocking
@@ -2102,7 +2180,8 @@ struct NPDMScheme {
             auto &r = right_terms[ir];
             right_blocking[ir].clear();
             if (r.first.first.size() == 0) {
-                right_blocking[ir].push_back(local_map.at(""));
+                right_blocking[ir].push_back(
+                    local_map.at(make_pair("", vector<uint8_t>())));
                 right_blocking[ir].push_back(ir);
             } else {
                 if (r.first.first.size() != 0) {
@@ -2116,14 +2195,13 @@ struct NPDMScheme {
                     for (auto &r : ppat)
                         r -= rref;
                     right_blocking[ir].push_back(
-                        local_map.at(SpinPermRecoupling::get_sub_expr(
-                            r.first.second, 0, kk + 1)));
+                        local_map.at(get_sub_expr(r.first.second, 0, kk + 1)));
                     right_blocking[ir].push_back(right_patterns.at(ppat).at(
-                        SpinPermRecoupling::get_sub_expr(
-                            r.first.second, kk + 1,
-                            (int)r.first.first.size())));
+                        get_sub_expr(r.first.second, kk + 1,
+                                     (int)r.first.first.size())));
                 }
-                right_blocking[ir].push_back(local_map.at(""));
+                right_blocking[ir].push_back(
+                    local_map.at(make_pair("", vector<uint8_t>())));
                 right_blocking[ir].push_back(ir);
             }
         }
@@ -2141,15 +2219,39 @@ struct NPDMScheme {
         stringstream ss;
         ss << "N_MAX_OPS = " << n_max_ops << endl;
         ss << "N_LOCAL = " << local_terms.size() << endl;
-        for (int i = 0; i < (int)local_terms.size(); i++)
-            ss << "[" << setw(4) << i << "] = " << local_terms[i] << endl;
+        if (has_index_mask) {
+            ss << "IDX_MASK =";
+            for (int i = 0; i < (int)index_mask.size(); i++) {
+                ss << " [" << i << "] (";
+                for (auto r : index_mask[i])
+                    ss << (int)r << " ";
+                ss << ")";
+            }
+            ss << endl;
+        }
+        for (int i = 0; i < (int)local_terms.size(); i++) {
+            ss << "[" << setw(4) << i << "] = " << local_terms[i].first;
+            if (has_index_mask) {
+                ss << " (";
+                for (auto r : local_terms[i].second)
+                    ss << (int)r << " ";
+                ss << ")";
+            }
+            ss << endl;
+        }
         ss << endl;
         ss << " N_L = " << left_terms.size() << endl;
         for (int i = 0; i < (int)left_terms.size(); i++) {
             ss << "[" << setw(4) << i << "] = ";
             for (auto &r : left_terms[i].first.first)
                 ss << r << " ";
-            ss << "- " << left_terms[i].first.second;
+            ss << "- " << left_terms[i].first.second.first;
+            if (has_index_mask) {
+                ss << " (";
+                for (auto r : left_terms[i].first.second.second)
+                    ss << (int)r << " ";
+                ss << ")";
+            }
             ss << " " << (left_terms[i].second ? "T" : "F");
             ss << " :: ";
             for (int j = 0; j < left_blocking[i].size(); j += 2)
@@ -2163,7 +2265,13 @@ struct NPDMScheme {
             ss << "[" << setw(4) << i << "] = ";
             for (auto &r : right_terms[i].first.first)
                 ss << r << " ";
-            ss << "- " << right_terms[i].first.second;
+            ss << "- " << right_terms[i].first.second.first;
+            if (has_index_mask) {
+                ss << " (";
+                for (auto r : right_terms[i].first.second.second)
+                    ss << (int)r << " ";
+                ss << ")";
+            }
             ss << " " << (right_terms[i].second ? "T" : "F");
             ss << " :: ";
             for (int j = 0; j < right_blocking[i].size(); j += 2)
@@ -2177,7 +2285,13 @@ struct NPDMScheme {
             ss << "[" << setw(4) << i << "] = ";
             for (auto &r : last_right_terms[i].first.first)
                 ss << r << " ";
-            ss << "- " << last_right_terms[i].first.second;
+            ss << "- " << last_right_terms[i].first.second.first;
+            if (has_index_mask) {
+                ss << " (";
+                for (auto r : last_right_terms[i].first.second.second)
+                    ss << (int)r << " ";
+                ss << ")";
+            }
             ss << " " << (last_right_terms[i].second ? "T" : "F");
             ss << " :: ";
             for (int j = 0; j < last_right_blocking[i].size(); j += 2)
@@ -2193,8 +2307,14 @@ struct NPDMScheme {
                 ss << r << " ";
             ss << ":: ";
             for (int j = 0; j < (int)middle_terms[i].size(); j++) {
-                ss << middle_terms[i][j] << " ";
-                ss << middle_blocking[i][j].first << "+"
+                ss << middle_terms[i][j].first;
+                if (has_index_mask) {
+                    ss << " (";
+                    for (auto r : middle_terms[i][j].second)
+                        ss << (int)r << " ";
+                    ss << ")";
+                }
+                ss << " " << middle_blocking[i][j].first << "+"
                    << middle_blocking[i][j].second << " / ";
             }
             ss << endl;
@@ -2212,8 +2332,14 @@ struct NPDMScheme {
                 ss << r << " ";
             ss << ":: ";
             for (int j = 0; j < (int)last_middle_blocking[i].size(); j++) {
-                ss << middle_terms[i][j] << " ";
-                ss << last_middle_blocking[i][j].first << "+"
+                ss << middle_terms[i][j].first;
+                if (has_index_mask) {
+                    ss << " (";
+                    for (auto r : middle_terms[i][j].second)
+                        ss << (int)r << " ";
+                    ss << ")";
+                }
+                ss << " " << last_middle_blocking[i][j].first << "+"
                    << last_middle_blocking[i][j].second << " / ";
             }
             ss << endl;

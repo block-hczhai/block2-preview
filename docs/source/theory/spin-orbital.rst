@@ -169,7 +169,7 @@ First consider the second and third terms
       + \frac{1}{2} \sum_{ij\in L, kl\in R} v_{klij} a_i^\dagger a_j a_k^\dagger a_l \\
     =&\ \sum_{ij\in L, kl\in R} v_{ijkl} a_i^\dagger a_j a_k^\dagger a_l
      = \sum_{ij\in L} a_i^\dagger a_j \sum_{kl\in R} v_{ijkl} a_k^\dagger a_l
-     = \sum_{ij\in L} \hat{B}_{ij} \hat{Q}_{ij\prime}^{R}
+     = \sum_{ij\in L} \hat{B}_{ij} \hat{Q}_{ij}^{R\prime}
 
 For the other two terms,
 
@@ -182,12 +182,12 @@ For the other two terms,
         -\frac{1}{2} \sum_{il\in L, jk\in R} v_{klij} a_i^\dagger a_l a_k^\dagger a_j \\
     =&\ -\sum_{il\in L, jk\in R} v_{ijkl} a_i^\dagger a_l a_k^\dagger a_j \\
     =&\ -\sum_{il\in L} a_i^\dagger a_l \sum_{jk\in R} v_{ijkl} a_k^\dagger a_j
-    =  \sum_{il\in L} \hat{B}_{il} \hat{Q}_{il\prime\prime}^{R}
+    =  \sum_{il\in L} \hat{B}_{il} \hat{Q}_{il}^{R\prime\prime}
 
 Then
 
 .. math::
-     \hat{Q}_{ij}^{R} =  \hat{Q}_{ij\prime}^{R} + \hat{Q}_{ij\prime\prime}^{R}
+     \hat{Q}_{ij}^{R} =  \hat{Q}_{ij}^{R\prime} + \hat{Q}_{ij}^{R\prime\prime}
     = \sum_{kl\in R} \big( v_{ijkl} - v_{ilkj} \big) a_k^\dagger a_l
 
 Normal/Complementary Partitioning

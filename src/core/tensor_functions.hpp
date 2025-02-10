@@ -195,7 +195,11 @@ template <typename S, typename FL> struct TensorFunctions {
                 if (a->lmat->data[i]->get_type() == OpTypes::Zero)
                     c->lmat->data[i] = a->lmat->data[i];
                 else {
-                    assert(a->lmat->data[i] == c->lmat->data[i]);
+                    if (a->lmat->data[i] != c->lmat->data[i])
+                        throw runtime_error(
+                            "TensorFunctions::left_assign: mismatch " +
+                            Parsing::to_string(a->lmat->data[i]) + " and " +
+                            Parsing::to_string(c->lmat->data[i]));
                     shared_ptr<OpExpr<S>> pa = abs_value(a->lmat->data[i]),
                                           pc = abs_value(c->lmat->data[i]);
                     if (!frame_<FP>()->use_main_stack) {
@@ -279,7 +283,11 @@ template <typename S, typename FL> struct TensorFunctions {
                 if (a->rmat->data[i]->get_type() == OpTypes::Zero)
                     c->rmat->data[i] = a->rmat->data[i];
                 else {
-                    assert(a->rmat->data[i] == c->rmat->data[i]);
+                    if (a->rmat->data[i] != c->rmat->data[i])
+                        throw runtime_error(
+                            "TensorFunctions::right_assign: mismatch " +
+                            Parsing::to_string(*a->rmat->data[i]) + " and " +
+                            Parsing::to_string(*c->rmat->data[i]));
                     shared_ptr<OpExpr<S>> pa = abs_value(a->rmat->data[i]),
                                           pc = abs_value(c->rmat->data[i]);
                     if (!frame_<FP>()->use_main_stack) {
@@ -950,8 +958,8 @@ template <typename S, typename FL> struct TensorFunctions {
     }
     template <typename FLX, typename GT>
     void npdm_sort(const shared_ptr<NPDMScheme> &scheme, const vector<GT> &npdm,
-                   const string &filename, int n_sites, int center,
-                   bool compressed, int r_step, int r_init) const {
+                   const string &filename, int n_sites, int n_physical_sites,
+                   int center, bool compressed, int r_step, int r_init) const {
         shared_ptr<NPDMCounter> counter =
             make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
         shared_ptr<GTensor<FL, uint64_t>> p =
@@ -973,13 +981,55 @@ template <typename S, typename FL> struct TensorFunctions {
         if (center == n_sites - 2)
             middle_count += (int)scheme->last_middle_blocking.size();
         int ntg = threading->activate_global();
+        vector<vector<uint64_t>> strides_f(scheme->perms.size());
+        vector<vector<uint64_t>> strides(scheme->perms.size());
+        vector<vector<MKL_INT>> shape_f(scheme->perms.size());
+        vector<vector<vector<uint16_t>>> ix_map(scheme->perms.size());
+        for (int i = 0; i < (int)scheme->perms.size(); i++) {
+            const int n_op = (int)scheme->perms[i]->index_patterns[0].size();
+            vector<MKL_INT> shape(n_op, n_physical_sites);
+            shape_f[i] = shape;
+            if (scheme->has_index_mask) {
+                shape.clear();
+                for (const auto &x : scheme->perms[i]->index_mask) {
+                    shape.push_back((MKL_INT)x.size());
+                    ix_map[i].push_back(
+                        vector<uint16_t>(n_physical_sites, n_physical_sites));
+                    for (uint16_t ixx = 0; ixx < (uint16_t)x.size(); ixx++)
+                        ix_map[i].back()[x[ixx]] = ixx;
+                }
+            }
+            if (scheme->perms[i]->mask.size() != 0) {
+                vector<MKL_INT> xshape, xshape_f;
+                vector<vector<uint16_t>> xix_map;
+                for (int k = 0; k < (int)scheme->perms[i]->mask.size(); k++) {
+                    bool ok = true;
+                    for (int j = 0; j < k; j++)
+                        ok = ok && scheme->perms[i]->mask[k] !=
+                                       scheme->perms[i]->mask[j];
+                    if (ok) {
+                        xshape.push_back(shape[k]);
+                        xshape_f.push_back(shape_f[i][k]);
+                        if (scheme->has_index_mask)
+                            xix_map.push_back(ix_map[i][k]);
+                    }
+                }
+                shape = xshape, shape_f[i] = xshape_f, ix_map[i] = xix_map;
+            }
+            strides_f[i] = vector<uint64_t>(shape_f[i].size(), r_step);
+            for (int j = (int)shape_f[i].size() - 1; j > 0; j--)
+                strides_f[i][j - 1] = strides_f[i][j] * (uint64_t)shape_f[i][j];
+            strides[i] = vector<uint64_t>(shape.size(), r_step);
+            for (int j = (int)shape.size() - 1; j > 0; j--)
+                strides[i][j - 1] = strides[i][j] * (uint64_t)shape[j];
+        }
 #pragma omp parallel for schedule(dynamic) num_threads(ntg)
         for (int ii = 0; ii < middle_count; ii++) {
             bool is_last = ii >= middle_base_count;
             int i = is_last ? ii - middle_base_count : ii;
             if (is_last && scheme->last_middle_blocking[i].size() == 0)
                 continue;
-            map<string, int> middle_cd_map;
+            map<pair<string, vector<uint8_t>>, int> middle_cd_map;
             for (int j = 0; j < (int)scheme->middle_terms[i].size(); j++)
                 middle_cd_map[scheme->middle_terms[i][j]] = j;
             for (auto &r :
@@ -993,7 +1043,16 @@ template <typename S, typename FL> struct TensorFunctions {
                     const vector<uint16_t> &mask = scheme->perms[r.first]->mask;
                     const vector<uint16_t> &perm = pr.first;
                     for (auto &prr : pr.second) {
-                        int jj = middle_cd_map[prr.second];
+                        int jj = 0;
+                        if (scheme->has_index_mask) {
+                            vector<uint8_t> imk(perm.size());
+                            for (size_t k = 0; k < perm.size(); k++)
+                                imk[perm[k]] =
+                                    scheme->index_mask_tags[r.first][k];
+                            jj = middle_cd_map[make_pair(prr.second, imk)];
+                        } else
+                            jj = middle_cd_map[make_pair(prr.second,
+                                                         vector<uint8_t>())];
                         const uint32_t lx =
                             is_last ? scheme->last_middle_blocking[i][jj].first
                                     : scheme->middle_blocking[i][jj].first;
@@ -1054,11 +1113,35 @@ template <typename S, typename FL> struct TensorFunctions {
                         }
                         // sorting
                         const uint64_t ip = mshape_presum[is_last][i][jj];
-                        for (uint64_t il = 0; il < lcnt; il++)
-                            for (uint64_t ir = 0; ir < rcnt; ir++)
-                                (*npdm[r.first]->data)[lixx[il] + rixx[ir]] +=
-                                    (FLX)prr.first *
-                                    (FLX)(*p->data)[ip + il * rcnt + ir];
+                        if (scheme->has_index_mask) {
+                            for (uint64_t il = 0; il < lcnt; il++)
+                                for (uint64_t ir = 0; ir < rcnt; ir++) {
+                                    uint64_t kk = lixx[il] + rixx[ir],
+                                             mk = r_init, pk = 0;
+                                    for (size_t im = 0;
+                                         im < strides_f[r.first].size(); im++) {
+                                        pk = ix_map[r.first][im][(
+                                            uint16_t)(kk /
+                                                      strides_f[r.first][im] %
+                                                      shape_f[r.first][im])];
+                                        if (pk == n_physical_sites)
+                                            break;
+                                        mk += pk * strides[r.first][im];
+                                    }
+                                    if (pk != n_physical_sites)
+                                        (*npdm[r.first]->data)[mk] +=
+                                            (FLX)prr.first *
+                                            (FLX)(*p->data)[ip + il * rcnt +
+                                                            ir];
+                                }
+                        } else {
+                            for (uint64_t il = 0; il < lcnt; il++)
+                                for (uint64_t ir = 0; ir < rcnt; ir++)
+                                    (*npdm[r.first]
+                                          ->data)[lixx[il] + rixx[ir]] +=
+                                        (FLX)prr.first *
+                                        (FLX)(*p->data)[ip + il * rcnt + ir];
+                        }
                     }
                 }
             }

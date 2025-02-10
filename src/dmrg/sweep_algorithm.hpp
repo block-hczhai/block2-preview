@@ -6596,19 +6596,47 @@ struct Expect {
         if (n_physical_sites == 0U)
             n_physical_sites = me->n_sites;
         size_t total_mem = 0;
+        vector<vector<uint64_t>> strides_f(scheme->perms.size());
+        vector<vector<uint64_t>> strides(scheme->perms.size());
+        vector<vector<MKL_INT>> shape_f(scheme->perms.size());
+        vector<vector<vector<uint16_t>>> ix_map(scheme->perms.size());
         for (int i = 0; i < (int)scheme->perms.size(); i++) {
-            int n_op = (int)scheme->perms[i]->index_patterns[0].size();
+            const int n_op = (int)scheme->perms[i]->index_patterns[0].size();
+            vector<MKL_INT> shape(n_op, n_physical_sites);
+            shape_f[i] = shape;
+            if (scheme->has_index_mask) {
+                shape.clear();
+                for (const auto &x : scheme->perms[i]->index_mask) {
+                    shape.push_back((MKL_INT)x.size());
+                    ix_map[i].push_back(
+                        vector<uint16_t>(n_physical_sites, n_physical_sites));
+                    for (uint16_t ixx = 0; ixx < (uint16_t)x.size(); ixx++)
+                        ix_map[i].back()[x[ixx]] = ixx;
+                }
+            }
             if (scheme->perms[i]->mask.size() != 0) {
-                n_op = 0;
+                vector<MKL_INT> xshape, xshape_f;
+                vector<vector<uint16_t>> xix_map;
                 for (int k = 0; k < (int)scheme->perms[i]->mask.size(); k++) {
                     bool ok = true;
                     for (int j = 0; j < k; j++)
                         ok = ok && scheme->perms[i]->mask[k] !=
                                        scheme->perms[i]->mask[j];
-                    n_op += (int)ok;
+                    if (ok) {
+                        xshape.push_back(shape[k]);
+                        xshape_f.push_back(shape_f[i][k]);
+                        if (scheme->has_index_mask)
+                            xix_map.push_back(ix_map[i][k]);
+                    }
                 }
+                shape = xshape, shape_f[i] = xshape_f, ix_map[i] = xix_map;
             }
-            vector<MKL_INT> shape(n_op, n_physical_sites);
+            strides_f[i] = vector<uint64_t>(shape_f[i].size(), 1);
+            for (int j = (int)shape_f[i].size() - 1; j > 0; j--)
+                strides_f[i][j - 1] = strides_f[i][j] * (uint64_t)shape_f[i][j];
+            strides[i] = vector<uint64_t>(shape.size(), 1);
+            for (int j = (int)shape.size() - 1; j > 0; j--)
+                strides[i][j - 1] = strides[i][j] * (uint64_t)shape[j];
             r[i] = make_shared<GTensor<FLX>>(shape);
             r[i]->clear();
             total_mem += r[i]->size();
@@ -6669,14 +6697,14 @@ struct Expect {
                     me->mpo->tf->template npdm_sort<FLS,
                                                     shared_ptr<GTensorPtr>>(
                         scheme, rx, me->get_npdm_fragment_filename(ix) + "-RE",
-                        me->n_sites, ix,
+                        me->n_sites, (int)n_physical_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
                             (algo_type & ExpectationAlgorithmTypes::Automatic),
                         2, 0);
                     me->mpo->tf->template npdm_sort<FLS,
                                                     shared_ptr<GTensorPtr>>(
                         scheme, rx, me->get_npdm_fragment_filename(ix) + "-IM",
-                        me->n_sites, ix,
+                        me->n_sites, (int)n_physical_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
                             (algo_type & ExpectationAlgorithmTypes::Automatic),
                         2, 1);
@@ -6684,7 +6712,7 @@ struct Expect {
                     me->mpo->tf->template npdm_sort<FLX,
                                                     shared_ptr<GTensor<FLX>>>(
                         scheme, r, me->get_npdm_fragment_filename(ix),
-                        me->n_sites, ix,
+                        me->n_sites, (int)n_physical_sites, ix,
                         (algo_type & ExpectationAlgorithmTypes::Compressed) ||
                             (algo_type & ExpectationAlgorithmTypes::Automatic),
                         1, 0);
@@ -6698,6 +6726,20 @@ struct Expect {
                                 ((size_t)op->site_index[1] << 24) |
                                 ((size_t)op->site_index[2] << 12) |
                                 ((size_t)op->site_index[3]);
+                    if (scheme->has_index_mask) {
+                        uint64_t mk = 0, pk = 0;
+                        for (size_t im = 0; im < strides_f[ii].size(); im++) {
+                            pk = ix_map[ii][im]
+                                       [(uint16_t)(kk / strides_f[ii][im] %
+                                                   shape_f[ii][im])];
+                            if (pk == n_physical_sites)
+                                break;
+                            mk += pk * strides[ii][im];
+                        }
+                        if (pk == n_physical_sites)
+                            continue;
+                        kk = mk;
+                    }
                     (*r[ii]->data)[kk] += v[i].second;
                 }
             if (iprint >= 2) {

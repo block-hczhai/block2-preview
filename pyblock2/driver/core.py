@@ -5498,6 +5498,7 @@ class DMRGDriver:
         algo_type=None,
         npdm_expr=None,
         mask=None,
+        index_masks=None,
         simulated_parallel=0,
         fused_contraction_rotation=True,
         cutoff=1e-24,
@@ -5537,6 +5538,9 @@ class DMRGDriver:
             mask : None or list[int] or list[list[int]]
                 The mask for setting repeated indices for the operator expression.
                 Default is None, meaning that all indices can be different.
+            index_masks : None or list[list[int]] or list[list[list[int]]]
+                The list of allowed site indices for each operator in the operator expression.
+                Default is None, meaning that all site indices are allowed.
             simulated_parallel : int
                 Number of processors for simulating parallel algorithm serially.
                 Default is zero, meaning that the serial algorithm is used if
@@ -5629,7 +5633,7 @@ class DMRGDriver:
                 for _ in range(pdm_type - 1):
                     op_str = su2_coupling % op_str
             perm = bw.b.SpinPermScheme.initialize_su2(
-                pdm_type * 2, op_str, True,
+                int(pdm_type * 2), op_str, True,
                 mask=bw.b.VectorUInt16() if mask is None else bw.b.VectorUInt16(mask),
                 max_n_sites=ket.n_sites,
             )
@@ -5646,41 +5650,33 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True,
+                        bw.b.SpinPermScheme.initialize_sz(len(cd), cd, True,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops,
+                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
                 assert len(mask) == len(op_str)
-                pts = (
-                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
-                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            len(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
-                        )
-                        for cd, xm, pt in zip(op_str, mask, pts)
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                        ) for cd, xm in zip(op_str, mask)
                     ]
                 )
             else:
-                pts = (
-                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
-                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            len(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
-                        )
-                        for cd, pt in zip(op_str, pts)
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                        ) for cd in op_str
                     ]
                 )
         elif SymmetryTypes.SGF in bw.symm_type:
@@ -5693,41 +5689,34 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(pdm_type * 2, cd, True,
+                        bw.b.SpinPermScheme.initialize_sz(len(cd), cd, True,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(pdm_type * 2, cd, fermionic_ops,
+                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
             elif len(mask) != 0 and not isinstance(mask[0], int):
                 assert len(mask) == len(op_str)
-                pts = (
-                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
-                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            len(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
-                        for cd, xm, pt in zip(op_str, mask, pts)
+                        for cd, xm in zip(op_str, mask)
                     ]
                 )
             else:
-                pts = (
-                    [pdm_type] * len(op_str) if isinstance(pdm_type, int) else pdm_type
-                )
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            pt * 2, cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            len(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            pt * 2, cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
-                        )
-                        for cd, pt in zip(op_str, pts)
+                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                        ) for cd in op_str
                     ]
                 )
         elif SymmetryTypes.SAny in bw.symm_type:
@@ -5760,6 +5749,19 @@ class DMRGDriver:
                         for cd in op_str
                     ]
                 )
+
+        if index_masks is not None:
+            if any(any(isinstance(im, (int, np.int64)) for im in ims) for ims in index_masks if len(ims) != 0):
+                index_masks = [index_masks]
+            if len(index_masks) == 1:
+                index_masks = index_masks * len(perms)
+            assert len(perms) == len(index_masks)
+            for perm, ims in zip(perms, index_masks):
+                f = lambda x: [int(px) for px in x]
+                if self.reorder_idx is not None:
+                    rev_idx = np.argsort(self.reorder_idx)
+                    f = lambda x: [rev_idx[int(px)] for px in x]
+                perm.index_mask = bw.b.VectorVectorUInt16([bw.b.VectorUInt16(f(x)) for x in ims])
 
         if iprint >= 1:
             print("npdm string =", op_str)
@@ -5949,7 +5951,7 @@ class DMRGDriver:
             for ip in range(len(npdms)):
                 npdms[ip] = np.asarray(npdms[ip])
 
-        if self.reorder_idx is not None:
+        if self.reorder_idx is not None and index_masks is None:
             rev_idx = np.argsort(self.reorder_idx)
             for ip in range(len(npdms)):
                 for i in range(npdms[ip].ndim):

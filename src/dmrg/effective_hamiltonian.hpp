@@ -149,7 +149,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         opdq = hop->q_label;
         vector<S> msl = Partition<S, FL>::get_uniq_labels({hop_mat});
         operator_quanta = msl;
-        assert(msl[0] == opdq);
+        assert(npdm_scheme != nullptr || msl.size() == 0 || msl[0] == opdq);
         vector<vector<pair<uint8_t, S>>> msubsl;
         if (op->stacked_mat == nullptr)
             msubsl = Partition<S, FL>::get_uniq_sub_labels(

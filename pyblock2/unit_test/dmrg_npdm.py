@@ -36,9 +36,25 @@ def fuse_ctrrot_type(request):
     return request.param
 
 
+@pytest.fixture(scope="module", params=[True, False])
+def use_mask(request):
+    return request.param
+
+
+@pytest.fixture(scope="module", params=[True, False])
+def use_index_mask(request):
+    return request.param
+
+
+@pytest.fixture(scope="module", params=[True, False])
+def use_complex(request):
+    return request.param
+
+
 class TestNPDM:
-    def test_rhf(self, tmp_path, name, site_type, algo_type, fuse_ctrrot_type, symm_type, fd_data):
+    def test_rhf(self, tmp_path, name, site_type, algo_type, fuse_ctrrot_type, symm_type, fd_data, use_complex, use_mask, use_index_mask):
         symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
+        symm = symm | SymmetryTypes.CPX if use_complex else symm
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
 
         if fd_data == "":
@@ -106,6 +122,8 @@ class TestNPDM:
         porder = 4 if algo_type == "SFLM" else 3
         if site_type != 0:
             porder = 2
+        if use_complex or use_mask or use_index_mask:
+            porder = min(3, porder)
 
         pdms = []
         for ip in range(1, porder + 1):
@@ -119,6 +137,50 @@ class TestNPDM:
                     fused_contraction_rotation=fuse_ctrrot_type,
                 )
             )
+
+        if use_mask or use_index_mask:
+            for ip in range(1, porder + 1):
+                def_idxs = np.mgrid[:len(pdms[ip - 1])]
+                mask = list(range(ip * 2))
+                index_masks = [[int(x) for x in def_idxs] for _ in range(ip * 2)]
+                if use_index_mask:
+                    for _ in range(np.random.randint(0, ip * 4)):
+                        ix = np.random.randint(len(mask))
+                        x = np.array(index_masks[ix], dtype=int)
+                        np.random.shuffle(x)
+                        index_masks[ix] = [int(px) for px in x[:np.random.randint(1, len(x) + 1)]]
+                if use_mask:
+                    for _ in range(np.random.randint(0, ip * 2)):
+                        ii, jj = [np.random.randint(len(mask)) for _ in range(2)]
+                        mask[ii] = mask[jj]
+                        index_masks[ii] = index_masks[jj]
+                print(mask)
+                print(index_masks)
+                xnpdm = driver.get_npdm(
+                    ket,
+                    pdm_type=ip,
+                    algo_type=n_algo_type,
+                    site_type=site_type,
+                    mask=mask if use_mask else None,
+                    index_masks=index_masks if use_index_mask else None,
+                    iprint=2,
+                    fused_contraction_rotation=fuse_ctrrot_type,
+                )
+                ix, nn, sli = 0, len(set(mask)), []
+                for ii, im in enumerate(mask):
+                    if im in mask[:ii]:
+                        sli.append(sli[mask.index(im)])
+                    else:
+                        idx = (None, ) * ix + (slice(None), ) + (None, ) * (nn - ix - 1)
+                        sli.append(np.array(index_masks[ii], dtype=int)[idx])
+                        ix += 1
+                znpdm = pdms[ip - 1][tuple(sli)]
+                assert znpdm.shape == xnpdm.shape
+                ddm = np.max(np.abs(znpdm - xnpdm))
+                print("ddm diff = %9.2g" % ddm)
+                assert ddm < 1e-5
+            driver.finalize()
+            return
 
         driver.finalize()
 
@@ -202,8 +264,9 @@ class TestNPDM:
             print("pdm4 diff = %9.2g" % ddm4)
             assert ddm4 < 1e-5
 
-    def test_uhf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data):
+    def test_uhf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data, use_complex, use_mask, use_index_mask):
         symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
+        symm = symm | SymmetryTypes.CPX if use_complex else symm
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
         
         if fd_data == "":
@@ -269,6 +332,8 @@ class TestNPDM:
             )
 
         porder = 3 if site_type == 0 else 2
+        if use_complex:
+            porder = min(2, porder)
 
         pdms = []
         for ip in range(1, porder + 1):
@@ -281,6 +346,51 @@ class TestNPDM:
                     iprint=2,
                 )
             )
+
+        if use_mask or use_index_mask:
+            for ip in range(1, porder + 1):
+                def_idxs = np.mgrid[:len(pdms[ip - 1][0])]
+                mask = list(range(ip * 2))
+                index_masks = [[int(x) for x in def_idxs] for _ in range(ip * 2)]
+                if use_index_mask:
+                    for _ in range(np.random.randint(0, ip * 4)):
+                        ix = np.random.randint(len(mask))
+                        x = np.array(index_masks[ix], dtype=int)
+                        np.random.shuffle(x)
+                        index_masks[ix] = [int(px) for px in x[:np.random.randint(1, len(x) + 1)]]
+                if use_mask:
+                    for _ in range(np.random.randint(0, ip * 2)):
+                        ii, jj = [np.random.randint(len(mask)) for _ in range(2)]
+                        mask[ii] = mask[jj]
+                        index_masks[ii] = index_masks[jj]
+                print(mask)
+                print(index_masks)
+                xnpdms = driver.get_npdm(
+                    ket,
+                    pdm_type=ip,
+                    algo_type=n_algo_type,
+                    site_type=site_type,
+                    mask=mask if use_mask else None,
+                    index_masks=index_masks if use_index_mask else None,
+                    iprint=2,
+                )
+                ix, nn, sli = 0, len(set(mask)), []
+                for ii, im in enumerate(mask):
+                    if im in mask[:ii]:
+                        sli.append(sli[mask.index(im)])
+                    else:
+                        idx = (None, ) * ix + (slice(None), ) + (None, ) * (nn - ix - 1)
+                        sli.append(np.array(index_masks[ii], dtype=int)[idx])
+                        ix += 1
+                assert len(pdms[ip - 1]) == len(xnpdms)
+                for kpdm, kxpdm in zip(pdms[ip - 1], xnpdms):
+                    znpdm = kpdm[tuple(sli)]
+                    assert znpdm.shape == kxpdm.shape
+                    ddm = np.max(np.abs(znpdm - kxpdm))
+                    print("ddm diff = %9.2g" % ddm)
+                    assert ddm < 1e-5
+            driver.finalize()
+            return
 
         driver.finalize()
 
@@ -335,8 +445,9 @@ class TestNPDM:
             print("pdm3 diff = %9.2g" % ddm3)
             assert ddm3 < 1e-5
 
-    def test_ghf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data):
+    def test_ghf(self, tmp_path, name, site_type, algo_type, symm_type, fd_data, use_complex, use_mask, use_index_mask):
         symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
+        symm = symm | SymmetryTypes.CPX if use_complex else symm
         driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
 
         if fd_data == "":
@@ -414,6 +525,49 @@ class TestNPDM:
                     iprint=2,
                 )
             )
+        
+        if use_mask or use_index_mask:
+            for ip in range(1, porder + 1):
+                def_idxs = np.mgrid[:len(pdms[ip - 1])]
+                mask = list(range(ip * 2))
+                index_masks = [[int(x) for x in def_idxs] for _ in range(ip * 2)]
+                if use_index_mask:
+                    for _ in range(np.random.randint(0, ip * 4)):
+                        ix = np.random.randint(len(mask))
+                        x = np.array(index_masks[ix], dtype=int)
+                        np.random.shuffle(x)
+                        index_masks[ix] = [int(px) for px in x[:np.random.randint(1, len(x) + 1)]]
+                if use_mask:
+                    for _ in range(np.random.randint(0, ip * 2)):
+                        ii, jj = [np.random.randint(len(mask)) for _ in range(2)]
+                        mask[ii] = mask[jj]
+                        index_masks[ii] = index_masks[jj]
+                print(mask)
+                print(index_masks)
+                xnpdm = driver.get_npdm(
+                    ket,
+                    pdm_type=ip,
+                    algo_type=n_algo_type,
+                    site_type=site_type,
+                    mask=mask if use_mask else None,
+                    index_masks=index_masks if use_index_mask else None,
+                    iprint=2,
+                )
+                ix, nn, sli = 0, len(set(mask)), []
+                for ii, im in enumerate(mask):
+                    if im in mask[:ii]:
+                        sli.append(sli[mask.index(im)])
+                    else:
+                        idx = (None, ) * ix + (slice(None), ) + (None, ) * (nn - ix - 1)
+                        sli.append(np.array(index_masks[ii], dtype=int)[idx])
+                        ix += 1
+                znpdm = pdms[ip - 1][tuple(sli)]
+                assert znpdm.shape == xnpdm.shape
+                ddm = np.max(np.abs(znpdm - xnpdm))
+                print("ddm diff = %9.2g" % ddm)
+                assert ddm < 1e-5
+            driver.finalize()
+            return
 
         driver.finalize()
 

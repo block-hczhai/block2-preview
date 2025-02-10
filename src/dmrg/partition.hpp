@@ -443,9 +443,14 @@ template <typename S, typename FL> struct Partition {
                     }
                     if (!partial) {
                         S p = l.combine(bra, ket);
-                        // here possible error can be due to non-zero (small)
-                        // integral element violating point group symmetry
-                        assert(p != S(S::invalid));
+                        if (p == S(S::invalid))
+                            throw runtime_error(
+                                "Partition::get_uniq_sub_labels: possible "
+                                "error due to non-zero (small) integral "
+                                "element violating point group symmetry: l = " +
+                                Parsing::to_string(l) +
+                                " bra = " + Parsing::to_string(bra) +
+                                " ket = " + Parsing::to_string(ket));
                         subsl[idx].push_back(make_pair(op->conj, p));
                     } else if (left_only)
                         subsl[idx].push_back(make_pair(op->conj & 1, bra));

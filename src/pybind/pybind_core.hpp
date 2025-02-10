@@ -2368,6 +2368,7 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_readwrite("is_su2", &SpinPermScheme::is_su2)
         .def_readwrite("left_vacuum", &SpinPermScheme::left_vacuum)
         .def_readwrite("mask", &SpinPermScheme::mask)
+        .def_readwrite("index_mask", &SpinPermScheme::index_mask)
         .def_static(
             "initialize_sz", &SpinPermScheme::initialize_sz, py::arg("nn"),
             py::arg("spin_str"), py::arg("is_fermion") = true,

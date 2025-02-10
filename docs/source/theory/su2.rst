@@ -315,7 +315,7 @@ we have
     + a_{p\beta}^\dagger a_{q\beta}^\dagger a_{r\beta} a_{s\beta}
     + a_{p\alpha}^\dagger a_{q\beta}^\dagger a_{r\alpha} a_{s\beta}
     + a_{p\beta}^\dagger a_{q\alpha}^\dagger a_{r\beta} a_{s\alpha} \\
-    =&\ \sum_{\sigma\sigma'} a_{p\sigma}^\dagger a_{q\sigma'}^\dagger a_{r\sigma} s_{s\sigma'}
+    =&\ \sum_{\sigma\sigma'} a_{p\sigma}^\dagger a_{q\sigma'}^\dagger a_{r\sigma} a_{s\sigma'}
 
 Another case
 

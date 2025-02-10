@@ -71,6 +71,9 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         shared_ptr<OpElement<S, FL>> zero_op = make_shared<OpElement<S, FL>>(
             OpNames::Zero, SiteIndex(),
             delta_quantum == S(S::invalid) ? hamil->vacuum : delta_quantum);
+        shared_ptr<OpElement<S, FL>> skip_op = make_shared<OpElement<S, FL>>(
+            OpNames::Zero, SiteIndex(), hamil->vacuum, (FL)0.0);
+        shared_ptr<OpExpr<S>> zero_expr = make_shared<OpExpr<S>>();
         MPO<S, FL>::const_e = (typename const_fl_type<FL>::FL)0.0;
         MPO<S, FL>::op = zero_op;
         MPO<S, FL>::tf = make_shared<TensorFunctions<S, FL>>(hamil->opf);
@@ -88,6 +91,13 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
         shared_ptr<NPDMCounter> counter =
             make_shared<NPDMCounter>(scheme->n_max_ops, n_sites);
         MPO<S, FL>::left_vacuum = hamil->vacuum;
+        vector<vector<uint8_t>> index_bool_mask(scheme->index_mask.size(),
+                                                vector<uint8_t>(n_sites, 0));
+        if (scheme->has_index_mask) {
+            for (size_t ix = 0; ix < scheme->index_mask.size(); ix++)
+                for (uint16_t mx : scheme->index_mask[ix])
+                    index_bool_mask[ix][mx] = 1;
+        }
         vector<LL> lshapes(n_sites, 0), rshapes(n_sites, 0);
         map<vector<uint16_t>, vector<pair<int, int>>> middle_patterns;
         for (int i = 0; i < (int)scheme->perms.size(); i++)
@@ -244,7 +254,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
             shared_ptr<SymbolicRowVector<S>> plop =
                 make_shared<SymbolicRowVector<S>>((int)lshape);
             vector<uint16_t> idx;
-            map<string, LL> lmap, rmap;
+            map<pair<string, vector<uint8_t>>, LL> lmap, rmap;
             ixx = 0;
             if (iprint >= 2)
                 cout << endl;
@@ -265,19 +275,33 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                   (uint16_t)((ixx >> 12) & 0xFFFLL),
                                   (uint16_t)(ixx & 0xFFFLL)},
                                  {});
-                    S q = hamil->get_string_quantum(
-                        scheme->left_terms[i].first.second, &idx[0]);
-                    (*plop)[ixx] =
-                        make_shared<OpElement<S, FL>>(OpNames::XL, si, q);
-                    if (m == 0)
-                        lmap[scheme->left_terms[i].first.second] = ixx;
-                    if (iprint >= 2) {
-                        cout << "(" << ixx << ") "
-                             << scheme->left_terms[i].first.second << " ";
-                        for (auto &g : idx)
-                            cout << g << " ";
-                        cout << q << " / ";
-                    }
+                    uint8_t ok = 1;
+                    if (scheme->has_index_mask)
+                        for (size_t ix = 0;
+                             ix <
+                             scheme->left_terms[i].first.second.second.size();
+                             ix++)
+                            ok &= index_bool_mask[scheme->left_terms[i]
+                                                      .first.second.second[ix]]
+                                                 [idx[ix]];
+                    S q;
+                    if (ok) {
+                        q = hamil->get_string_quantum(
+                            scheme->left_terms[i].first.second.first, &idx[0]);
+                        (*plop)[ixx] =
+                            make_shared<OpElement<S, FL>>(OpNames::XL, si, q);
+                        if (m == 0)
+                            lmap[scheme->left_terms[i].first.second] = ixx;
+                        if (iprint >= 2) {
+                            cout << "(" << ixx << ") "
+                                 << scheme->left_terms[i].first.second.first
+                                 << " ";
+                            for (auto &g : idx)
+                                cout << g << " ";
+                            cout << q << " / ";
+                        }
+                    } else
+                        (*plop)[ixx] = skip_op;
                     ixx++;
                     has_next = counter->next_left(
                         scheme->left_terms[i].first.first, m, idx);
@@ -307,19 +331,33 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                   (uint16_t)((ixx >> 12) & 0xFFFLL),
                                   (uint16_t)(ixx & 0xFFFLL)},
                                  {});
-                    S q = hamil->get_string_quantum(
-                        scheme->right_terms[i].first.second, &idx[0]);
-                    (*prop)[ixx] =
-                        make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
-                    if (m == n_sites - 1)
-                        rmap[scheme->right_terms[i].first.second] = ixx;
-                    if (iprint >= 2) {
-                        cout << "(" << ixx << ") "
-                             << scheme->right_terms[i].first.second << " ";
-                        for (auto &g : idx)
-                            cout << g << " ";
-                        cout << q << " / ";
-                    }
+                    uint8_t ok = 1;
+                    if (scheme->has_index_mask)
+                        for (size_t ix = 0;
+                             ix <
+                             scheme->right_terms[i].first.second.second.size();
+                             ix++)
+                            ok &= index_bool_mask[scheme->right_terms[i]
+                                                      .first.second.second[ix]]
+                                                 [idx[ix]];
+                    S q;
+                    if (ok) {
+                        q = hamil->get_string_quantum(
+                            scheme->right_terms[i].first.second.first, &idx[0]);
+                        (*prop)[ixx] =
+                            make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
+                        if (m == n_sites - 1)
+                            rmap[scheme->right_terms[i].first.second] = ixx;
+                        if (iprint >= 2) {
+                            cout << "(" << ixx << ") "
+                                 << scheme->right_terms[i].first.second.first
+                                 << " ";
+                            for (auto &g : idx)
+                                cout << g << " ";
+                            cout << q << " / ";
+                        }
+                    } else
+                        (*prop)[ixx] = skip_op;
                     ixx++;
                     has_next = counter->next_right(
                         scheme->right_terms[i].first.first, m, idx);
@@ -343,19 +381,36 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                       (uint16_t)((ixx >> 12) & 0xFFFLL),
                                       (uint16_t)(ixx & 0xFFFLL)},
                                      {});
-                        S q = hamil->get_string_quantum(
-                            scheme->last_right_terms[i].first.second, &idx[0]);
-                        (*prop)[ixx] =
-                            make_shared<OpElement<S, FL>>(OpNames::XR, si, q);
-                        rmap[scheme->last_right_terms[i].first.second] = ixx;
-                        if (iprint >= 2) {
-                            cout << "(" << ixx << ") "
-                                 << scheme->last_right_terms[i].first.second
-                                 << " ";
-                            for (auto &g : idx)
-                                cout << g << " ";
-                            cout << q << " / ";
-                        }
+                        uint8_t ok = 1;
+                        if (scheme->has_index_mask)
+                            for (size_t ix = 0;
+                                 ix < scheme->last_right_terms[i]
+                                          .first.second.second.size();
+                                 ix++)
+                                ok &=
+                                    index_bool_mask[scheme->last_right_terms[i]
+                                                        .first.second
+                                                        .second[ix]][idx[ix]];
+                        S q;
+                        if (ok) {
+                            q = hamil->get_string_quantum(
+                                scheme->last_right_terms[i].first.second.first,
+                                &idx[0]);
+                            (*prop)[ixx] = make_shared<OpElement<S, FL>>(
+                                OpNames::XR, si, q);
+                            rmap[scheme->last_right_terms[i].first.second] =
+                                ixx;
+                            if (iprint >= 2) {
+                                cout << "(" << ixx << ") "
+                                     << scheme->last_right_terms[i]
+                                            .first.second.first
+                                     << " ";
+                                for (auto &g : idx)
+                                    cout << g << " ";
+                                cout << q << " / ";
+                            }
+                        } else
+                            (*prop)[ixx] = skip_op;
                         ixx++;
                         has_next = counter->next_right(
                             scheme->last_right_terms[i].first.first, m, idx);
@@ -388,28 +443,42 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 prmat = make_shared<SymbolicMatrix<S>>(rlshape, rrshape);
             opt->lmat = plmat, opt->rmat = prmat;
             unordered_map<string, shared_ptr<SparseMatrix<S, FL>>> site_ops;
-            unordered_map<string, shared_ptr<OpElement<S, FL>>> site_op_names;
-            for (string &cd : scheme->local_terms)
-                site_ops[cd] = nullptr;
+            map<pair<string, vector<uint8_t>>, shared_ptr<OpElement<S, FL>>>
+                site_op_names;
+            for (const pair<string, vector<uint8_t>> &cd :
+                 scheme->local_terms) {
+                uint8_t ok = 1;
+                if (scheme->has_index_mask)
+                    for (uint8_t xcd : cd.second)
+                        ok &= index_bool_mask[xcd][m];
+                if (ok)
+                    site_ops[cd.first] = nullptr;
+            }
             site_ops[""] = nullptr;
             hamil->get_site_string_ops(m, site_ops);
-            site_op_names.reserve(site_ops.size());
             ixx = 0;
-            for (string &cd : scheme->local_terms) {
+            for (const pair<string, vector<uint8_t>> &pcd :
+                 scheme->local_terms) {
+                const string &cd = pcd.first;
+                if (!site_ops.count(cd) || (m == 0 && !lmap.count(pcd)) ||
+                    (m == n_sites - 1 && !rmap.count(pcd))) {
+                    site_op_names[pcd] = nullptr;
+                    continue;
+                }
                 shared_ptr<SparseMatrix<S, FL>> xm = site_ops.at(cd);
                 if (cd.length() == 0 && m != 0 && m != n_sites - 1) {
-                    site_op_names[cd] = make_shared<OpElement<S, FL>>(
+                    site_op_names[pcd] = make_shared<OpElement<S, FL>>(
                         OpNames::I, SiteIndex(), xm->info->delta_quantum);
                 } else {
                     LL igx;
                     OpNames name;
-                    if (m == 0 && lmap.count(cd))
-                        igx = lmap.at(cd), name = OpNames::XL;
-                    else if (m == n_sites - 1 && rmap.count(cd))
-                        igx = rmap.at(cd), name = OpNames::XR;
+                    if (m == 0 && lmap.count(pcd))
+                        igx = lmap.at(pcd), name = OpNames::XL;
+                    else if (m == n_sites - 1 && rmap.count(pcd))
+                        igx = rmap.at(pcd), name = OpNames::XR;
                     else
                         igx = ixx++, name = OpNames::X;
-                    site_op_names[cd] = make_shared<OpElement<S, FL>>(
+                    site_op_names[pcd] = make_shared<OpElement<S, FL>>(
                         name,
                         SiteIndex({(uint16_t)(igx >> 36),
                                    (uint16_t)((igx >> 24) & 0xFFFLL),
@@ -420,16 +489,17 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 }
                 if (xm->factor == (FL)0.0 || xm->info->n == 0 ||
                     xm->norm() < TINY)
-                    site_op_names[cd] = nullptr;
+                    site_op_names[pcd] = nullptr;
                 else
-                    opt->ops[site_op_names.at(cd)] = xm;
+                    opt->ops[site_op_names.at(pcd)] = xm;
             }
-            vector<shared_ptr<OpElement<S, FL>>> site_mp(site_ops.size());
+            vector<shared_ptr<OpElement<S, FL>>> site_mp(
+                scheme->local_terms.size());
             for (int i = 0; i < (int)scheme->local_terms.size(); i++) {
                 site_mp[i] = site_op_names[scheme->local_terms[i]];
                 if (iprint >= 2) {
                     cout << " - LOCAL  [" << setw(5) << i << "] :: ";
-                    cout << scheme->local_terms[i];
+                    cout << scheme->local_terms[i].first;
                     if (site_op_names[scheme->local_terms[i]] != nullptr)
                         cout << " "
                              << site_op_names[scheme->local_terms[i]]->q_label;
@@ -624,15 +694,27 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 pmshape = mshape;
             else
                 for (int i = 0; i < scheme->middle_blocking.size(); i++) {
-                    map<string, int> middle_cd_map;
+                    map<pair<string, vector<uint8_t>>, int> middle_cd_map;
                     for (int j = 0; j < (int)scheme->middle_terms[i].size();
                          j++)
                         middle_cd_map[scheme->middle_terms[i][j]] = j;
                     for (auto &r :
                          middle_patterns.at(scheme->middle_perm_patterns[i]))
-                        for (auto &pr : scheme->perms[r.first]->data[r.second])
+                        for (auto &pr :
+                             scheme->perms[r.first]->data[r.second]) {
+                            const vector<uint16_t> &perm = pr.first;
                             for (auto &prr : pr.second) {
-                                int jj = middle_cd_map[prr.second];
+                                int jj = 0;
+                                if (scheme->has_index_mask) {
+                                    vector<uint8_t> imk(perm.size());
+                                    for (size_t k = 0; k < perm.size(); k++)
+                                        imk[perm[k]] =
+                                            scheme->index_mask_tags[r.first][k];
+                                    jj = middle_cd_map[make_pair(prr.second,
+                                                                 imk)];
+                                } else
+                                    jj = middle_cd_map[make_pair(
+                                        prr.second, vector<uint8_t>())];
                                 uint32_t lx =
                                     scheme->middle_blocking[i][jj].first;
                                 uint32_t rx =
@@ -667,6 +749,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                 }
                                 pmshape += lcnt * prcnt;
                             }
+                        }
                 }
             if (m == n_sites - 1) {
                 for (int i = 0; i < scheme->last_middle_blocking.size(); i++)
@@ -697,16 +780,30 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     for (int i = 0; i < scheme->last_middle_blocking.size();
                          i++)
                         if (scheme->last_middle_blocking[i].size() != 0) {
-                            map<string, int> middle_cd_map;
+                            map<pair<string, vector<uint8_t>>, int>
+                                middle_cd_map;
                             for (int j = 0;
                                  j < (int)scheme->middle_terms[i].size(); j++)
                                 middle_cd_map[scheme->middle_terms[i][j]] = j;
                             for (auto &r : middle_patterns.at(
                                      scheme->middle_perm_patterns[i]))
                                 for (auto &pr :
-                                     scheme->perms[r.first]->data[r.second])
+                                     scheme->perms[r.first]->data[r.second]) {
+                                    const vector<uint16_t> &perm = pr.first;
                                     for (auto &prr : pr.second) {
-                                        int jj = middle_cd_map[prr.second];
+                                        int jj = 0;
+                                        if (scheme->has_index_mask) {
+                                            vector<uint8_t> imk(perm.size());
+                                            for (size_t k = 0; k < perm.size();
+                                                 k++)
+                                                imk[perm[k]] =
+                                                    scheme->index_mask_tags
+                                                        [r.first][k];
+                                            jj = middle_cd_map[make_pair(
+                                                prr.second, imk)];
+                                        } else
+                                            jj = middle_cd_map[make_pair(
+                                                prr.second, vector<uint8_t>())];
                                         uint32_t lx =
                                             scheme->last_middle_blocking[i][jj]
                                                 .first;
@@ -744,6 +841,7 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                             m);
                                         pmshape += lcnt * rcnt;
                                     }
+                                }
                         }
             }
             if (iprint) {
@@ -799,12 +897,14 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                 int i = is_last ? ii - middle_base_count : ii;
                 if (is_last && scheme->last_middle_blocking[i].size() == 0)
                     continue;
-                map<string, int> middle_cd_map;
+                map<pair<string, vector<uint8_t>>, int> middle_cd_map;
                 for (int j = 0; j < (int)scheme->middle_terms[i].size(); j++)
                     middle_cd_map[scheme->middle_terms[i][j]] = j;
                 for (auto &r :
                      middle_patterns.at(scheme->middle_perm_patterns[i]))
                     for (auto &pr : scheme->perms[r.first]->data[r.second]) {
+                        const vector<uint16_t> &mask =
+                            scheme->perms[r.first]->mask;
                         const vector<uint16_t> &perm = pr.first;
                         for (auto &prr : pr.second) {
                             if (iprint >= 2) {
@@ -819,7 +919,17 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                     cout << g << " ";
                                 cout << ":: ";
                             }
-                            int jj = middle_cd_map[prr.second];
+                            int jj = 0;
+                            if (scheme->has_index_mask) {
+                                vector<uint8_t> imk(perm.size());
+                                for (size_t k = 0; k < perm.size(); k++)
+                                    imk[perm[k]] =
+                                        scheme->index_mask_tags[r.first][k];
+                                jj = middle_cd_map.at(
+                                    make_pair(prr.second, imk));
+                            } else
+                                jj = middle_cd_map.at(
+                                    make_pair(prr.second, vector<uint8_t>()));
                             uint32_t lx =
                                 is_last
                                     ? scheme->last_middle_blocking[i][jj].first
@@ -898,33 +1008,59 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                                             perm[k] < lxx.size()
                                                 ? lxx[perm[k]]
                                                 : rxx[perm[k] - lxx.size()];
+                                        if (mask.size() != 0) {
+                                            bool ok = true;
+                                            for (int kk = 0; kk < k; kk++)
+                                                ok = ok && mask[k] != mask[kk];
+                                            if (!ok)
+                                                continue;
+                                        }
                                         ixx = ixx * n_sites + mxx[k];
                                     }
-                                    S q = hamil->get_string_quantum(
-                                        scheme->middle_terms[i][jj], &mxx[0]);
-                                    if (iprint >= 2) {
-                                        for (auto &g : mxx)
-                                            cout << g << " ";
-                                        cout << ": " << plidxs[lx] + lshift + il
-                                             << "+" << pridxs[rx] + ir << " (*"
-                                             << fixed << setprecision(3)
-                                             << setw(6) << prr.first << ") ";
+                                    uint8_t ok = 1;
+                                    if (scheme->has_index_mask)
+                                        for (size_t ix = 0;
+                                             ix < scheme->middle_terms[i][jj]
+                                                      .second.size();
+                                             ix++)
+                                            ok &= index_bool_mask
+                                                [scheme->middle_terms[i][jj]
+                                                     .second[perm[ix]]]
+                                                [mxx[ix]];
+                                    S q;
+                                    if (ok) {
+                                        q = hamil->get_string_quantum(
+                                            scheme->middle_terms[i][jj].first,
+                                            &mxx[0]);
+                                        if (iprint >= 2) {
+                                            for (auto &g : mxx)
+                                                cout << g << " ";
+                                            cout << ": "
+                                                 << plidxs[lx] + lshift + il
+                                                 << "+" << pridxs[rx] + ir
+                                                 << " (*" << fixed
+                                                 << setprecision(3) << setw(6)
+                                                 << prr.first << ") ";
+                                        }
+                                        (*pmop)[im] =
+                                            make_shared<OpElement<S, FL>>(
+                                                OpNames::XPDM,
+                                                SiteIndex(
+                                                    {(uint16_t)(ixx >> 36),
+                                                     (uint16_t)((ixx >> 24) &
+                                                                0xFFFLL),
+                                                     (uint16_t)((ixx >> 12) &
+                                                                0xFFFLL),
+                                                     (uint16_t)(ixx & 0xFFFLL)},
+                                                    {(uint8_t)r.first}),
+                                                q);
+                                        (*pmexpr)[im] =
+                                            (FL)prr.first *
+                                            (*pmlop)[plidxs[lx] + lshift + il] *
+                                            (*pmrop)[pridxs[rx] + ir];
+                                        im++;
                                     }
-                                    (*pmop)[im] = make_shared<OpElement<S, FL>>(
-                                        OpNames::XPDM,
-                                        SiteIndex(
-                                            {(uint16_t)(ixx >> 36),
-                                             (uint16_t)((ixx >> 24) & 0xFFFLL),
-                                             (uint16_t)((ixx >> 12) & 0xFFFLL),
-                                             (uint16_t)(ixx & 0xFFFLL)},
-                                            {(uint8_t)r.first}),
-                                        q);
-                                    (*pmexpr)[im] =
-                                        (FL)prr.first *
-                                        (*pmlop)[plidxs[lx] + lshift + il] *
-                                        (*pmrop)[pridxs[rx] + ir];
                                     counter->next_right(rpat, m, rxx);
-                                    im++;
                                 }
                                 counter->next_left(
                                     scheme->left_terms[lx].first.first, m - 1,
@@ -936,19 +1072,25 @@ template <typename S, typename FL> struct GeneralNPDMMPO : MPO<S, FL> {
                     }
             }
             if (symbol_free) {
-                S q = delta_quantum == S(S::invalid)
-                          ? (scheme->middle_terms.size() > 0 &&
-                                     scheme->middle_terms[0].size() > 0
-                                 ? hamil->get_string_quantum(
-                                       scheme->middle_terms[0][0], nullptr)
-                                 : hamil->vacuum)
-                          : delta_quantum;
+                S q =
+                    delta_quantum == S(S::invalid)
+                        ? (scheme->middle_terms.size() > 0 &&
+                                   scheme->middle_terms[0].size() > 0
+                               ? hamil->get_string_quantum(
+                                     scheme->middle_terms[0][0].first, nullptr)
+                               : hamil->vacuum)
+                        : delta_quantum;
                 (*pmop)[im] = make_shared<OpElement<S, FL>>(OpNames::XPDM,
                                                             SiteIndex(), q);
-                (*pmexpr)[im] = make_shared<OpExpr<S>>();
+                (*pmexpr)[im] = zero_expr;
                 im++;
             }
-            assert(im == pmshape);
+            if (symbol_free || !scheme->has_index_mask)
+                assert(im == pmshape);
+            else {
+                pmop->data.resize(im), pmexpr->data.resize(im);
+                pmop->m = pmexpr->m = (int)im;
+            }
             middle_operator_names[m - 1] = pmop;
             middle_operator_exprs[m - 1] = pmexpr;
             if (iprint) {
