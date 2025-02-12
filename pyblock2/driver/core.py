@@ -510,9 +510,12 @@ class Block2Wrapper:
 
         Args:
             args : list[str]
-                List of names of (Abelian) symmetry groups. ``0 <= len(args) <= 6`` is required.
-                Possible sub-group names are "U1", "Z1", "Z2", "Z3", ..., "Z2055",
-                "U1Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+                List of names of symmetry groups. ``0 <= len(args) <= 6`` is required.
+                Possible sub-group names are "U1", "SU2", "Z1", "Z2", "Z3", ..., "Z2055", "U1Fermi",
+                "SU2Fermi", "Z1Fermi", "Z2Fermi", "Z3Fermi", ..., "Z2055Fermi", "LZ", and "AbelianPG".
+                Support for non-Abelian groups ("SU2") is limited. Each "SU2" needs to be repeated once
+                and occupy two contiguous slots in the list. Correspondingly, when setting the "SU2"
+                quantum numbers, the number should be copied once.
             hints : list[str] or None
                 Hint for symmetry interpretation. Default is None.
         """
