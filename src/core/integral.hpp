@@ -843,6 +843,8 @@ template <typename FL> struct FCIDUMP {
                         int_idx[i][3] ==
                     0)
                     ;
+                else if (int_idx[i][1] + int_idx[i][2] + int_idx[i][3] == 0)
+                    ;
                 else if (int_idx[i][2] + int_idx[i][3] == 0)
                     ts[0](int_idx[i][0] - 1, int_idx[i][1] - 1) = int_val[i];
                 else if (!general)
@@ -895,6 +897,8 @@ template <typename FL> struct FCIDUMP {
                         int_idx[i][3] ==
                     0) {
                     ip++;
+                } else if (int_idx[i][1] + int_idx[i][2] + int_idx[i][3] == 0) {
+                    ;
                 } else if (int_idx[i][2] + int_idx[i][3] == 0) {
                     ts[ip - 3](int_idx[i][0] - 1, int_idx[i][1] - 1) =
                         int_val[i];
