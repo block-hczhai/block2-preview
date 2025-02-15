@@ -15,11 +15,21 @@ It also provides plenty of options for tuning performance and new algorithm deve
 
 The block2 code is developed as an improved version of `StackBlock <https://sanshar.github.io/Block/>`_,
 where the low-level structure of the code has been completely rewritten.
-The block2 code is developed and maintained in Garnet Chan group at Caltech.
+The block2 code is developed and maintained in Garnet Chan group at Caltech
+and Initiative for Computational Catalysis at Flatiron Institute.
 
 Documentation: https://block2.readthedocs.io/en/latest/
 
 Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hubbard.html
+
+Custom model Hamiltonians can be supported via a Python interface:
+`Fermi-Hubbard <https://block2.readthedocs.io/en/latest/tutorial/hubbard.html>`_,
+`Bose-Hubbard <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model>`_,
+`Hubbard-Holstein <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model>`_,
+`SU(2) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html>`_,
+`SU(3) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model>`_,
+`t-J <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model`_,
+`Correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions`_.
 
 Source code: https://github.com/block-hczhai/block2-preview
 

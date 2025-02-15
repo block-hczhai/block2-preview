@@ -13,7 +13,8 @@ based on Matrix Product Operator (MPO) formalism.
 
 The block2 code is developed as an improved version of [StackBlock](https://sanshar.github.io/Block/),
 where the low-level structure of the code has been completely rewritten.
-The block2 code is developed and maintained in Garnet Chan group at Caltech.
+The block2 code is developed and maintained in Garnet Chan group at Caltech
+and Initiative for Computational Catalysis at Flatiron Institute.
 
 Main contributors:
 
@@ -76,9 +77,9 @@ For a list of DMRG references for methods implemented in ``block2``, see: https:
 
 Documentation: https://block2.readthedocs.io/en/latest/
 
-Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
+Tutorial (Python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
 
-Example script for models: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model).
+Custom model Hamiltonians can be supported via a Python interface: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model), [Correlation functions](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions).
 
 Source code: https://github.com/block-hczhai/block2-preview
 
