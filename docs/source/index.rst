@@ -28,8 +28,8 @@ Custom model Hamiltonians can be supported via a Python interface:
 `Hubbard-Holstein <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model>`_,
 `SU(2) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html>`_,
 `SU(3) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model>`_,
-`t-J <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model`_,
-`Correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions`_.
+`t-J <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model>`_,
+`Correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions>`_.
 
 Source code: https://github.com/block-hczhai/block2-preview
 
