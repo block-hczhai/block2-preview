@@ -674,7 +674,7 @@ def rcc_eom_amplitudes_to_vector(cc, eom_t, tamps, out=None):
 def rcc_eom_vector_to_amplitudes(cc, eom_t, vector):
     return rt_unsymm_amps(eom_t, rcc_vector_to_symm_amplitudes(cc, eom_t, vector), cc.symm_schemes)
 
-def eomcc_kernel(cc, eom_t, rampss=None, tamps=None, left=False, nroots=1, max_cycle=200, tol=1e-8):
+def eomcc_kernel(cc, eom_t, rampss=None, tamps=None, left=False, nroots=1, max_cycle=200, tol=1e-6):
     import numpy as np
     if eom_t not in cc.eom_eqs:
         cc.eom_eqs[eom_t] = get_eomcc_eqs(cc.order, eom_t)
@@ -826,8 +826,8 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
                 m += 1
         if xiter == max_iter:
             break
-    ket[:ck] = bx[:ck]
-    return eigv[:ck], ket[:ck], xiter
+    ket[:k] = bx[:k]
+    return eigv[:k], ket[:k], xiter
 
 class RCC:
     def __init__(self, mf, t_order=3, nfrozen=0, normal_ord=True, ecore_target=None, verbose=None, diis=True, dtype=float):
@@ -900,7 +900,7 @@ if __name__ == "__main__":
     assert abs(mcc.e_tot - -76.23486335601116) < 1E-6
     wl1, wl2 = mcc.solve_lambda()
     print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
-    print('E-ee (right) = ', mcc.eeccsd()[0])
+    print('E-ee (right) = ', mcc.eeccsd(max_cycle=1000)[0])
     print('E-ip (right) = ', mcc.ipccsd()[0])
     print('E-ip ( left) = ', mcc.ipccsd(left=True)[0])
     print('E-ea (right) = ', mcc.eaccsd()[0])
@@ -911,7 +911,7 @@ if __name__ == "__main__":
     assert abs(mcc.e_tot - -76.2385041073466) < 1E-6
     wl1, wl2, wl3 = mcc.solve_lambda()
     print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
-    print('E-ee (right) = ', mcc.eeccsd()[0])
+    print('E-ee (right) = ', mcc.eeccsd(max_cycle=1000)[0])
     print('E-ip (right) = ', mcc.ipccsd()[0])
     print('E-ip ( left) = ', mcc.ipccsd(left=True)[0])
     print('E-ea (right) = ', mcc.eaccsd()[0])
