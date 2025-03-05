@@ -23,8 +23,8 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-13, macos-14, windows-2022 ]
-        python: [ '3.13-dev' ]
+        os: [ ubuntu-24.04, macos-13, macos-14, windows-2022 ]
+        python: [ '3.13' ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest, main-test ]
         exclude:
@@ -35,7 +35,7 @@ jobs:
           - os: windows-2022
             parallel: mpi
         include:
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             python: '3.12'
             plat: wasm
             parallel: serial
@@ -48,7 +48,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: install requirements (linux / macos)
-        if: (matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04') && matrix.plat == 'x86_64'
+        if: (matrix.os == 'macos-13' || matrix.os == 'ubuntu-24.04') && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
         run: |
@@ -56,13 +56,13 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (linux emscripten)
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install pyodide-build numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: setup emscripten (linux emscripten)
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         run: |
           git clone -b main https://github.com/emscripten-core/emsdk.git
           cd emsdk
@@ -81,7 +81,7 @@ jobs:
           python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (linux / mpi)
-        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'mpi' && matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get install libopenmpi-dev
           python -m pip install mpi4py
@@ -93,13 +93,13 @@ jobs:
           python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: Download OpenBLAS (linux emscripten)
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         run: |
           wget -q https://github.com/pyodide/pyodide/releases/download/0.26.3/xbuildenv-0.26.3.tar.bz2
           tar xjf xbuildenv-0.26.3.tar.bz2
 
       - name: build gtest (linux emscripten)
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         env:
           GTESTROOT: ~/gtest
         run: |
@@ -133,10 +133,10 @@ jobs:
           cmake --install . --prefix $env:GTEST_ROOT
 
       - name: build gtest (linux)
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
         env:
-          CC: gcc-9
-          CXX: g++-9
+          CC: gcc-14
+          CXX: g++-14
         run: |
           lscpu
           sudo apt-get install libgtest-dev
@@ -146,10 +146,10 @@ jobs:
           sudo cp lib/*.a /usr/lib
 
       - name: fix mkl for amd cpu
-        if: matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
         env:
-          CC: gcc-9
-          CXX: g++-9
+          CC: gcc-14
+          CXX: g++-14
         run: |
           lscpu
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
@@ -188,10 +188,25 @@ jobs:
           brew update
           brew install libomp
 
-      - name: build test (serial-pytest, linux | macos)
+      - name: build test (serial-pytest, linux)
         if: |
           (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') &&
-          (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13') && matrix.plat == 'x86_64'
+          matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
+        env:
+          MKLROOT: ~/.local
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          make -j 2
+
+      - name: build test (serial-pytest, macos)
+        if: |
+          (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') &&
+          matrix.os == 'macos-13' && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -232,8 +247,21 @@ jobs:
           cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           cmake --build . -j 2 --config Release -- '/v:d'
 
-      - name: build test (any-symm-pytest, linux | macos)
-        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'ubuntu-20.04' || matrix.os == 'macos-13') && matrix.plat == 'x86_64'
+      - name: build test (any-symm-pytest, linux)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
+        env:
+          MKLROOT: ~/.local
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
+          make -j 2
+
+      - name: build test (any-symm-pytest, macos)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-13' && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -287,7 +315,7 @@ jobs:
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (serial, linux emscripten)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         env:
           GTESTROOT: ~/gtest
         run: |
@@ -302,11 +330,11 @@ jobs:
           emmake make -j 2
 
       - name: build test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
-          CC: gcc-9
-          CXX: g++-9
+          CC: gcc-14
+          CXX: g++-14
         run: |
           mkdir build_test
           cd build_test
@@ -357,14 +385,14 @@ jobs:
           .\block2_tests.exe
 
       - name: run test (serial, linux emscripten)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'wasm'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         run: |
           source emsdk/emsdk_env.sh
           cd build_test
           node block2_tests.js
 
       - name: run test (serial, linux)
-        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-20.04' && matrix.plat == 'x86_64'
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
         run: |
           export CPUTYPE=$(lscpu | grep 'Vendor ID' | awk '{print $3}')
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
@@ -397,7 +425,7 @@ jobs:
           python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --fd_data=${xpwd}/data
 
       - name: run test (serial-pytest, linux)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-24.04'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -435,7 +463,7 @@ jobs:
           .\run-test.ps1
 
       - name: run test (main-test, linux)
-        if: matrix.parallel == 'main-test' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'main-test' && matrix.os == 'ubuntu-24.04'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -475,7 +503,7 @@ jobs:
           python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --symm sany --fd_data=${xpwd}/data
 
       - name: run test (any-symm-pytest, linux)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-20.04'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-24.04'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -520,8 +548,8 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-20.04, macos-13, windows-2022, macos-14 ]
-        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13-dev' ]
+        os: [ ubuntu-24.04, macos-13, windows-2022, macos-14 ]
+        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
@@ -536,7 +564,7 @@ jobs:
             plat: x86_64
           - os: macos-14
             python: '3.7'
-          - os: ubuntu-20.04
+          - os: ubuntu-24.04
             plat: arm64
           - os: windows-2022
             parallel: mpi
@@ -546,12 +574,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - if: matrix.os == 'macos-13' || matrix.os == 'macos-14' || matrix.os == 'windows-2022'
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
 
+      - if: matrix.os == 'ubuntu-24.04'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-24.04'
         env:
           MKLROOT: ~/.local
         run: |
@@ -671,7 +705,7 @@ jobs:
           delocate-wheel --require-archs=arm64 -k dist/*.whl
 
       - name: prepare build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-24.04'
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -680,7 +714,7 @@ jobs:
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-20.04'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-24.04'
         uses: ./.github/actions/build-wheel
         with:
           python-version: ${{ matrix.python }}
@@ -703,7 +737,7 @@ jobs:
   pypi:
     name: pypi
     needs: [build, test]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
     environment:
       name: github-pages
@@ -712,7 +746,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13-dev'
+          python-version: '3.13'
 
       - name: build source dist (serial)
         env:
@@ -768,13 +802,13 @@ jobs:
   publish:
     name: publish
     needs: [build, test]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13-dev'
+          python-version: '3.13'
 
       - name: build source dist (serial)
         env:
