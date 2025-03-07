@@ -168,7 +168,7 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
     if (params.count("fcidump") != 0) {
         fcidump->read(params.at("fcidump"));
     } else {
-        cerr << "'ficudmp' parameter not found!" << endl;
+        cerr << "'fcidump' parameter not found!" << endl;
         abort();
     }
 
