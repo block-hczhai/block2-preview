@@ -790,6 +790,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
+        current_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham.end", iprint);
+        current_eff_ham = nullptr;
         if (state_specific || projection_weights.size() != 0)
             for (auto &wfn : ortho_bra)
                 wfn->deallocate();
@@ -1240,6 +1243,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                           davidson_shift - xreal<FL>((FL)me->mpo->const_e),
                           me->para_rule, ortho_bra, projection_weights);
         teig += _t.get_time();
+        current_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham.end", iprint);
+        current_eff_ham = nullptr;
         if (state_specific || projection_weights.size() != 0)
             for (auto &wfn : ortho_bra)
                 wfn->deallocate();
@@ -1931,6 +1937,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
         teig += _t.get_time();
+        current_multi_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham.end", iprint);
+        current_multi_eff_ham = nullptr;
         if (state_specific || projection_weights.size() != 0)
             for (auto &wfn : ortho_bra)
                 wfn->deallocate();
@@ -2461,6 +2470,9 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                 mps_quanta[i] = SparseMatrixGroup<S, FLS>::merge_delta_quanta(
                     mps_quanta[i + i], mps_quanta[i + i + 1]);
         teig += _t.get_time();
+        current_multi_eff_ham = h_eff;
+        callback_()->compute("DMRG::sweep::iter.eff_ham.end", iprint);
+        current_multi_eff_ham = nullptr;
         if (state_specific || projection_weights.size() != 0)
             for (auto &wfn : ortho_bra)
                 wfn->deallocate();
