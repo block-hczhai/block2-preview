@@ -317,24 +317,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
             para_rule->comm->barrier();
         return r;
     }
-    // set the value for each determinant to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
-        assert(ref.size() == n_sites || ref.size() == 0);
-        if (max_rank < 0)
-            max_rank = mps->info->target.n();
-        vals.resize(dets.size());
-        memset(vals.data(), 0, sizeof(FL) * vals.size());
-        bool has_dets = dets.size() != 0;
+    void initialize_pinfos(
+        const shared_ptr<UnfusedMPS<S, FL>> &mps,
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>, int, int>>
-            ptrs;
-
-        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
+        pinfos.resize(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
         pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
@@ -364,6 +352,100 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                                              false);
             }
         }
+    }
+    // directly sample determinants in MPS
+    pair<vector<uint8_t>, vector<FL>>
+    sample(const shared_ptr<UnfusedMPS<S, FL>> &mps, int64_t n_sample,
+           int rand_seed = -1) const {
+        int ntg = threading->activate_global();
+        unsigned rand_sd =
+            rand_seed == -1
+                ? (unsigned)Random::rand_int(0, numeric_limits<int>::max())
+                : (unsigned)rand_seed;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+        pair<vector<uint8_t>, vector<FL>> r = make_pair(
+            vector<uint8_t>(n_sample * n_sites), vector<FL>(n_sample));
+        vector<uint8_t> &det_strings = r.first;
+        vector<FL> &det_coeffs = r.second;
+#pragma omp parallel num_threads(ntg)
+        {
+            vector<vector<shared_ptr<SparseMatrix<S, FL>>>> pmats(n_sites + 1);
+            shared_ptr<VectorAllocator<FP>> dd_alloc =
+                make_shared<VectorAllocator<FP>>();
+            for (int i_site = 0; i_site < n_sites + 1; i_site++) {
+                pmats[i_site].resize(pinfos[i_site].size());
+                for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
+                    pmats[i_site][d] =
+                        make_shared<SparseMatrix<S, FL>>(dd_alloc);
+                    pmats[i_site][d]->allocate(pinfos[i_site][d]);
+                }
+            }
+            for (size_t j = 0; j < pmats[0][0]->total_memory; j++)
+                pmats[0][0]->data[j] = 1.0;
+            int tid = threading->get_thread_id();
+            RandomMT rand_mt((unsigned)(rand_sd + tid));
+            vector<FP> rand(n_sites);
+            vector<FP> cp(4), accp(4 + 1, 0);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+#pragma omp for schedule(static)
+            for (int i_sample = 0; i_sample < n_sample; i_sample++) {
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FL coeff = (FL)0.0;
+                ptrs = pmats[0][0];
+                for (int i_site = 0; i_site < n_sites; i_site++) {
+                    const uint8_t nd = (uint8_t)pmats[i_site + 1].size();
+                    for (uint8_t d = 0; d < nd; d++) {
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
+                            pmats[i_site + 1][d];
+                        cmp->clear();
+                        for (auto &m : mps->tensors[i_site]->data[d]) {
+                            S bra = m.first.first, ket = m.first.second;
+                            if (pmp->info->find_state(bra) == -1)
+                                continue;
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
+                        }
+                        FP tmp = cmp->norm();
+                        cp[d] = tmp * tmp;
+                    }
+                    for (uint8_t d = 0; d < nd; d++)
+                        accp[d + 1] = accp[d] + cp[d];
+                    for (uint8_t d = 0; d < nd; d++) {
+                        accp[d + 1] /= accp[nd];
+                        if (rand[i_site] < accp[d + 1]) {
+                            ptrs = pmats[i_site + 1][d];
+                            coeff = ptrs->data[0];
+                            det_strings[i_sample * n_sites + i_site] = d;
+                            break;
+                        }
+                    }
+                }
+                det_coeffs[i_sample] = coeff;
+            }
+        }
+        threading->activate_normal();
+        return r;
+    }
+    // set the value for each determinant to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        assert(ref.size() == n_sites || ref.size() == 0);
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
+        vals.resize(dets.size());
+        memset(vals.data(), 0, sizeof(FL) * vals.size());
+        bool has_dets = dets.size() != 0;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<tuple<int, int, int, shared_ptr<SparseMatrix<S, FL>>,
+                     vector<uint8_t>, int, int>>
+            ptrs;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
@@ -489,7 +571,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
             }
         }
         pinfos.clear();
-        sort_dets();
+        if (!has_dets)
+            sort_dets();
         threading->activate_normal();
     }
     // phase of moving all alpha elec before beta elec
@@ -698,22 +781,12 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
             para_rule->comm->barrier();
         return r;
     }
-    // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
-        if (max_rank < 0)
-            max_rank = mps->info->target.n();
-        vals.resize(dets.size());
-        memset(vals.data(), 0, sizeof(FL) * vals.size());
-        bool has_dets = dets.size() != 0;
+    void initialize_pinfos(
+        const shared_ptr<UnfusedMPS<S, FL>> &mps,
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
-            ptrs;
-        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
+        pinfos.resize(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
         pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
@@ -747,6 +820,104 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                                              false);
             }
         }
+    }
+    // directly sample determinants in MPS
+    pair<vector<uint8_t>, vector<FL>>
+    sample(const shared_ptr<UnfusedMPS<S, FL>> &mps, int64_t n_sample,
+           int rand_seed = -1) const {
+        int ntg = threading->activate_global();
+        unsigned rand_sd =
+            rand_seed == -1
+                ? (unsigned)Random::rand_int(0, numeric_limits<int>::max())
+                : (unsigned)rand_seed;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+        pair<vector<uint8_t>, vector<FL>> r = make_pair(
+            vector<uint8_t>(n_sample * n_sites), vector<FL>(n_sample));
+        vector<uint8_t> &det_strings = r.first;
+        vector<FL> &det_coeffs = r.second;
+#pragma omp parallel num_threads(ntg)
+        {
+            vector<vector<shared_ptr<SparseMatrix<S, FL>>>> pmats(n_sites + 1);
+            shared_ptr<VectorAllocator<FP>> dd_alloc =
+                make_shared<VectorAllocator<FP>>();
+            for (int i_site = 0; i_site < n_sites + 1; i_site++) {
+                pmats[i_site].resize(pinfos[i_site].size());
+                for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
+                    pmats[i_site][d] =
+                        make_shared<SparseMatrix<S, FL>>(dd_alloc);
+                    pmats[i_site][d]->allocate(pinfos[i_site][d]);
+                }
+            }
+            for (size_t j = 0; j < pmats[0][0]->total_memory; j++)
+                pmats[0][0]->data[j] = 1.0;
+            int tid = threading->get_thread_id();
+            RandomMT rand_mt((unsigned)(rand_sd + tid));
+            vector<FP> rand(n_sites);
+            vector<FP> cp(4), accp(4 + 1, 0);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+#pragma omp for schedule(static)
+            for (int i_sample = 0; i_sample < n_sample; i_sample++) {
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FL coeff = (FL)0.0;
+                ptrs = pmats[0][0];
+                for (int i_site = 0; i_site < n_sites; i_site++) {
+                    const uint8_t nd = (uint8_t)pmats[i_site + 1].size();
+                    for (uint8_t d = 0; d < nd; d++) {
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
+                            pmats[i_site + 1][d];
+                        cmp->clear();
+                        int jd = d >= 2 ? d - 1 : d;
+                        for (auto &m : mps->tensors[i_site]->data[jd]) {
+                            S bra = m.first.first, ket = m.first.second;
+                            if (jd == 1 &&
+                                !((d == 1 && ket.twos() > bra.twos()) ||
+                                  (d == 2 && ket.twos() < bra.twos())))
+                                continue;
+                            if (pmp->info->find_state(bra) == -1)
+                                continue;
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
+                        }
+                        FP tmp = cmp->norm();
+                        cp[d] = tmp * tmp;
+                    }
+                    for (uint8_t d = 0; d < nd; d++)
+                        accp[d + 1] = accp[d] + cp[d];
+                    for (uint8_t d = 0; d < nd; d++) {
+                        accp[d + 1] /= accp[nd];
+                        if (rand[i_site] < accp[d + 1]) {
+                            ptrs = pmats[i_site + 1][d];
+                            coeff = ptrs->data[0];
+                            det_strings[i_sample * n_sites + i_site] = d;
+                            break;
+                        }
+                    }
+                }
+                det_coeffs[i_sample] = coeff;
+            }
+        }
+        threading->activate_normal();
+        return r;
+    }
+    // set the value for each CSF to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
+        vals.resize(dets.size());
+        memset(vals.data(), 0, sizeof(FL) * vals.size());
+        bool has_dets = dets.size() != 0;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
+                     vector<uint8_t>>>
+            ptrs;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
@@ -857,7 +1028,8 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
             }
         }
         pinfos.clear();
-        sort_dets();
+        if (!has_dets)
+            sort_dets();
         threading->activate_normal();
     }
     void convert_phase(const vector<int> &reorder) {}
@@ -1010,23 +1182,12 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
             para_rule->comm->barrier();
         return r;
     }
-    // set the value for each CSF to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
-        assert(ref.size() == n_sites || ref.size() == 0);
-        if (max_rank < 0)
-            max_rank = mps->info->target.n();
-        vals.resize(dets.size());
-        memset(vals.data(), 0, sizeof(FL) * vals.size());
-        bool has_dets = dets.size() != 0;
+    void initialize_pinfos(
+        const shared_ptr<UnfusedMPS<S, FL>> &mps,
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>, int, int>>
-            ptrs;
-        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
+        pinfos.resize(n_sites + 1);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
         pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
@@ -1056,6 +1217,100 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                                              false);
             }
         }
+    }
+    // directly sample determinants in MPS
+    pair<vector<uint8_t>, vector<FL>>
+    sample(const shared_ptr<UnfusedMPS<S, FL>> &mps, int64_t n_sample,
+           int rand_seed = -1) const {
+        int ntg = threading->activate_global();
+        unsigned rand_sd =
+            rand_seed == -1
+                ? (unsigned)Random::rand_int(0, numeric_limits<int>::max())
+                : (unsigned)rand_seed;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+        pair<vector<uint8_t>, vector<FL>> r = make_pair(
+            vector<uint8_t>(n_sample * n_sites), vector<FL>(n_sample));
+        vector<uint8_t> &det_strings = r.first;
+        vector<FL> &det_coeffs = r.second;
+#pragma omp parallel num_threads(ntg)
+        {
+            vector<vector<shared_ptr<SparseMatrix<S, FL>>>> pmats(n_sites + 1);
+            shared_ptr<VectorAllocator<FP>> dd_alloc =
+                make_shared<VectorAllocator<FP>>();
+            for (int i_site = 0; i_site < n_sites + 1; i_site++) {
+                pmats[i_site].resize(pinfos[i_site].size());
+                for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
+                    pmats[i_site][d] =
+                        make_shared<SparseMatrix<S, FL>>(dd_alloc);
+                    pmats[i_site][d]->allocate(pinfos[i_site][d]);
+                }
+            }
+            for (size_t j = 0; j < pmats[0][0]->total_memory; j++)
+                pmats[0][0]->data[j] = 1.0;
+            int tid = threading->get_thread_id();
+            RandomMT rand_mt((unsigned)(rand_sd + tid));
+            vector<FP> rand(n_sites);
+            vector<FP> cp(2), accp(2 + 1, 0);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+#pragma omp for schedule(static)
+            for (int i_sample = 0; i_sample < n_sample; i_sample++) {
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FL coeff = (FL)0.0;
+                ptrs = pmats[0][0];
+                for (int i_site = 0; i_site < n_sites; i_site++) {
+                    const uint8_t nd = (uint8_t)pmats[i_site + 1].size();
+                    for (uint8_t d = 0; d < nd; d++) {
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
+                            pmats[i_site + 1][d];
+                        cmp->clear();
+                        for (auto &m : mps->tensors[i_site]->data[d]) {
+                            S bra = m.first.first, ket = m.first.second;
+                            if (pmp->info->find_state(bra) == -1)
+                                continue;
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false, m.second->ref(), false,
+                                (*cmp)[ket], 1.0, 1.0);
+                        }
+                        FP tmp = cmp->norm();
+                        cp[d] = tmp * tmp;
+                    }
+                    for (uint8_t d = 0; d < nd; d++)
+                        accp[d + 1] = accp[d] + cp[d];
+                    for (uint8_t d = 0; d < nd; d++) {
+                        accp[d + 1] /= accp[nd];
+                        if (rand[i_site] < accp[d + 1]) {
+                            ptrs = pmats[i_site + 1][d];
+                            coeff = ptrs->data[0];
+                            det_strings[i_sample * n_sites + i_site] = d;
+                            break;
+                        }
+                    }
+                }
+                det_coeffs[i_sample] = coeff;
+            }
+        }
+        threading->activate_normal();
+        return r;
+    }
+    // set the value for each CSF to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        assert(ref.size() == n_sites || ref.size() == 0);
+        if (max_rank < 0)
+            max_rank = mps->info->target.n();
+        vals.resize(dets.size());
+        memset(vals.data(), 0, sizeof(FL) * vals.size());
+        bool has_dets = dets.size() != 0;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
+                     vector<uint8_t>, int, int>>
+            ptrs;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        initialize_pinfos(mps, pinfos);
+
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)data[0].size(); j++)
                 if (data[0][j] == 0) {
@@ -1176,7 +1431,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
             }
         }
         pinfos.clear();
-        sort_dets();
+        if (!has_dets)
+            sort_dets();
         threading->activate_normal();
     }
     uint8_t permutation_parity(const vector<int> &perm) {
@@ -1369,27 +1625,19 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
             para_rule->comm->barrier();
         return r;
     }
-    // set the value for each DET to the overlap between mps
-    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
-                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
-        assert(max_rank == -1);
-        vals.resize(dets.size());
-        memset(vals.data(), 0, sizeof(FL) * vals.size());
-        bool has_dets = dets.size() != 0;
+    void
+    initialize_pinfos(const shared_ptr<UnfusedMPS<S, FL>> &mps,
+                      vector<vector<shared_ptr<SparseMatrixInfo<S>>>> &pinfos,
+                      vector<vector<array<uint8_t, 3>>> &basis_iqs) const {
         shared_ptr<VectorAllocator<uint32_t>> i_alloc =
             make_shared<VectorAllocator<uint32_t>>();
-        shared_ptr<VectorAllocator<FP>> d_alloc =
-            make_shared<VectorAllocator<FP>>();
-        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
-                     vector<uint8_t>>>
-            ptrs;
-        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos(n_sites + 1);
+        pinfos.resize(n_sites + 1);
+        basis_iqs.resize(n_sites);
         pinfos[0].resize(1);
         pinfos[0][0] = make_shared<SparseMatrixInfo<S>>(i_alloc);
         pinfos[0][0]->initialize(*mps->info->left_dims_fci[0],
                                  *mps->info->left_dims_fci[0],
                                  mps->info->vacuum, false);
-        vector<vector<array<uint8_t, 3>>> basis_iqs(n_sites);
         for (int d = 0; d < n_sites; d++) {
             for (uint8_t j = 0; j < mps->info->basis[d]->n; j++)
                 for (uint8_t jm = 0;
@@ -1428,6 +1676,112 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                                              false);
             }
         }
+    }
+    // directly sample determinants in MPS
+    pair<vector<uint8_t>, vector<FL>>
+    sample(const shared_ptr<UnfusedMPS<S, FL>> &mps, int64_t n_sample,
+           int rand_seed = -1) const {
+        int ntg = threading->activate_global();
+        unsigned rand_sd =
+            rand_seed == -1
+                ? (unsigned)Random::rand_int(0, numeric_limits<int>::max())
+                : (unsigned)rand_seed;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        vector<vector<array<uint8_t, 3>>> basis_iqs;
+        initialize_pinfos(mps, pinfos, basis_iqs);
+        pair<vector<uint8_t>, vector<FL>> r = make_pair(
+            vector<uint8_t>(n_sample * n_sites), vector<FL>(n_sample));
+        vector<uint8_t> &det_strings = r.first;
+        vector<FL> &det_coeffs = r.second;
+#pragma omp parallel num_threads(ntg)
+        {
+            vector<vector<shared_ptr<SparseMatrix<S, FL>>>> pmats(n_sites + 1);
+            shared_ptr<VectorAllocator<FP>> dd_alloc =
+                make_shared<VectorAllocator<FP>>();
+            for (int i_site = 0; i_site < n_sites + 1; i_site++) {
+                pmats[i_site].resize(pinfos[i_site].size());
+                for (uint8_t d = 0; d < (uint8_t)pinfos[i_site].size(); d++) {
+                    pmats[i_site][d] =
+                        make_shared<SparseMatrix<S, FL>>(dd_alloc);
+                    pmats[i_site][d]->allocate(pinfos[i_site][d]);
+                }
+            }
+            for (size_t j = 0; j < pmats[0][0]->total_memory; j++)
+                pmats[0][0]->data[j] = 1.0;
+            int tid = threading->get_thread_id();
+            RandomMT rand_mt((unsigned)(rand_sd + tid));
+            vector<FP> rand(n_sites);
+            vector<FP> cp(data[0].size()), accp(data[0].size() + 1, 0);
+            shared_ptr<SparseMatrix<S, FL>> ptrs;
+#pragma omp for schedule(static)
+            for (int i_sample = 0; i_sample < n_sample; i_sample++) {
+                rand_mt.fill<FP>((FP *)rand.data(), n_sites);
+                FL coeff = (FL)0.0;
+                ptrs = pmats[0][0];
+                for (int i_site = 0; i_site < n_sites; i_site++) {
+                    const uint8_t nd = (uint8_t)basis_iqs[i_site].size();
+                    for (uint8_t d = 0; d < nd; d++) {
+                        shared_ptr<SparseMatrix<S, FL>> pmp = ptrs;
+                        shared_ptr<SparseMatrix<S, FL>> cmp =
+                            pmats[i_site + 1][d];
+                        cmp->clear();
+                        int jd = basis_iqs[i_site][d][0];
+                        for (auto &m : mps->tensors[i_site]->data[jd]) {
+                            S bra = m.first.first, ket = m.first.second;
+                            S jket = bra + mps->info->basis[i_site]->quanta[jd];
+                            if (basis_iqs[i_site][d][1] >= jket.count())
+                                continue;
+                            if (jket[basis_iqs[i_site][d][1]] != ket)
+                                continue;
+                            if (pmp->info->find_state(bra) == -1)
+                                continue;
+                            GMatrixFunctions<FL>::multiply(
+                                (*pmp)[bra], false,
+                                GMatrix<FL>(m.second->data->data() +
+                                                basis_iqs[i_site][d][2] *
+                                                    m.second->shape[2],
+                                            m.second->shape[0],
+                                            m.second->shape[2]),
+                                false, (*cmp)[ket], 1.0, 1.0,
+                                (MKL_INT)m.second->shape[1] *
+                                    m.second->shape[2]);
+                        }
+                        FP tmp = cmp->norm();
+                        cp[d] = tmp * tmp;
+                    }
+                    for (uint8_t d = 0; d < nd; d++)
+                        accp[d + 1] = accp[d] + cp[d];
+                    for (uint8_t d = 0; d < nd; d++) {
+                        accp[d + 1] /= accp[nd];
+                        if (rand[i_site] < accp[d + 1]) {
+                            ptrs = pmats[i_site + 1][d];
+                            coeff = ptrs->data[0];
+                            det_strings[i_sample * n_sites + i_site] = d;
+                            break;
+                        }
+                    }
+                }
+                det_coeffs[i_sample] = coeff;
+            }
+        }
+        threading->activate_normal();
+        return r;
+    }
+    // set the value for each DET to the overlap between mps
+    void evaluate(const shared_ptr<UnfusedMPS<S, FL>> &mps, FP cutoff = 0,
+                  int max_rank = -1, const vector<uint8_t> &ref = {}) {
+        assert(max_rank == -1);
+        vals.resize(dets.size());
+        memset(vals.data(), 0, sizeof(FL) * vals.size());
+        bool has_dets = dets.size() != 0;
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        vector<tuple<IT, int, int, shared_ptr<SparseMatrix<S, FL>>,
+                     vector<uint8_t>>>
+            ptrs;
+        vector<vector<shared_ptr<SparseMatrixInfo<S>>>> pinfos;
+        vector<vector<array<uint8_t, 3>>> basis_iqs;
+        initialize_pinfos(mps, pinfos, basis_iqs);
         if (!has_dets) {
             for (uint8_t j = 0; j < (uint8_t)basis_iqs[0].size(); j++)
                 if (data[0][j] == 0) {
@@ -1544,7 +1898,8 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
             }
         }
         pinfos.clear();
-        sort_dets();
+        if (!has_dets)
+            sort_dets();
         threading->activate_normal();
     }
     uint8_t permutation_parity(const vector<int> &perm) {

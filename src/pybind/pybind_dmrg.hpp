@@ -537,6 +537,8 @@ template <typename S, typename FL> void bind_fl_mps(py::module &m) {
              &DeterminantTRIE<S, FL>::get_state_occupation)
         .def("construct_mps", &DeterminantTRIE<S, FL>::construct_mps,
              py::arg("info"), py::arg("para_rule") = nullptr)
+        .def("sample", &DeterminantTRIE<S, FL>::sample, py::arg("mps"),
+             py::arg("n_sample"), py::arg("rand_seed") = -1)
         .def("evaluate", &DeterminantTRIE<S, FL>::evaluate, py::arg("mps"),
              py::arg("cutoff") = 0.0, py::arg("max_rank") = -1,
              py::arg("ref") = vector<uint8_t>())

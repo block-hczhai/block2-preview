@@ -4988,8 +4988,10 @@ class DMRGDriver:
         Returns:
             bond_dims : np.ndarray[int]
                 The MPS bond dimension for each sweep.
+
             dws : np.ndarray[float]
                 The maximal discarded weight (sum of discarded eigenvalues) for each sweep.
+
             energies : np.ndarray[list[float]]
                 The list of ground (and possibly excited) state energies at each sweep.
         """
@@ -6073,6 +6075,87 @@ class DMRGDriver:
         """
         return self.get_npdm(ket, pdm_type=6, bra=bra, *args, **kwargs)
 
+    def sample_csf_coefficients(self, ket, n_sample, rand_seed=-1, max_print=200, iprint=1):
+        """
+        Sample the Configuration State Functions (CSFs, in SU2 mode)
+        or determinants (DETs, in SZ/SGF mode) according to their probability in the given MPS.
+
+        Args:
+            ket : MPS
+                The MPS for computing CSF/DET coefficients.
+                If targeting non-singlet state in the SU2 mode, the MPS should be in
+                the singlet embedding format.
+            n_sample : int
+                Number of sample to perform.
+            rand_seed : int
+                Non-negative integer as random seed. If -1, dynamic random seed will be used.
+                Default is -1.
+            max_print : int
+                The max number of CSF/DET and their coefficients that should be print.
+                When ``iprint == 0``, this argument has no effect and nothing will be printed.
+            iprint : int
+                Verbosity. Default is 1.
+
+        Returns:
+            dets : np.ndarray[np.uint8]
+                Array of CSF/DET, represented as a matrix with shape ``(n_dets, n_sites)``.
+                The occupancy value 0, 1, 2, 3 represents "0" (empty), "+" (spin-up coupling),
+                "-" (spin-down coupling), and "2" (doubly occupied) in the SU2 mode,
+                or "0" (empty), "a" (alpha occupied),  "b" (beta occupied), and "2"
+                (doubly occupied) in the SZ/SGF mode.
+            dvals : np.ndarray[float|complex]
+                Array of coefficients for each CSF/DET with size ``n_dets``.
+                Note that the probability is the square of coefficient.
+                There can be an overall phase uncertainty for all coefficients.
+        """
+        bw = self.bw
+        import numpy as np, time
+
+        if ket.center != 0:
+            ket = self.copy_mps(ket, tag="CSF-TMP")
+            self.align_mps_center(ket, ref=0)
+            if iprint:
+                print("mps center changed (temporarily)")
+        
+        if iprint and SymmetryTypes.SAny in bw.symm_type:
+            print("basis mapping:")
+            kk = 0
+            for j in range(ket.info.basis[0].n):
+                for jm in range(ket.info.basis[0].quanta[j].multiplicity):
+                    for jj in range(ket.info.basis[0].n_states[j]):
+                        print(
+                            "  [%2d] %24s : m=%2d state=%2d"
+                            % (kk, ket.info.basis[0].quanta[j], jm, jj)
+                        )
+                        kk += 1
+
+        tx = time.perf_counter()
+        dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
+        ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
+        if rand_seed == -1:
+            self.bw.b.Random.rand_seed(0)
+        dets, vals = dtrie.sample(bw.bs.UnfusedMPS(ket), n_sample, rand_seed)
+        if iprint:
+            print("DTRIE T = %10.3f (N sample = %d)" % (time.perf_counter() - tx, n_sample))
+        dname = "CSF" if SymmetryTypes.SU2 in bw.symm_type else "DET"
+        dvals = np.array(vals)
+        dets = np.array(dets, dtype=np.uint8).reshape(n_sample, ket.n_sites)
+        if iprint:
+            for ii in range(min(n_sample, max_print)):
+                arr = dets[ii]
+                if self.reorder_idx is not None:
+                    rev_idx = np.argsort(self.reorder_idx)
+                    arr = arr[rev_idx]
+                if SymmetryTypes.SAny in bw.symm_type:
+                    det = "".join(["%s" % x for x in arr])
+                else:
+                    det = "".join([ddstr[x] for x in arr])
+                val = dvals[ii]
+                print(dname, "%10d" % ii, det, " = %20.15f" % val)
+            if len(dvals) > max_print:
+                print(" ... and more ... ")
+        return dets, dvals
+
     def get_csf_coefficients(
         self, ket, cutoff=0.1, given_dets=None, max_print=200, fci_conv=False,
         max_excite=None, ref_det=None, iprint=1
@@ -6156,16 +6239,17 @@ class DMRGDriver:
         dtrie = bw.bs.DeterminantTRIE(ket.n_sites, True)
         ddstr = "0+-2" if SymmetryTypes.SU2 in bw.symm_type else "0ab2"
         if given_dets is not None:
-            uniq = set()
-            for det in given_dets:
+            gidx_map = np.zeros((len(given_dets), ), dtype=np.int64)
+            uniq = {}
+            for it, det in enumerate(given_dets):
                 ddet = det
                 if isinstance(ddet, str):
                     ddet = [ddstr.index(x) for x in ddet]
-                if tuple(ddet) in uniq:
-                    continue
-                else:
-                    uniq.add(tuple(ddet))
-                dtrie.append(bw.b.VectorUInt8(ddet))
+                if tuple(ddet) not in uniq:
+                    nq = len(uniq)
+                    uniq[tuple(ddet)] = nq
+                    dtrie.append(bw.b.VectorUInt8(ddet))
+                gidx_map[it] = uniq[tuple(ddet)]
         if max_excite is not None:
             refx = [ddstr.index(x) for x in ref_det] if isinstance(ref_det, str) else ref_det
             dtrie.evaluate(bw.bs.UnfusedMPS(ket), cutoff, max_excite, bw.b.VectorUInt8(refx))
@@ -6204,6 +6288,8 @@ class DMRGDriver:
                 dets[i] = np.array(dtrie[i])[rev_idx]
             else:
                 dets[i] = np.array(dtrie[i])
+        if given_dets is not None:
+            dets, dvals = dets[gidx_map], dvals[gidx_map]
         return dets, dvals
 
     def compress_mps(self, ket, max_bond_dim=None):
