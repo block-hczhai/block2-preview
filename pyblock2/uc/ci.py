@@ -159,6 +159,8 @@ class CI(lib.StreamObject):
         pkcis, pket = [np.ones((len(ket0 ^ 0),))], ket0 ^ 0
         self.e_hf = np.dot(pkcis[0], Hamiltonian(big, pket) @ pkcis[0]) + ecore
         self.e_corr = 0
+        self.big = big
+        self.ridx = np.argsort(idx)
         conv = False
         for n in range(2, self.ci_order + 1):
             ket = ket0 ^ n
@@ -209,15 +211,52 @@ class CI(lib.StreamObject):
 
         return conv, self.e_corr + self.e_hf, self.ci
 
+    def make_npdm(self, npdm_order):
+        is_rhf = self.mo_coeff is None or (
+            isinstance(self.mo_coeff, np.ndarray)
+            and self.mo_coeff.ndim == 2
+            and self.mo_coeff.shape[0] == self.mol.nao
+        )
+
+        if is_rhf:
+            expr = "(C+D)0"
+            for _ in range(1, npdm_order):
+                expr = "((C+%s)1+D)0" % expr
+            npdm = np.array(self.big.build_npdm(expr, self.ci, self.ci)[0]) * (2 ** 0.5) ** npdm_order
+            for i in range(npdm.ndim):
+                npdm = npdm[(slice(None),) * i + (self.ridx,)]
+            npdm = npdm.transpose(tuple(range(npdm_order)) + tuple(range(npdm_order, npdm_order * 2))[::-1])
+            return npdm.transpose(tuple(j for i in range(npdm_order) for j in [i, i + npdm_order]))
+        else:
+            exprs, npdms = ["cd", "CD"], []
+            for _ in range(1, npdm_order):
+                exprs = ["c%sd" % x for x in exprs] + ["C%sD" % exprs[-1]]
+            for expr in exprs:
+                npdm = np.array(self.big.build_npdm(expr, self.ci, self.ci)[0])
+                for i in range(npdm.ndim):
+                    npdm = npdm[(slice(None),) * i + (self.ridx,)]
+                npdm = npdm.transpose(tuple(range(npdm_order)) + tuple(range(npdm_order, npdm_order * 2))[::-1])
+                npdms.append(npdm.transpose(tuple(j for i in range(npdm_order) for j in [i, i + npdm_order])))
+            return tuple(npdms)
+
+    make_rdm1 = lambda self: self.make_npdm(npdm_order=1)
+    make_rdm2 = lambda self: self.make_npdm(npdm_order=2)
 
 if __name__ == "__main__":
 
     from pyscf import gto, scf, ci
 
     mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="d2h", verbose=3)
-    mf = scf.RHF(mol).run(conv_tol=1e-14)
-    ci.CISD(mf).run()
-    CI(mf, ci_order=2).run()
+    mf = scf.RHF(mol).run(conv_tol=1E-14)
+    mcx = ci.CISD(mf).run(conv_tol=1E-14)
+    mci = CI(mf, ci_order=2).run()
+
+    pdm1 = mci.make_rdm1()
+    pdm2 = mci.make_rdm2()
+    ref_pdm1 = mcx.make_rdm1()
+    ref_pdm2 = mcx.make_rdm2()
+    print(np.linalg.norm(pdm1 - ref_pdm1))
+    print(np.linalg.norm(pdm2 - ref_pdm2))
 
     mol = gto.M(atom="N 0 0 0; N 0 0 1.1", basis="ccpvdz", symmetry="c1", verbose=3, spin=2)
     mf = scf.RHF(mol).run(conv_tol=1e-14)

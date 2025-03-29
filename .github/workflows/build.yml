@@ -101,13 +101,14 @@ jobs:
       - name: build gtest (linux emscripten)
         if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         env:
-          GTESTROOT: ~/gtest
+          GTESTROOT: /home/runner/work/gtest
         run: |
           source emsdk/emsdk_env.sh
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
           export GTEST_ROOT=$PWD/googletest/install
-          CC=emcc CXX=em++ emcmake cmake CMakeLists.txt -DCMAKE_INSTALL_PREFIX=${GTESTROOT} -Dgtest_disable_pthreads=ON
+          CC=emcc CXX=em++ emcmake cmake CMakeLists.txt -DCMAKE_INSTALL_PREFIX=${GTESTROOT} -Dgtest_disable_pthreads=ON \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           emmake make -j 4
           emmake make install
 
@@ -128,7 +129,8 @@ jobs:
           Get-WmiObject -Class Win32_Processor
           git clone -b release-1.8.0 https://github.com/google/googletest.git
           cd googletest
-          cmake -G "Visual Studio 17 2022" -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" -Dgtest_force_shared_crt=ON
+          cmake -G "Visual Studio 17 2022" -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" `
+            -Dgtest_force_shared_crt=ON -DCMAKE_POLICY_VERSION_MINIMUM="3.5"
           cmake --build . -j 2 --config Release
           cmake --install . --prefix $env:GTEST_ROOT
 
@@ -167,7 +169,7 @@ jobs:
         run: |
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
-          cmake CMakeLists.txt
+          cmake CMakeLists.txt -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           make
           make install
           brew update
@@ -177,12 +179,12 @@ jobs:
       - name: build gtest (macos)
         if: matrix.os == 'macos-14'
         env:
-          GTESTROOT: ~/gtest
+          GTESTROOT: /Users/runner/work/gtest
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
           git clone -b release-1.8.0 https://github.com/google/googletest
           cd googletest
-          cmake CMakeLists.txt -DCMAKE_INSTALL_PREFIX=${GTESTROOT}
+          cmake CMakeLists.txt -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_INSTALL_PREFIX=${GTESTROOT}
           make
           make install
           brew update
@@ -317,7 +319,7 @@ jobs:
       - name: build test (serial, linux emscripten)
         if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
         env:
-          GTESTROOT: ~/gtest
+          GTESTROOT: /home/runner/work/gtest
         run: |
           source emsdk/emsdk_env.sh
           export BLAS_ROOT=$PWD/xbuildenv/pyodide-root/packages/.libs
@@ -325,7 +327,7 @@ jobs:
           cd build_test
           cmake --version
           CC=emcc CXX=em++ cmake .. -DUSE_MKL=OFF -DARCH_EMSCRIPTEN=ON -DF77UNDERSCORE=ON -DBUILD_TEST=ON \
-              -DGTEST_ROOT=${GTESTROOT} -DLARGE_BOND=ON -DUSE_COMPLEX=OFF -DUSE_DMRG=ON \
+              -DGTest_ROOT=${GTESTROOT} -DLARGE_BOND=ON -DUSE_COMPLEX=OFF -DUSE_DMRG=ON \
               -DSIMPLE_TEST=ON -DCMAKE_BUILD_TYPE=Release -DOMP_LIB=NONE
           emmake make -j 2
 
@@ -357,7 +359,7 @@ jobs:
       - name: build test (serial, macos-arm64)
         if: matrix.parallel == 'serial' && matrix.os == 'macos-14'
         env:
-          GTESTROOT: ~/gtest
+          GTESTROOT: /Users/runner/work/gtest
           MACOSX_DEPLOYMENT_TARGET: '11.0'
         run: |
           mkdir build_test
@@ -365,7 +367,7 @@ jobs:
           cmake --version
           export OMPROOT=$(brew --prefix libomp)
           cmake .. -DUSE_MKL=OFF -DARCH_ARM64=ON -DCMAKE_CXX_FLAGS=-I${OMPROOT}/include -DBUILD_TEST=ON -DOMP_LIB=OMP \
-            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=OFF -DUSE_SG=ON -DGTEST_ROOT=${GTESTROOT} \
+            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=OFF -DUSE_SG=ON -DGTest_ROOT=${GTESTROOT} \
             -DFORCE_LIB_ABS_PATH=OFF -DSIMPLE_TEST=ON
           make -j 2
 
