@@ -251,6 +251,11 @@ class MPSTools:
                 bmps.unload_tensor(i)
                 mr.deallocate()
                 r.deallocate()
+                if i == bmps.n_sites - 1 and tensors[i].rank == 3:
+                    for block in tensors[i].blocks:
+                        block.reduced = block.reduced.reshape(block.reduced.shape[:2])
+                        block.q_labels = block.q_labels[:2]
+                        block.rank = 2
             elif (
                 i == bmps.center and i != 0 and i != bmps.n_sites - 2 and bmps.dot == 2
             ):

@@ -4471,6 +4471,7 @@ class DMRGDriver:
         fused_contraction_multiplication=False,
         fused_contraction_rotation=False,
         lowmem_numerical_transform=False,
+        real_density_matrix=False,
     ):
         """
         Perform the ground state and/or excited state Density Matrix
@@ -4604,6 +4605,9 @@ class DMRGDriver:
             lowmem_numerical_transform : bool
                 If True, numerical transform will be done with copying to save peak memory.
                 Defult is False.
+            real_density_matrix : bool
+                If True, will use the real part of the density matrix for truncation.
+                Should not be used for complex Hamiltonians. Default is False.
 
         Returns:
             energy : float|complex or list[float|complex]
@@ -4729,7 +4733,8 @@ class DMRGDriver:
         dmrg.store_seq_data = store_seq_data
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
-        dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
+        if real_density_matrix:
+            dmrg.trunc_type = dmrg.trunc_type | bw.b.TruncationTypes.RealDensityMatrix
         if kernel is not None:
             # need to keep Python derived class in memory (stored in self)
             self.dmrg_kernel = self.make_kernel(kernel=kernel)
