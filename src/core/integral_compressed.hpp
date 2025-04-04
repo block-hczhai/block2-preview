@@ -170,7 +170,8 @@ struct CompressedV1Int<FL, typename enable_if<is_complex<FL>::value>::type> {
     size_t size() const { return m; }
     void clear() { cps_data->clear(); }
     FL &operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) {
-        return reinterpret_cast<FL &>((*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2]);
+        return reinterpret_cast<FL &>(
+            (*cps_data)[((((size_t)i * n + j) * n + k) * n + l) * 2]);
     }
     FL operator()(uint16_t i, uint16_t j, uint16_t k, uint16_t l) const {
         return FL(
@@ -854,7 +855,7 @@ template <typename FL> struct CompressedFCIDUMP : FCIDUMP<FL> {
         }
         cps_ts = rts, cps_vgs = rvgs, cps_vabs = rvabs, cps_vs = rvs;
         if (params.count("orbsym"))
-            FCIDUMP<FL>::template set_orb_sym(FCIDUMP<FL>::reorder(
+            FCIDUMP<FL>::template set_orb_sym<int>(FCIDUMP<FL>::reorder(
                 FCIDUMP<FL>::template orb_sym<int>(), ord));
         freeze();
     }

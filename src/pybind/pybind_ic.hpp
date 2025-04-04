@@ -70,8 +70,7 @@ class_<Set, holder_type> bind_set_block2(handle scope, std::string const &name,
     cl.def(
         "add", [](Set &s, const T &value) { s.insert(value); }, arg("x"),
         "Add an item to the set.");
-    cl.def(
-        "clear", [](Set &s) { s.clear(); }, "Clear the contents.");
+    cl.def("clear", [](Set &s) { s.clear(); }, "Clear the contents.");
     cl.def(
         "__iter__",
         [](Set &s) {
@@ -428,26 +427,24 @@ template <typename S = void> void bind_wick(py::module &m) {
         .def_static("spin_free", &WickTensor::spin_free)
         .def_static("spin_free_density_matrix",
                     &WickTensor::spin_free_density_matrix)
-        .def_static("cre",
-                    (WickTensor(*)(const WickIndex &, const string &)) &
-                        WickTensor::cre,
-                    py::arg("index"), py::arg("name") = string("C"))
+        .def_static(
+            "cre",
+            (WickTensor(*)(const WickIndex &, const string &))&WickTensor::cre,
+            py::arg("index"), py::arg("name") = string("C"))
         .def_static("cre",
                     (WickTensor(*)(const WickIndex &,
                                    const map<WickIndexTypes, set<WickIndex>> &,
-                                   const string &)) &
-                        WickTensor::cre,
+                                   const string &))&WickTensor::cre,
                     py::arg("index"), py::arg("idx_map"),
                     py::arg("name") = string("C"))
-        .def_static("des",
-                    (WickTensor(*)(const WickIndex &, const string &)) &
-                        WickTensor::des,
-                    py::arg("index"), py::arg("name") = string("D"))
+        .def_static(
+            "des",
+            (WickTensor(*)(const WickIndex &, const string &))&WickTensor::des,
+            py::arg("index"), py::arg("name") = string("D"))
         .def_static("des",
                     (WickTensor(*)(const WickIndex &,
                                    const map<WickIndexTypes, set<WickIndex>> &,
-                                   const string &)) &
-                        WickTensor::des,
+                                   const string &))&WickTensor::des,
                     py::arg("index"), py::arg("idx_map"),
                     py::arg("name") = string("D"))
         .def("get_spin_tag", &WickTensor::get_spin_tag)
@@ -580,14 +577,15 @@ template <typename S = void> void bind_wick(py::module &m) {
                     py::arg("idx_map"),
                     py::arg("perm_map") =
                         map<pair<string, int>, vector<WickPermutation>>())
-        .def_static("split_index_types_static",
-                    (WickExpr(*)(const WickString &)) &
-                        WickExpr::split_index_types)
+        .def_static(
+            "split_index_types_static",
+            (WickExpr(*)(const WickString &))&WickExpr::split_index_types)
         .def("split_index_types",
-             (WickExpr(WickExpr::*)() const) & WickExpr::split_index_types)
+             (WickExpr(WickExpr::*)() const)&WickExpr::split_index_types)
         .def("to_einsum", &WickExpr::to_einsum, py::arg("x"),
              py::arg("first_eq") = false,
-             py::arg("intermediate_name") = string(""))
+             py::arg("intermediate_name") = string(""),
+             py::arg("sep_const") = true)
         .def_static("to_einsum_add_indent", &WickExpr::to_einsum_add_indent,
                     py::arg("x"), py::arg("indent") = 4)
         .def("substitute", &WickExpr::substitute)

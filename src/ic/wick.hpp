@@ -1634,7 +1634,7 @@ struct WickExpr {
         return os;
     }
     string to_einsum(const WickTensor &x, bool first_eq = false,
-                     const string &intermediate_name = "") const {
+                     const string &intermediate_name = "", bool sep_const = true) const {
         stringstream ss;
         bool first = true;
         bool has_br = false;
@@ -1705,12 +1705,12 @@ struct WickExpr {
             if (term.factor != 1.0)
                 ss << term.factor << " * ";
             for (auto &wt : term.tensors)
-                if (wt.indices.size() == 0)
+                if (wt.indices.size() == 0 && sep_const)
                     ss << wt.name << " * ";
             ss << "np.einsum('";
             first = false;
             for (auto &wt : term.tensors) {
-                if (wt.indices.size() == 0)
+                if (wt.indices.size() == 0 && sep_const)
                     continue;
                 if (first)
                     ss << ",";
@@ -1732,7 +1732,7 @@ struct WickExpr {
                 ss << mp[wi];
             ss << "'";
             for (auto &wt : term.tensors) {
-                if (wt.indices.size() == 0)
+                if (wt.indices.size() == 0 && sep_const)
                     continue;
                 ss << ", " << wt.name;
                 if (wt.type == WickTensorTypes::KroneckerDelta ||

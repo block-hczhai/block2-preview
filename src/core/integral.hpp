@@ -1383,9 +1383,9 @@ template <typename FL> struct FCIDUMP {
         data = rdata->data();
         ts = rts, vgs = rvgs, vabs = rvabs, vs = rvs;
         if (params.count("orbsym"))
-            set_orb_sym(reorder(orb_sym<int>(), ord));
+            set_orb_sym<int>(reorder(orb_sym<int>(), ord));
         if (params.count("ksym"))
-            set_k_sym(reorder(k_sym<int>(), ord));
+            set_k_sym<int>(reorder(k_sym<int>(), ord));
     }
     virtual void rescale(typename const_fl_type<FL>::FL shift = 0) {
         typename const_fl_type<FL>::FL x = 0;
