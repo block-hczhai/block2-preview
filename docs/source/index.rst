@@ -9,7 +9,7 @@
    ######
 
 **block2** is an efficient and highly scalable implementation of the Density Matrix Renormalization Group (DMRG)
-for quantum chemistry, based on Matrix Product Operator (MPO) formalism.
+for quantum chemistry, based on the Matrix Product Operator (MPO) formalism.
 The code is highly optimized for production level calculation of realistic systems.
 It also provides plenty of options for tuning performance and new algorithm development.
 
@@ -29,7 +29,7 @@ Custom model Hamiltonians can be supported via a Python interface:
 `SU(2) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html>`_,
 `SU(3) Heisenberg <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model>`_,
 `t-J <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model>`_,
-`Correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions>`_.
+`correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions>`_.
 
 Source code: https://github.com/block-hczhai/block2-preview
 
