@@ -26,6 +26,7 @@ try:
     from block2 import WickIndexTypes, WickIndex, WickExpr, WickTensor, WickPermutation
     from block2 import MapWickIndexTypesSet, MapPStrIntVectorWickPermutation, VectorWickTensor
     from block2 import MapStrPWickTensorExpr, VectorWickIndex, WickTensorTypes
+    from block2 import VectorWickPermutation, VectorInt16
 except ImportError:
     raise RuntimeError("block2 needs to be compiled with '-DUSE_IC=ON'!")
 import numpy as np
@@ -44,9 +45,6 @@ def init_parsers():
     perm_map[("L", 2)] = WickPermutation.non_symmetric()
     perm_map[("L", 4)] = WickPermutation.pair_symmetric(2, False)
     perm_map[("L", 6)] = WickPermutation.pair_symmetric(3, False)
-    perm_map[("R", 2)] = WickPermutation.non_symmetric()
-    perm_map[("R", 4)] = WickPermutation.pair_symmetric(2, False)
-    perm_map[("R", 6)] = WickPermutation.pair_symmetric(3, False)
 
     defs = MapStrPWickTensorExpr()
     p = lambda x: WickExpr.parse(x, idx_map, perm_map).substitute(defs)
@@ -58,9 +56,9 @@ def init_parsers():
         defs[name] = WickExpr.parse_def(x, idx_map, perm_map)
         return defs
 
-    return p, pt, pd, px, defs
+    return p, pt, pd, px, defs, perm_map
 
-P, PT, PD, PX, DEF = init_parsers() # parsers
+P, PT, PD, PX, DEF, PM = init_parsers() # parsers
 SP = lambda x: x.simplify() # just simplify
 FC = lambda x: x.expand(0).simplify() # fully contracted
 NR = lambda x: x.expand(-1, True, False).simplify() # normal order
@@ -71,9 +69,6 @@ h2 = 0.5 * P("SUM <pqrs> V[pqrs] E2[pq,rs]")
 t1 = P("SUM <ai> T[ia] E1[a,i]")
 t2 = 0.5 * P("SUM <abij> T[ijab] E1[a,i] E1[b,j]")
 t3 = (1.0 / 6.0) * P("SUM <abcijk> T[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
-l1 = P("SUM <ai> L[ia] E1[i,a]")
-l2 = 0.5 * P("SUM <abij> L[ijab] E1[i,a] E1[j,b]")
-l3 = (1.0 / 6.0) * P("SUM <abcijk> L[ijkabc] E1[i,a] E1[j,b] E1[k,c]")
 ex1 = P("E1[i,a]")
 ex2 = P("E1[i,a] E1[j,b]")
 ex3 = P("E1[i,a] E1[j,b] E1[k,c]")
@@ -99,29 +94,38 @@ HBarTermsSDT = lambda h, t: [
 def make_diag(eq, name, outt):
     diag_terms = []
     for term in eq.terms:
-        deltas, tensors = [], []
-        if any(wt.name == name and len(wt.indices) != len(outt.indices) for wt in term.tensors):
-            continue
-        for wt in term.tensors:
-            if wt.name == name:
-                for wi, oi in zip(wt.indices, outt.indices):
-                    deltas.append(WickTensor("delta", VectorWickIndex([wi, oi]), WickPermutation.two_symmetric(),
-                          WickTensorTypes.KroneckerDelta))
-            else:
-                tensors.append(wt)
-        diag_terms.append(term.__class__(VectorWickTensor(tensors + deltas), term.ctr_indices, term.factor))
+        ix = [ip for ip, wt in enumerate(term.tensors) if wt.name == name][0]
+        if len(term.tensors[ix].indices) == len(outt.indices):
+            for perm in term.tensors[ix].perms:
+                deltas, tensors = [], []
+                for wt in term.tensors:
+                    if wt.name == name:
+                        for wi, oi in zip((wt * perm).indices, outt.indices):
+                            deltas.append(WickTensor("delta", VectorWickIndex([wi, oi]),
+                                WickPermutation.two_symmetric(), WickTensorTypes.KroneckerDelta))
+                    else:
+                        tensors.append(wt)
+                diag_terms.append(term.__class__(VectorWickTensor(tensors + deltas), term.ctr_indices,
+                    term.factor))
     return eq.__class__(eq.terms.__class__(diag_terms))
 
-def purify(eq, outt):
+def purify(eq, outt, ipea=0):
     pure_terms = []
     for term in eq.terms:
         nt, mp = len(term.tensors) + 1, {}
         mi = max([(len(wt.indices) + 1) // 2 for wt in list(term.tensors) + [outt]])
         for it, wt in enumerate(list(term.tensors) + [outt]):
+            if it == nt - 1 or wt.name == 'R':
+                nn = len(wt.indices) + abs(ipea)
+                nl, nr = (nn - max(ipea, 0)) // 2, (nn + min(ipea, 0)) // 2
+            else:
+                nl, nr = len(wt.indices) // 2, len(wt.indices) // 2
             for ii, wi in enumerate(wt.indices):
-                x = (ii - len(wt.indices) % 2) % max(1, len(wt.indices) // 2)
-                mp[wi] = mp.get(wi, []) + [it * mi + (x if len(wt.indices) % 2 == 0 else
-                    (-it * mi + (nt - 1) * mi if ii == 0 else x + 1))]
+                x = (ii + max(nl, nr) - nl if ii < nl else ii - nl + max(nl, nr) - nr) % max(nl, nr)
+                if (ii < nl and nl == max(nl, nr) and ii < nl - nr) or (ii >= nl and nr == max(nl, nr) and ii - nl < nr - nl):
+                    mp[wi] = mp.get(wi, []) + [(nt - 1) * mi + x]
+                else:
+                    mp[wi] = mp.get(wi, []) + [it * mi + x]
         parex = list(range(nt * mi))
         cnt = [0] * nt * mi
         def findx(x):
@@ -152,6 +156,9 @@ def to_tensor_eqs(eqs, outt):
         nmls = [len(x) for x in script.split('->')[0].split(',')]
         nms = ['=' if x.startswith('ident') else x[:-l] for x, l in zip(zz[1:-1], nmls)]
         idxs = ['?' * l if x.startswith('ident') else x[-l:] for x, l in zip(zz[1:-1], nmls)]
+        idxs += [''.join([xx.types.name[0] for xx in outt.indices])]
+        nms += ['X']
+        nms = [{'V': 'H', 'F': 'H'}.get(x, x) for x in nms]
         tensor_eqs.append((f, script, idxs, nms))
     return tensor_eqs
 
@@ -173,6 +180,9 @@ def get_cc_eqs(t_order, normal_ord=True):
     return tensor_eqs
 
 def get_cc_lambda_eqs(t_order, normal_ord=True):
+    l1 = P("SUM <ai> L[ia] E1[i,a]")
+    l2 = 0.5 * P("SUM <abij> L[ijab] E1[i,a] E1[j,b]")
+    l3 = (1.0 / 6.0) * P("SUM <abcijk> L[ijkabc] E1[i,a] E1[j,b] E1[k,c]")
     I = P("1")
     t = [SP(t1 + t2), SP(t1 + t2 + t3)][t_order - 2]
     l = [SP(l1 + l2), SP(l1 + l2 + l3)][t_order - 2]
@@ -189,47 +199,68 @@ def get_cc_lambda_eqs(t_order, normal_ord=True):
         tensor_eqs += [to_tensor_eqs(l3_eq, PT("X[ijkabc]"))]
     return tensor_eqs
 
-def get_eomcc_eqs(t_order, eom_t, normal_ord=True):
-    if eom_t == 'ee':
+def get_eomcc_eqs(t_order, ipea=0, normal_ord=True):
+    if ipea == 0:
+        PM[("R", 2)] = WickPermutation.non_symmetric()
+        PM[("R", 4)] = WickPermutation.pair_symmetric(2, False)
+        PM[("R", 6)] = WickPermutation.pair_symmetric(3, False)
         r1 = P("SUM <ai> R[ia] E1[a,i]")
         r2 = 0.5 * P("SUM <abij> R[ijab] E1[a,i] E1[b,j]")
         r3 = (1.0 / 6.0) * P("SUM <abcijk> R[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
+        k1 = P("SUM <ai> K[ia] E1[a,i]")
+        k2 = 0.5 * P("SUM <abij> K[ijab] E1[a,i] E1[b,j]")
+        k3 = (1.0 / 6.0) * P("SUM <abcijk> K[ijkabc] E1[a,i] E1[b,j] E1[c,k]")
         pt1, pt2, pt3 = PT("X[ia]"), PT("X[ijab]"), PT("X[ijkabc]")
         ex1, ex2, ex3 = P("E1[i,a]"), P("E1[i,a] E1[j,b]"), P("E1[i,a] E1[j,b] E1[k,c]")
-    elif eom_t == 'ip':
+    elif ipea == -1:
+        PM[("R", 1)] = WickPermutation.non_symmetric()
+        PM[("R", 3)] = WickPermutation.non_symmetric()
+        PM[("R", 5)] = VectorWickPermutation([WickPermutation(VectorInt16([0, 2, 1, 4, 3]))])
         r1 = P("SUM <i> R[i] D1[i]")
         r2 = P("SUM <bij> R[ijb] E1[b,j] D1[i]")
-        r3 = P("SUM <bcijk> R[ijkbc] E1[b,j] E1[c,k] D1[i]")
+        r3 = 0.5 * P("SUM <bcijk> R[ijkbc] E1[b,j] E1[c,k] D1[i]")
+        k1 = P("SUM <i> K[i] D1[i]")
+        k2 = P("SUM <bij> K[ijb] E1[b,j] D1[i]")
+        k3 = 0.5 * P("SUM <bcijk> K[ijkbc] E1[b,j] E1[c,k] D1[i]")
         pt1, pt2, pt3 = PT("X[i]"), PT("X[ijb]"), PT("X[ijkbc]")
         ex1, ex2, ex3 = P("C1[i]"), P("C1[i] E1[j,b]"), P("C1[i] E1[j,b] E1[k,c]")
-    elif eom_t == 'ea':
+    elif ipea == 1:
+        PM[("R", 1)] = WickPermutation.non_symmetric()
+        PM[("R", 3)] = WickPermutation.non_symmetric()
+        PM[("R", 5)] = VectorWickPermutation([WickPermutation(VectorInt16([1, 0, 2, 4, 3]))])
         r1 = P("SUM <a> R[a] C1[a]")
-        r2 = P("SUM <abj> R[abj] C1[a] E1[b,j]")
-        r3 = P("SUM <abcjk> R[abcjk] C1[a] E1[b,j] E1[c,k]")
-        pt1, pt2, pt3 = PT("X[a]"), PT("X[abj]"), PT("X[abcjk]")
+        r2 = P("SUM <abj> R[jab] C1[a] E1[b,j]")
+        r3 = 0.5 * P("SUM <abcjk> R[jkabc] C1[a] E1[b,j] E1[c,k]")
+        k1 = P("SUM <a> K[a] C1[a]")
+        k2 = P("SUM <abj> K[jab] C1[a] E1[b,j]")
+        k3 = 0.5 * P("SUM <abcjk> K[jkabc] C1[a] E1[b,j] E1[c,k]")
+        pt1, pt2, pt3 = PT("X[a]"), PT("X[jab]"), PT("X[jkabc]")
         ex1, ex2, ex3 = P("D1[a]"), P("E1[j,b] D1[a]"), P("E1[j,b] E1[k,c] D1[a]")
     t = [SP(t1 + t2), SP(t1 + t2 + t3)][t_order - 2]
     r = [SP(r1 + r2), SP(r1 + r2 + r3)][t_order - 2]
+    k = [SP(k1 + k2), SP(k1 + k2 + k3)][t_order - 2]
     h = [SP(h1 + h2), SP(h1 + h2 - ehf).substitute(hf)][normal_ord]
     HBarTerms = [HBarTermsSD, HBarTermsSDT][t_order - 2]
     hbar = sum(HBarTerms(h, t)[:5], Z)
-    r1_eq = purify(FC(ex1 * (hbar ^ r)), pt1)
-    r2_eq = purify(FC(ex2 * (hbar ^ r)), pt2)
-    r1_left_eq = purify(FC(r.conjugate() * (hbar ^ ex1.conjugate())), pt1)
-    r2_left_eq = purify(FC(r.conjugate() * (hbar ^ ex2.conjugate())), pt2)
+    r1_eq = purify(FC(ex1 * (hbar ^ r)), pt1, ipea=ipea)
+    r2_eq = purify(FC(ex2 * (hbar ^ r)), pt2, ipea=ipea)
+    r1_left_eq = purify(FC(r.conjugate() * (hbar ^ ex1.conjugate())), pt1, ipea=ipea)
+    r2_left_eq = purify(FC(r.conjugate() * (hbar ^ ex2.conjugate())), pt2, ipea=ipea)
     r1_diag_eq = SP(make_diag(r1_eq, 'R', pt1))
     r2_diag_eq = SP(make_diag(r2_eq, 'R', pt2))
     r1_left_diag_eq = SP(make_diag(r1_left_eq, 'R', pt1))
     r2_left_diag_eq = SP(make_diag(r2_left_eq, 'R', pt2))
+    ovlp_eq = FC(k.conjugate() * r)
     tensor_eqs = [
         [to_tensor_eqs(r1_eq, pt1), to_tensor_eqs(r2_eq, pt2)],
         [to_tensor_eqs(r1_left_eq, pt1), to_tensor_eqs(r2_left_eq, pt2)],
         [to_tensor_eqs(r1_diag_eq, pt1), to_tensor_eqs(r2_diag_eq, pt2)],
         [to_tensor_eqs(r1_left_diag_eq, pt1), to_tensor_eqs(r2_left_diag_eq, pt2)],
+        [to_tensor_eqs(ovlp_eq, PT("X[]"))],
     ]
     if t_order == 3:
-        r3_eq = purify(FC(ex3 * (hbar ^ r)), pt3)
-        r3_left_eq = purify(FC(r.conjugate() * (hbar ^ ex3.conjugate())), pt3)
+        r3_eq = purify(FC(ex3 * (hbar ^ r)), pt3, ipea=ipea)
+        r3_left_eq = purify(FC(r.conjugate() * (hbar ^ ex3.conjugate())), pt3, ipea=ipea)
         r3_diag_eq = SP(make_diag(r3_eq, 'R', pt3))
         r3_left_diag_eq = SP(make_diag(r3_left_eq, 'R', pt3))
         tensor_eqs[0] += [to_tensor_eqs(r3_eq, pt3)]
@@ -429,22 +460,35 @@ def rcc_energy(cc, tamps):
     ener = np.array(0.0, dtype=ints[0].dtype)
     for f, script, idxs, nm in eqs[0]:
         tensors = []
-        for nmx, idx in zip(nm, idxs):
+        for nmx, idx in zip(nm[:-1], idxs[:-1]):
             tensors.append(tamps[len(idx) // 2 - 1] if nmx == 'T' else ints[len(idx) // 2 - 1][tuple(sli[x] for x in idx)])
         ener += f * np.einsum(script, *tensors, optimize='optimal')
     return ener
 
-def rt_purify(r):
+def rt_purify(r, ipea=0):
     import itertools, numpy as np
-    r, ip, n = np.copy(r), r.ndim % 2, r.ndim // 2
-    for perm in itertools.combinations(range(n), 3):
-        idxl, idxr = [slice(None)] * n, [slice(None)] * n
+    r, nl, nr = np.copy(r), (r.ndim - ipea) // 2, (r.ndim + ipea) // 2
+    for perm in itertools.combinations(range(nl), 3):
+        idxl = [slice(None)] * nl
         for p in perm:
             idxl[p] = np.mgrid[:r.shape[p]]
+        r[tuple(idxl) + (slice(None), ) * nr] = 0.0
+    for perm in itertools.combinations(range(nr), 3):
+        idxr = [slice(None)] * nr
         for p in perm:
-            idxr[p] = np.mgrid[:r.shape[p + n]]
-        r[(slice(None), ) * ip + tuple(idxl) + (slice(None), ) * n] = 0.0
-        r[(slice(None), ) * ip + (slice(None), ) * n + tuple(idxr)] = 0.0
+            idxr[p] = np.mgrid[:r.shape[p + nl]]
+        r[(slice(None), ) * nl + tuple(idxr)] = 0.0
+    return r
+
+def rt_multi_scale(r, ipea=0):
+    import itertools, numpy as np
+    r, nl, nr, n = np.copy(r), (r.ndim - ipea) // 2, (r.ndim + ipea) // 2, (r.ndim - abs(ipea)) // 2
+    for perm in itertools.combinations(range(n), 2):
+        idx = [slice(None)] * (nl + nr)
+        for p in perm:
+            idx[nl - n + p] = np.mgrid[:r.shape[p + nl - n]][:, None]
+            idx[nl + nr - n + p] = np.mgrid[:r.shape[p + nl + nr - n]][None, :]
+        r[tuple(idx)] /= 2
     return r
 
 def rcc_update_amps(cc, tamps):
@@ -460,10 +504,12 @@ def rcc_update_amps(cc, tamps):
     for kk in range(0, cc.order):
         for f, script, idxs, nm in eqs[kk + 1]:
             tensors = []
-            for nmx, idx in zip(nm, idxs):
+            for nmx, idx in zip(nm[:-1], idxs[:-1]):
                 tensors.append(tamps[len(idx) // 2 - 1] if nmx == 'T' else ints[len(idx) // 2 - 1][tuple(sli[x] for x in idx)])
             ts_new[kk] += f * np.einsum(script, *tensors, optimize='optimal')
         ts_new[kk] = rt_purify(ts_new[kk])
+    ts_new = rt_unsymm_amps(rt_symm_amps(ts_new, cc.symm_schemes, ipea=0), cc.symm_schemes, ipea=0)
+    for kk in range(0, cc.order):
         xi, xa, xt = 'ijklmnop'[:kk + 1], 'abcdefgh'[:kk + 1], tamps[kk]
         for ii, aa in zip(xi, xa):
             ts_new[kk] += np.einsum('%s,%s%s->%s%s' % (ii, xi, xa, xi, xa), fii, xt, optimize='optimal')
@@ -485,11 +531,13 @@ def rcc_update_lambda(cc, lamps, tamps):
     for kk in range(0, cc.order):
         for f, script, idxs, nm in eqs[kk]:
             tensors = []
-            for nmx, idx in zip(nm, idxs):
+            for nmx, idx in zip(nm[:-1], idxs[:-1]):
                 tensors.append({'L': lamps, 'T': tamps}[nmx][len(idx) // 2 - 1] if nmx in 'LT'
                     else ints[len(idx) // 2 - 1][tuple(sli[x] for x in idx)])
             ls_new[kk] += f * np.einsum(script, *tensors, optimize='optimal')
         ls_new[kk] = rt_purify(ls_new[kk])
+    ls_new = rt_unsymm_amps(rt_symm_amps(ls_new, cc.symm_schemes, ipea=0), cc.symm_schemes, ipea=0)
+    for kk in range(0, cc.order):
         xi, xa, xt = 'ijklmnop'[:kk + 1], 'abcdefgh'[:kk + 1], lamps[kk]
         for ii, aa in zip(xi, xa):
             ls_new[kk] += np.einsum('%s,%s%s->%s%s' % (ii, xi, xa, xi, xa), fii, xt, optimize='optimal')
@@ -498,34 +546,34 @@ def rcc_update_lambda(cc, lamps, tamps):
         ls_new[kk] /= exx
     return ls_new
 
-def rcc_eom_matmul(cc, eom_t, ramps, tamps, left=False):
+def rcc_eom_matmul(cc, ramps, tamps, left=False, ipea=0):
     import numpy as np
-    ints, n_occ, eqs = cc.ints, cc.n_occ, cc.eom_eqs[eom_t][left]
+    ints, n_occ, eqs = cc.ints, cc.n_occ, cc.eom_eqs[ipea][left]
     sli = {'I': slice(n_occ), 'E': slice(n_occ, None)}
     rs_new = [np.zeros_like(r, dtype=ints[0].dtype) for r in ramps]
     for kk in range(0, cc.order):
         for f, script, idxs, nm in eqs[kk]:
             tensors = []
-            for nmx, idx in zip(nm, idxs):
+            for nmx, idx in zip(nm[:-1], idxs[:-1]):
                 tensors.append({'R': ramps, 'T': tamps}[nmx][(len(idx) + 1) // 2 - 1] if nmx in 'RT'
                     else ints[len(idx) // 2 - 1][tuple(sli[x] for x in idx)])
             rs_new[kk] += f * np.einsum(script, *tensors, optimize='optimal')
-        rs_new[kk] = rt_purify(rs_new[kk])
+        rs_new[kk] = rt_purify(rs_new[kk], ipea=ipea)
     return rs_new
 
-def rcc_eom_matdiag(cc, eom_t, tamps, left=False):
+def rcc_eom_matdiag(cc, tamps, left=False, ipea=0):
     import numpy as np
-    ints, nocc, nvir, eqs = cc.ints, cc.n_occ, cc.n_virt, cc.eom_eqs[eom_t][2 + left]
+    ints, nocc, nvir, eqs = cc.ints, cc.n_occ, cc.n_virt, cc.eom_eqs[ipea][2 + left]
     sli = {'I': slice(nocc), 'E': slice(nocc, None)}
     diags = [0 for _ in tamps]
     for it in range(cc.order):
-        t_shape = [[nocc] * (it + (eom_t != 'ea')), [nvir] * (it + (eom_t != 'ip'))][::2 * (eom_t != 'ea') - 1]
+        t_shape = [[nocc] * (it + 1 - max(ipea, 0)), [nvir] * (it + 1 + min(ipea, 0))]
         t_shape = (*t_shape[0], *t_shape[1])
         diags[it] = np.zeros(t_shape)
     for kk in range(0, cc.order):
         for f, script, idxs, nm in eqs[kk]:
             tensors = []
-            for nmx, idx in zip(nm, idxs):
+            for nmx, idx in zip(nm[:-1], idxs[:-1]):
                 if nmx == '=':
                     tensors.append(np.ones((1, ) * len(idx)))
                 elif nmx == 'delta':
@@ -534,7 +582,18 @@ def rcc_eom_matdiag(cc, eom_t, tamps, left=False):
                     tensors.append(tamps[(len(idx) + 1) // 2 - 1] if nmx in 'T'
                         else ints[len(idx) // 2 - 1][tuple(sli[x] for x in idx)])
             diags[kk] += f * np.einsum(script, *tensors, optimize='optimal')
+        diags[kk] = rt_multi_scale(rt_purify(diags[kk], ipea=ipea), ipea=ipea)
     return diags
+
+def rcc_eom_overlap(cc, xlamps, xramps, ipea=0):
+    import numpy as np
+    rr = 0.0
+    for f, script, idxs, nm in cc.eom_eqs[ipea][4][0]:
+        tensors = []
+        for nmx, idx in zip(nm[:-1], idxs[:-1]):
+            tensors.append({'K': xlamps, 'R': xramps}[nmx][(len(idx) + 1) // 2 - 1])
+        rr += f * np.einsum(script, *tensors, optimize='optimal')
+    return rr
 
 def rt_symm_schemes(n_occ, n_vir, t_ord):
     from pyscf.fci import cistring
@@ -579,11 +638,14 @@ def rt_symm_take(x, symm_t, pats, shapes, masks, addrs):
     addr, shape = (), ()
     x = x.transpose(tuple(p for x in symm_t for p in x[2:]))
     for it, (ov, na) in enumerate([(x[1], x[0]) for x in symm_t if x[0] != 0]):
+        if na == 1:
+            addr = tuple(ix[..., None] for ix in addr) + (np.mgrid[:x.shape[it]][(None, ) * it], )
+            shape = shape + (x.shape[it], )
+            continue
         assert na % 2 == 0
         xparts, xaddrs, xshape, xa, xb = [], [], 0, ov not in [-1, -2], ov in [-1, -3]
         for pi, pj, px in [(pi + 1, pj + 1, x) for pi, ps in enumerate(pats[na // 2]) for pj, px in enumerate(ps) for x in px]:
-            xp = x[(slice(None), ) * it + tuple(masks[pi][xa][p] for p in px[0])][(slice(None), ) * (it + 1)
-                + tuple(masks[pj][xb][p] for p in px[1])]
+            xp = x[(slice(None), ) * it + tuple(masks[pi][xa][p] for p in px[0])][(slice(None), ) * (it + 1) + tuple(masks[pj][xb][p] for p in px[1])]
             xparts.append(xp.reshape((*xp.shape[:it], xp.shape[it] * xp.shape[it + 1], *xp.shape[it + 2:])))
             xaddrs.append((addrs[pi][xa][:, None] * shapes[pj][xb] + addrs[pj][xb][None, :]).ravel() + xshape)
             xshape += shapes[pi][xa] * shapes[pj][xb]
@@ -598,6 +660,10 @@ def rt_symm_untake(x, symm_t, pats, shapes, masks):
     import itertools, numpy as np
     nt, xx = 0, x
     for it, (ov, na) in enumerate([(x[1], x[0]) for x in symm_t if x[0] != 0]):
+        if na == 1:
+            xx = xx.reshape((*xx.shape[:nt], shapes[1][ov], xx.shape[nt] // shapes[1][ov]))
+            nt += 1
+            continue
         assert na % 2 == 0
         nn, xi, xj = na // 2, int(ov not in [-1, -2]), int(ov in [-1, -3])
         z = np.zeros(xx.shape[:nt] + (shapes[1][xi], ) * nn + (shapes[1][xj], ) * nn + x.shape[it + 1:])
@@ -613,35 +679,30 @@ def rt_symm_untake(x, symm_t, pats, shapes, masks):
                     xx[(slice(None), ) * nt + (slice(ic, ic + nnc), ...)].reshape(shape)
         xx = z.transpose(*range(nt), *[nt + p for p in np.argsort(symm_t[it][2:])], *range(nt + na, nt + na + x.ndim - it - 1))
         nt += na
-    return xx
+    xx = xx[tuple([0, slice(None)][x[0] != 0] for x in symm_t)]
+    return xx.transpose(*np.argsort(tuple(p for x in symm_t for p in x[2:])))
 
-def rt_symm_amps(eom_t, ts, symm_schemes):
-    import numpy as np
+def rt_symm_amps(ts, symm_schemes, ipea=0):
     ts = list(ts)
     for it, xt in enumerate(ts):
-        nn = xt.ndim // 2
-        if eom_t == 'ee':
-            ts[it] = rt_symm_take(xt, ((nn * 2, -1, *range(nn * 2)), ), *symm_schemes)
-        else:
-            if eom_t == 'ea':
-                xt = xt.transpose((0, *range(1 + it, 1 + it + it), *range(1, 1 + it)))
-            ts[it] = np.concatenate([rt_symm_take(x, ((nn * 2, -1, *range(nn * 2)), ), *symm_schemes)[None] for x in xt])
+        nl, nr = (xt.ndim + abs(ipea)) // 2 - max(ipea, 0), (xt.ndim + abs(ipea)) // 2 + min(ipea, 0)
+        nn = min(nl, nr)
+        tsymm = (*[(1, 0, i) for i in range(nl - nn)], *[(1, 1, i) for i in range(nl, nl + nr - nn)],
+            (nn * 2, -1, *range(nl - nn, nl), *range(nl + nr - nn, nl + nr)), )
+        ts[it] = rt_symm_take(xt, tsymm, *symm_schemes)
     return ts
 
-def rt_unsymm_amps(eom_t, ts, symm_schemes):
-    import numpy as np
+def rt_unsymm_amps(ts, symm_schemes, has_ref=False, ipea=0):
     ts = list(ts)
     for it, xt in enumerate(ts):
-        if eom_t == 'ee':
-            ts[it] = rt_symm_untake(xt, (((it + 1) * 2, -1, *range((it + 1) * 2)), ), *symm_schemes[:3])
-        else:
-            ts[it] = np.concatenate([rt_symm_untake(x, ((it * 2, -1, *range(it * 2)), ), *symm_schemes[:3])[None] for x in xt])
-            ts[it] = ts[it].reshape(ts[it].shape[:1 + it + it])
-            if eom_t == 'ea':
-                ts[it] = ts[it].transpose((0, *range(1 + it, 1 + it + it), *range(1, 1 + it)))
+        nx = (it if has_ref else it + 1) + max(abs(ipea) - 1, 0)
+        nl, nr, nn = nx - max(ipea, 0), nx + min(ipea, 0), nx - abs(ipea)
+        tsymm = (*[(1, 0, i) for i in range(nl - nn)], *[(1, 1, i) for i in range(nl, nl + nr - nn)],
+            (min(nl, nr) * 2, -1, *range(nl - nn, nl), *range(nl + nr - nn, nl + nr)), )
+        ts[it] = rt_symm_untake(xt, tsymm, *symm_schemes[:3])
     return ts
 
-def rcc_symm_amplitudes_to_vector(cc, tamps, out=None):
+def rcc_amplitudes_to_vector(cc, tamps, out=None):
     import numpy as np
     vector = np.ndarray(np.sum([t.size for t in tamps]), tamps[0].dtype, buffer=out)
     size = 0
@@ -650,88 +711,75 @@ def rcc_symm_amplitudes_to_vector(cc, tamps, out=None):
         size += t.size
     return vector
 
-def rcc_vector_to_symm_amplitudes(cc, eom_t, vector):
-    z, it, tamps = 0, 0, []
-    while len(tamps) < cc.order:
-        pats, shapes = cc.symm_schemes[:2]
-        if eom_t == 'ee':
-            nz = sum(shapes[pi + 1][0] * shapes[pj + 1][1] * len(px)
-                for pi, ps in enumerate(pats[it + 1]) for pj, px in enumerate(ps))
+def rcc_vector_to_amplitudes(cc, vector, order=None, symm_amps=False, has_ref=False, ipea=0):
+    import numpy as np
+    z, it, tamps = 0, max(abs(ipea) - 1, 0) + (-1 if has_ref else 0), []
+    while it < (order if order is not None else cc.order):
+        if symm_amps:
+            pats, shapes, nn = *cc.symm_schemes[:2], it + 1 - abs(ipea)
+            nz = sum(shapes[pi + (nn != 0)][0] * shapes[pj + (nn != 0)][1] * len(px)
+                for pi, ps in enumerate(pats[nn]) for pj, px in enumerate(ps))
+            nz *= cc.n_occ ** (-min(ipea, 0)) * cc.n_virt ** max(ipea, 0)
             t = vector[z:z + nz]
+            z += nz
         else:
-            nw = {'ip': cc.n_occ, 'ea':cc.n_virt}[eom_t]
-            nz = nw * sum(shapes[pi + (it != 0)][0] * shapes[pj + (it != 0)][1] * len(px)
-                for pi, ps in enumerate(pats[it]) for pj, px in enumerate(ps))
-            t = vector[z:z + nz].reshape((nw, nz // nw))
-        z += nz
+            shape = (*([cc.n_occ] * (it + 1 - max(ipea, 0))), *([cc.n_virt] * (it + 1 + min(ipea, 0))))
+            t = vector[z:z + np.prod(shape, dtype=int)].reshape(shape)
+            z += t.size
         tamps.append(t)
         it += 1
     return tamps
 
-def rcc_eom_amplitudes_to_vector(cc, eom_t, tamps, out=None):
-    return rcc_symm_amplitudes_to_vector(cc, rt_symm_amps(eom_t, tamps, cc.symm_schemes), out=out)
+def rcc_amplitudes_to_symm_vector(cc, tamps, ipea=0, out=None):
+    return rcc_amplitudes_to_vector(cc, rt_symm_amps(tamps, cc.symm_schemes, ipea=ipea), out=out)
 
-def rcc_eom_vector_to_amplitudes(cc, eom_t, vector):
-    return rt_unsymm_amps(eom_t, rcc_vector_to_symm_amplitudes(cc, eom_t, vector), cc.symm_schemes)
+def rcc_symm_vector_to_amplitudes(cc, vector, ipea=0):
+    return rt_unsymm_amps(rcc_vector_to_amplitudes(cc, vector, cc.order, symm_amps=True, ipea=ipea), cc.symm_schemes, ipea=ipea)
 
-def eomcc_kernel(cc, eom_t, rampss=None, tamps=None, left=False, nroots=1, max_cycle=200, tol=1e-6):
+def eomcc_kernel(cc, ipea=0, rampss=None, tamps=None, left=False, nroots=1, max_cycle=200, tol=1e-6):
     import numpy as np
-    if eom_t not in cc.eom_eqs:
-        cc.eom_eqs[eom_t] = get_eomcc_eqs(cc.order, eom_t)
+    if ipea not in cc.eom_eqs:
+        cc.eom_eqs[ipea] = get_eomcc_eqs(cc.order, ipea)
     if tamps is None:
         tamps = cc.tamps
-    diag = cc.eom_amplitudes_to_vector(eom_t, cc.eom_matdiag(eom_t, tamps=tamps, left=left))
+    diag = cc.eom_amplitudes_to_vector(cc.eom_matdiag(tamps=tamps, left=left, ipea=ipea), ipea=ipea)
     if rampss is None:
         rampss = [[0 for _ in range(cc.order)] for _ in range(nroots)]
         nocc, nvir = cc.n_occ, cc.n_virt
+        shapes = []
+        for it in range(cc.order):
+            t_shape = [[nocc] * (it + 1 - max(ipea, 0)), [nvir] * (it + 1 + min(ipea, 0))]
+            shapes.append((*t_shape[0], *t_shape[1]))
         for ir in range(nroots):
             for it in range(cc.order):
-                t_shape = [[nocc] * (it + (eom_t != 'ea')), [nvir] * (it + (eom_t != 'ip'))][::2 * (eom_t != 'ea') - 1]
-                t_shape = (*t_shape[0], *t_shape[1])
-                rampss[ir][it] = np.zeros(t_shape)
-        rampss = [cc.eom_amplitudes_to_vector(eom_t, ramps) for ramps in rampss]
-        for ir, idx in enumerate(np.argsort(diag)[:nroots]):
+                rampss[ir][it] = np.zeros(shapes[it])
+        rampss = [cc.eom_amplitudes_to_vector(ramps, ipea=ipea) for ramps in rampss]
+        for ir, idx in enumerate(np.argsort(diag[:max(np.prod(shapes[0], dtype=int), nroots)])[:nroots]):
             rampss[ir][idx] = 1.0
     def hop(vector):
-        ramps = cc.eom_vector_to_amplitudes(eom_t, vector)
-        ramps = cc.eom_matmul(eom_t, ramps, tamps, left=left)
-        return cc.eom_amplitudes_to_vector(eom_t, ramps)
-    eners, cc.rampss, _ = davidson_non_hermi(hop, rampss, diag, iprint=cc.verbose >= 5, conv_thrd=tol, max_iter=max_cycle * nroots)
+        ramps = cc.eom_vector_to_amplitudes(vector, ipea=ipea)
+        ramps = cc.eom_matmul(ramps, tamps, left=left, ipea=ipea)
+        return cc.eom_amplitudes_to_vector(ramps, ipea=ipea)
+    def dot(lvec, rvec):
+        xlamps = cc.eom_vector_to_amplitudes(lvec, ipea=ipea)
+        xramps = cc.eom_vector_to_amplitudes(rvec, ipea=ipea)
+        return cc.eom_overlap(xlamps, xramps, ipea=ipea)
+    _, rampss, _ = davidson_non_hermi(hop, rampss, diag, dot=None, iprint=cc.verbose >= 4, conv_thrd=tol, max_iter=max_cycle * nroots)
+    eners, rampss, _ = davidson_non_hermi(hop, rampss, diag, dot=dot, iprint=cc.verbose >= 4, conv_thrd=tol, max_iter=max_cycle * nroots)
+    cc.rampss = rampss
     return eners[0] if nroots == 1 else eners, cc.rampss
 
-def rcc_amplitudes_to_vector(cc, tamps, out=None):
-    import numpy as np
-    nov = cc.n_occ * cc.n_virt
-    size = 0
-    for it, _ in enumerate(tamps):
-        size += nov ** (it + 1)
-    vector = np.ndarray(size, tamps[0].dtype, buffer=out)
-    size = 0
-    for it, t in enumerate(tamps):
-        vector[size : size + nov ** (it + 1)] = t.ravel()
-        size += nov ** (it + 1)
-    return vector
-
-def rcc_vector_to_amplitudes(cc, vector):
-    nocc, nvir, nov = cc.n_occ, cc.n_virt, cc.n_occ * cc.n_virt
-    z, it, tamps = 0, 0, []
-    while z < vector.size:
-        t = vector[z:z + nov ** (it + 1)].reshape((*([nocc] * (it + 1)), *([nvir] * (it + 1))))
-        tamps.append(t)
-        z += nov ** (it + 1)
-        it += 1
-    return tamps
-
-def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, deflation_min_size=2,
+def davidson_non_hermi(hop, ket, adiag=None, dot=None, max_iter=5000, conv_thrd=1E-7, deflation_min_size=2,
                        deflation_max_size=30, iprint=False, imag_cutoff=1E-3):
     import numpy as np, time, scipy.linalg
+    dot = dot if dot is not None else np.dot
     k = len(ket)
     if deflation_min_size < k:
         deflation_min_size = k
     for i in range(k):
         for j in range(i):
-            ket[i] += -np.dot(ket[j].conj(), ket[i]) * ket[j]
-        ket[i] /= np.linalg.norm(ket[i])
+            ket[i] += -dot(ket[j].conj(), ket[i]) * ket[j]
+        ket[i] /= dot(ket[i].conj(), ket[i]) ** 0.5
     sigma = [None] * k
     q, ck, msig, m, xiter = ket[0], 0, 0, k, 0
     while xiter < max_iter:
@@ -743,7 +791,7 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
         atilde = np.zeros((m, m), dtype=sigma[0].dtype)
         for i in range(m):
             for j in range(m):
-                atilde[i, j] = np.dot(ket[i].conj(), sigma[j])
+                atilde[i, j] = dot(ket[i].conj(), sigma[j])
         eigv, alpha = scipy.linalg.eig(atilde)
         ixv = np.argsort(np.abs(eigv.imag))
         max_imag_tol = max(imag_cutoff, np.abs(eigv[min(m, k) - 1].imag))
@@ -775,7 +823,7 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
         for i in range(ck):
             q = sigmax[i].copy()
             q += (-eigv[i]) * bx[i]
-            qq = np.dot(q.conj(), q)
+            qq = dot(q.conj(), q)
             if np.sqrt(qq) >= conv_thrd:
                 ck = i
                 break
@@ -785,7 +833,7 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
             qs[ick] = sigmax[ck + ick].copy()
             qs[ick] += (-eigv[ck + ick]) * bx[ck + ick]
         q = qs[0]
-        qq = np.dot(q.conj(), q)
+        qq = dot(q.conj(), q)
         if iprint:
             print("%5d %5d %5d %15.8f %9.2E T = %.3f" % (xiter, m, ck, eigv[ck], qq, time.perf_counter() - tx))
         if adiag is not None:
@@ -793,8 +841,8 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
                 t = bx[iq].copy()
                 mask = np.abs(eigv[ck] - adiag) > 1E-12
                 t[mask] = t[mask] / (eigv[ck] - adiag[mask])
-                numerator = np.dot(t.conj(), qs[iq])
-                denominator = np.dot(bx[iq].conj(), t)
+                numerator = dot(t.conj(), qs[iq])
+                denominator = dot(bx[iq].conj(), t)
                 qs[iq] += (-numerator / denominator) * bx[iq]
                 qs[iq][mask] = qs[iq][mask] / (eigv[ck] - adiag[mask])
         if qq < 0 or np.sqrt(qq) < conv_thrd:
@@ -808,12 +856,13 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
                 qs = [x.copy() for x in bx]
             for iq in range(len(qs)):
                 for j in range(m):
-                    qs[iq] += (-np.dot(ket[j].conj(), qs[iq])) * ket[j]
+                    qs[iq] += (-dot(ket[j].conj(), qs[iq])) * ket[j]
                 for j in range(iq):
                     if qs[j] is not None:
-                        qs[iq] += (-np.dot(qs[j].conj(), qs[iq])) * qs[j]
-                if np.linalg.norm(qs[iq]) > 1E-14:
-                    qs[iq] /= np.linalg.norm(qs[iq])
+                        qs[iq] += (-dot(qs[j].conj(), qs[iq])) * qs[j]
+                qnr = dot(qs[iq].conj(), qs[iq]) ** 0.5
+                if qnr > 1E-14:
+                    qs[iq] /= qnr
                 else:
                     qs[iq] = None
             qs = [x for x in qs if x is not None]
@@ -826,7 +875,7 @@ def davidson_non_hermi(hop, ket, adiag=None, max_iter=5000, conv_thrd=1E-7, defl
                 m += 1
         if xiter == max_iter:
             break
-    ket[:k] = bx[:k]
+    ket[:ck] = bx[:ck]
     return eigv[:k], ket[:k], xiter
 
 class RCC:
@@ -842,7 +891,7 @@ class RCC:
         pats = rt_symm_patterns(self.order, True)
         shapes, masks, addrs = rt_symm_schemes(self.n_occ, self.n_virt, self.order)[0]
         self.symm_schemes = pats, shapes, masks, addrs
-        self.mo_energy = mf.mo_energy
+        self.mo_energy = mf.mo_energy[nfrozen:]
         self.stdout = sys.stdout
         self.verbose = mf.verbose if verbose is None else verbose
         self.diis = diis
@@ -857,17 +906,18 @@ class RCC:
     init_amps = rcc_init_amps
     amplitudes_to_vector = rcc_amplitudes_to_vector
     vector_to_amplitudes = rcc_vector_to_amplitudes
-    eom_amplitudes_to_vector = rcc_eom_amplitudes_to_vector
-    eom_vector_to_amplitudes = rcc_eom_vector_to_amplitudes
+    eom_amplitudes_to_vector = rcc_amplitudes_to_symm_vector
+    eom_vector_to_amplitudes = rcc_symm_vector_to_amplitudes
     eom_matdiag = rcc_eom_matdiag
     eom_matmul = rcc_eom_matmul
+    eom_overlap = rcc_eom_overlap
     get_init_guess = rcc_init_amps
     run_diis = cc_run_diis
     kernel = cc_kernel
     solve_lambda = cc_lamb_kernel
-    ipccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, 'ip', *args, **kwargs)
-    eaccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, 'ea', *args, **kwargs)
-    eeccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, 'ee', *args, **kwargs)
+    ipccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, ipea=-1, *args, **kwargs)
+    eaccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, ipea=1, *args, **kwargs)
+    eeccsd = lambda cc, *args, **kwargs: eomcc_kernel(cc, ipea=0, *args, **kwargs)
     e_tot = property(lambda self: self.e_hf + self.e_corr)
 
 def RCCSD(*args, **kwargs):
@@ -898,21 +948,21 @@ if __name__ == "__main__":
     mcc = RCCSD(mf, verbose=4, diis=False)
     mcc.kernel()
     assert abs(mcc.e_tot - -76.23486335601116) < 1E-6
-    wl1, wl2 = mcc.solve_lambda()
-    print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
-    print('E-ee (right) = ', mcc.eeccsd(max_cycle=1000)[0])
     print('E-ip (right) = ', mcc.ipccsd()[0])
     print('E-ip ( left) = ', mcc.ipccsd(left=True)[0])
     print('E-ea (right) = ', mcc.eaccsd()[0])
     print('E-ea ( left) = ', mcc.eaccsd(left=True)[0])
+    print('E-ee (right) = ', mcc.eeccsd()[0])
+    wl1, wl2 = mcc.solve_lambda()
+    print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
 
     mcc = RCCSDT(mf, verbose=4, diis=False)
     mcc.kernel()
     assert abs(mcc.e_tot - -76.2385041073466) < 1E-6
-    wl1, wl2, wl3 = mcc.solve_lambda()
-    print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
-    print('E-ee (right) = ', mcc.eeccsd(max_cycle=1000)[0])
     print('E-ip (right) = ', mcc.ipccsd()[0])
     print('E-ip ( left) = ', mcc.ipccsd(left=True)[0])
     print('E-ea (right) = ', mcc.eaccsd()[0])
     print('E-ea ( left) = ', mcc.eaccsd(left=True)[0])
+    print('E-ee (right) = ', mcc.eeccsd()[0])
+    wl1, wl2, wl3 = mcc.solve_lambda()
+    print('lambda diff = ', np.linalg.norm(xl1 - wl1), np.linalg.norm(xl2 - wl2))
