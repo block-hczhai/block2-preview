@@ -398,8 +398,8 @@ size_t printable(const T &p, const Args &...) {
 }
 
 template <typename T>
-auto printable(const T &p) -> decltype(declval<ostream &>() << declval<T>(),
-                                       T()) {
+auto printable(const T &p)
+    -> decltype(declval<ostream &>() << declval<T>(), T()) {
     return p;
 }
 
@@ -696,8 +696,8 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
                                                          self->n);
                                })
         .def("load_data",
-             (void(StateInfo<S>::*)(const string &)) & StateInfo<S>::load_data)
-        .def("save_data", (void(StateInfo<S>::*)(const string &) const) &
+             (void (StateInfo<S>::*)(const string &))&StateInfo<S>::load_data)
+        .def("save_data", (void (StateInfo<S>::*)(const string &) const) &
                               StateInfo<S>::save_data)
         .def("allocate",
              [](StateInfo<S> *self, int length) { self->allocate(length); })
@@ -710,13 +710,13 @@ template <typename S> void bind_state_info(py::module &m, const string &name) {
              py::arg("target") = S(S::invalid))
         .def("find_state", &StateInfo<S>::find_state)
         .def_static("tensor_product_ref",
-                    (StateInfo<S>(*)(const StateInfo<S> &, const StateInfo<S> &,
-                                     const StateInfo<S> &)) &
-                        StateInfo<S>::tensor_product)
+                    (StateInfo<S> (*)(
+                        const StateInfo<S> &, const StateInfo<S> &,
+                        const StateInfo<S> &))&StateInfo<S>::tensor_product)
         .def_static(
             "tensor_product",
-            (StateInfo<S>(*)(const StateInfo<S> &, const StateInfo<S> &, S)) &
-                StateInfo<S>::tensor_product)
+            (StateInfo<S> (*)(const StateInfo<S> &, const StateInfo<S> &,
+                              S))&StateInfo<S>::tensor_product)
         .def_static("get_connection_info", &StateInfo<S>::get_connection_info)
         .def_static("filter", &StateInfo<S>::filter)
         .def("__repr__", [](StateInfo<S> *self) {
@@ -848,14 +848,14 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
             })
         .def("clear", &SparseMatrix<S, FL>::clear)
         .def("load_data",
-             (void(SparseMatrix<S, FL>::*)(
+             (void (SparseMatrix<S, FL>::*)(
                  const string &, bool,
-                 const shared_ptr<Allocator<uint32_t>> &)) &
-                 SparseMatrix<S, FL>::load_data,
+                 const shared_ptr<Allocator<uint32_t>>
+                     &))&SparseMatrix<S, FL>::load_data,
              py::arg("filename"), py::arg("load_info") = false,
              py::arg("i_alloc") = nullptr)
         .def("save_data",
-             (void(SparseMatrix<S, FL>::*)(const string &, bool) const) &
+             (void (SparseMatrix<S, FL>::*)(const string &, bool) const) &
                  SparseMatrix<S, FL>::save_data,
              py::arg("filename"), py::arg("save_info") = false)
         .def("copy_data_from", &SparseMatrix<S, FL>::copy_data_from)
@@ -868,8 +868,8 @@ template <typename S, typename FL> void bind_fl_sparse(py::module &m) {
              })
         .def("deallocate", &SparseMatrix<S, FL>::deallocate)
         .def("reallocate",
-             (void(SparseMatrix<S, FL>::*)(size_t)) &
-                 SparseMatrix<S, FL>::reallocate,
+             (void (SparseMatrix<S, FL>::*)(
+                 size_t))&SparseMatrix<S, FL>::reallocate,
              py::arg("length"))
         .def("trace", &SparseMatrix<S, FL>::trace)
         .def("norm", &SparseMatrix<S, FL>::norm)
@@ -1209,7 +1209,7 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
              &TensorFunctions<S, FL>::post_numerical_transform)
         .def("substitute_delayed_exprs",
              &TensorFunctions<S, FL>::substitute_delayed_exprs)
-        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor<S, FL>>(
+        .def("delayed_contract", (shared_ptr<DelayedOperatorTensor<S, FL>> (
                                      TensorFunctions<S, FL>::*)(
                                      const shared_ptr<OperatorTensor<S, FL>> &,
                                      const shared_ptr<OperatorTensor<S, FL>> &,
@@ -1217,7 +1217,7 @@ template <typename S, typename FL> void bind_fl_operator(py::module &m) {
                                      OpNamesSet delayed, bool) const) &
                                      TensorFunctions<S, FL>::delayed_contract)
         .def("delayed_contract_simplified",
-             (shared_ptr<DelayedOperatorTensor<S, FL>>(
+             (shared_ptr<DelayedOperatorTensor<S, FL>> (
                  TensorFunctions<S, FL>::*)(
                  const shared_ptr<OperatorTensor<S, FL>> &,
                  const shared_ptr<OperatorTensor<S, FL>> &,
@@ -2248,21 +2248,20 @@ template <typename S = void> void bind_io(py::module &m) {
         .def_static("permutation_parity", &SpinPermTensor::permutation_parity)
         .def_static("find_pattern_perm", &SpinPermTensor::find_pattern_perm)
         .def_static("auto_sort_string",
-                    (pair<string, int>(*)(const vector<uint16_t> &,
-                                          const string &, const string &)) &
-                        SpinPermTensor::auto_sort_string)
-        .def_static(
-            "auto_sort_string",
-            (pair<string, int>(*)(const vector<uint16_t> &, const string &)) &
-                SpinPermTensor::auto_sort_string)
-        .def_static("mul", (SpinPermTensor(*)(const SpinPermTensor &,
-                                              const SpinPermTensor &, int16_t,
-                                              const SU2CG &)) &
-                               SpinPermTensor::mul)
-        .def_static("mul", (SpinPermTensor(*)(
+                    (pair<string, int> (*)(
+                        const vector<uint16_t> &, const string &,
+                        const string &))&SpinPermTensor::auto_sort_string)
+        .def_static("auto_sort_string",
+                    (pair<string, int> (*)(
+                        const vector<uint16_t> &,
+                        const string &))&SpinPermTensor::auto_sort_string)
+        .def_static("mul", (SpinPermTensor (*)(
                                const SpinPermTensor &, const SpinPermTensor &,
-                               const vector<int16_t> &, const SU2CG &)) &
-                               SpinPermTensor::mul)
+                               int16_t, const SU2CG &))&SpinPermTensor::mul)
+        .def_static("mul", (SpinPermTensor (*)(
+                               const SpinPermTensor &, const SpinPermTensor &,
+                               const vector<int16_t> &,
+                               const SU2CG &))&SpinPermTensor::mul)
         .def_static("dot_product", &SpinPermTensor::dot_product)
         .def("simplify", &SpinPermTensor::simplify)
         .def("auto_sort", &SpinPermTensor::auto_sort)
@@ -2981,7 +2980,7 @@ template <typename FL> void bind_matrix(py::module &m) {
                typename GMatrix<FL>::FP conv_thrd,
                typename GMatrix<FL>::FP rel_conv_thrd, int max_iter,
                int soft_max_iter, int deflation_min_size,
-               int deflation_max_size) {
+               int deflation_max_size, DavidsonTypes dav_type) {
                 auto f = [&op](const GMatrix<FL> &b, const GMatrix<FL> &c) {
                     py::array_t<FL> x =
                         (py::array_t<FL>)op(py::array_t<FL>(b.size(), b.data));
@@ -3001,9 +3000,8 @@ template <typename FL> void bind_matrix(py::module &m) {
                         f,
                         GDiagonalMatrix<FL>(diag.mutable_data(),
                                             (MKL_INT)diag.size()),
-                        vs, (typename GMatrix<FL>::FP)0.0,
-                        DavidsonTypes::Normal, ndav, iprint,
-                        (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
+                        vs, (typename GMatrix<FL>::FP)0.0, dav_type, ndav,
+                        iprint, (shared_ptr<ParallelCommunicator<SZ>>)nullptr,
                         conv_thrd, rel_conv_thrd, max_iter, soft_max_iter,
                         deflation_min_size, deflation_max_size),
                     ndav);
@@ -3012,7 +3010,8 @@ template <typename FL> void bind_matrix(py::module &m) {
             py::arg("iprint") = false, py::arg("conv_thrd") = 5E-6,
             py::arg("rel_conv_thrd") = 0.0, py::arg("max_iter") = 5000,
             py::arg("soft_max_iter") = -1, py::arg("deflation_min_size") = 2,
-            py::arg("deflation_max_size") = 50)
+            py::arg("deflation_max_size") = 50,
+            py::arg("dav_type") = DavidsonTypes::Normal)
         .def_static(
             "davidson_generalized",
             [](py::object op, py::object sop, py::array_t<FL> &diag,
@@ -3454,18 +3453,19 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def_static("dot", &GCSRMatrixFunctions<FL>::dot)
         .def_static("sparse_dot", &GCSRMatrixFunctions<FL>::sparse_dot)
         .def_static("iadd", &GCSRMatrixFunctions<FL>::iadd)
-        .def_static("multiply", (void (*)(const GCSRMatrix<FL> &, uint8_t,
-                                          const GCSRMatrix<FL> &, uint8_t,
-                                          GCSRMatrix<FL> &, FL, FL)) &
-                                    GCSRMatrixFunctions<FL>::multiply)
-        .def_static("multiply", (void (*)(const GMatrix<FL> &, uint8_t,
-                                          const GCSRMatrix<FL> &, uint8_t,
-                                          const GMatrix<FL> &, FL, FL)) &
-                                    GCSRMatrixFunctions<FL>::multiply)
-        .def_static("multiply", (void (*)(const GCSRMatrix<FL> &, uint8_t,
-                                          const GMatrix<FL> &, uint8_t,
-                                          const GMatrix<FL> &, FL, FL)) &
-                                    GCSRMatrixFunctions<FL>::multiply);
+        .def_static("multiply",
+                    (void (*)(const GCSRMatrix<FL> &, uint8_t,
+                              const GCSRMatrix<FL> &, uint8_t, GCSRMatrix<FL> &,
+                              FL, FL))&GCSRMatrixFunctions<FL>::multiply)
+        .def_static(
+            "multiply",
+            (void (*)(const GMatrix<FL> &, uint8_t, const GCSRMatrix<FL> &,
+                      uint8_t, const GMatrix<FL> &, FL,
+                      FL))&GCSRMatrixFunctions<FL>::multiply)
+        .def_static("multiply",
+                    (void (*)(const GCSRMatrix<FL> &, uint8_t,
+                              const GMatrix<FL> &, uint8_t, const GMatrix<FL> &,
+                              FL, FL))&GCSRMatrixFunctions<FL>::multiply);
 
     py::class_<GDiagonalMatrix<FL>, shared_ptr<GDiagonalMatrix<FL>>>(
         m, "DiagonalMatrix", py::buffer_protocol())
@@ -3510,35 +3510,32 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("deallocate", &FCIDUMP<FL>::deallocate)
         .def("truncate_small", &FCIDUMP<FL>::truncate_small)
         .def("symmetrize",
-             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(const vector<int> &)) &
-                 FCIDUMP<FL>::symmetrize,
+             (typename GMatrix<FL>::FP (FCIDUMP<FL>::*)(
+                 const vector<int> &))&FCIDUMP<FL>::symmetrize,
              py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
              "Returns summed error in symmetrization\n\n"
              "    Args:\n"
              "        orbsym : in XOR convention")
         .def("symmetrize",
-             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
-                 const vector<uint8_t> &)) &
-                 FCIDUMP<FL>::symmetrize,
+             (typename GMatrix<FL>::FP (FCIDUMP<FL>::*)(
+                 const vector<uint8_t> &))&FCIDUMP<FL>::symmetrize,
              py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
              "Returns summed error in symmetrization\n\n"
              "    Args:\n"
              "        orbsym : in XOR convention")
         .def("symmetrize",
-             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(
-                 const vector<int16_t> &)) &
-                 FCIDUMP<FL>::symmetrize,
+             (typename GMatrix<FL>::FP (FCIDUMP<FL>::*)(
+                 const vector<int16_t> &))&FCIDUMP<FL>::symmetrize,
              py::arg("orbsym"),
              "Remove integral elements that violate point group symmetry. "
              "Returns summed error in symmetrization\n\n"
              "    Args:\n"
              "        orbsym : in Lz convention")
         .def("symmetrize",
-             (typename GMatrix<FL>::FP(FCIDUMP<FL>::*)(const vector<int> &,
-                                                       int)) &
-                 FCIDUMP<FL>::symmetrize,
+             (typename GMatrix<FL>::FP (FCIDUMP<FL>::*)(
+                 const vector<int> &, int))&FCIDUMP<FL>::symmetrize,
              py::arg("k_sym"), py::arg("k_mod"),
              "Remove integral elements that violate k symmetry. "
              "Returns summed error in symmetrization")
@@ -3598,8 +3595,8 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("g2e_8fold", &FCIDUMP<FL>::g2e_8fold, py::arg("sl") = -1,
              py::arg("sr") = -1)
         .def("abs_h1e_matrix", &FCIDUMP<FL>::abs_h1e_matrix)
-        .def("reorder", (void(FCIDUMP<FL>::*)(const vector<uint16_t> &)) &
-                            FCIDUMP<FL>::reorder)
+        .def("reorder", (void (FCIDUMP<FL>::*)(
+                            const vector<uint16_t> &))&FCIDUMP<FL>::reorder)
         .def("rescale", &FCIDUMP<FL>::rescale, py::arg("shift") = (FL)0.0)
         .def("rotate", &FCIDUMP<FL>::rotate)
         .def("deep_copy", &FCIDUMP<FL>::deep_copy)
@@ -3807,17 +3804,17 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
              py::arg("conja"), py::arg("b"), py::arg("conjb"), py::arg("c"),
              py::arg("scale"), py::arg("cfactor"))
         .def("rotate",
-             (void(BatchGEMMSeq<FL>::*)(
+             (void (BatchGEMMSeq<FL>::*)(
                  const GMatrix<FL> &, const GMatrix<FL> &, const GMatrix<FL> &,
-                 uint8_t, const GMatrix<FL> &, uint8_t, FL)) &
-                 BatchGEMMSeq<FL>::rotate,
+                 uint8_t, const GMatrix<FL> &, uint8_t,
+                 FL))&BatchGEMMSeq<FL>::rotate,
              py::arg("a"), py::arg("c"), py::arg("bra"), py::arg("conj_bra"),
              py::arg("ket"), py::arg("conj_ket"), py::arg("scale"))
         .def("rotate",
-             (void(BatchGEMMSeq<FL>::*)(
+             (void (BatchGEMMSeq<FL>::*)(
                  const GMatrix<FL> &, bool, const GMatrix<FL> &, bool,
-                 const GMatrix<FL> &, const GMatrix<FL> &, FL)) &
-                 BatchGEMMSeq<FL>::rotate,
+                 const GMatrix<FL> &, const GMatrix<FL> &,
+                 FL))&BatchGEMMSeq<FL>::rotate,
              py::arg("a"), py::arg("conj_a"), py::arg("c"), py::arg("conj_c"),
              py::arg("bra"), py::arg("ket"), py::arg("scale"))
         .def("tensor_product_diagonal",
@@ -3833,12 +3830,12 @@ template <typename FL> void bind_fl_matrix(py::module &m) {
         .def("deallocate", &BatchGEMMSeq<FL>::deallocate)
         .def("simple_perform", &BatchGEMMSeq<FL>::simple_perform)
         .def("auto_perform",
-             (void(BatchGEMMSeq<FL>::*)(const GMatrix<FL> &)) &
-                 BatchGEMMSeq<FL>::auto_perform,
+             (void (BatchGEMMSeq<FL>::*)(
+                 const GMatrix<FL> &))&BatchGEMMSeq<FL>::auto_perform,
              py::arg("v") = GMatrix<FL>(nullptr, 0, 0))
         .def("auto_perform",
-             (void(BatchGEMMSeq<FL>::*)(const vector<GMatrix<FL>> &)) &
-                 BatchGEMMSeq<FL>::auto_perform,
+             (void (BatchGEMMSeq<FL>::*)(
+                 const vector<GMatrix<FL>> &))&BatchGEMMSeq<FL>::auto_perform,
              py::arg("vs"))
         .def("perform", &BatchGEMMSeq<FL>::perform)
         .def("clear", &BatchGEMMSeq<FL>::clear)
@@ -3897,19 +3894,19 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
                     py::arg("elem_type"),
                     py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order",
-             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+             (shared_ptr<GeneralFCIDUMP<FL>> (GeneralFCIDUMP<FL>::*)(
                  const string &, bool, typename GeneralFCIDUMP<FL>::FP) const) &
                  GeneralFCIDUMP<FL>::adjust_order,
              py::arg("fermionic_ops"), py::arg("merge") = true,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order",
-             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+             (shared_ptr<GeneralFCIDUMP<FL>> (GeneralFCIDUMP<FL>::*)(
                  bool, bool, typename GeneralFCIDUMP<FL>::FP) const) &
                  GeneralFCIDUMP<FL>::adjust_order,
              py::arg("merge") = true, py::arg("is_drt") = false,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order",
-             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+             (shared_ptr<GeneralFCIDUMP<FL>> (GeneralFCIDUMP<FL>::*)(
                  const vector<shared_ptr<SpinPermScheme>> &, bool, bool,
                  typename GeneralFCIDUMP<FL>::FP) const) &
                  GeneralFCIDUMP<FL>::adjust_order,
@@ -3917,7 +3914,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
              py::arg("is_drt") = false,
              py::arg("cutoff") = (typename GeneralFCIDUMP<FL>::FP)0.0)
         .def("adjust_order",
-             (shared_ptr<GeneralFCIDUMP<FL>>(GeneralFCIDUMP<FL>::*)(
+             (shared_ptr<GeneralFCIDUMP<FL>> (GeneralFCIDUMP<FL>::*)(
                  const vector<shared_ptr<GeneralSymmPermScheme<FL>>> &, bool,
                  bool, typename GeneralFCIDUMP<FL>::FP) const) &
                  GeneralFCIDUMP<FL>::adjust_order,
@@ -4000,16 +3997,16 @@ template <typename S = void> void bind_symmetry(py::module &m) {
         .def_static("invalid_init", &SAny::invalid_init)
         .def_static("empty_types_init", &SAny::empty_types_init)
         .def_static("empty_values_init", &SAny::empty_values_init)
-        .def_static("init_su2", (SAny(*)(int, int, int)) & SAny::init_su2,
+        .def_static("init_su2", (SAny (*)(int, int, int))&SAny::init_su2,
                     py::arg("n") = 0, py::arg("twos") = 0, py::arg("pg") = 0)
-        .def_static("init_su2", (SAny(*)(int, int, int, int)) & SAny::init_su2,
+        .def_static("init_su2", (SAny (*)(int, int, int, int))&SAny::init_su2,
                     py::arg("n"), py::arg("twos_low"), py::arg("twos"),
                     py::arg("pg"))
         .def_static("init_sz", &SAny::init_sz, py::arg("n") = 0,
                     py::arg("twos") = 0, py::arg("pg") = 0)
-        .def_static("init_sgf", (SAny(*)(int, int)) & SAny::init_sgf,
+        .def_static("init_sgf", (SAny (*)(int, int))&SAny::init_sgf,
                     py::arg("n") = 0, py::arg("pg") = 0)
-        .def_static("init_sgf", (SAny(*)(int, int, int)) & SAny::init_sgf,
+        .def_static("init_sgf", (SAny (*)(int, int, int))&SAny::init_sgf,
                     py::arg("n"), py::arg("twos"), py::arg("pg"))
         .def_static("init_sgb", &SAny::init_sgb, py::arg("n") = 0,
                     py::arg("pg") = 0)
