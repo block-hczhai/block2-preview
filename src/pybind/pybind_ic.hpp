@@ -241,7 +241,12 @@ template <typename S = void> void bind_nd_array(py::module &m) {
                  } else
                      return py::cast(self->slice(idxs));
              })
+        .def("__mul__", [](NDArray *self, double d) { return *self * d; })
+        .def("__rmul__", [](NDArray *self, double d) { return *self * d; })
         .def(py::self + py::self)
+        .def(py::self - py::self)
+        .def(py::self += py::self)
+        .def(py::self -= py::self)
         .def(-py::self)
         .def_buffer([](NDArray *self) -> py::buffer_info {
             vector<ssize_t> shape(self->ndim()), strides(self->ndim());
@@ -429,22 +434,22 @@ template <typename S = void> void bind_wick(py::module &m) {
                     &WickTensor::spin_free_density_matrix)
         .def_static(
             "cre",
-            (WickTensor(*)(const WickIndex &, const string &))&WickTensor::cre,
+            (WickTensor (*)(const WickIndex &, const string &))&WickTensor::cre,
             py::arg("index"), py::arg("name") = string("C"))
         .def_static("cre",
-                    (WickTensor(*)(const WickIndex &,
-                                   const map<WickIndexTypes, set<WickIndex>> &,
-                                   const string &))&WickTensor::cre,
+                    (WickTensor (*)(const WickIndex &,
+                                    const map<WickIndexTypes, set<WickIndex>> &,
+                                    const string &))&WickTensor::cre,
                     py::arg("index"), py::arg("idx_map"),
                     py::arg("name") = string("C"))
         .def_static(
             "des",
-            (WickTensor(*)(const WickIndex &, const string &))&WickTensor::des,
+            (WickTensor (*)(const WickIndex &, const string &))&WickTensor::des,
             py::arg("index"), py::arg("name") = string("D"))
         .def_static("des",
-                    (WickTensor(*)(const WickIndex &,
-                                   const map<WickIndexTypes, set<WickIndex>> &,
-                                   const string &))&WickTensor::des,
+                    (WickTensor (*)(const WickIndex &,
+                                    const map<WickIndexTypes, set<WickIndex>> &,
+                                    const string &))&WickTensor::des,
                     py::arg("index"), py::arg("idx_map"),
                     py::arg("name") = string("D"))
         .def("get_spin_tag", &WickTensor::get_spin_tag)
@@ -579,9 +584,9 @@ template <typename S = void> void bind_wick(py::module &m) {
                         map<pair<string, int>, vector<WickPermutation>>())
         .def_static(
             "split_index_types_static",
-            (WickExpr(*)(const WickString &))&WickExpr::split_index_types)
+            (WickExpr (*)(const WickString &))&WickExpr::split_index_types)
         .def("split_index_types",
-             (WickExpr(WickExpr::*)() const)&WickExpr::split_index_types)
+             (WickExpr (WickExpr::*)() const) & WickExpr::split_index_types)
         .def("to_einsum", &WickExpr::to_einsum, py::arg("x"),
              py::arg("first_eq") = false,
              py::arg("intermediate_name") = string(""),

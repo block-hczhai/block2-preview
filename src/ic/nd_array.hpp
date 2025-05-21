@@ -370,22 +370,31 @@ struct NDArray {
     NDArray operator*(double d) const {
         NDArray r(shape, strides);
         size_t sz = size();
-        for (size_t i = 0; i < sz; i++) {
-            const ssize_t ii = linear_index(i);
-            r.data[ii] = data[ii] * d;
-        }
+        vector<int> idx;
+        if (reorder_c(idx).is_c_order())
+            for (size_t i = 0; i < sz; i++)
+                r.data[i] = data[i] * d;
+        else
+            for (size_t i = 0; i < sz; i++) {
+                const ssize_t ii = linear_index(i);
+                r.data[ii] = data[ii] * d;
+            }
         return r;
     }
     NDArray operator-() const {
         NDArray r(shape, strides);
         size_t sz = size();
-        for (size_t i = 0; i < sz; i++) {
-            const ssize_t ii = linear_index(i);
-            r.data[ii] = -data[ii];
-        }
+        vector<int> idx;
+        if (reorder_c(idx).is_c_order())
+            for (size_t i = 0; i < sz; i++)
+                r.data[i] = -data[i];
+        else
+            for (size_t i = 0; i < sz; i++) {
+                const ssize_t ii = linear_index(i);
+                r.data[ii] = -data[ii];
+            }
         return r;
     }
-    NDArray operator-(const NDArray &other) const { return *this + (-other); }
     NDArray operator+=(const NDArray &other) {
         assert(shape == other.shape);
         size_t sz = size();
@@ -430,10 +439,15 @@ struct NDArray {
             // FNAME(dgemm)("N", "N", &inc, &n, &inc, &x, &x, &inc, other.data,
             // &inc, &x, r.data, &inc);
             const size_t r_size = r.size();
-            for (size_t i = 0; i < r_size; i++) {
-                size_t ii = linear_index(i);
-                r.data[ii] = data[ii] + other.data[ii];
-            }
+            vector<int> idx;
+            if (reorder_c(idx).is_c_order())
+                for (size_t i = 0; i < r_size; i++)
+                    r.data[i] = data[i] + other.data[i];
+            else
+                for (size_t i = 0; i < r_size; i++) {
+                    size_t ii = linear_index(i);
+                    r.data[ii] = data[ii] + other.data[ii];
+                }
         } else {
             size_t cur = 1;
             for (int i = r.ndim() - 1; i >= 0; cur *= r.shape[i--])
@@ -441,6 +455,44 @@ struct NDArray {
                     r.strides[i] = cur;
             transpose(*this, r, {}, 1.0, 0.0);
             transpose(other, r, {}, 1.0, 1.0);
+        }
+        return r;
+    }
+    NDArray operator-(const NDArray &other) const {
+        assert(ndim() == other.ndim());
+        int dim = ndim();
+        bool same_stride = true;
+        NDArray r(shape, strides);
+        for (int i = 0; i < dim; i++) {
+            if (strides[i] != 0 && other.strides[i] != 0) {
+                assert(shape[i] == other.shape[i]);
+                same_stride = same_stride && strides[i] == other.strides[i];
+            } else if (strides[i] != 0)
+                same_stride = false;
+            else if (other.strides[i] != 0) {
+                r.shape[i] = other.shape[i];
+                r.strides[i] = other.strides[i];
+                same_stride = false;
+            }
+        }
+        if (same_stride) {
+            const size_t r_size = r.size();
+            vector<int> idx;
+            if (reorder_c(idx).is_c_order())
+                for (size_t i = 0; i < r_size; i++)
+                    r.data[i] = data[i] - other.data[i];
+            else
+                for (size_t i = 0; i < r_size; i++) {
+                    size_t ii = linear_index(i);
+                    r.data[ii] = data[ii] - other.data[ii];
+                }
+        } else {
+            size_t cur = 1;
+            for (int i = r.ndim() - 1; i >= 0; cur *= r.shape[i--])
+                if (r.strides[i] != 0)
+                    r.strides[i] = cur;
+            transpose(*this, r, {}, 1.0, 0.0);
+            transpose(other, r, {}, -1.0, 1.0);
         }
         return r;
     }
@@ -769,7 +821,8 @@ struct NDArray {
             }
             // handle ellipses of operands
             if (op_features[iop] & _ELLIP) {
-                int nchar = (int)(arrs[iop].ndim() - (operands[iop].length() - 3));
+                int nchar =
+                    (int)(arrs[iop].ndim() - (operands[iop].length() - 3));
                 if (!ellip_determined) {
                     stringstream ss;
                     for (int j = 0; j < nchar; j++) {
