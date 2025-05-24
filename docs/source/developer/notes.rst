@@ -24,7 +24,7 @@ Clone the block2 repo: ::
 
 Edit the ``setup.py``: ::
 
-    '-DPYTHON_EXECUTABLE={}'.format('/opt/python/cp37-cp37m/bin/python3'),
+    '-DPython3_EXECUTABLE={}'.format('/opt/python/cp37-cp37m/bin/python3'),
 
 Instal dependencies and build: ::
 

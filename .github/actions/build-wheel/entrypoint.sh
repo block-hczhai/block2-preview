@@ -23,11 +23,17 @@ elif [ "${PYTHON_VERSION}" = "3.12" ]; then
     PY_VER=cp312-cp312
 elif [ "${PYTHON_VERSION}" = "3.13" ]; then
     PY_VER=cp313-cp313
+elif [ "${PYTHON_VERSION}" = "3.13t" ]; then
+    PY_VER=cp313-cp313t
+elif [ "${PYTHON_VERSION}" = "3.14-dev" ]; then
+    PY_VER=cp314-cp314
+elif [ "${PYTHON_VERSION}" = "3.14t-dev" ]; then
+    PY_VER=cp314-cp314t
 fi
 
 PY_EXE=/opt/python/"${PY_VER}"/bin/python3
-sed -i "/DPYTHON_EXECUTABLE/a \                '-DPYTHON_EXECUTABLE=${PY_EXE}'," setup.py
-sed -i "/DPYTHON_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
+sed -i "/DPython3_EXECUTABLE/a \                '-DPython3_EXECUTABLE=${PY_EXE}'," setup.py
+sed -i "/DPython3_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
 
 ls -l /opt/python
 /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
@@ -47,11 +53,11 @@ if [ "${PARALLEL}" = "mpi" ]; then
     export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
     /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mpi4py
     sed -i "/DUSE_MKL/a \                '-DMPI=ON'," setup.py
-    sed -i "/intel-openmp/d" setup.py
-    sed -i "/pybind11/d" setup.py
-    sed -i "/mkl-include/d" setup.py
-    sed -i "/cmake>/d" setup.py
+    sed -i "/intel-openmp/d" pyproject.toml
+    sed -i "/mkl-include/d" pyproject.toml
+    sed -i "/cmake>/d" pyproject.toml
     sed -i "s/name=\"block2\"/name=\"block2-mpi\"/g" setup.py
+    sed -i "s/name = \"block2\"/name = \"block2-mpi\"/g" pyproject.toml
     sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmpi", "libopen-pal", "libopen-rte"]): continue' \
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
     sed -i '/for soname, src_path/a \                if "libmpi.so" in soname: patcher.replace_needed(fn, soname, "libmpi.so")' \

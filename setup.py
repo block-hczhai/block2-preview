@@ -87,7 +87,7 @@ class CMakeBuild(build_ext):
                 "-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_{}={}".format(
                     cfg.upper(), self.build_temp
                 ),
-                "-DPYTHON_EXECUTABLE_HINT={}".format(sys.executable),
+                "-DPython3_EXECUTABLE_HINT={}".format(sys.executable),
                 "-DUSE_MKL=ON",
                 "-DBUILD_LIB=ON",
                 "-DBUILD_EXE=ON",
@@ -144,27 +144,16 @@ build.sub_commands = [c for c in build.sub_commands if c[0] == "build_ext"] + [
 
 setup(
     name="block2",
-    version="0.1.10",
+    version="0.5.4",
     packages=find_packages(),
     ext_modules=[CMakeExt("block2")],
     cmdclass={"build_ext": CMakeBuild, "build_scripts": BinBuild},
-    license="LICENSE",
     description="""An efficient MPO implementation of DMRG for quantum chemistry.""",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Huanchen Zhai, Henrik R. Larsson, Seunghoon Lee, and Zhi-Hao Cui",
     author_email="hczhai.ok@gmail.com",
     url="https://github.com/block-hczhai/block2-preview",
-    install_requires=[
-        "mkl==2021.4",
-        "mkl-include",
-        "intel-openmp",
-        "numpy",
-        "cmake>=3.19",
-        "scipy",
-        "psutil",
-        "pybind11!=2.10.3,!=2.10.4,!=2.11.0,!=2.11.1",
-    ],
     scripts=[
         "pyblock2/driver/block2main",
         "pyblock2/driver/gaopt",

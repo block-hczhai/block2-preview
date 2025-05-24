@@ -1,0 +1,33 @@
+[build-system]
+requires = [
+    "setuptools>=42.0.0",
+    "pybind11!=2.10.3,!=2.10.4,!=2.11.0,!=2.11.1",
+    "cmake>=3.19",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "block2"
+description = "An efficient MPO implementation of DMRG for quantum chemistry."
+version = "0.5.4"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [
+    { name = "Huanchen Zhai", email = "hczhai.ok@gmail.com" },
+    { name = "Henrik R. Larsson" },
+    { name = "Seunghoon Lee" },
+    { name = "Zhi-Hao Cui" },
+]
+requires-python = ">= 3.6"
+dependencies = [
+    "mkl==2021.4.0",
+    "mkl-include",
+    "intel-openmp",
+    "numpy",
+    "scipy",
+    "psutil",
+]
+
+[project.urls]
+Homepage = "https://github.com/block-hczhai/block2-preview"
