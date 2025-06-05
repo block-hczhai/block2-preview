@@ -224,15 +224,15 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True, frozen=ic.frozen)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
-    ncore = mc.ncore
+    ncore = mc.ncore - ic.frozen
     ncas = mc.ncas
     nocc = ncore + ncas
-    nvirt = len(ic.mo_energy) - nocc
+    nvirt = len(ic.mo_energy) - nocc - ic.frozen
     mdict = {
         "E1": E1, "E2": E2, "E3": E3, "E4": E4,
         "deltaII": np.eye(ncore), "deltaEE": np.eye(nvirt),
@@ -288,7 +288,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sw, su = np.linalg.eigh(ss.reshape((ns * 2, ns * 2)))
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
-            sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], -1))
+            sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], sf.shape[-1]))
             exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("v%s,v%sx->x" % (rkey, rkey), g, sf, optimize=True)
@@ -309,7 +309,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             sw, su = np.linalg.eigh(s.reshape((ns, ns)))
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
-            sf = sf.reshape((*s.shape[:len(s.shape) // 2], -1))
+            sf = sf.reshape((*s.shape[:len(s.shape) // 2], sf.shape[-1]))
             exec(pt2_beqs, globals(), { "b": b, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("%s,%sx->x" % (rkey, rkey), g, sf, optimize=True)
@@ -341,7 +341,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         " | ".join(["%s = %7.2f" % (k, v) for k, v in ic.sub_times.items()]))
 
 class WickICMRREPT2(lib.StreamObject):
-    def __init__(self, mc):
+    def __init__(self, mc, frozen=0):
         self._mc = mc
         assert mc.canonicalization
         self._scf = mc._scf
@@ -350,6 +350,7 @@ class WickICMRREPT2(lib.StreamObject):
         self.stdout = self.mol.stdout
         self.e_corr = None
         self.trunc_thrds = 1E-4
+        self.frozen = frozen
 
     @property
     def e_tot(self):

@@ -59,35 +59,40 @@ class _ChemistsERIs:
     def __init__(self, mol=None):
         self.mol = mol
     
-    def _common_init_(self, mc, mo_coeff=None):
+    def _common_init_(self, mc, mo_coeff=None, frozen=0):
         if mo_coeff is None:
             mo_coeff = mc.mo_coeff
-        self.ncore = mc.ncore
+        self.ncore = mc.ncore - frozen
         self.ncas = mc.ncas
         self.nocc = self.ncore + self.ncas
-        ncore = mc.ncore
-        dmcore = np.dot(mo_coeff[:,:ncore], mo_coeff[:,:ncore].T)
+        dmcore = np.dot(mo_coeff[:, :mc.ncore], mo_coeff[:, :mc.ncore].T)
         vj, vk = mc._scf.get_jk(mc.mol, dmcore)
         vhfcore = mo_coeff.conj().T @ (vj * 2 - vk) @ mo_coeff
         self.h1eff = mo_coeff.conj().T @ mc.get_hcore() @ mo_coeff + vhfcore
+        self.h1eff = self.h1eff[frozen:, frozen:]
     
     get_chem = get_chem_eri
     get_phys = get_phys_eri
     get_h1 = get_h1_eri
     get_h1eff = get_h1eff_eri
 
-def init_eris(mc, mo_coeff=None, mrci=False):
+def init_eris(mc, mo_coeff=None, mrci=False, frozen=0):
     from pyscf import ao2mo, lib
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
-    nmo, ncore, ncas = mo_coeff.shape[1], mc.ncore, mc.ncas
+    nmo, ncore, ncas = mo_coeff.shape[1] - frozen, mc.ncore - frozen, mc.ncas
     nocc = ncore + ncas
     nvir = nmo - nocc
     eris = _ChemistsERIs()
-    eris._common_init_(mc, mo_coeff)
+    eris._common_init_(mc, mo_coeff, frozen=frozen)
     if mrci:
-        h1e = mo_coeff.conj().T @ mc._scf.get_hcore() @ mo_coeff
-        g2e = ao2mo.restore(1, ao2mo.kernel(mc._scf.mol, mo_coeff), nmo)
+        hveff_ao = 0
+        if frozen != 0:
+            core_dmao = 2 * mo_coeff[:, :frozen] @ mo_coeff[:, :frozen].T.conj()
+            vj, vk = mc._scf.get_jk(mc.mol, core_dmao)
+            hveff_ao = vj - 0.5 * vk
+        h1e = mo_coeff[:, frozen:].conj().T @ (mc._scf.get_hcore() + hveff_ao) @ mo_coeff[:, frozen:]
+        g2e = ao2mo.restore(1, ao2mo.kernel(mc._scf.mol, mo_coeff[:, frozen:]), nmo)
         eris.known = ['vvca', 'aaca', 'cvca', 'cvaa', 'cvcv', 'caac', 'avaa',
                       'vacc', 'aacc', 'avva', 'avcv', 'accc', 'vaca', 'vvaa',
                       'aaaa', 'vvvv', 'vccc', 'vvva', 'vvvc', 'cccc', 'vvcc']
@@ -104,6 +109,7 @@ def init_eris(mc, mo_coeff=None, mrci=False):
         nwav = nmo - ncore # w = a + v
         if mc._scf._eri is None:
             mc._scf._eri = mc._scf.mol.intor('int2e', aosym='s8')
+        mo_coeff = mo_coeff[:, frozen:]
         pwxx = ao2mo.incore.half_e1(mc._scf._eri,
             (mo_coeff[:, :nocc], mo_coeff[:, ncore:]), compact=False)
         pwxx = pwxx.reshape((nocc, nwav, -1))

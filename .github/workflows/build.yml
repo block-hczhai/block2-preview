@@ -576,7 +576,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - if: matrix.os == 'macos-13' || matrix.os == 'macos-14' || matrix.os == 'windows-2022'
+
+      - if: matrix.os == 'windows-2022' && matrix.python == '3.13t'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.3t'
+
+      - if: matrix.os == 'macos-13' || matrix.os == 'macos-14' || (matrix.os == 'windows-2022' && matrix.python != '3.13t')
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}

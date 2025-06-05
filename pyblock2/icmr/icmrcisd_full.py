@@ -150,14 +150,14 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, nroots=1):
     if pdms is None:
         pdms = eri_helper.init_pdms(mc=mc, pdm_eqs=pdm_eqs)
     if eris is None:
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=mo_coeff, mrci=True, frozen=ic.frozen)
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
-    ncore = mc.ncore
+    ncore = mc.ncore - ic.frozen
     ncas = mc.ncas
     nocc = ncore + ncas
-    nvirt = len(ic.mo_energy) - nocc
+    nvirt = len(ic.mo_energy) - nocc - ic.frozen
     mdict = {
         "E1": E1, "E2": E2, "E3": E3, "E4": E4,
         "deltaII": np.eye(ncore), "deltaEE": np.eye(nvirt),
@@ -250,7 +250,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, nroots=1):
         ic.__class__.__name__, ic.e_tot + ic.de_dav_q, ic.e_corr + ic.de_dav_q)
 
 class WickICMRCISD(lib.StreamObject):
-    def __init__(self, mc):
+    def __init__(self, mc, frozen=0):
         self._mc = mc
         self._scf = mc._scf
         self.mol = self._scf.mol
@@ -258,6 +258,7 @@ class WickICMRCISD(lib.StreamObject):
         self.stdout = self.mol.stdout
         self.e_corr = None
         self.mrci_thrds = 1E-10
+        self.frozen = frozen
 
     @property
     def e_tot(self):

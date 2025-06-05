@@ -266,17 +266,17 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff, frozen=ic.frozen)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
-    ncore = mc.ncore
+    ncore = mc.ncore - ic.frozen
     ncas = mc.ncas
     nocc = ncore + ncas
-    nvirt = len(ic.mo_energy) - nocc
-    orbeI = ic.mo_energy[:ncore]
-    orbeE = ic.mo_energy[nocc:]
+    nvirt = len(ic.mo_energy) - nocc - ic.frozen
+    orbeI = ic.mo_energy[ic.frozen:ic.frozen + ncore]
+    orbeE = ic.mo_energy[ic.frozen + nocc:]
     wkeys = ["wAAAA", "wEAAA", "wEAIA", "wEAAI", "wAAIA", 
              "wEEIA", "wEAII", "wEEAA", "wAAII", "wEEII"]
     mdict = {
@@ -340,8 +340,8 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
             sb = su[:, idx] * (sw[idx] ** 0.5)
-            sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], -1))
-            sb = sb.reshape((2, *s.shape[:len(s.shape) // 2], -1))
+            sf = sf.reshape((2, *s.shape[:len(s.shape) // 2], sf.shape[-1]))
+            sb = sb.reshape((2, *s.shape[:len(s.shape) // 2], sb.shape[-1]))
             exec(pt2_beqs, globals(), { "b": b, "b2": b2, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("v%s,v%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
@@ -364,8 +364,8 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
             idx = sw > ic.trunc_thrds
             sf = su[:, idx] * (sw[idx] ** (-0.5))
             sb = su[:, idx] * (sw[idx] ** 0.5)
-            sf = sf.reshape((*s.shape[:len(s.shape) // 2], -1))
-            sb = sb.reshape((*s.shape[:len(s.shape) // 2], -1))
+            sf = sf.reshape((*s.shape[:len(s.shape) // 2], sf.shape[-1]))
+            sb = sb.reshape((*s.shape[:len(s.shape) // 2], sb.shape[-1]))
             exec(pt2_beqs, globals(), { "b": b, **mdict })
             def trans_forth(g, sf=sf):
                 return np.einsum("%s,%sx->%sx" % (rkey, key[4 - l:-1], key[:9 - l]), g, sf, optimize=True)
@@ -408,7 +408,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         " | ".join(["%s = %7.2f" % (k, v) for k, v in ic.sub_times.items()]))
 
 class WickICNEVPT2(lib.StreamObject):
-    def __init__(self, mc):
+    def __init__(self, mc, frozen=0):
         self._mc = mc
         self._scf = mc._scf
         self.mol = self._scf.mol
@@ -417,6 +417,7 @@ class WickICNEVPT2(lib.StreamObject):
         self.e_corr = None
         self.canonicalized = False
         self.trunc_thrds = 1E-4
+        self.frozen = frozen
 
     @property
     def e_tot(self):

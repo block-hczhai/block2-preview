@@ -245,17 +245,17 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         tpdms = time.perf_counter() - t
     if eris is None:
         t = time.perf_counter()
-        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff)
+        eris = eri_helper.init_eris(mc=mc, mo_coeff=ic.mo_coeff, frozen=ic.frozen)
         teris = time.perf_counter() - t
     ic.eris = eris
     assert isinstance(eris, eri_helper._ChemistsERIs)
     E1, E2, E3, E4 = pdms
-    ncore = mc.ncore
+    ncore = mc.ncore - ic.frozen
     ncas = mc.ncas
     nocc = ncore + ncas
-    nvirt = len(ic.mo_energy) - nocc
-    orbeI = ic.mo_energy[:ncore]
-    orbeE = ic.mo_energy[nocc:]
+    nvirt = len(ic.mo_energy) - nocc - ic.frozen
+    orbeI = ic.mo_energy[ic.frozen:ic.frozen + ncore]
+    orbeE = ic.mo_energy[ic.frozen + nocc:]
     wkeys = ["wAAAA", "wEAAA", "wEAIA", "wEAAI", "wAAIA", 
              "wEEIA", "wEAII", "wEEAA", "wAAII", "wEEII"]
     mdict = {
@@ -351,7 +351,7 @@ def kernel(ic, mc=None, mo_coeff=None, pdms=None, eris=None, root=None, iprint=N
         " | ".join(["%s = %7.2f" % (k, v) for k, v in ic.sub_times.items()]))
 
 class WickICNEVPT2(lib.StreamObject):
-    def __init__(self, mc):
+    def __init__(self, mc, frozen=0):
         self._mc = mc
         self._scf = mc._scf
         self.mol = self._scf.mol
@@ -359,6 +359,7 @@ class WickICNEVPT2(lib.StreamObject):
         self.stdout = self.mol.stdout
         self.canonicalized = False
         self.e_corr = None
+        self.frozen = frozen
 
     @property
     def e_tot(self):
