@@ -190,7 +190,7 @@ def pmloc(mol, mocoeff, tol=1e-6, maxcycle=1000, iop=0, iprint=1):
     return ierr, u
 
 
-def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False, dmaos=None):
+def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False, dmaos=None, loc_texts=[]):
 
     mol = mf.mol
 
@@ -395,6 +395,8 @@ def get_uno(mf, do_loc=True, iprint=True, sort_by_ener=False, dmaos=None):
         if iprint:
             print(text + ftext + " " + gtext)
         texts[iorb] = text + "\\n" + gtext
+    
+    loc_texts[:] = texts
 
     return coeff, mo_occ, mo_energy
 

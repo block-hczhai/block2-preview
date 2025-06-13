@@ -740,7 +740,7 @@ class DMRGDriver:
 
         Args:
             symm_type : :class:`SymmetryTypes`
-                The symmetry/floating point number mode. Default: ``SymmetryTypes.SU2``.
+                The symmetry/floating point number mode.
             reset_frame : bool
                 Whether the data frame should be reset. This is required to be True
                 after switching between single precision and double precision. Default is True.
