@@ -22,7 +22,9 @@ MPS/MPO format transform between block2 and pyblock2.
 """
 
 import numpy as np
+from collections import defaultdict
 from .core import MPS, MPO, Tensor, SubTensor
+from block2 import SZ as Q_op
 
 
 class TensorTools:
@@ -588,6 +590,82 @@ class MPSTools:
             u_tensors.append(qred)
         return MPS(tensors=u_tensors[::-1])
 
+    def _index_lookup(qnumbers_site):
+        """Return {(na,nb): np.ndarray(indices)} for one bond."""
+        q_arr = np.asarray(qnumbers_site).reshape(-1, 2)
+        lut = defaultdict(list)
+        for idx, (na, nb) in enumerate(q_arr):
+            lut[(na, nb)].append(idx)
+        return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
+
+    @staticmethod
+    def transform_renormalizer_sz_to_block2_sz(tensors, qn):
+        """
+        Convert a dense Sz-conserving MPS into a list of pyblock2 `Tensor`s.
+        Such MPS is used in package such as `Renormalizer`.
+
+        Parameters
+        ----------
+        tensors : list[np.ndarray]
+            Local tensors of shape (Dl, 4, Dr) in the physical basis
+            [vac, spin up, spin down, spin up+down].
+        qn : list[list[[na, nb]]]
+            Bond quantum numbers (eg., qn[0] == [[0,0]], ..., qn[-1] == [[N_a, N_b]]).
+
+        Returns
+        -------
+        List[Tensor]
+            pyblock2 tensors with explicit Sz symmetry labels.
+        """
+        _PHYS_INFO = {
+            0: ((0, 0), Q_op(0, 0, 0)),     # |vac〉
+            1: ((1, 0), Q_op(1, 1, 0)),     # |spin up〉
+            2: ((0, 1), Q_op(1, -1, 0)),    # |spin down〉
+            3: ((1, 1), Q_op(2, 0, 0)),     # |spin up+down〉
+        }
+
+        nsite = len(tensors)
+        bra_tables = [_index_lookup(qn[i])     for i in range(nsite)]
+        ket_tables = [_index_lookup(qn[i + 1]) for i in range(nsite)]
+
+        block_tensors = []
+
+        for it in range(nsite):
+            A = tensors[it]
+            bra = bra_tables[it]
+            ket = ket_tables[it]
+            local_blocks = []
+
+            for (na, nb), bra_idx in bra.items():
+                if bra_idx.size == 0:
+                    continue
+
+                for phys_idx, ((d_na, d_nb), phys_Q) in _PHYS_INFO.items():
+                    right_key = (na + d_na, nb + d_nb)
+                    ket_idx = ket.get(right_key)
+                    if ket_idx is None or ket_idx.size == 0:
+                        continue
+
+                    block = A[np.ix_(bra_idx, [phys_idx], ket_idx)]
+                    if it == 0:
+                        block = block.reshape(1, len(ket_idx))
+                        labels = (phys_Q, phys_Q)
+
+                    elif it == nsite - 1:
+                        block = block.reshape(len(bra_idx), 1)
+                        labels = (Q_op(na + nb, na - nb, 0), phys_Q)
+
+                    else:
+                        block = block.reshape(len(bra_idx), 1, len(ket_idx))
+                        left_Q  = Q_op(na + nb, na - nb, 0)
+                        right_Q = Q_op(na + nb + d_na + d_nb, na - nb + d_na - d_nb, 0)
+                        labels  = (left_Q, phys_Q, right_Q)
+
+                    local_blocks.append(SubTensor(labels, block))
+
+            block_tensors.append(Tensor(local_blocks))
+
+        return block_tensors
 
 class MPOTools:
     @staticmethod
