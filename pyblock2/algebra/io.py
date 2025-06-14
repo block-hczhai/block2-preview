@@ -590,14 +590,6 @@ class MPSTools:
             u_tensors.append(qred)
         return MPS(tensors=u_tensors[::-1])
 
-    def _index_lookup(qnumbers_site):
-        """Return {(na,nb): np.ndarray(indices)} for one bond."""
-        q_arr = np.asarray(qnumbers_site).reshape(-1, 2)
-        lut = defaultdict(list)
-        for idx, (na, nb) in enumerate(q_arr):
-            lut[(na, nb)].append(idx)
-        return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
-
     @staticmethod
     def trans_dense_sz_to_block2_sz(tensors, qn):
         """
@@ -1021,3 +1013,11 @@ class MPOTools:
         if add_ident:
             bmpo = bs.IdentityAddedMPO(bmpo)
         return bmpo
+
+def _index_lookup(qnumbers_site):
+    """Return {(na,nb): np.ndarray(indices)} for one bond."""
+    q_arr = np.asarray(qnumbers_site).reshape(-1, 2)
+    lut = defaultdict(list)
+    for idx, (na, nb) in enumerate(q_arr):
+        lut[(na, nb)].append(idx)
+    return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
