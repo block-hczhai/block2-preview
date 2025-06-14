@@ -588,7 +588,7 @@ class MPSTools:
         return MPS(tensors=u_tensors[::-1])
 
     @staticmethod
-    def trans_renormalizer_sz_to_block2_sz(tensors, qn):
+    def from_renormalizer_dense_sz(tensors, qn):
         """
         Convert a dense Sz-conserving MPS into a list of pyblock2 `Tensor`s.
         Such MPS is used in package such as `Renormalizer`.
@@ -665,7 +665,7 @@ class MPSTools:
 
             block_tensors.append(Tensor(local_blocks))
 
-        return block_tensors
+        return MPS(tensors=block_tensors)
 
 class MPOTools:
     @staticmethod
