@@ -22,10 +22,7 @@ MPS/MPO format transform between block2 and pyblock2.
 """
 
 import numpy as np
-from collections import defaultdict
 from .core import MPS, MPO, Tensor, SubTensor
-from block2 import SZ as Q_op
-
 
 class TensorTools:
     @staticmethod
@@ -591,7 +588,7 @@ class MPSTools:
         return MPS(tensors=u_tensors[::-1])
 
     @staticmethod
-    def trans_dense_sz_to_block2_sz(tensors, qn):
+    def trans_renormalizer_sz_to_block2_sz(tensors, qn):
         """
         Convert a dense Sz-conserving MPS into a list of pyblock2 `Tensor`s.
         Such MPS is used in package such as `Renormalizer`.
@@ -609,6 +606,17 @@ class MPSTools:
         List[Tensor]
             pyblock2 tensors with explicit Sz symmetry labels.
         """
+        from collections import defaultdict
+        from block2 import SZ as Q_op
+
+        def _index_lookup(qnumbers_site):
+            """Return {(na,nb): np.ndarray(indices)} for one bond."""
+            q_arr = np.asarray(qnumbers_site).reshape(-1, 2)
+            lut = defaultdict(list)
+            for idx, (na, nb) in enumerate(q_arr):
+                lut[(na, nb)].append(idx)
+            return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
+
         _PHYS_INFO = {
             0: ((0, 0), Q_op(0, 0, 0)),     # |vac〉
             1: ((1, 0), Q_op(1, 1, 0)),     # |spin up〉
@@ -1013,11 +1021,3 @@ class MPOTools:
         if add_ident:
             bmpo = bs.IdentityAddedMPO(bmpo)
         return bmpo
-
-def _index_lookup(qnumbers_site):
-    """Return {(na,nb): np.ndarray(indices)} for one bond."""
-    q_arr = np.asarray(qnumbers_site).reshape(-1, 2)
-    lut = defaultdict(list)
-    for idx, (na, nb) in enumerate(q_arr):
-        lut[(na, nb)].append(idx)
-    return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
