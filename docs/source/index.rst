@@ -149,6 +149,7 @@ Features
    tutorial/heisenberg
    tutorial/vibrational-hamiltonians
    tutorial/mpo-mps-quimb
+   tutorial/mps-import-renormalizer
 
 .. raw:: latex
 

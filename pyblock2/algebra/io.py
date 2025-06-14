@@ -590,21 +590,18 @@ class MPSTools:
     @staticmethod
     def from_renormalizer_dense_sz(tensors, qn):
         """
-        Convert a dense Sz-conserving MPS into a list of pyblock2 `Tensor`s.
-        Such MPS is used in package such as `Renormalizer`.
+        Import a dense Sz-conserving MPS from ``Renormalizer``.
 
-        Parameters
-        ----------
-        tensors : list[np.ndarray]
-            Local tensors of shape (Dl, 4, Dr) in the physical basis
-            [vac, spin up, spin down, spin up+down].
-        qn : list[list[[na, nb]]]
-            Bond quantum numbers (eg., qn[0] == [[0,0]], ..., qn[-1] == [[N_a, N_b]]).
+        Args:
+            tensors : list[np.ndarray]
+                Local tensors of shape (Dl, 4, Dr) in the physical basis
+                [vac, spin up, spin down, spin up+down].
+            qn : list[list[[int, int]]]
+                Bond quantum numbers (eg., qn[0] == [[0,0]], ..., qn[-1] == [[N_a, N_b]]).
 
-        Returns
-        -------
-        List[Tensor]
-            pyblock2 tensors with explicit Sz symmetry labels.
+        Returns:
+            mps : MPS
+                pyblock2 MPS with Sz symmetry.
         """
         from collections import defaultdict
         from block2 import SZ as Q_op
