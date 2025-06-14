@@ -599,7 +599,7 @@ class MPSTools:
         return {k: np.fromiter(v, dtype=int) for k, v in lut.items()}
 
     @staticmethod
-    def transform_renormalizer_sz_to_block2_sz(tensors, qn):
+    def trans_dense_sz_to_block2_sz(tensors, qn):
         """
         Convert a dense Sz-conserving MPS into a list of pyblock2 `Tensor`s.
         Such MPS is used in package such as `Renormalizer`.
