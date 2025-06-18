@@ -3859,6 +3859,7 @@ template <typename FL> void bind_general_fcidump(py::module &m) {
         .def_readwrite("data", &GeneralFCIDUMP<FL>::data)
         .def_readwrite("elem_type", &GeneralFCIDUMP<FL>::elem_type)
         .def_readwrite("order_adjusted", &GeneralFCIDUMP<FL>::order_adjusted)
+        .def("pre_merge_terms", &GeneralFCIDUMP<FL>::pre_merge_terms)
         .def(
             "add_eight_fold_term",
             [](GeneralFCIDUMP<FL> *self, const py::array_t<FL> &v,

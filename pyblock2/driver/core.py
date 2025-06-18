@@ -6271,7 +6271,7 @@ class DMRGDriver:
         gidx = np.argsort(np.abs(dvals))[::-1][:max_print]
         if iprint:
             print(
-                "Sum of weights of included %s = %20.15f\n" % (dname, (dvals**2).sum())
+                "Sum of weights of included %s = %20.15f\n" % (dname, (np.conj(dvals) * dvals).sum())
             )
             for ii, idx in enumerate(gidx):
                 arr = np.array(dtrie[idx])
@@ -6283,7 +6283,10 @@ class DMRGDriver:
                 else:
                     det = "".join([ddstr[x] for x in arr])
                 val = dvals[idx]
-                print(dname, "%10d" % ii, det, " = %20.15f" % val)
+                if val.imag != 0.0:
+                    print(dname, "%10d" % ii, det, " = %20.15f + %20.15f i" % (val.real, val.imag))
+                else:
+                    print(dname, "%10d" % ii, det, " = %20.15f" % val)
             if len(dvals) > max_print:
                 print(" ... and more ... ")
         dets = np.zeros((len(dtrie), ket.n_sites), dtype=np.uint8)
@@ -9156,7 +9159,7 @@ class ExprBuilder:
             self.data.data[i] = self.bw.VectorFL(d * np.array(ix))
         return self
 
-    def finalize(self, adjust_order=True, merge=True, is_drt=False, fermionic_ops=None):
+    def finalize(self, adjust_order=True, merge=True, is_drt=False, fermionic_ops=None, pre_merge=True):
         """
         Finalize the symbolic expression.
 
@@ -9174,11 +9177,16 @@ class ExprBuilder:
                 operators (for computing signs for swapping operators).
                 Default is None, and operators like "cdCD" will be treated as Fermion
                 operators.
+            pre_merge : bool
+                If True, will do pre-merge for terms with the same expr. When the number of expr is big,
+                setting this to False may cause large memory in 'adjust_order'. Default is True.
 
         Returns:
             gfd : GeneralFCIDUMP
                 The block2 GeneralFCIDUMP object.
         """
+        if pre_merge:
+            self.data.pre_merge_terms()
         if adjust_order:
             if fermionic_ops is not None:
                 assert (

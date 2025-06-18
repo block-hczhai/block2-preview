@@ -555,6 +555,64 @@ template <typename FL> struct GeneralFCIDUMP {
             rr[ii] = dsu.findx(ii);
         return rr;
     }
+    void pre_merge_terms() {
+        int ntg = threading->activate_global();
+        size_t nidx = exprs.size();
+        const size_t pidx = nidx / ntg + !!(nidx % ntg);
+        vector<unordered_map<string, pair<size_t, size_t>>> expr_ds(ntg);
+        unordered_map<string, pair<size_t, size_t>> expr_d;
+#pragma omp parallel num_threads(ntg)
+        {
+            int tid = threading->get_thread_id();
+            for (size_t im = pidx * tid; im < min(nidx, pidx * (tid + 1));
+                 im++) {
+                expr_ds[tid][exprs[im]].first += indices[im].size();
+                expr_ds[tid][exprs[im]].second += data[im].size();
+            }
+        }
+        for (int ig = 0; ig < ntg; ig++)
+            for (auto &m : expr_ds[ig]) {
+                expr_d[m.first].first += m.second.first;
+                expr_d[m.first].second += m.second.second;
+            }
+        if (expr_d.size() * 128 < exprs.size()) {
+            vector<string> r_exprs = std::move(exprs);
+            vector<vector<uint16_t>> r_indices = std::move(indices);
+            vector<vector<FL>> r_data = std::move(data);
+            exprs = vector<string>(expr_d.size());
+            indices = vector<vector<uint16_t>>(expr_d.size());
+            data = vector<vector<FL>>(expr_d.size());
+            unordered_map<string, size_t> expr_id;
+            size_t nx = 0;
+            for (auto &m : expr_d) {
+                exprs[nx] = m.first;
+                indices[nx].resize(m.second.first);
+                data[nx].resize(m.second.second);
+                expr_id[m.first] = nx++;
+            }
+            expr_d = unordered_map<string, pair<size_t, size_t>>();
+#pragma omp parallel num_threads(ntg)
+            {
+                int tid = threading->get_thread_id();
+                vector<pair<size_t, size_t>> expr_x(exprs.size());
+                for (int ig = 0; ig < tid; ig++)
+                    for (auto &m : expr_ds[ig]) {
+                        expr_x[expr_id.at(m.first)].first += m.second.first;
+                        expr_x[expr_id.at(m.first)].second += m.second.second;
+                    }
+                for (size_t im = pidx * tid; im < min(nidx, pidx * (tid + 1));
+                     im++) {
+                    size_t ix = expr_id.at(r_exprs[im]);
+                    memcpy(&indices[ix][expr_x[ix].first], &r_indices[im][0],
+                           r_indices[im].size() * sizeof(uint16_t));
+                    memcpy(&data[ix][expr_x[ix].second], &r_data[im][0],
+                           r_data[im].size() * sizeof(FL));
+                    expr_x[ix].first += r_indices[im].size();
+                    expr_x[ix].second += r_data[im].size();
+                }
+            }
+        }
+    }
     void merge_terms(FP cutoff = (FP)0.0) {
         vector<size_t> idx;
         for (int ix = 0; ix < (int)exprs.size(); ix++) {
