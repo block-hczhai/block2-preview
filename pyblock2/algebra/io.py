@@ -807,7 +807,7 @@ class MPOTools:
                                 )
                     else:
                         assert False
-            tensors[i] = Tensor(blocks=list(map_blocks.values()))
+            tensors[i] = Tensor(blocks=sorted(map_blocks.values(), key=lambda t: (t.q_labels, t.reduced)))
         return MPO(tensors=tensors, const_e=bmpo.const_e)
 
     @staticmethod
@@ -1018,3 +1018,54 @@ class MPOTools:
         if add_ident:
             bmpo = bs.IdentityAddedMPO(bmpo)
         return bmpo
+
+    @staticmethod
+    def from_itensor(xdata):
+        """
+        Translate itensor MPO (json data) to pyblock2 MPO.
+        """
+        from block2 import SAny, SAnySymmTypes
+        def init_sz(Nf=0, Sz=0):
+            q = SAny()
+            q.types[0] = SAnySymmTypes.U1
+            q.types[1] = SAnySymmTypes.U1
+            q.values[0] = Nf
+            q.values[1] = Sz
+            return q
+        _parse_qn = lambda Nf=0, Sz=0: init_sz(Nf, Sz)
+        tensors = []
+        for k, xd in enumerate(xdata):
+            qns, blocks = xd['Q'], xd['D']
+            qns = [[(_parse_qn(**dict(xqn)), nn) for xqn, nn in qn] for qn in qns]
+            uniq_qns = []
+            for qn in qns:
+                dd = {}
+                for xqn, nn in qn:
+                    dd[xqn] = dd.get(xqn, 0) + nn
+                d2, d3 = {xqn: 0 for xqn, _ in sorted(dd.items())}, []
+                for xqn, nn in qn:
+                    d3.append((d2[xqn], d2[xqn] + nn))
+                    d2[xqn] += nn
+                uniq_qns.append((dd, d3))
+            xblocks = {}
+            for tag, shape, arr in blocks:
+                data = np.array(arr).reshape(tuple(shape), order='F')
+                q_labels = tuple(qns[ii][ix][0] for ii, ix in enumerate(tag))
+                if q_labels not in xblocks:
+                    xblocks[q_labels] = np.zeros(tuple(uniq_qns[ii][0][q] for ii, q in enumerate(q_labels)))
+                xblocks[q_labels][tuple(slice(*uniq_qns[ii][1][ix]) for ii, ix in enumerate(tag))] = data
+            xblocks = sorted(xblocks.items())
+            if k == 0:
+                xblocks = [([q[2], q[1], q[0]], d.transpose(2, 1, 0)) for q, d in xblocks]
+                for q, _ in xblocks:
+                    assert q[0] - q[1] == q[2]
+            elif k != len(xdata) - 1:
+                xblocks = [([q[0], q[3], q[2], q[1]], d.transpose(0, 3, 2, 1)) for q, d in xblocks]
+                for q, _ in xblocks:
+                    assert q[0] + q[1] - q[2] == q[3]
+            else:
+                xblocks = [([q[0], q[2], q[1]], d.transpose(0, 2, 1)) for q, d in xblocks]
+                for q, _ in xblocks:
+                    assert q[0] + q[1] == q[2]
+            tensors.append(Tensor([SubTensor(q_labels=tuple(q), reduced=d) for q, d in sorted(xblocks)]))
+        return MPO(tensors)
