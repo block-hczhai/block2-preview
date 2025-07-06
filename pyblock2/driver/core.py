@@ -4760,7 +4760,7 @@ class DMRGDriver:
                 dmrg.me.dot = 1
                 for ext_me in dmrg.ext_mes:
                     ext_me.dot = 1
-            ener = dmrg.solve(n_sweeps, forward, tol, twosite_to_onesite)
+            ener = dmrg.solve(n_sweeps, forward ^ (twosite_to_onesite % 2), tol, twosite_to_onesite)
             ket.dot = 1
             if self.mpi is not None:
                 self.mpi.barrier()
@@ -6520,6 +6520,7 @@ class DMRGDriver:
         thrds=None,
         left_mpo=None,
         cutoff=1e-24,
+        twosite_to_onesite=None,
         linear_max_iter=4000,
         linear_rel_conv_thrd=0.0,
         proj_mpss=None,
@@ -6587,6 +6588,10 @@ class DMRGDriver:
                 States with eigenvalue below this number will be discarded,
                 even when the bond dimension is large enough to keep this state.
                 Default is 1E-24.
+            twosite_to_onesite : None or int
+                If not None and ``ket.dot == 2`` in the initial MPS, will perform
+                ``twosite_to_onesite`` 2-site sweeps and then switch to the 1-site algorithm
+                for the remaining sweeps. Default is None (no switching).
             linear_max_iter : int
                 Maximal number of iteration in the linear solver. Default is 4000.
             solver_type : None or str.
@@ -6691,7 +6696,25 @@ class DMRGDriver:
         cps.right_weight = right_weight
         if solver_type is not None:
             cps.solver_type = getattr(bw.b.LinearSolverTypes, solver_type)
-        norm = cps.solve(n_sweeps, ket.center == 0, tol)
+        if twosite_to_onesite is None:
+            norm = cps.solve(n_sweeps, ket.center == 0, tol)
+        else:
+            assert twosite_to_onesite < n_sweeps
+            cps.solve(twosite_to_onesite, ket.center == 0, 0)
+            me.dot = 1
+            if pme is not None:
+                pme.dot = 1
+            for ext_me in cps.ext_mes:
+                ext_me.dot = 1
+            bond_dims = bra_bond_dims[twosite_to_onesite:] if len(bra_bond_dims) > twosite_to_onesite else bra_bond_dims[-1:]
+            cps.bra_bond_dims = bw.b.VectorUBond(bond_dims)
+            norm = cps.solve(n_sweeps - twosite_to_onesite, ket.center == 0, tol)
+            bra.dot = ket.dot = 1
+            if self.mpi is not None:
+                self.mpi.barrier()
+            bra.save_data()
+            if self.mpi is not None:
+                self.mpi.barrier()
 
         if self.clean_scratch:
             me.remove_partition_files()

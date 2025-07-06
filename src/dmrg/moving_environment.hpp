@@ -1442,12 +1442,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
         // two-site to one-site transition
         if (dot == 1 && envs[0]->middle.size() == 2) {
             frame_<FP>()->reset_buffer(1);
-            if (center == end_site - 2 &&
-                (ket->canonical_form[end_site - 1] == 'C' ||
-                 ket->canonical_form[end_site - 1] == 'M')) {
+            if (center == end_site - 2) {
                 center = end_site - 1;
-                ket->canonical_form[center] =
-                    ket->canonical_form[center] == 'C' ? 'S' : 'T';
+                if (ket->canonical_form[center] == 'C' ||
+                    ket->canonical_form[center] == 'M')
+                    ket->canonical_form[center] =
+                        ket->canonical_form[center] == 'C' ? 'S' : 'T';
                 if (bra != ket && (bra->canonical_form[center] == 'C' ||
                                    bra->canonical_form[center] == 'M'))
                     bra->canonical_form[center] =

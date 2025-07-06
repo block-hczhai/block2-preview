@@ -3726,7 +3726,7 @@ if not pre_run:
                 else:
                     tto = int(dic["twodot_to_onedot"])
                     assert len(bond_dims) > tto
-                    cps.solve(tto, mps.center == 0, 0)
+                    cps.solve(tto, bra.center == 0, 0)
                     cps.bra_bond_dims = VectorUBond(bond_dims[tto:])
                     me.dot = 1
                     if pme is not None:
