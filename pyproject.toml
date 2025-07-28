@@ -13,8 +13,11 @@ version = "0.5.4"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 readme = "README.md"
+maintainers = [
+    { name = "Huanchen Zhai", email = "hczhai.ok@gmail.com" }
+]
 authors = [
-    { name = "Huanchen Zhai", email = "hczhai.ok@gmail.com" },
+    { name = "Huanchen Zhai" },
     { name = "Henrik R. Larsson" },
     { name = "Seunghoon Lee" },
     { name = "Zhi-Hao Cui" },

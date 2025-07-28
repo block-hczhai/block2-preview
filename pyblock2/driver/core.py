@@ -1391,6 +1391,7 @@ class DMRGDriver:
         assert SymmetryTypes.SGB in self.symm_type
         GH = self.bw.bs.GeneralHamiltonian
         super_self = self
+        is_cpx = SymmetryTypes.CPX in self.symm_type
         import numpy as np
 
         class PauliHamiltonian(GH):
@@ -1428,6 +1429,8 @@ class DMRGDriver:
                     "Z": np.array([-1.0, 0.0, 0.0, 1.0]),
                     "N": np.array([0.0, 0.0, 0.0, 1.0]),
                 }
+                if is_cpx:
+                    op_defs['Y'] = op_defs['Y'] * 1j
                 i_alloc = super_self.bw.b.IntVectorAllocator()
                 d_alloc = super_self.bw.b.DoubleVectorAllocator()
                 q = self.vacuum
@@ -4259,7 +4262,7 @@ class DMRGDriver:
         .. highlight:: python3
 
         Args:
-            op_list : list[tuple[str, float]]
+            op_list : list[tuple[str, float|complex]]
                 A list of Pauli strings and coefficients.
                 Characters in the string can be IXYZ. For example, ::
 
@@ -4281,9 +4284,12 @@ class DMRGDriver:
         b = self.expr_builder()
         idxs = np.arange(self.n_sites, dtype=int)
         for ops, val in op_list:
-            num_y = ops.count("Y")
-            assert num_y % 2 == 0
-            b.add_term(ops, idxs, val.real * (1 - num_y % 4))
+            if SymmetryTypes.CPX not in self.symm_type:
+                num_y = ops.count("Y")
+                assert num_y % 2 == 0
+                b.add_term(ops, idxs, val.real * (1 - num_y % 4))
+            else:
+                b.add_term(ops, idxs, val)
         if ecore is not None:
             b.add_const(ecore)
         return self.get_mpo(b.finalize(adjust_order=False), **kwargs)
