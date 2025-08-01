@@ -664,6 +664,74 @@ class MPSTools:
 
         return MPS(tensors=block_tensors)
 
+    @staticmethod
+    def to_focus_mps_file(fname, mps, dtype=np.float64):
+        """Save pyblock2 MPS to ``focus`` MPS binary file."""
+        import struct, numpy as np
+        with open(fname, 'wb') as f:
+            n_sites = len(mps.tensors)
+            f.write(struct.pack('i', n_sites))
+            for ii in range(n_sites):
+                tensor = mps.tensors[ii].__class__(blocks=[x.copy() for x in mps.tensors[ii].blocks])
+                for block in tensor.blocks:
+                    if ii == 0:
+                        block.q_labels = ((block.q_labels[1] - block.q_labels[0])[0], ) + block.q_labels
+                        block.reduced = block.reduced[None, ...]
+                    elif ii == n_sites - 1:
+                        block.q_labels = block.q_labels + ((block.q_labels[0] + block.q_labels[1])[0], )
+                        block.reduced = block.reduced[..., None]
+                    block.q_labels = tuple(block.q_labels[x] for x in [2, 0, 1]) # rcm order
+                    block.reduced = block.reduced.transpose(2, 0, 1)
+                qinfos = [sorted(tensor.get_state_info(i).items()) for i in [0, 1, 2]]
+                qmaps = [{q[0]: iq for iq, q in enumerate(qs)} for qs in qinfos]
+                fqs = [np.array([[q.n, q.twos, n] for q, n in qs], dtype=np.int32) for qs in qinfos]
+                foffset = np.zeros(tuple(len(qs) for qs in qinfos), dtype=np.uint64)
+                fdata = np.zeros((np.sum([block.reduced.size for block in tensor.blocks]), ), dtype=dtype)
+                block_idxs = [tuple(qm[q] for qm, q in zip(qmaps, block.q_labels)) for block in tensor.blocks]
+                off = 0
+                for idx, block in sorted(zip(block_idxs, tensor.blocks)):
+                    foffset[idx] = off + 1
+                    fdata[off:off + block.reduced.size] = block.reduced.transpose(2, 1, 0).flatten()
+                    off += block.reduced.size
+                for fq in fqs:
+                    f.write(struct.pack('i', len(fq)))
+                    fq.astype(np.int32).tofile(f)
+                foffset.astype(np.uint64).tofile(f)
+                f.write(struct.pack('N', len(fdata)))
+                fdata.astype(dtype).tofile(f)
+
+    @staticmethod
+    def from_focus_mps_file(fname, is_su2=False, dtype=np.float64):
+        """Load pyblock2 MPS from ``focus`` MPS binary file."""
+        import struct, numpy as np, block2
+        qw = block2.SAny.init_su2 if is_su2 else block2.SAny.init_sz
+        fd = open(fname, 'rb').read()
+        n_sites = struct.unpack('i', fd[:4])[0]
+        off, tensors = 4, []
+        for ii in range(n_sites):
+            fqs = []
+            for _ in range(3):
+                nx = struct.unpack('i', fd[off:off + 4])[0]
+                fqs.append(np.fromfile(fname, dtype=np.int32, offset=off + 4, count=3 * nx).reshape(nx, 3))
+                off += 4 + fqs[-1].nbytes
+            fshape = [len(x) for x in fqs]
+            foffset = np.fromfile(fname, dtype=np.uint64, offset=off, count=np.prod(fshape)).reshape(fshape)
+            off += foffset.nbytes
+            fdata = np.fromfile(fname, dtype=dtype, offset=off + 8, count=struct.unpack('N', fd[off:off + 8])[0])
+            off += 8 + fdata.nbytes
+            qrow, qcol, qmid, mask = *fqs, foffset != 0
+            mr, ml, mm = np.mgrid[tuple(slice(x) for x in foffset.shape)][:, mask] # rcm order
+            shapes = qrow[mr, -1], qcol[ml, -1], qmid[mm, -1]
+            qns = [[qw(*x[:-1]) for x in qdata] for qdata in [qcol, qmid, qrow]]
+            data = [fdata[int(x - 1):int(x - 1 + r * l * m)].reshape(m, l, r).transpose(1, 0, 2)
+                for (r, l, m), x in zip(zip(*shapes), foffset[mask])]
+            q_labels = [tuple(qns[i][x] for i, x in enumerate(xs)) for xs in zip(ml, mm, mr)]
+            if ii == 0 or ii == n_sites - 1:
+                q_labels = [[q[:-1], q[1:]][ii == 0] for q in q_labels]
+                data = [d[0, ...] if ii == 0 else d[..., 0] for d in data]
+            tensors.append(Tensor([SubTensor(q_labels=q, reduced=d) for q, d in sorted(zip(q_labels, data))]))
+        return MPS(tensors=tensors)
+
 class MPOTools:
     @staticmethod
     def from_block2(bmpo):

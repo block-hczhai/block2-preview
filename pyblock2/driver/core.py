@@ -934,11 +934,11 @@ class DMRGDriver:
         self.n_elec = n_elec
 
         if target is None and bw.qargs is not None:
-            if bw.qargs == ("U1Fermi", ):
+            if bw.qargs in [("U1Fermi", ), ("U1", )]:
                 self.vacuum = bw.SX(0)
                 self.target = bw.SX(n_elec)
                 self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
-            elif bw.qargs == ("U1Fermi", "U1"):
+            elif bw.qargs in [("U1Fermi", "U1"), ("U1", "U1")]:
                 self.vacuum = bw.SX(0, 0)
                 if left_vacuum is None:
                     self.target = bw.SX(n_elec, spin)
@@ -950,7 +950,7 @@ class DMRGDriver:
                         n_elec + left_vacuum.n, spin - left_vacuum.twos
                     )
                     self.left_vacuum = left_vacuum
-            elif bw.qargs == ("U1Fermi", "SU2", "SU2"):
+            elif bw.qargs in [("U1Fermi", "SU2", "SU2"), ("U1", "SU2", "SU2")]:
                 self.vacuum = bw.SX(0, 0, 0)
                 if singlet_embedding and left_vacuum is None:
                     self.target = bw.SX(n_elec + spin % 2, 0, 0)
@@ -964,11 +964,11 @@ class DMRGDriver:
                     self.left_vacuum = (
                         self.vacuum if left_vacuum is None else left_vacuum
                     )
-            elif bw.qargs == ("U1Fermi", "AbelianPG"):
+            elif bw.qargs in [("U1Fermi", "AbelianPG"), ("U1", "AbelianPG")]:
                 self.vacuum = bw.SX(0, 0)
                 self.target = bw.SX(n_elec, pg_irrep)
                 self.left_vacuum = self.vacuum if left_vacuum is None else left_vacuum
-            elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
+            elif bw.qargs in [("U1Fermi", "U1", "AbelianPG"), ("U1", "U1", "AbelianPG")]:
                 self.vacuum = bw.SX(0, 0, 0)
                 if left_vacuum is None:
                     self.target = bw.SX(n_elec, spin, pg_irrep)
@@ -980,7 +980,7 @@ class DMRGDriver:
                         n_elec + left_vacuum.n, spin - left_vacuum.twos, pg_irrep
                     )
                     self.left_vacuum = left_vacuum
-            elif bw.qargs == ("U1Fermi", "SU2", "SU2", "AbelianPG"):
+            elif bw.qargs in [("U1Fermi", "SU2", "SU2", "AbelianPG"), ("U1", "SU2", "SU2", "AbelianPG")]:
                 self.vacuum = bw.SX(0, 0, 0, 0)
                 if singlet_embedding and left_vacuum is None:
                     self.target = bw.SX(n_elec + spin % 2, 0, 0, pg_irrep)
@@ -1083,6 +1083,32 @@ class DMRGDriver:
                     [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, -1], [0, 0, 0, 0]]
                 ),  # beta
             }
+            std_ops_alt = {
+                "": np.array(
+                    [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+                ),  # identity
+                "c": np.array(
+                    [[0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 0], [0, 1, 0, 0]]
+                ),  # alpha+
+                "d": np.array(
+                    [[0, 0, -1, 0], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]]
+                ),  # alpha
+                "C": np.array(
+                    [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]
+                ),  # beta+
+                "D": np.array(
+                    [[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+                ),  # beta
+            }
+            std_ops_jw = {
+                "": np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),    # identity
+                "c": np.array([[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [0, 1, 0, 0]]),   # alpha+
+                "d": np.array([[0, 0, 1, 0], [0, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0]]),   # alpha
+                "z": np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]), # alpha/z
+                "C": np.array([[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 1, 0]]),   # beta+
+                "D": np.array([[0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]),   # beta
+                "Z": np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]), # beta/z
+            }
             std_ops_sgf = {
                 "": np.array([[1, 0], [0, 1]]),  # identity
                 "C": np.array([[0, 0], [1, 0]]),  # +
@@ -1128,6 +1154,19 @@ class DMRGDriver:
                 self.ghamil = self.get_custom_hamiltonian(
                     site_basis, site_ops, spin_dependent_ops="CD", spin_sym=spin_sym
                 )
+            elif bw.qargs == ("U1", "U1", "AbelianPG") and "JW" in bw.hints:
+                site_basis, site_ops = [], []
+                for k in range(self.n_sites):
+                    ipg = self.orb_sym[k]
+                    basis = [
+                        (self.bw.SX(0, 0, 0), 1),
+                        (self.bw.SX(1, -1, ipg), 1),
+                        (self.bw.SX(1, 1, ipg), 1),
+                        (self.bw.SX(2, 0, 0), 1),
+                    ]  # [0ba2]
+                    site_basis.append(basis)
+                    site_ops.append(std_ops_jw)
+                self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
             elif bw.qargs == ("U1Fermi", "U1", "AbelianPG"):
                 site_basis, site_ops = [], []
                 for k in range(self.n_sites):
@@ -1139,7 +1178,7 @@ class DMRGDriver:
                         (self.bw.SX(2, 0, 0), 1),
                     ]  # [0ba2]
                     site_basis.append(basis)
-                    site_ops.append(std_ops)
+                    site_ops.append(std_ops_alt if "ALT" in bw.hints else std_ops)
                 self.ghamil = self.get_custom_hamiltonian(site_basis, site_ops)
             elif bw.qargs == ("U1Fermi", "SU2", "SU2", "AbelianPG"):
                 site_basis, site_ops = [], []
@@ -3686,7 +3725,7 @@ class DMRGDriver:
             if self.orb_sym is not None and not prev_reord:
                 self.orb_sym = bw.VectorPG(np.array(self.orb_sym)[idx])
                 if self.ghamil is not None:
-                    self.ghamil = bw.bs.GeneralHamiltonian(
+                    self.ghamil = self.ghamil.__class__(
                         self.vacuum, self.n_sites, self.orb_sym, self.heis_twos
                     )
             if normal_order_ref is not None:
@@ -3740,7 +3779,7 @@ class DMRGDriver:
                 g2e[(~((xi == xj) & (xk == xl))) & (~((xj == xk) & (xi == xl)))] = 0
 
         if normal_order_ref is None:
-            if SymmetryTypes.SU2 in bw.symm_type:
+            if SymmetryTypes.SU2 in bw.symm_type and "JW" not in bw.hints:
                 if h1e is not None:
                     b.add_sum_term("(C+D)0", h1e, cutoff=fast_cutoff, factor=np.sqrt(2))
                 if g2e is not None:
@@ -3754,7 +3793,7 @@ class DMRGDriver:
                             cutoff=fast_cutoff,
                             perm=[0, 2, 3, 1],
                         )
-            elif SymmetryTypes.SZ in bw.symm_type:
+            elif SymmetryTypes.SZ in bw.symm_type and "JW" not in bw.hints:
                 if h1e is not None:
                     b.add_sum_term("cd", h1e[0], cutoff=fast_cutoff)
                     b.add_sum_term("CD", h1e[1], cutoff=fast_cutoff)
@@ -3787,7 +3826,7 @@ class DMRGDriver:
                         perm=[0, 2, 3, 1],
                         factor=0.5,
                     )
-            elif SymmetryTypes.SGF in bw.symm_type:
+            elif SymmetryTypes.SGF in bw.symm_type and "JW" not in bw.hints:
                 if h1e is not None:
                     b.add_sum_term("CD", h1e, cutoff=fast_cutoff)
                 if g2e is not None:
@@ -3795,7 +3834,11 @@ class DMRGDriver:
                         "CCDD", g2e, cutoff=fast_cutoff, perm=[0, 2, 3, 1], factor=0.5
                     )
             elif SymmetryTypes.SGB in bw.symm_type:
-                h_terms = FermionTransform.jordan_wigner(h1e, g2e)
+                h_terms = FermionTransform.jordan_wigner_sgb(h1e, g2e)
+                for k, (x, v) in h_terms.items():
+                    b.add_term(k, x, v)
+            elif SymmetryTypes.SZ in bw.symm_type and "JW" in bw.hints:
+                h_terms = FermionTransform.jordan_wigner_sz(h1e, g2e)
                 for k, (x, v) in h_terms.items():
                     b.add_term(k, x, v)
         else:
@@ -3851,7 +3894,7 @@ class DMRGDriver:
             b.add_term("", [], ecore)
         else:
             b.add_const(ecore)
-        bx = b.finalize(adjust_order=SymmetryTypes.SGB not in bw.symm_type)
+        bx = b.finalize(adjust_order=SymmetryTypes.SGB not in bw.symm_type and "JW" not in bw.hints)
 
         if iprint:
             if self.mpi is not None:
@@ -9236,8 +9279,8 @@ class FermionTransform:
     """Static methods for fermion to spin operator transforms."""
 
     @staticmethod
-    def jordan_wigner(h1e, g2e):
-        """Jordan-Wigner transform of quantum chemistry integrals."""
+    def jordan_wigner_sgb(h1e, g2e):
+        """Jordan-Wigner transform of quantum chemistry integrals (spin orbital)."""
         import numpy as np
 
         # sort indices to ascending order, adjusting fermion sign
@@ -9292,6 +9335,67 @@ class FermionTransform:
         for k, xv in h_terms.items():
             xv[0] = np.array(xv[0])
             xv[1] = np.array(xv[1]) * 2 ** k.count("Z")
+
+        return h_terms
+
+    @staticmethod
+    def jordan_wigner_sz(h1es, g2es):
+        """Jordan-Wigner transform of quantum chemistry integrals (spatial orbital)."""
+        import numpy as np
+
+        # sort indices to ascending order, adjusting fermion sign
+        if h1es is not None:
+            hixs = 2 * np.mgrid[tuple(slice(x) for x in h1es[0].shape)].reshape((h1es[0].ndim, -1))
+            hixs = np.concatenate([hixs, hixs + 1], axis=1)
+            hop = np.array([0, 1] * (h1es[0].size * 2), dtype="<i1").reshape((-1, h1es[0].ndim))
+            h1e = np.concatenate([h1e.reshape((-1,)) for h1e in h1es])
+            i, j = hixs
+            h1e[i > j] *= -1
+            hop[i > j] = hop[i > j, ::-1]
+            hixs[:, i > j] = hixs[::-1, i > j]
+
+        if g2es is not None:
+            gixs = 2 * np.mgrid[tuple(slice(x) for x in g2es[0].shape)].reshape((g2es[0].ndim, -1))
+            gixs = np.concatenate([gixs, gixs + np.array([[0], [1], [1], [0]]), gixs + np.array([[1], [0], [0], [1]]), gixs + 1], axis=1)
+            gop = np.array([0, 0, 1, 1] * (g2es[0].size * 4), dtype="<i1").reshape((-1, g2es[0].ndim))
+            xg2es = [(g2e.transpose(0, 2, 3, 1) * 0.5) for g2e in g2es]
+            g2e = np.concatenate([xg2es[0].reshape((-1,)), xg2es[1].reshape((-1,)),
+                xg2es[1].transpose(1, 0, 3, 2).reshape((-1,)), xg2es[2].reshape((-1,))])
+            for x in [0, 1, 2, 0, 1, 0]:
+                i, j = gixs[x], gixs[x + 1]
+                g2e[i > j] *= -1
+                gop[i > j, x : x + 2] = gop[i > j, x : x + 2][:, ::-1]
+                gixs[x : x + 2, i > j] = gixs[x : x + 2, i > j][::-1]
+
+        h_terms = {}
+
+        if h1es is not None:
+            for v, i, j, xi, xj in [(v, *[p // 2 for p in ix], *[p % 2 * 2 + q for p, q in zip(ix, x)])
+                for v, x, ix in zip(h1e, hop, hixs.T) if v != 0]:
+                zi, zj = [["Z", "zZ"][int(xi < 2)], ["z", ""][int((xi < 2) == (xj < 2))]][int(i == j)], ["z", ""][int(xj < 2 or i == j)]
+                ex = "cdCD"[xi] + zi + "zZ" * max(0, j - i - 1) + zj + "cdCD"[xj]
+                ix = [*[i] * (1 + len(zi)), *[w for x in range(i + 1, j) for w in [x, x]], *[j] * (1 + len(zj))]
+                if ex not in h_terms:
+                    h_terms[ex] = [[], []]
+                h_terms[ex][0].extend(ix)
+                h_terms[ex][1].append(v)
+
+        if g2es is not None:
+            for v, i, j, k, l, xi, xj, xk, xl in [(v, *[p // 2 for p in ix], *[p % 2 * 2 + q for p, q in zip(ix, x)])
+                for v, x, ix in zip(g2e, gop, gixs.T) if v != 0]:
+                zi, zj = [["Z", "zZ"][int(xi < 2)], ["z", ""][int((xi < 2) == (xj < 2))]][int(i == j)], ["z", ""][int(xj < 2 or i == j)]
+                zk, zl = [["Z", "zZ"][int(xk < 2)], ["z", ""][int((xk < 2) == (xl < 2))]][int(k == l)], ["z", ""][int(xl < 2 or k == l)]
+                ex = "cdCD"[xi] + zi + "zZ" * max(0, j - i - 1) + zj + "cdCD"[xj] + "cdCD"[xk] + zk + "zZ" * max(0, l - k - 1) + zl + "cdCD"[xl]
+                ix = [*[i] * (1 + len(zi)), *[w for x in range(i + 1, j) for w in [x, x]], *[j] * (1 + len(zj)),
+                    *[k] * (1 + len(zk)), *[w for x in range(k + 1, l) for w in [x, x]], *[l] * (1 + len(zl))]
+                if ex not in h_terms:
+                    h_terms[ex] = [[], []]
+                h_terms[ex][0].extend(ix)
+                h_terms[ex][1].append(v)
+
+        for k, xv in h_terms.items():
+            xv[0] = np.array(xv[0])
+            xv[1] = np.array(xv[1])
 
         return h_terms
 
