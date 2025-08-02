@@ -686,17 +686,24 @@ class MPSTools:
                 qmaps = [{q[0]: iq for iq, q in enumerate(qs)} for qs in qinfos]
                 fqs = [np.array([[q.n, q.twos, n] for q, n in qs], dtype=np.int32) for qs in qinfos]
                 foffset = np.zeros(tuple(len(qs) for qs in qinfos), dtype=np.uint64)
+                fnnzaddr = np.zeros((len(tensor.blocks), 4), dtype=np.int32)
                 fdata = np.zeros((np.sum([block.reduced.size for block in tensor.blocks]), ), dtype=dtype)
                 block_idxs = [tuple(qm[q] for qm, q in zip(qmaps, block.q_labels)) for block in tensor.blocks]
                 off = 0
-                for idx, block in sorted(zip(block_idxs, tensor.blocks)):
+                for ix, (idx, block) in enumerate(sorted(zip(block_idxs, tensor.blocks))):
+                    fnnzaddr[ix] = [*idx, fqs[0][idx[0]][1]]
                     foffset[idx] = off + 1
                     fdata[off:off + block.reduced.size] = block.reduced.transpose(2, 1, 0).flatten()
                     off += block.reduced.size
                 for fq in fqs:
                     f.write(struct.pack('i', len(fq)))
                     fq.astype(np.int32).tofile(f)
-                foffset.astype(np.uint64).tofile(f)
+                if tensor.blocks[0].q_labels[0].__class__.__name__ == 'SU2':
+                    f.write(struct.pack('i', 1))
+                    f.write(struct.pack('N', len(tensor.blocks)))
+                    fnnzaddr.astype(np.int32).tofile(f)
+                else:
+                    foffset.astype(np.uint64).tofile(f)
                 f.write(struct.pack('N', len(fdata)))
                 fdata.astype(dtype).tofile(f)
 
@@ -704,7 +711,7 @@ class MPSTools:
     def from_focus_mps_file(fname, is_su2=False, dtype=np.float64):
         """Load pyblock2 MPS from ``focus`` MPS binary file."""
         import struct, numpy as np, block2
-        qw = block2.SAny.init_su2 if is_su2 else block2.SAny.init_sz
+        qw = (lambda n, s: block2.SU2(n, s, 0)) if is_su2 else block2.SAny.init_sz
         fd = open(fname, 'rb').read()
         n_sites = struct.unpack('i', fd[:4])[0]
         off, tensors = 4, []
@@ -715,8 +722,20 @@ class MPSTools:
                 fqs.append(np.fromfile(fname, dtype=np.int32, offset=off + 4, count=3 * nx).reshape(nx, 3))
                 off += 4 + fqs[-1].nbytes
             fshape = [len(x) for x in fqs]
-            foffset = np.fromfile(fname, dtype=np.uint64, offset=off, count=np.prod(fshape)).reshape(fshape)
-            off += foffset.nbytes
+            if is_su2:
+                foffset = np.zeros(fshape, dtype=np.uint64)
+                assert struct.unpack('i', fd[off:off + 4])[0] == 1
+                nnz = struct.unpack('N', fd[off + 4:off + 12])[0]
+                fnnzaddr = np.fromfile(fname, dtype=np.int32, offset=off + 12, count=nnz * 4).reshape(nnz, 4)
+                off += 12 + fnnzaddr.nbytes
+                xoff = 0
+                for idx in fnnzaddr:
+                    assert idx[-1] == fqs[0][idx[0]][1]
+                    foffset[tuple(idx[:3])] = xoff + 1
+                    xoff += np.prod([q[x][-1] for x, q in zip(idx, fqs)], dtype=int)
+            else:
+                foffset = np.fromfile(fname, dtype=np.uint64, offset=off, count=np.prod(fshape)).reshape(fshape)
+                off += foffset.nbytes
             fdata = np.fromfile(fname, dtype=dtype, offset=off + 8, count=struct.unpack('N', fd[off:off + 8])[0])
             off += 8 + fdata.nbytes
             qrow, qcol, qmid, mask = *fqs, foffset != 0
