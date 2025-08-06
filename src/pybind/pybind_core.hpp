@@ -3995,6 +3995,25 @@ template <typename S = void> void bind_symmetry(py::module &m) {
             "invalid", [](py::object) { return SAny(SAny::invalid); })
         .def_readwrite("types", &SAny::types)
         .def_readwrite("values", &SAny::values)
+        .def(py::pickle(
+            [](const SAny &self) {
+                py::list tdata, vdata;
+                for (size_t i = 0; i < self.types.size(); i++)
+                    tdata.append((int32_t)self.types[i]);
+                for (size_t i = 0; i < self.values.size(); i++)
+                    vdata.append(self.values[i]);
+                return py::make_tuple(py::tuple(tdata), py::tuple(vdata));
+            },
+            [](py::tuple data) {
+                SAny r;
+                py::tuple tdata = data[0].cast<py::tuple>();
+                py::tuple vdata = data[1].cast<py::tuple>();
+                for (size_t i = 0; i < tdata.size(); i++)
+                    r.types[i] = (SAnySymmTypes)tdata[i].cast<int32_t>();
+                for (size_t i = 0; i < vdata.size(); i++)
+                    r.values[i] = vdata[i].cast<int32_t>();
+                return r;
+            }))
         .def_static("invalid_init", &SAny::invalid_init)
         .def_static("empty_types_init", &SAny::empty_types_init)
         .def_static("empty_values_init", &SAny::empty_values_init)
@@ -4046,11 +4065,16 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SZ>(m, "SZ")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SZ::data)>())
         .def(py::init<int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SZ(SZ::invalid); })
         .def_readwrite("data", &SZ::data)
+        .def(
+            py::pickle([](const SZ &self) { return py::make_tuple(self.data); },
+                       [](py::tuple data) {
+                           return SZ(data[0].cast<decltype(SZ::data)>());
+                       }))
         .def_property("n", &SZ::n, &SZ::set_n)
         .def_property("twos", &SZ::twos, &SZ::set_twos)
         .def_property("pg", &SZ::pg, &SZ::set_pg)
@@ -4080,12 +4104,17 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SU2>(m, "SU2")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SU2::data)>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SU2(SU2::invalid); })
         .def_readwrite("data", &SU2::data)
+        .def(py::pickle(
+            [](const SU2 &self) { return py::make_tuple(self.data); },
+            [](py::tuple data) {
+                return SU2(data[0].cast<decltype(SU2::data)>());
+            }))
         .def_property("n", &SU2::n, &SU2::set_n)
         .def_property("twos", &SU2::twos, &SU2::set_twos)
         .def_property("twos_low", &SU2::twos_low, &SU2::set_twos_low)
@@ -4116,12 +4145,17 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SGF>(m, "SGF")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SGF::data)>())
         .def(py::init<int, int>())
         .def(py::init<int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SGF(SGF::invalid); })
         .def_readwrite("data", &SGF::data)
+        .def(py::pickle(
+            [](const SGF &self) { return py::make_tuple(self.data); },
+            [](py::tuple data) {
+                return SGF(data[0].cast<decltype(SGF::data)>());
+            }))
         .def_property("n", &SGF::n, &SGF::set_n)
         .def_property_readonly("twos", &SGF::twos)
         .def_property("pg", &SGF::pg, &SGF::set_pg)
@@ -4151,12 +4185,17 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SGB>(m, "SGB")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SGB::data)>())
         .def(py::init<int, int>())
         .def(py::init<int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SGB(SGB::invalid); })
         .def_readwrite("data", &SGB::data)
+        .def(py::pickle(
+            [](const SGB &self) { return py::make_tuple(self.data); },
+            [](py::tuple data) {
+                return SGB(data[0].cast<decltype(SGB::data)>());
+            }))
         .def_property("n", &SGB::n, &SGB::set_n)
         .def_property_readonly("twos", &SGB::twos)
         .def_property("pg", &SGB::pg, &SGB::set_pg)
@@ -4186,12 +4225,17 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SZK>(m, "SZK")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SZK::data)>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SZK(SZK::invalid); })
         .def_readwrite("data", &SZK::data)
+        .def(py::pickle(
+            [](const SZK &self) { return py::make_tuple(self.data); },
+            [](py::tuple data) {
+                return SZK(data[0].cast<decltype(SZK::data)>());
+            }))
         .def_property("n", &SZK::n, &SZK::set_n)
         .def_property("twos", &SZK::twos, &SZK::set_twos)
         .def_property("pg", &SZK::pg, &SZK::set_pg)
@@ -4224,13 +4268,18 @@ template <typename S = void> void bind_symmetry(py::module &m) {
 
     py::class_<SU2K>(m, "SU2K")
         .def(py::init<>())
-        .def(py::init<uint32_t>())
+        .def(py::init<decltype(SU2K::data)>())
         .def(py::init<int, int, int>())
         .def(py::init<int, int, int, int>())
         .def(py::init<int, int, int, int, int, int>())
         .def_property_readonly_static(
             "invalid", [](py::object) { return SU2K(SU2K::invalid); })
         .def_readwrite("data", &SU2K::data)
+        .def(py::pickle(
+            [](const SU2K &self) { return py::make_tuple(self.data); },
+            [](py::tuple data) {
+                return SU2K(data[0].cast<decltype(SU2K::data)>());
+            }))
         .def_property("n", &SU2K::n, &SU2K::set_n)
         .def_property("twos", &SU2K::twos, &SU2K::set_twos)
         .def_property("twos_low", &SU2K::twos_low, &SU2K::set_twos_low)
