@@ -283,6 +283,9 @@ class MPSTools:
                 l.deallocate()
             else:
                 assert False
+        if bmps.info.left_dims_fci[0].quanta[0].twos != 0:
+            for block in tensors[0].blocks:
+                block.q_labels = ((block.q_labels[0] - bmps.info.left_dims_fci[0].quanta[0])[0], ) + block.q_labels[1:]
         if bmps.center != bmps.n_sites - 1:
             for block in tensors[bmps.center].blocks:
                 block.q_labels = block.q_labels[:-1] + (
@@ -668,12 +671,17 @@ class MPSTools:
     def to_focus_mps_file(fname, mps, dtype=np.float64):
         """Save pyblock2 MPS to ``focus`` MPS binary file."""
         import struct, numpy as np
+        ql = mps.tensors[0].blocks[0].q_labels
+        is_se = (ql[1] - ql[0])[0].twos != 0
+        tensors = mps.tensors[::-1] if is_se else mps.tensors
         with open(fname, 'wb') as f:
-            n_sites = len(mps.tensors)
+            n_sites = len(tensors)
             f.write(struct.pack('i', n_sites))
             for ii in range(n_sites):
-                tensor = mps.tensors[ii].__class__(blocks=[x.copy() for x in mps.tensors[ii].blocks])
+                tensor = tensors[ii].__class__(blocks=[x.copy() for x in tensors[ii].blocks])
                 for block in tensor.blocks:
+                    if is_se:
+                        block.q_labels, block.reduced = block.q_labels[::-1], block.reduced.T
                     if ii == 0:
                         block.q_labels = ((block.q_labels[1] - block.q_labels[0])[0], ) + block.q_labels
                         block.reduced = block.reduced[None, ...]
@@ -691,7 +699,7 @@ class MPSTools:
                 block_idxs = [tuple(qm[q] for qm, q in zip(qmaps, block.q_labels)) for block in tensor.blocks]
                 off = 0
                 for ix, (idx, block) in enumerate(sorted(zip(block_idxs, tensor.blocks))):
-                    fnnzaddr[ix] = [*idx, fqs[0][idx[0]][1]]
+                    fnnzaddr[ix] = [*idx, fqs[1][idx[1]][1] if is_se else fqs[0][idx[0]][1]]
                     foffset[idx] = off + 1
                     fdata[off:off + block.reduced.size] = block.reduced.transpose(2, 1, 0).flatten()
                     off += block.reduced.size
@@ -699,7 +707,7 @@ class MPSTools:
                     f.write(struct.pack('i', len(fq)))
                     fq.astype(np.int32).tofile(f)
                 if tensor.blocks[0].q_labels[0].__class__.__name__ == 'SU2':
-                    f.write(struct.pack('i', 1))
+                    f.write(struct.pack('i', 0 if is_se else 1))
                     f.write(struct.pack('N', len(tensor.blocks)))
                     fnnzaddr.astype(np.int32).tofile(f)
                 else:
@@ -714,7 +722,7 @@ class MPSTools:
         qw = (lambda n, s: block2.SU2(n, s, 0)) if is_su2 else block2.SAny.init_sz
         fd = open(fname, 'rb').read()
         n_sites = struct.unpack('i', fd[:4])[0]
-        off, tensors = 4, []
+        off, tensors, target = 4, [], None
         for ii in range(n_sites):
             fqs = []
             for _ in range(3):
@@ -724,15 +732,19 @@ class MPSTools:
             fshape = [len(x) for x in fqs]
             if is_su2:
                 foffset = np.zeros(fshape, dtype=np.uint64)
-                assert struct.unpack('i', fd[off:off + 4])[0] == 1
+                couple = struct.unpack('i', fd[off:off + 4])[0]
                 nnz = struct.unpack('N', fd[off + 4:off + 12])[0]
                 fnnzaddr = np.fromfile(fname, dtype=np.int32, offset=off + 12, count=nnz * 4).reshape(nnz, 4)
                 off += 12 + fnnzaddr.nbytes
+                assert couple in [0, 1]
                 xoff = 0
                 for idx in fnnzaddr:
-                    assert idx[-1] == fqs[0][idx[0]][1]
+                    assert idx[-1] == fqs[1 - couple][idx[1 - couple]][1]
                     foffset[tuple(idx[:3])] = xoff + 1
                     xoff += np.prod([q[x][-1] for x, q in zip(idx, fqs)], dtype=int)
+                if target is None and couple == 0:
+                    target = qw(*fqs[1][0][:-1])
+                    assert target.twos == 0
             else:
                 foffset = np.fromfile(fname, dtype=np.uint64, offset=off, count=np.prod(fshape)).reshape(fshape)
                 off += foffset.nbytes
@@ -748,7 +760,11 @@ class MPSTools:
             if ii == 0 or ii == n_sites - 1:
                 q_labels = [[q[:-1], q[1:]][ii == 0] for q in q_labels]
                 data = [d[0, ...] if ii == 0 else d[..., 0] for d in data]
+            if target is not None:
+                q_labels, data = [q[::-1] for q in q_labels], [d.T for d in data]
             tensors.append(Tensor([SubTensor(q_labels=q, reduced=d) for q, d in sorted(zip(q_labels, data))]))
+        if target is not None:
+            tensors = tensors[::-1]
         return MPS(tensors=tensors)
 
 class MPOTools:
