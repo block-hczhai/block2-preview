@@ -80,8 +80,9 @@ Finally, we can build `forte <https://github.com/evangelistalab/forte>`_.
 The ``block2`` interface has been implemented in the main ``Forte`` branch.
 To build it, we can: ::
 
-    git clone https://github.com/evangelistalab/forte
+    git clone -b block2_dmrg https://github.com/hczhai/forte
     cd forte
+    git checkout 1df396525b1f3595e8cf99f16524dbe7aa397258
     $(psi4 --plugin-compile) -Dambit_DIR=${AMBIT_DIR}/share/cmake/ambit \
         -DENABLE_block2=ON \
         -Dblock2_DIR=${BLOCK2_DIR}/share/cmake/block2 \
