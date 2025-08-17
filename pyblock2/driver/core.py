@@ -5562,6 +5562,7 @@ class DMRGDriver:
         mask=None,
         index_masks=None,
         simulated_parallel=0,
+        simulated_parallel_restart_rank=0,
         fused_contraction_rotation=True,
         cutoff=1e-24,
         iprint=0,
@@ -5611,6 +5612,10 @@ class DMRGDriver:
                 When ``self.mpi is None``, one can optionally set this to a positive
                 number to simulate the parallel algorithm which will be
                 computationally less efficient but requiring less amount of memory.
+            simulated_parallel_restart_rank : int
+                For restarting interrupted "simulated parallel" calculation.
+                Results for rank less than this number will be loaded from scratch.
+                Default is 0.
             fused_contraction_rotation : bool
                 Indicating whether contraction and rotation should be done within
                 one-step, without using large memory for blocking (only saving
@@ -5913,7 +5918,8 @@ class DMRGDriver:
             else:
                 pme.cached_contraction = True
                 pme.fused_contraction_rotation = False
-            pme.init_environments(iprint >= 2)
+            if sp_rank >= simulated_parallel_restart_rank:
+                pme.init_environments(iprint >= 2)
             expect = bw.bs.Expect(pme, mbra.info.bond_dim, mket.info.bond_dim)
             expect.cutoff = cutoff
             if site_type == 0:
@@ -5936,7 +5942,8 @@ class DMRGDriver:
                 expect.algo_type = bw.b.ExpectationAlgorithmTypes.Automatic
 
             expect.iprint = iprint
-            expect.solve(True, mket.center == 0)
+            if sp_rank >= simulated_parallel_restart_rank:
+                expect.solve(True, mket.center == 0)
 
             if simulated_parallel != 0:
                 if (
@@ -5951,7 +5958,7 @@ class DMRGDriver:
                         pme.get_npdm_fragment_filename(-1)[:-2] + "%d.npy"
                     )
 
-            if self.clean_scratch:
+            if sp_rank >= simulated_parallel_restart_rank and self.clean_scratch:
                 expect.me.remove_partition_files()
 
         if simulated_parallel != 0:
