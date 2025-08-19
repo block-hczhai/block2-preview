@@ -39,7 +39,9 @@ For DMRG with spin-orbit-coupling, please cite
 
  - H. Zhai, and G. K.-L. Chan. A comparison between the one- and two-step spin-orbit coupling approaches based on the ab initio Density Matrix Renormalization Group. *The Journal of Chemical Physics* **157**, 164108 (2022). doi: [10.1063/5.0107805](https://doi.org/10.1063/5.0107805).
 
-You can find a bibtex file in `CITATIONS.bib`.
+You can find a bibtex file in [`CITATIONS.bib`](https://github.com/block-hczhai/block2-preview/blob/master/CITATIONS.bib).
+
+For a list of DMRG references for methods implemented in ``block2``, see: https://block2.readthedocs.io/en/latest/user/references.html.
 
 One can install ``block2`` using ``pip`` (note: for very new Python versions, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the developement version of ``block2``):
 
@@ -73,8 +75,6 @@ Example input files can be found [here](https://block2.readthedocs.io/en/latest/
 
 For DMRGSCF calculation, please have a look at [here](https://block2.readthedocs.io/en/latest/user/dmrg-scf.html).
 
-For a list of DMRG references for methods implemented in ``block2``, see: https://block2.readthedocs.io/en/latest/user/references.html
-
 Documentation: https://block2.readthedocs.io/en/latest/
 
 Tutorial (Python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
@@ -82,6 +82,8 @@ Tutorial (Python interface): https://block2.readthedocs.io/en/latest/tutorial/qc
 Custom model Hamiltonians can be supported via a Python interface: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model), [correlation functions](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions).
 
 Source code: https://github.com/block-hczhai/block2-preview
+
+Example DMRG scripts for realistic systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
 
 For a simplified implementation of ab initio DMRG, see [pyblock3](https://github.com/block-hczhai/pyblock3-preview). Data can be imported and exported between ``block2`` and ``pyblock3``, see https://github.com/block-hczhai/block2-preview/discussions/35.
 

@@ -20,7 +20,7 @@ and Initiative for Computational Catalysis at Flatiron Institute.
 
 Documentation: https://block2.readthedocs.io/en/latest/
 
-Tutorial (python interface): https://block2.readthedocs.io/en/latest/tutorial/hubbard.html
+Tutorial (Python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
 
 Custom model Hamiltonians can be supported via a Python interface:
 `Fermi-Hubbard <https://block2.readthedocs.io/en/latest/tutorial/hubbard.html>`_,
@@ -32,6 +32,8 @@ Custom model Hamiltonians can be supported via a Python interface:
 `correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions>`_.
 
 Source code: https://github.com/block-hczhai/block2-preview
+
+Example DMRG scripts for realistic systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
 
 Contributors
 """"""""""""
