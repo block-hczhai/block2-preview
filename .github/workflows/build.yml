@@ -23,16 +23,14 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-24.04, macos-13, macos-14, windows-2022 ]
+        os: [ ubuntu-24.04, macos-15, windows-2025 ]
         python: [ '3.13' ]
         plat: [ x86_64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest, main-test ]
         exclude:
-          - os: macos-13
+          - os: macos-15
             parallel: mpi
-          - os: macos-14
-            parallel: mpi
-          - os: windows-2022
+          - os: windows-2025
             parallel: mpi
         include:
           - os: ubuntu-24.04
@@ -48,7 +46,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: install requirements (linux / macos)
-        if: (matrix.os == 'macos-13' || matrix.os == 'ubuntu-24.04') && matrix.plat == 'x86_64'
+        if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
         env:
           MKLROOT: ~/.local
         run: |
@@ -75,7 +73,7 @@ jobs:
           em++ -v
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
@@ -87,7 +85,7 @@ jobs:
           python -m pip install mpi4py
 
       - name: install requirements (windows)
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2025'
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
@@ -113,7 +111,7 @@ jobs:
           emmake make install
 
       - name: Download OpenBLAS (windows)
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -122,14 +120,14 @@ jobs:
           Expand-Archive -Path "OpenBLAS-0.3.27-x64.zip" -DestinationPath $env:BLAS_ROOT
 
       - name: build gtest (windows)
-        if: matrix.os == 'windows-2022' && matrix.parallel == 'serial'
+        if: matrix.os == 'windows-2025' && matrix.parallel == 'serial'
         env:
           GTEST_ROOT: D:\a\gtest
         run: |
           Get-WmiObject -Class Win32_Processor
           git clone -b release-1.8.0 https://github.com/google/googletest.git
           cd googletest
-          cmake -G "Visual Studio 17 2022" -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" `
+          cmake -G "Visual Studio 17 2022" -A x64 -S . -B . -DCMAKE_CXX_FLAGS="-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING" `
             -Dgtest_force_shared_crt=ON -DCMAKE_POLICY_VERSION_MINIMUM="3.5"
           cmake --build . -j 2 --config Release
           cmake --install . --prefix $env:GTEST_ROOT
@@ -163,21 +161,7 @@ jobs:
           getconf LONG_BIT
 
       - name: build gtest (macos)
-        if: matrix.os == 'macos-13'
-        env:
-          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
-        run: |
-          git clone -b release-1.8.0 https://github.com/google/googletest
-          cd googletest
-          cmake CMakeLists.txt -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-          make
-          make install
-          brew update
-          brew install libomp
-          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
-
-      - name: build gtest (macos)
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         env:
           GTESTROOT: /Users/runner/work/gtest
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
@@ -205,24 +189,8 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 2
 
-      - name: build test (serial-pytest, macos)
-        if: |
-          (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') &&
-          matrix.os == 'macos-13' && matrix.plat == 'x86_64'
-        env:
-          MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '11.0'
-          CC: gcc-9
-          CXX: g++-9
-        run: |
-          mkdir build
-          cd build
-          cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
-          make -j 2
-
       - name: build test (serial-pytest, macos-arm64)
-        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'macos-14'
+        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'macos-15'
         env:
           MACOSX_DEPLOYMENT_TARGET: '11.0'
           CC: gcc-9
@@ -238,7 +206,7 @@ jobs:
           make -j 2
 
       - name: build test (serial-pytest, windows)
-        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'windows-2022'
+        if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -246,7 +214,8 @@ jobs:
           mkdir build
           cd build
           cmake --version
-          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          cmake -G "Visual Studio 17 2022" -A x64 -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON `
+            -DUSE_COMPLEX=ON -DUSE_SG=ON -DUSE_SP_DMRG=OFF -DUSE_BIG_SITE=OFF
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (any-symm-pytest, linux)
@@ -262,22 +231,8 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
           make -j 2
 
-      - name: build test (any-symm-pytest, macos)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-13' && matrix.plat == 'x86_64'
-        env:
-          MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '11.0'
-          CC: gcc-9
-          CXX: g++-9
-        run: |
-          mkdir build
-          cd build
-          cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
-          make -j 2
-
       - name: build test (any-symm-pytest, macos-arm64)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-14'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-15'
         env:
           MACOSX_DEPLOYMENT_TARGET: '11.0'
           CC: gcc-9
@@ -293,7 +248,7 @@ jobs:
           make -j 2
 
       - name: build test (any-symm-pytest, windows)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -301,11 +256,12 @@ jobs:
           mkdir build
           cd build
           cmake --version
-          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
+          cmake -G "Visual Studio 17 2022" -A x64 -S .. -B . -DUSE_MKL=OFF -DBUILD_LIB=ON -DLARGE_BOND=ON `
+            -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON -DUSE_SP_DMRG=OFF -DUSE_BIG_SITE=OFF
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (serial, windows)
-        if: matrix.parallel == 'serial' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'serial' && matrix.os == 'windows-2025'
         env:
           GTEST_ROOT: D:\a\gtest
           BLAS_ROOT: D:\a\openblas
@@ -313,7 +269,7 @@ jobs:
           ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
           mkdir build_test
           cd build_test
-          cmake -G "Visual Studio 17 2022" -S .. -B . -DUSE_MKL=OFF -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          cmake -G "Visual Studio 17 2022" -A x64 -S .. -B . -DUSE_MKL=OFF -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           cmake --build . -j 2 --config Release -- '/v:d'
 
       - name: build test (serial, linux emscripten)
@@ -344,20 +300,8 @@ jobs:
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
 
-      - name: build test (serial, macos)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-13'
-        env:
-          MKLROOT: ~/.local
-          MACOSX_DEPLOYMENT_TARGET: '11.0'
-        run: |
-          mkdir build_test
-          cd build_test
-          cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
-          make -j 2
-
       - name: build test (serial, macos-arm64)
-        if: matrix.parallel == 'serial' && matrix.os == 'macos-14'
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-15'
         env:
           GTESTROOT: /Users/runner/work/gtest
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -372,7 +316,7 @@ jobs:
           make -j 2
 
       - name: run test (serial, windows)
-        if: matrix.parallel == 'serial' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'serial' && matrix.os == 'windows-2025'
         env:
           GTEST_ROOT: D:\a\gtest
           BLAS_ROOT: D:\a\openblas
@@ -404,13 +348,13 @@ jobs:
           ./block2_tests
 
       - name: run test (serial, macos)
-        if: matrix.parallel == 'serial' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+        if: matrix.parallel == 'serial' && matrix.os == 'macos-15'
         run: |
           cd build_test
           ./block2_tests
 
       - name: run test (serial-pytest, windows)
-        if: matrix.parallel == 'serial-pytest' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -439,14 +383,14 @@ jobs:
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
-        if: matrix.parallel == 'serial-pytest' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-15'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (main-test, windows)
-        if: matrix.parallel == 'main-test' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'main-test' && matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -479,7 +423,7 @@ jobs:
           ./run-test.sh
 
       - name: run test (main-test, macos)
-        if: matrix.parallel == 'main-test' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+        if: matrix.parallel == 'main-test' && matrix.os == 'macos-15'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -488,7 +432,7 @@ jobs:
           ./run-test.sh
 
       - name: run test (any-symm-pytest, windows)
-        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2022'
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
@@ -517,7 +461,7 @@ jobs:
           py.test -s pyblock2/unit_test/*.py --symm sany
 
       - name: run test (any-symm-pytest, macos)
-        if: matrix.parallel == 'any-symm-pytest' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-15'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
@@ -550,39 +494,35 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-24.04, macos-13, windows-2022, macos-14 ]
+        os: [ ubuntu-24.04, windows-2025, macos-15 ]
         python: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.13t', '3.14-dev' ]
         manylinux: [ 2014 ]
         plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial ]
         exclude:
-          - os: macos-13
+          - os: macos-15
             parallel: mpi
-          - os: macos-14
-            parallel: mpi
-          - os: macos-13
-            plat: arm64
-          - os: macos-14
+          - os: macos-15
             plat: x86_64
           - os: ubuntu-24.04
             plat: arm64
-          - os: windows-2022
+          - os: windows-2025
             parallel: mpi
-          - os: windows-2022
+          - os: windows-2025
             plat: arm64
-          - os: windows-2022
+          - os: windows-2025
             python: '3.14-dev'
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
 
-      - if: matrix.os == 'windows-2022' && matrix.python == '3.13t'
+      - if: matrix.os == 'windows-2025' && matrix.python == '3.13t'
         uses: actions/setup-python@v5
         with:
           python-version: '3.13.3t'
 
-      - if: matrix.os == 'macos-13' || matrix.os == 'macos-14' || (matrix.os == 'windows-2022' && matrix.python != '3.13t')
+      - if: matrix.os == 'macos-15' || (matrix.os == 'windows-2025' && matrix.python != '3.13t')
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -592,13 +532,13 @@ jobs:
         with:
           python-version: '3.13'
 
-      - if: matrix.os == 'macos-13' || matrix.os == 'macos-14'
+      - if: matrix.os == 'macos-15'
         run: |
           brew update
           brew install libomp
           brew install gnu-sed
 
-      - if: matrix.python == '3.8' && matrix.os == 'windows-2022'
+      - if: matrix.python == '3.8' && matrix.os == 'windows-2025'
         run: |
           sed -i "s/license = .*/license = { text = `"GPL-3.0-only`" }/" pyproject.toml
           sed -i "/license-files = /d" pyproject.toml
@@ -608,13 +548,13 @@ jobs:
           sed -i "s/license = .*/license = { text = \"GPL-3.0-only\" }/" pyproject.toml
           sed -i "/license-files = /d" pyproject.toml
 
-      - if: matrix.python == '3.8' && (matrix.os == 'macos-13' || matrix.os == 'macos-14')
+      - if: matrix.python == '3.8' && matrix.os == 'macos-15'
         run: |
           gsed -i "s/license = .*/license = { text = \"GPL-3.0-only\" }/" pyproject.toml
           gsed -i "/license-files = /d" pyproject.toml
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-13' || matrix.os == 'ubuntu-24.04'
+        if: matrix.os == 'ubuntu-24.04'
         env:
           MKLROOT: ~/.local
         run: |
@@ -623,7 +563,7 @@ jobs:
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (linux / macos)
-        if: matrix.os == 'macos-14'
+        if: matrix.os == 'macos-15'
         env:
           MKLROOT: ~/.local
         run: |
@@ -632,18 +572,18 @@ jobs:
           python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (windows)
-        if: matrix.os == 'windows-2022'
+        if: matrix.os == 'windows-2025'
         env:
           BLAS_ROOT: D:\a\openblas
         run: |
           python -m pip install pip build twine setuptools --upgrade
-          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==2.12.0
+          python -m pip install intel-openmp==2024.1.0 numpy 'cmake>=3.19' pybind11==3.0.1
           $file = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.27/OpenBLAS-0.3.27-x64.zip"
           Invoke-WebRequest -Uri $file -OutFile "OpenBLAS-0.3.27-x64.zip"
           Expand-Archive -Path "OpenBLAS-0.3.27-x64.zip" -DestinationPath $env:BLAS_ROOT
 
       - name: build wheels (windows)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'windows-2022'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'windows-2025'
         env:
           TAG_STRING: ${{ github.event.ref }}
           BLAS_ROOT: D:\a\openblas
@@ -656,6 +596,9 @@ jobs:
           sed -i "/scipy/d" pyproject.toml
           sed -i "/DUSE_SINGLE_PREC/d" setup.py
           sed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+          sed -i "/DUSE_MKL/a \                '-DUSE_BIG_SITE=OFF'," setup.py
+          sed -i "/DUSE_MKL/a \                '-DUSE_SP_DMRG=OFF'," setup.py
+          sed -i "/DUSE_MKL/a \                '-DUSE_IC=OFF'," setup.py
           sed -i "/DBUILD_EXE/c \                '-DBUILD_EXE=OFF'," setup.py
           sed -i "/  `"block2`"/d" setup.py
           ${env:OMPROOT} = "${env:Python_ROOT_DIR}\Library"
@@ -671,39 +614,8 @@ jobs:
           Write-Output "$($rr[0].FullName)"
           delvewheel repair "$($rr[0].FullName)" -v -w dist
 
-      - name: build wheels (macos-x86_64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-13' && matrix.plat == 'x86_64'
-        env:
-          TAG_STRING: ${{ github.event.ref }}
-          MACOSX_DEPLOYMENT_TARGET: '11.0'
-          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
-        run: |
-          cp /usr/local/opt/libomp/include/*.h /usr/local/include/
-          export PATH=/usr/local/opt/gnu-sed/bin:$PATH
-          echo ${TAG_STRING:11}
-          gsed -i "s/version=.*/version='${TAG_STRING:11}',/" setup.py
-          gsed -i "s/version = .*/version = \"${TAG_STRING:11}\"/" pyproject.toml
-          # if use mkl, will need iomp5
-          gsed -i "/DUSE_MKL/a \                '-DOMP_LIB=OMP'," setup.py
-          gsed -i "/mkl/d" pyproject.toml
-          gsed -i "/intel-openmp/d" pyproject.toml
-          gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
-          gsed -i "/DUSE_MKL/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
-          export OMPROOT=$(brew --prefix libomp)
-          echo ${OMPROOT}
-          cmake --version
-          python -m pip install wheel delocate==0.10.7
-          python -m pip wheel . -w ./dist --no-deps
-          export DYLD_LIBRARY_PATH=$(python -c "import site;print(':'.join(x+'/../..' for x in site.getsitepackages()))")
-          # prevent delocating libomp
-          export DELO_PY=$(cat $(which delocate-wheel) | head -1 | awk -F'!' '{print $2}')
-          export DELO_DE=$(${DELO_PY} -c "from delocate import delocating;print(delocating.__file__)")
-          gsed -i '/r_ed_base = base/a \        if "libomp" in required: needs_delocating.add(required); continue' ${DELO_DE}
-          gsed -i '/new_install_name =/a \            if "libomp" in required: new_install_name = "/usr/local/opt/libomp/lib/libomp.dylib"' ${DELO_DE}
-          delocate-wheel -k dist/*.whl
-
       - name: build wheels (macos-arm64)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-14' && matrix.plat == 'arm64'
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'macos-15' && matrix.plat == 'arm64'
         env:
           TAG_STRING: ${{ github.event.ref }}
           MACOSX_DEPLOYMENT_TARGET: '11.0'
@@ -724,8 +636,9 @@ jobs:
           gsed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
           cmake --version
           python -m pip install wheel delocate==0.10.7
-          export _PYTHON_HOST_PLATFORM="macosx-14.0-arm64"
-          export SDKROOT=/Applications/Xcode_15.4.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+          export _PYTHON_HOST_PLATFORM="macosx-15.0-arm64"
+          xcrun --sdk macosx --show-sdk-path
+          export SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
           export PLAT="arm64"
           python -m pip wheel . -w ./dist --no-deps
           delocate-wheel --require-archs=arm64 -k dist/*.whl

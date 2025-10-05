@@ -5082,6 +5082,9 @@ class DMRGDriver:
             else:
                 ldsq = np.array(x, dtype=np.float64) ** 2
             ldsq = ldsq[ldsq != 0]
+            sum_ldsq = np.sum(ldsq)
+            if sum_ldsq > 1E-14:
+                ldsq /= sum_ldsq
             bip_ent[ix] = float(np.sum(-ldsq * np.log(ldsq)))
         return bip_ent
 
