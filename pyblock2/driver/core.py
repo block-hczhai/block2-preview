@@ -6406,7 +6406,7 @@ class DMRGDriver:
             if refc < ket.center:
                 if ket.dot == 2:
                     ket.center += 1
-                    if ket.canonical_form[-1] == "C":
+                    if ket.canonical_form[-1] in ["C", "S"]:
                         ket.canonical_form = ket.canonical_form[:-1] + "S"
                     else:
                         ket.canonical_form = ket.canonical_form[:-1] + "T"
@@ -7329,7 +7329,7 @@ class DMRGDriver:
                 and cp_mps.dot == 2
                 and cp_mps.canonical_form[cp_mps.center] == "L"
             ):
-                if cp_mps.canonical_form[-1] == "C":
+                if cp_mps.canonical_form[-1] in ["C", "S"]:
                     cp_mps.canonical_form = cp_mps.canonical_form[:-1] + "S"
                 else:
                     cp_mps.canonical_form = cp_mps.canonical_form[:-1] + "T"
