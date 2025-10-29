@@ -5599,14 +5599,15 @@ class DMRGDriver:
                 If None, this is set to ``NPDMAlgorithmTypes.Default``. Default is None.
             npdm_expr : None or str or list[str]
                 The operator expression for the NPDM. If None, this will be determined
-                automatically. Multiple operator expressions are allowed in the SZ and
-                SGF modes. Default is None.
+                automatically. Multiple operator expressions are allowed. Default is None.
             mask : None or list[int] or list[list[int]]
                 The mask for setting repeated indices for the operator expression.
                 Default is None, meaning that all indices can be different.
+                Multiple values can be given when npdm_expr is a list.
             index_masks : None or list[list[int]] or list[list[list[int]]]
                 The list of allowed site indices for each operator in the operator expression.
                 Default is None, meaning that all site indices are allowed.
+                Multiple values can be given when npdm_expr is a list.
             simulated_parallel : int
                 Number of processors for simulating parallel algorithm serially.
                 Default is zero, meaning that the serial algorithm is used if
@@ -5695,19 +5696,25 @@ class DMRGDriver:
 
         if SymmetryTypes.SU2 in bw.symm_type:
             assert fermionic_ops is None
-            if npdm_expr is not None and "%s" not in npdm_expr:
+            if npdm_expr is not None and isinstance(npdm_expr, str) and "%s" not in npdm_expr:
+                op_str = [npdm_expr]
+            elif npdm_expr is not None and not isinstance(npdm_expr, str):
                 op_str = npdm_expr
             else:
                 su2_coupling = "((C+%s)1+D)0" if npdm_expr is None else npdm_expr
                 op_str = "(C+D)0"
                 for _ in range(pdm_type - 1):
                     op_str = su2_coupling % op_str
-            perm = bw.b.SpinPermScheme.initialize_su2(
-                int(pdm_type * 2), op_str, True,
-                mask=bw.b.VectorUInt16() if mask is None else bw.b.VectorUInt16(mask),
-                max_n_sites=ket.n_sites,
-            )
-            perms = bw.b.VectorSpinPermScheme([perm])
+                op_str = [op_str]
+            perms = bw.b.VectorSpinPermScheme([
+                bw.b.SpinPermScheme.initialize_su2(
+                    int(pdm_type * 2), cd, True,
+                    mask=bw.b.VectorUInt16() if mask is None else (
+                        bw.b.VectorUInt16(mask[ixm])
+                        if len(mask) != 0 and not isinstance(mask[0], int)
+                        else bw.b.VectorUInt16(mask)),
+                    max_n_sites=ket.n_sites) for ixm, cd in enumerate(op_str)
+            ])
         elif SymmetryTypes.SZ in bw.symm_type:
             if npdm_expr is not None and isinstance(npdm_expr, str):
                 op_str = [npdm_expr]
@@ -5886,9 +5893,9 @@ class DMRGDriver:
             scheme = bw.b.NPDMScheme(perms)
             opdq = (mbra.info.target - mket.info.target)[0]
             if SymmetryTypes.SU2 in bw.symm_type:
-                opdq.twos = opdq.twos_low = bw.b.SpinPermRecoupling.get_target_twos(
-                    op_str
-                )
+                twoss = [bw.b.SpinPermRecoupling.get_target_twos(x) for x in op_str]
+                assert min(twoss) == max(twoss)
+                opdq.twos = opdq.twos_low = twoss[0]
             if iprint >= 4:
                 print("NPDM dq =", opdq)
                 print(scheme.to_str())
@@ -6032,14 +6039,13 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
 
-        if SymmetryTypes.SU2 in bw.symm_type:
-            assert len(npdms) == 1
-            npdms = npdms[0]
-        elif SymmetryTypes.SGF in bw.symm_type and (
-            npdm_expr is None or isinstance(npdm_expr, str)
-        ):
-            assert len(npdms) == 1
-            npdms = npdms[0]
+        if npdm_expr is None or isinstance(npdm_expr, str):
+            if SymmetryTypes.SU2 in bw.symm_type:
+                assert len(npdms) == 1
+                npdms = npdms[0]
+            elif SymmetryTypes.SGF in bw.symm_type:
+                assert len(npdms) == 1
+                npdms = npdms[0]
 
         return npdms
 
