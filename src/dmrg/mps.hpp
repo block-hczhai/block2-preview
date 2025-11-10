@@ -536,7 +536,7 @@ template <typename S> struct MPSInfo {
                 right_probs[i]->probs[j] *= x;
             }
         }
-        // adjusted temparary fci dims
+        // adjusted temporary fci dims
         vector<shared_ptr<StateInfo<S>>> left_dims_fci_t(n_sites + 1);
         vector<shared_ptr<StateInfo<S>>> right_dims_fci_t(n_sites + 1);
         for (int i = 0; i < n_sites + 1; i++) {
