@@ -152,8 +152,8 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void broadcast(long double *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
-            int ierr = MPI_Bcast((double *)(data + offset),
-                                 min(chunk_size, len - offset) * 2, MPI_DOUBLE,
+            int ierr = MPI_Bcast((long double *)(data + offset),
+                                 min(chunk_size, len - offset), MPI_LONG_DOUBLE,
                                  owner, comm);
             assert(ierr == 0);
         }
@@ -162,9 +162,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void broadcast(complex<long double> *data, size_t len, int owner) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
-            int ierr = MPI_Bcast((double *)(data + offset),
-                                 min(chunk_size, len - offset) * 4, MPI_DOUBLE,
-                                 owner, comm);
+            int ierr = MPI_Bcast((long double *)(data + offset),
+                                 min(chunk_size, len - offset) * 2,
+                                 MPI_LONG_DOUBLE, owner, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
@@ -419,9 +419,9 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void allreduce_min(long double *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
-            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
-                                     min(chunk_size, len - offset) * 2,
-                                     MPI_DOUBLE, MPI_MIN, comm);
+            int ierr = MPI_Allreduce(
+                MPI_IN_PLACE, (long double *)(data + offset),
+                min(chunk_size, len - offset), MPI_LONG_DOUBLE, MPI_MIN, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
@@ -429,9 +429,10 @@ template <typename S> struct MPICommunicator : ParallelCommunicator<S> {
     void allreduce_min(complex<long double> *data, size_t len) override {
         _t.get_time();
         for (size_t offset = 0; offset < len; offset += chunk_size) {
-            int ierr = MPI_Allreduce(MPI_IN_PLACE, (double *)(data + offset),
-                                     min(chunk_size, len - offset) * 4,
-                                     MPI_DOUBLE, MPI_MIN, comm);
+            int ierr =
+                MPI_Allreduce(MPI_IN_PLACE, (long double *)(data + offset),
+                              min(chunk_size, len - offset) * 2,
+                              MPI_LONG_DOUBLE, MPI_MIN, comm);
             assert(ierr == 0);
         }
         tcomm += _t.get_time();
