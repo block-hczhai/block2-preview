@@ -60,6 +60,13 @@ using namespace std;
 #endif
 #endif
 
+#ifdef _HAS_OPENBLAS
+extern "C" {
+int openblas_get_max_threads(void);
+void openblas_set_num_threads(int num_threads);
+}
+#endif
+
 namespace block2 {
 
 /**
@@ -284,6 +291,9 @@ struct Threading {
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(1);
 #endif
+#ifdef _HAS_OPENBLAS
+        openblas_set_num_threads(1);
+#endif
 #ifdef _OPENMP
         omp_set_num_threads(n_threads_global != 0 ? n_threads_global : 1);
         return n_threads_global != 0 ? n_threads_global : 1;
@@ -304,13 +314,17 @@ struct Threading {
                                                          : 1);
         return n_threads_global != 0 ? n_threads_global : 1;
 #else
-        return 1;
-#endif
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n_threads_global != 0 ? n_threads_global : 1);
         return n_threads_global != 0 ? n_threads_global : 1;
 #else
+#ifdef _HAS_OPENBLAS
+        openblas_set_num_threads(n_threads_global != 0 ? n_threads_global : 1);
+        return n_threads_global != 0 ? n_threads_global : 1;
+#else
         return 1;
+#endif
+#endif
 #endif
     }
     /** Set number of threads for a normal (parallelism over renormalized
@@ -327,6 +341,9 @@ struct Threading {
 #endif
 #ifdef _HAS_INTEL_MKL
         mkl_set_num_threads(n_threads_mkl != 0 ? n_threads_mkl : 1);
+#endif
+#ifdef _HAS_OPENBLAS
+        openblas_set_num_threads(n_threads_mkl != 0 ? n_threads_mkl : 1);
 #endif
 #ifdef _OPENMP
         omp_set_num_threads(n_threads_op != 0 ? n_threads_op : 1);
@@ -378,6 +395,10 @@ struct Threading {
 #ifdef _HAS_BLIS
         if (n_threads_mkl != 0)
             bli_thread_set_num_threads(n_threads_mkl);
+#endif
+#ifdef _HAS_OPENBLAS
+        if (n_threads_mkl != 0)
+            openblas_set_num_threads(n_threads_mkl);
 #endif
 #ifdef _OPENMP
 #ifndef _MSC_VER
@@ -468,6 +489,9 @@ struct Threading {
         if (type & ThreadingTypes::BatchedGEMM) {
 #ifdef _HAS_BLIS
             bli_thread_set_num_threads(n_threads_mkl);
+#endif
+#ifdef _HAS_OPENBLAS
+            openblas_set_num_threads(n_threads_mkl);
 #endif
 #ifdef _HAS_INTEL_MKL
             mkl_set_num_threads(n_threads_mkl);

@@ -23,15 +23,25 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-24.04, macos-15, windows-2025 ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025 ]
         python: [ '3.13' ]
-        plat: [ x86_64 ]
+        plat: [ x86_64, arm64 ]
         parallel: [ mpi, serial, serial-pytest, any-symm-pytest, main-test ]
         exclude:
+          - os: ubuntu-24.04
+            plat: arm64
           - os: macos-15
             parallel: mpi
+          - os: macos-15
+            plat: x86_64
           - os: windows-2025
             parallel: mpi
+          - os: windows-2025
+            plat: arm64
+          - os: ubuntu-24.04-arm
+            parallel: mpi
+          - os: ubuntu-24.04-arm
+            plat: x86_64
         include:
           - os: ubuntu-24.04
             python: '3.12'
@@ -52,6 +62,14 @@ jobs:
         run: |
           python -m pip install pip build twine setuptools --upgrade
           python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+      
+      - name: install requirements (linux arm)
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          python -m pip install pip build twine setuptools --upgrade
+          python -m pip install numpy 'cmake>=3.19' pybind11==2.12.0
+          sudo apt-get update
+          sudo apt-get install -y libopenblas-dev
 
       - name: install requirements (linux emscripten)
         if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'wasm'
@@ -144,6 +162,16 @@ jobs:
           sudo cmake CMakeLists.txt
           sudo make
           sudo cp lib/*.a /usr/lib
+      
+      - name: build gtest (linux arm)
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          lscpu
+          sudo apt-get install -y libgtest-dev
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo cp lib/*.a /usr/lib
 
       - name: fix mkl for amd cpu
         if: matrix.os == 'ubuntu-24.04' && matrix.plat == 'x86_64'
@@ -188,6 +216,18 @@ jobs:
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
           make -j 2
+      
+      - name: build test (serial-pytest, linux arm)
+        if: |
+          (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') &&
+          matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          cmake .. -DUSE_MKL=OFF -DBLA_VENDOR=OpenBLAS -DUSE_OPENBLAS=ON -DF77UNDERSCORE=ON \
+            -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SG=ON
+          make -j 2
 
       - name: build test (serial-pytest, macos-arm64)
         if: (matrix.parallel == 'serial-pytest' || matrix.parallel == 'main-test') && matrix.os == 'macos-15'
@@ -229,6 +269,16 @@ jobs:
           cd build
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_LIB=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
+          make -j 2
+      
+      - name: build test (any-symm-pytest, linux arm)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          mkdir build
+          cd build
+          cmake --version
+          cmake .. -DUSE_MKL=OFF -DBLA_VENDOR=OpenBLAS -DUSE_OPENBLAS=ON -DF77UNDERSCORE=ON -DBUILD_LIB=ON \
+            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SU2SZ=OFF -DUSE_SANY=ON
           make -j 2
 
       - name: build test (any-symm-pytest, macos-arm64)
@@ -299,6 +349,16 @@ jobs:
           cmake --version
           cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
           make -j 2
+      
+      - name: build test (serial, linux arm)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          mkdir build_test
+          cd build_test
+          cmake --version
+          cmake .. -DUSE_MKL=OFF -DBLA_VENDOR=OpenBLAS -DUSE_OPENBLAS=ON -DF77UNDERSCORE=ON -DBUILD_TEST=ON \
+            -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON -DSIMPLE_TEST=ON
+          make -j 2
 
       - name: build test (serial, macos-arm64)
         if: matrix.parallel == 'serial' && matrix.os == 'macos-15'
@@ -346,6 +406,12 @@ jobs:
           fi
           cd build_test
           ./block2_tests
+      
+      - name: run test (serial, linux arm)
+        if: matrix.parallel == 'serial' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          cd build_test
+          ./block2_tests
 
       - name: run test (serial, macos)
         if: matrix.parallel == 'serial' && matrix.os == 'macos-15'
@@ -380,6 +446,13 @@ jobs:
             export LD_PRELOAD=$PWD/libfixcpu.so
           fi
           echo $LD_PRELOAD
+          py.test -s pyblock2/unit_test/*.py
+      
+      - name: run test (serial-pytest, linux arm)
+        if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
           py.test -s pyblock2/unit_test/*.py
 
       - name: run test (serial-pytest, macos)
@@ -421,6 +494,15 @@ jobs:
           echo $LD_PRELOAD
           cd pyblock2/main_test
           ./run-test.sh
+      
+      - name: run test (main-test, linux arm)
+        if: matrix.parallel == 'main-test' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          export PATH=$(pwd)/pyblock2/driver:$PATH
+          cd pyblock2/main_test
+          ./run-test.sh
 
       - name: run test (main-test, macos)
         if: matrix.parallel == 'main-test' && matrix.os == 'macos-15'
@@ -459,6 +541,13 @@ jobs:
           fi
           echo $LD_PRELOAD
           py.test -s pyblock2/unit_test/*.py --symm sany
+      
+      - name: run test (any-symm-pytest, linux arm)
+        if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
+          export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
+          py.test -s pyblock2/unit_test/*.py --symm sany
 
       - name: run test (any-symm-pytest, macos)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'macos-15'
@@ -494,24 +583,38 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-24.04, windows-2025, macos-15 ]
-        python: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.13t', '3.14-dev' ]
-        manylinux: [ 2014 ]
-        plat: [ x86_64, arm64 ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, windows-2025, macos-15 ]
+        python: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.13t', '3.14', '3.14t' ]
+        manylinux: [ '2014', 2014-aarch64 ]
+        plat: [ x86_64, arm64, aarch64 ]
         parallel: [ mpi, serial ]
         exclude:
+          - manylinux: 2014-aarch64
+            plat: arm64
+          - manylinux: 2014-aarch64
+            plat: x86_64
+          - manylinux: 2014-aarch64
+            parallel: mpi
+          - manylinux: 2014
+            plat: aarch64
           - os: macos-15
             parallel: mpi
           - os: macos-15
             plat: x86_64
+          - os: macos-15
+            manylinux: 2014-aarch64
           - os: ubuntu-24.04
             plat: arm64
+          - os: ubuntu-24.04
+            manylinux: 2014-aarch64
           - os: windows-2025
             parallel: mpi
           - os: windows-2025
             plat: arm64
           - os: windows-2025
-            python: '3.14-dev'
+            manylinux: 2014-aarch64
+          - os: ubuntu-24.04-arm
+            manylinux: 2014
       fail-fast: false
 
     steps:
@@ -527,7 +630,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - if: matrix.os == 'ubuntu-24.04'
+      - if: matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm'
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -543,7 +646,7 @@ jobs:
           sed -i "s/license = .*/license = { text = `"GPL-3.0-only`" }/" pyproject.toml
           sed -i "/license-files = /d" pyproject.toml
 
-      - if: matrix.python == '3.8' && matrix.os == 'ubuntu-24.04'
+      - if: matrix.python == '3.8' && (matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm')
         run: |
           sed -i "s/license = .*/license = { text = \"GPL-3.0-only\" }/" pyproject.toml
           sed -i "/license-files = /d" pyproject.toml
@@ -644,7 +747,7 @@ jobs:
           delocate-wheel --require-archs=arm64 -k dist/*.whl
 
       - name: prepare build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-24.04'
+        if: startsWith(github.ref, 'refs/tags/') && (matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm')
         env:
           TAG_STRING: ${{ github.event.ref }}
         run: |
@@ -654,7 +757,7 @@ jobs:
           cp ./.github/actions/build-wheel/Dockerfile.manylinux${{ matrix.manylinux }} ./.github/actions/build-wheel/Dockerfile
 
       - name: build wheels (manylinux)
-        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-24.04'
+        if: startsWith(github.ref, 'refs/tags/') && (matrix.os == 'ubuntu-24.04' || matrix.os == 'ubuntu-24.04-arm')
         uses: ./.github/actions/build-wheel
         with:
           python-version: ${{ matrix.python }}

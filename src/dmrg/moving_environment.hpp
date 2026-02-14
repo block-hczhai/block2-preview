@@ -426,9 +426,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_left->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(left_op_infos_notrunc);
         if (save_environments) {
-            frame_<FP>()->save_data(1, get_left_partition_filename(i));
-            left_part_files[i] = make_pair(get_left_partition_filename(i),
-                                           renormal_mem * sizeof(FL));
+            const string partition_filename = get_left_partition_filename(i);
+            frame_<FP>()->save_data(1, partition_filename);
+            left_part_files[i] =
+                make_pair(partition_filename, renormal_mem * sizeof(FL));
             if (frame_<FP>()->fp_codec != nullptr)
                 left_part_files[i].second =
                     frame_<FPS>()->fp_codec->ncpsd_last * sizeof(FP);
@@ -654,9 +655,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             new_right->deallocate();
         Partition<S, FL>::deallocate_op_infos_notrunc(right_op_infos_notrunc);
         if (save_environments) {
-            frame_<FP>()->save_data(1, get_right_partition_filename(i));
-            right_part_files[i] = make_pair(get_right_partition_filename(i),
-                                            renormal_mem * sizeof(FL));
+            const string partition_filename = get_right_partition_filename(i);
+            frame_<FP>()->save_data(1, partition_filename);
+            right_part_files[i] =
+                make_pair(partition_filename, renormal_mem * sizeof(FL));
             if (frame_<FP>()->fp_codec != nullptr)
                 right_part_files[i].second =
                     frame_<FPS>()->fp_codec->ncpsd_last * sizeof(FP);
@@ -893,18 +895,22 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             if (envs[i]->left != nullptr) {
                 Parsing::link_file(get_left_partition_filename(i),
                                    me->get_left_partition_filename(i));
-                if (left_part_files.count(i))
-                    me->left_part_files[i] =
-                        make_pair(me->get_left_partition_filename(i),
-                                  left_part_files[i].second);
+                if (left_part_files.count(i)) {
+                    const string partition_filename =
+                        me->get_left_partition_filename(i);
+                    me->left_part_files[i] = make_pair(
+                        partition_filename, left_part_files[i].second);
+                }
             }
             if (envs[i]->right != nullptr) {
                 Parsing::link_file(get_right_partition_filename(i),
                                    me->get_right_partition_filename(i));
-                if (right_part_files.count(i))
-                    me->right_part_files[i] =
-                        make_pair(me->get_right_partition_filename(i),
-                                  right_part_files[i].second);
+                if (right_part_files.count(i)) {
+                    const string partition_filename =
+                        me->get_right_partition_filename(i);
+                    me->right_part_files[i] = make_pair(
+                        partition_filename, right_part_files[i].second);
+                }
             }
         }
     }
@@ -1467,10 +1473,12 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     frame_<FP>()->rename_data(
                         get_right_partition_filename(i),
                         get_right_partition_filename(i + 1));
-                    if (right_part_files.count(i))
-                        right_part_files[i + 1] =
-                            make_pair(get_right_partition_filename(i + 1),
-                                      right_part_files[i].second);
+                    if (right_part_files.count(i)) {
+                        const string partition_filename =
+                            get_right_partition_filename(i + 1);
+                        right_part_files[i + 1] = make_pair(
+                            partition_filename, right_part_files[i].second);
+                    }
                 }
             for (int i = n_sites - 1; i >= 0; i--) {
                 envs[i]->middle.resize(1);

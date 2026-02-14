@@ -25,9 +25,9 @@ elif [ "${PYTHON_VERSION}" = "3.13" ]; then
     PY_VER=cp313-cp313
 elif [ "${PYTHON_VERSION}" = "3.13t" ]; then
     PY_VER=cp313-cp313t
-elif [ "${PYTHON_VERSION}" = "3.14-dev" ]; then
+elif [ "${PYTHON_VERSION}" = "3.14" ]; then
     PY_VER=cp314-cp314
-elif [ "${PYTHON_VERSION}" = "3.14t-dev" ]; then
+elif [ "${PYTHON_VERSION}" = "3.14t" ]; then
     PY_VER=cp314-cp314t
 fi
 
@@ -36,8 +36,25 @@ sed -i "/DPython3_EXECUTABLE/a \                '-DPython3_EXECUTABLE=${PY_EXE}'
 sed -i "/DPython3_EXECUTABLE/a \                '-DFORCE_LIB_ABS_PATH=OFF'," setup.py
 
 ls -l /opt/python
-/opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
-/opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+
+USE_OPENBLAS=${USE_OPENBLAS:-0}
+if [ "${USE_OPENBLAS}" = "1" ]; then
+    /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir numpy 'cmake>=3.19' pybind11==2.12.0
+    yum install -y epel-release && yum install -y openblas-devel
+    export BLAS_ROOT=/usr
+    export BLA_VENDOR=OpenBLAS
+    sed -i "/DUSE_MKL/c \                '-DUSE_MKL=OFF'," setup.py
+    sed -i "/DUSE_MKL/a \                '-DBLA_VENDOR=OpenBLAS'," setup.py
+    sed -i "/DUSE_MKL/a \                '-DUSE_OPENBLAS=ON'," setup.py
+    sed -i "/DUSE_MKL/a \                '-DF77UNDERSCORE=ON'," setup.py
+    sed -i "/mkl/d" pyproject.toml
+    sed -i "/intel-openmp/d" pyproject.toml
+else
+    /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+fi
+
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install setuptools
 
