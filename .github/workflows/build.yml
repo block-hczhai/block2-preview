@@ -347,7 +347,8 @@ jobs:
           mkdir build_test
           cd build_test
           cmake --version
-          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON
+          cmake .. -DUSE_MKL=ON -DBUILD_TEST=ON -DLARGE_BOND=ON -DUSE_COMPLEX=ON -DUSE_SINGLE_PREC=ON -DUSE_SG=ON \
+            -DSIMPLE_TEST=ON
           make -j 2
       
       - name: build test (serial, linux arm)

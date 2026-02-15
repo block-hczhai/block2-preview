@@ -62,7 +62,7 @@ One can install ``block2`` using ``pip`` (note: for very new Python versions, th
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.4rc5`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``.
+  where ``<version>`` can be some development version number like ``0.5.4rc13`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``. For the most recent development version, binary format is prepared for python 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.13t, 3.14, and 3.14t with macOS (arm64), Linux (x86_64 and aarch64), or Windows (x86_64) with no MPI dependence, and Linux (x86_64) with openMPI.
 
 The detailed instructions on manual installation can be found [here](https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation).
 
