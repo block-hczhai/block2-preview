@@ -21,8 +21,8 @@ class TestNPDM : public ::testing::Test {
         frame_<FP>()->minimal_disk_usage = true;
         frame_<FP>()->minimal_memory_usage = true;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
-            8);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
+            2);
         threading_()->seq_type = SeqTypes::Simple;
         cout << *frame_<FP>() << endl;
         cout << *threading_() << endl;

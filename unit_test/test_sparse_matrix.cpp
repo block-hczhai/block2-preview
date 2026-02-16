@@ -15,7 +15,7 @@ template <typename S> class TestSparseMatrix : public ::testing::Test {
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
             ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 1, 1,
-            4);
+            2);
     }
     void TearDown() override {
         frame_<FP>()->activate(0);

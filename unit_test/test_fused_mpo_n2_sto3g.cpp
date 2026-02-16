@@ -21,7 +21,7 @@ class TestFusedMPON2STO3G : public ::testing::Test {
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         frame_<FP>()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
             1);
         threading_()->seq_type = SeqTypes::None;
         cout << *threading_() << endl;
@@ -35,7 +35,8 @@ class TestFusedMPON2STO3G : public ::testing::Test {
 
 template <typename S, typename FL>
 void TestFusedMPON2STO3G::test_dmrg(
-    const vector<vector<S>> &targets, const vector<vector<long double>> &energies,
+    const vector<vector<S>> &targets,
+    const vector<vector<long double>> &energies,
     const shared_ptr<HamiltonianQC<S, FL>> &hamil, const string &name,
     DecompositionTypes dt, NoiseTypes nt) {
     Timer t;

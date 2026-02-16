@@ -16,7 +16,8 @@ class TestNPDMN2STO3GSA : public ::testing::Test {
     typedef double FP;
 
     template <typename S, typename FL>
-    void test_dmrg(const vector<S> &targets, const vector<long double> &energies,
+    void test_dmrg(const vector<S> &targets,
+                   const vector<long double> &energies,
                    const shared_ptr<HamiltonianQC<S, FL>> &hamil,
                    const string &name, ubond_t bond_dim, uint16_t nroots);
     void SetUp() override {
@@ -24,7 +25,7 @@ class TestNPDMN2STO3GSA : public ::testing::Test {
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         frame_<FP>()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
             1);
         threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;

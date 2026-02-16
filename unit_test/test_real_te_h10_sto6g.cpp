@@ -22,8 +22,8 @@ template <typename FL> class TestRealTEH10STO6G : public ::testing::Test {
         frame_<FP>()->use_main_stack = false;
         frame_<FP>()->fp_codec = make_shared<FPCodec<double>>(1E-14, 8 * 1024);
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 16,
-            16, 1);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
+            1);
         threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;
     }

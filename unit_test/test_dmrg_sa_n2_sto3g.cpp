@@ -25,7 +25,7 @@ template <typename FL> class TestDMRGN2STO3GSA : public ::testing::Test {
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         frame_<FP>()->use_main_stack = false;
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 8, 8,
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
             1);
         threading_()->seq_type = SeqTypes::Tasked;
         cout << *threading_() << endl;

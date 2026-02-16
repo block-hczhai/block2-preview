@@ -14,8 +14,8 @@ template <typename FL> class TestBatchGEMM : public ::testing::Test {
         Random::rand_seed(1969);
         frame_<FP>() = make_shared<DataFrame<FP>>(isize, dsize, "nodex");
         threading_() = make_shared<Threading>(
-            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 4, 4,
-            4);
+            ThreadingTypes::OperatorBatchedGEMM | ThreadingTypes::Global, 2, 2,
+            2);
     }
     void TearDown() override {
         frame_<FP>()->activate(0);
