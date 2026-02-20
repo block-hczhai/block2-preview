@@ -43,7 +43,7 @@ You can find a bibtex file in [`CITATIONS.bib`](https://github.com/block-hczhai/
 
 For a list of DMRG references for methods implemented in ``block2``, see: https://block2.readthedocs.io/en/latest/user/references.html.
 
-One can install ``block2`` using ``pip`` (note: for very new Python versions, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the developement version of ``block2``):
+One can install ``block2`` using ``pip`` (note: for very new Python versions, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the development version of ``block2``):
 
 * OpenMP-only version (no MPI dependence)
 
@@ -166,7 +166,7 @@ StackBlock Compatibility
 A [StackBlock 1.5](https://github.com/sanshar/StackBlock) compatible user interface can be found at `pyblock2/driver/block2main`.
 This script can work as a replacement of the StackBlock binary, with a few limitations and some extensions.
 The format of the input file `dmrg.conf` is identical to that of StackBlock 1.5.
-See `docs/driver.md` and `docs/source/user/basic.rst` for detailed documentations for this interface.
+See `docs/driver.md` and `docs/source/user/basic.rst` for detailed documentation for this interface.
 Examples using this interface can be found at `tests/driver`.
 
-Instuctions for installing the StackBlock code can be found in [here](https://block2.readthedocs.io/en/latest/user/mps-io.html#stackblock-installation). A list of precompiled binaries of StackBlock can be found in [here](https://github.com/hczhai/StackBlock/releases/tag/v1.5.3).
+Instructions for installing the StackBlock code can be found in [here](https://block2.readthedocs.io/en/latest/user/mps-io.html#stackblock-installation). A list of precompiled binaries of StackBlock can be found in [here](https://github.com/hczhai/StackBlock/releases/tag/v1.5.3).
