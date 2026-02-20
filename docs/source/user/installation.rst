@@ -23,11 +23,11 @@ One can install ``block2`` using ``pip``:
   If these binaries have some problems, you can use the ``--no-binary`` option of ``pip`` to force building from source
   (for example, ``pip install block2 --no-binary block2``).
 
-* For very new Python versions, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the developement version of ``block2``.
+* For very new Python versions, the ``--extra-index-url`` option of ``pip`` is required, see below for installing the development version of ``block2``.
 
 * One should only install one of ``block2`` and ``block2-mpi``. ``block2-mpi`` covers all features in ``block2``,
   but its dependence on mpi library can sometimes be difficult to deal with.
-  Some guidance for resolving environment problems can be found in github issue
+  Some guidance for resolving environment problems can be found in GitHub issue
   `#7 <https://github.com/block-hczhai/block2-preview/issues/7>`_.
 
 * To install the most recent development version, use: ::
@@ -242,7 +242,7 @@ Sometimes, when you have to use ``block2`` together with other python modules (s
 it may have some problem coexisting with each other.
 In general, change the import order may help.
 For ``pyscf``, ``import block2`` at the very beginning of the script may help.
-For ``pyblock``, recompiling ``block2`` use ``cmake .. -DUSE_MKL=OFF -DBUILD_LIB=ON -OMP_LIB=SEQ -DLARGE_BOND=ON`` may help.
+For ``pyblock``, recompiling ``block2`` use ``cmake .. -DUSE_MKL=OFF -DBUILD_LIB=ON -DOMP_LIB=SEQ -DLARGE_BOND=ON`` may help.
 
 Using C++ Interpreter cling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -250,6 +250,6 @@ Using C++ Interpreter cling
 Since ``block2`` is designed as a header-only C++ library, it can be conveniently executed
 using C++ interpreter `cling <https://github.com/root-project/cling>`_
 (which can be installed via `anaconda <https://anaconda.org/conda-forge/cling>`_)
-without any compilation. This can be useful for testing samll changes in the C++ code.
+without any compilation. This can be useful for testing small changes in the C++ code.
 
 Example C++ code for ``cling`` can be found at ``tests/cling/hubbard.cl``.

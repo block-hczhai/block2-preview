@@ -162,14 +162,14 @@ The energy for the MPS that will be translated is the energy at the last site of
     $ grep 'sweep energy' dmrg.out | tail -1
     Finished Sweep with 500 states and sweep energy for State [ 0 ] with Spin [ 0 ] :: -75.728442606745
 
-Since in the default schedule the one-site algorithm is used for the last sweep. This two energies are identical.
+Since in the default schedule the one-site algorithm is used for the last sweep. These two energies are identical.
 
 Now the MPS in ``StackBlock`` format is stored in the scratch folder ``./tmp/node0``.
 We will only need files in this folder with file names ``Rotation-*``, ``StateInfo-*``, ``wave-*``.
 The other files ``Block-b-*`` and ``Block-f-*`` (with renormalized operators stored)
 are not part of the MPS, which can be deleted.
 
-The folowing commands can be used to translate the MPS.
+The following commands can be used to translate the MPS.
 Please make sure that the environment variables ``${STACKBLOCK}``, ``${PYBLOCKHOME}``, and ``${BLOCK2HOME}``
 are correctly set. ::
 
@@ -183,11 +183,11 @@ are correctly set. ::
 .. note ::
     Here we use a special build of ``block2`` python extension,
     which was built using the ``cmake`` option ``-DTBB=OFF`` (the default is ``OFF``).
-    On some systems ``-DUSE_MKL=OFF -OMP_LIB=SEQ`` may be required.
+    On some systems ``-DUSE_MKL=OFF -DOMP_LIB=SEQ`` may be required.
     This is to solve the conflicts for importing ``pyblock`` and ``block2`` in the same script.
 
 Note that ``-expect`` option is optional. With this option, the energy of the translated MPS
-will be evaluted in ``block2`` and printed.
+will be evaluated in ``block2`` and printed.
 We can see that the printed ``block2`` energy is almost exactly the same as the one obtained from
 ``StackBlock``.
 By default, the translated ``block2`` MPS will be put in the output directory named
