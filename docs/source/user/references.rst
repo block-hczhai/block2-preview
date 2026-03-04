@@ -112,18 +112,23 @@ Multi-Reference Correlation Theories
 * Sharma, S., Alavi, A. Multireference Linearized Coupled Cluster Theory for Strongly Correlated Systems Using Matrix Product States. *The Journal of Chemical Physics* 2015, **143**, 102815. doi: `10.1063/1.4928643 <https://doi.org/10.1063/1.4928643>`_
 * Sharma, S., Jeanmairet, G., Alavi, A. Quasi-Degenerate Perturbation Theory Using Matrix Product States. *The Journal of Chemical Physics* 2016, **144**, 034103. doi: `10.1063/1.4939752 <https://doi.org/10.1063/1.4939752>`_
 
-* Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K. L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762. doi: `10.1021/acs.jctc.1c00957 <https://doi.org/10.1021/acs.jctc.1c00957>`_
+* Larsson, H. R., Zhai, H., Gunst, K., Chan, G. K.-L. Matrix product states with large sites. *Journal of Chemical Theory and Computation* 2022, **18**, 749-762. doi: `10.1021/acs.jctc.1c00957 <https://doi.org/10.1021/acs.jctc.1c00957>`_
 
 Determinant Coefficients
 ------------------------
 
-* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425. doi: `10.1021/acs.jctc.1c00205 <https://doi.org/10.1021/acs.jctc.1c00205>`_
+* Lee, S., Zhai, H., Sharma, S., Umrigar, C. J., Chan, G. K.-L. Externally Corrected CCSD with Renormalized Perturbative Triples (R-ecCCSD (T)) and the Density Matrix Renormalization Group and Selected Configuration Interaction External Sources. *Journal of Chemical Theory and Computation* 2021, **17**, 3414-3425. doi: `10.1021/acs.jctc.1c00205 <https://doi.org/10.1021/acs.jctc.1c00205>`_
 
 Perturbative DMRG
 -----------------
 
-* Guo, S., Li, Z., Chan, G. K. L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104.  doi: `10.1063/1.5031140 <https://doi.org/10.1063/1.5031140>`_
-* Guo, S., Li, Z., Chan, G. K. L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071. doi: `10.1021/acs.jctc.8b00273 <https://doi.org/10.1021/acs.jctc.8b00273>`_
+* Guo, S., Li, Z., Chan, G. K.-L. Communication: An efficient stochastic algorithm for the perturbative density matrix renormalization group in large active spaces. *The Journal of chemical physics* 2018, **148**, 221104.  doi: `10.1063/1.5031140 <https://doi.org/10.1063/1.5031140>`_
+* Guo, S., Li, Z., Chan, G. K.-L. A perturbative density matrix renormalization group algorithm for large active spaces. *Journal of chemical theory and computation* 2018, **14**, 4063-4071. doi: `10.1021/acs.jctc.8b00273 <https://doi.org/10.1021/acs.jctc.8b00273>`_
+
+Spin-Projected DMRG
+-------------------
+
+* Li, Z., Chan, G. K.-L. Spin-Projected Matrix Product States: Versatile Tool for Strongly Correlated Systems. *Journal of Chemical Theory and Computation* 2017, **13**, 2681-2695. doi: `10.1021/acs.jctc.7b00270 <https://doi.org/10.1021/acs.jctc.7b00270>`_
 
 Orbital Reordering
 ------------------

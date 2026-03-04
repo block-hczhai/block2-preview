@@ -152,6 +152,7 @@ Features
    tutorial/vibrational-hamiltonians
    tutorial/mpo-mps-quimb
    tutorial/mps-import-renormalizer
+   tutorial/spin-projected-dmrg
 
 .. raw:: latex
 
