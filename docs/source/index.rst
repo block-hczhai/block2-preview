@@ -153,6 +153,7 @@ Features
    tutorial/mpo-mps-quimb
    tutorial/mps-import-renormalizer
    tutorial/spin-projected-dmrg
+   tutorial/dmrg-pde
 
 .. raw:: latex
 
