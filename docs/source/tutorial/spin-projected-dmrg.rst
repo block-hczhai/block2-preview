@@ -72,6 +72,7 @@ symmetry mode to do spin-adapted DMRG with larger bond dimensions (not performed
 
     n_sites = driver.n_sites
 
+    # Note: when you have ``driver.spin`` larger than zero, number of 'b' should be larger than number of 'a'.
     xdstr = [
         '22aaaaa2aaaa222222222222b2bbbbbbbb22',
         '22aaaaabbb2b222222222222a2aaabbbbb22',
@@ -194,6 +195,7 @@ After compression, the Hamiltonian MPO is transformed to lower symmetries. ::
 
     n_sites = driver.n_sites
 
+    # Note: when you have ``driver.spin`` larger than zero, number of 'b' should be larger than number of 'a'.
     xdstr = [
         '22aaaaa2aaaa222222222222b2bbbbbbbb22',
         '22aaaaabbb2b222222222222a2aaabbbbb22',
