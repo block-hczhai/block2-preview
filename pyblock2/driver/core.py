@@ -6594,7 +6594,8 @@ class DMRGDriver:
         solver_type=None,
         right_weight=0.0,
         iprint=0,
-        kernel=None,
+        left_kernel=None,
+        right_kernel=None,
     ):
         """
         Apply the MPO to the MPS to get a new MPS (when ``left_mpo is None``),
@@ -6677,8 +6678,10 @@ class DMRGDriver:
                 Bond dimensions for projection MPSs. Default is -1 (no truncations).
             iprint : int
                 Verbosity. Default is 0 (quiet).
-            kernel : None or function
-                Kernel operation for the local problem.
+            left_kernel : None or function
+                Kernel operation for the left-side local linear problem.
+            right_kernel : None or function
+                Kernel operation for the main right-side local problem.
 
         Returns:
             norm : float|complex
@@ -6748,10 +6751,14 @@ class DMRGDriver:
             cps.decomp_type = bw.b.DecompositionTypes.SVD
         if noises is not None and noises[0] != 0 and left_mpo is None:
             cps.eq_type = bw.b.EquationTypes.PerturbativeCompression
-        if kernel is not None:
+        if left_kernel is not None:
             # need to keep Python derived class in memory (stored in self)
-            self.cps_kernel = self.make_kernel(kernel=kernel)
-            cps.eff_kernel = self.cps_kernel
+            self.cps_left_kernel = self.make_kernel(kernel=left_kernel)
+            cps.leff_kernel = self.cps_left_kernel
+        if right_kernel is not None:
+            # need to keep Python derived class in memory (stored in self)
+            self.cps_right_kernel = self.make_kernel(kernel=right_kernel)
+            cps.reff_kernel = self.cps_right_kernel
         cps.iprint = iprint
         cps.cutoff = cutoff
         cps.linear_conv_thrds = bw.VectorFP(thrds)
