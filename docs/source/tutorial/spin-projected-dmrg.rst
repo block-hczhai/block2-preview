@@ -31,6 +31,11 @@ in the particle-number U1 symmetry mode. MPS can be initialized using a broken-s
 determinant in the particle-number and projected spin symmetry mode, and then transformed
 to the particle-number U1 symmetry mode.
 
+Note:
+
+1. For ``SAny`` mode, ``fast_no_orb_dep_op=True`` can be used to speed up the construction of MPO.
+2. ``fp_codec_cutoff=0.0`` is important for getting reilable results for Spin-Projected DMRG.
+
 .. highlight:: python3
 
 SP-DMRG is performed with particle-number U1 symmetry only, and the final MPS is transformed
@@ -61,7 +66,7 @@ symmetry mode to do spin-adapted DMRG with larger bond dimensions (not performed
     driver.set_symmetry_groups("U1Fermi", "AbelianPG")
     driver.initialize_system(n_sites=driver.n_sites, n_elec=driver.n_elec, spin=driver.spin, orb_sym=driver.orb_sym)
 
-    mpo = driver.get_qc_mpo(h1e=driver.h1e, g2e=driver.g2e, ecore=driver.ecore, iprint=2, simple_const=True, add_ident=False)
+    mpo = driver.get_qc_mpo(h1e=driver.h1e, g2e=driver.g2e, ecore=driver.ecore, iprint=2, simple_const=True, add_ident=False, fast_no_orb_dep_op=True)
     print("MPO = ", mpo.get_bond_dims())
     pmpo = driver.get_spin_projection_mpo(twos=twos, twosz=driver.spin, npts=npts, use_sz_symm=False, cutoff=1E-12, add_ident=True, iprint=1)
 
