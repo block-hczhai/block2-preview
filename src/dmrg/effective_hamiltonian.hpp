@@ -679,9 +679,16 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
     // norm, nmult, nflop, tmult
     tuple<FP, int, size_t, double>
     multiply(typename const_fl_type<FL>::FL const_e,
-             const shared_ptr<ParallelRule<S>> &para_rule = nullptr) {
+             const shared_ptr<ParallelRule<S>> &para_rule = nullptr,
+             const vector<shared_ptr<SparseMatrix<S, FL>>> &ortho_bra =
+                 vector<shared_ptr<SparseMatrix<S, FL>>>()) {
         bra->clear();
         shared_ptr<OpExpr<S>> expr = add_const_term(const_e, para_rule);
+        vector<GMatrix<FL>> ors =
+            vector<GMatrix<FL>>(ortho_bra.size(), GMatrix<FL>(nullptr, 0, 0));
+        for (size_t i = 0; i < ortho_bra.size(); i++)
+            ors[i] = GMatrix<FL>(ortho_bra[i]->data,
+                                 (MKL_INT)ortho_bra[i]->total_memory, 1);
         Timer t;
         t.get_time();
         // Auto mode cannot add const_e term
@@ -701,7 +708,7 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                 (FL)1.0, f,
                 GMatrix<FL>(ket->data, (MKL_INT)ket->total_memory, 1),
                 GMatrix<FL>(bra->data, (MKL_INT)bra->total_memory, 1),
-                vector<GMatrix<FL>>());
+                ors);
         }
         op->mat->data[0] = expr;
         FP norm = GMatrixFunctions<FL>::norm(

@@ -3556,7 +3556,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         h_eff->eff_kernel = reff_kernel;
         teff += _t.get_time();
         tuple<FLS, pair<int, int>, size_t, double> pdi;
-        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule, ortho_bra);
         get<0>(pdi) = get<0>(mpdi);
         get<1>(pdi).first = get<1>(mpdi);
         get<2>(pdi) = get<2>(mpdi);
@@ -3597,11 +3597,10 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             make_shared<SparseMatrix<S, FLS>>();
                         extra_bra->allocate(me->bra->tensors[i]->info);
                         shared_ptr<EffectiveHamiltonian<S, FL>> x_eff =
-                            ext_mes[ist]->eff_ham(
-                                fuse_left ? FuseTypes::FuseL
-                                          : FuseTypes::FuseR,
-                                forward, false, extra_bra,
-                                ext_mpss[ist]->tensors[i]);
+                            ext_mes[ist]->eff_ham(fuse_left ? FuseTypes::FuseL
+                                                            : FuseTypes::FuseR,
+                                                  forward, false, extra_bra,
+                                                  ext_mpss[ist]->tensors[i]);
                         teff += _t.get_time();
                         auto xpdi = x_eff->multiply(ext_mes[ist]->mpo->const_e,
                                                     ext_mes[ist]->para_rule);
@@ -4327,7 +4326,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         h_eff->eff_kernel = reff_kernel;
         teff += _t.get_time();
         tuple<FLS, pair<int, int>, size_t, double> pdi;
-        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule);
+        auto mpdi = h_eff->multiply(me->mpo->const_e, me->para_rule, ortho_bra);
         get<0>(pdi) = get<0>(mpdi);
         get<1>(pdi).first = get<1>(mpdi);
         get<2>(pdi) = get<2>(mpdi);
@@ -4344,7 +4343,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 if (eq_type == EquationTypes::FitAddition) {
                     shared_ptr<EffectiveHamiltonian<S, FL>> t_eff =
                         tme->eff_ham(FuseTypes::FuseLR, forward, false,
-                                     tme->bra->tensors[i], tme->ket->tensors[i]);
+                                     tme->bra->tensors[i],
+                                     tme->ket->tensors[i]);
                     teff += _t.get_time();
                     auto tpdi =
                         t_eff->multiply(tme->mpo->const_e, tme->para_rule);
@@ -4366,9 +4366,9 @@ template <typename S, typename FL, typename FLS> struct Linear {
                             make_shared<SparseMatrix<S, FLS>>();
                         extra_bra->allocate(me->bra->tensors[i]->info);
                         shared_ptr<EffectiveHamiltonian<S, FL>> x_eff =
-                            ext_mes[ist]->eff_ham(
-                                FuseTypes::FuseLR, forward, false, extra_bra,
-                                ext_mpss[ist]->tensors[i]);
+                            ext_mes[ist]->eff_ham(FuseTypes::FuseLR, forward,
+                                                  false, extra_bra,
+                                                  ext_mpss[ist]->tensors[i]);
                         teff += _t.get_time();
                         auto xpdi = x_eff->multiply(ext_mes[ist]->mpo->const_e,
                                                     ext_mes[ist]->para_rule);
