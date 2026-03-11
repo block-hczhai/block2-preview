@@ -2388,7 +2388,8 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
                EquationTypes::PerturbativeCompression)
         .value("GreensFunction", EquationTypes::GreensFunction)
         .value("GreensFunctionSquared", EquationTypes::GreensFunctionSquared)
-        .value("FitAddition", EquationTypes::FitAddition);
+        .value("FitAddition", EquationTypes::FitAddition)
+        .value("FitMultiAddition", EquationTypes::FitMultiAddition);
 
     py::enum_<ConvergenceTypes>(m, "ConvergenceTypes", py::arithmetic())
         .value("LastMinimal", ConvergenceTypes::LastMinimal)

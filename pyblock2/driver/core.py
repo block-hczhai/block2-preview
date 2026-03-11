@@ -6935,6 +6935,167 @@ class DMRGDriver:
             self.mpi.barrier()
         return norm
 
+    def multi_addition(
+        self,
+        bra,
+        kets,
+        mpos=None,
+        n_sweeps=10,
+        tol=1e-8,
+        bra_bond_dims=None,
+        ket_bond_dimss=None,
+        noises=None,
+        noise_mpo=None,
+        cutoff=1e-24,
+        iprint=0,
+    ):
+        """
+        Perform the addition of multiple MPSs to generate a new MPS (using fitting):
+
+        .. math::
+            |\\mathrm{bra}\\rangle = \\sum_i \\mathrm{mpo}_i |\\mathrm{ket}_i\\rangle.
+
+        Args:
+            bra : MPS
+                The block2 MPS object. The given MPS ``bra`` will be used as the
+                initial guess for the left-hand side MPS.
+            kets : list[MPS]
+                Input block2 MPS objects. At least two MPSs are required.
+            mpos : None or list[None|int|float|complex|MPO]
+                Operators applied to each input MPS. If None, all entries are the
+                identity MPO. Scalars multiply the identity MPO.
+            n_sweeps : int
+                Maximal number of sweeps. Default is 10.
+            tol : float
+                Converge threshold for the norm of ``bra``. Default is 1E-8.
+            bra_bond_dims : None or list[int]
+                List of ``bra`` bond dimensions for each sweep. Default is None.
+            ket_bond_dimss : None or list[list[int]]
+                Bond dimension schedules for each input MPS. The first MPS uses the
+                full schedule, while extra MPSs use their last entry as fixed bond
+                dimension during center alignment.
+            noises : None or list[float]
+                List of prefactor of the noise for each sweep. Default is None.
+            noise_mpo : None or MPO
+                If not None and ``noises`` is not zero or None, this MPO will be
+                used for computing noise.
+            cutoff : float
+                States with eigenvalue below this number will be discarded.
+            iprint : int
+                Verbosity. Default is 0.
+
+        Returns:
+            norm : float|complex
+                The norm of ``bra``.
+        """
+        bw = self.bw
+        kets = list(kets)
+        if len(kets) < 2:
+            raise ValueError("Need at least two kets in multi_addition!!")
+
+        ket_tags = [ket.info.tag for ket in kets]
+        if len(set(ket_tags)) != len(ket_tags):
+            raise RuntimeError("Same tag for kets!!")
+        if bra.info.tag in ket_tags:
+            raise RuntimeError("Same tag for bra and ket!!")
+        if any(ket.dot != bra.dot for ket in kets):
+            raise RuntimeError("bra and kets should have the same dot!!")
+
+        if ket_bond_dimss is None:
+            ket_bond_dimss = [[ket.info.bond_dim] for ket in kets]
+        else:
+            ket_bond_dimss = [list(ket_bond_dims) for ket_bond_dims in ket_bond_dimss]
+            if len(ket_bond_dimss) != len(kets):
+                raise ValueError(
+                    "ket_bond_dimss should have the same length as kets!!"
+                )
+            if any(len(ket_bond_dims) == 0 for ket_bond_dims in ket_bond_dimss):
+                raise ValueError("Empty ket_bond_dims in ket_bond_dimss!!")
+
+        if mpos is None:
+            mpos = [None] * len(kets)
+        else:
+            mpos = list(mpos)
+            if len(mpos) != len(kets):
+                raise ValueError("mpos should have the same length as kets!!")
+
+        if bra_bond_dims is None:
+            bra_bond_dims = [bra.info.bond_dim]
+
+        self.align_mps_center(bra, kets[0])
+        for ik, ket in enumerate(kets[1:], 1):
+            self.align_mps_center(ket, bra, max_bond_dim=ket_bond_dimss[ik][-1])
+
+        if noises is not None and noises[0] != 0 and noise_mpo is not None:
+            pme = bw.bs.MovingEnvironment(noise_mpo, bra, bra, "PERT-MADD")
+            pme.init_environments(iprint >= 2)
+        else:
+            pme = None
+
+        impo = None
+
+        def get_addition_mpo(mpo):
+            nonlocal impo
+            if mpo is None:
+                if impo is None:
+                    impo = self.get_identity_mpo()
+                return impo
+            if isinstance(mpo, (int, float, complex)):
+                if impo is None:
+                    impo = self.get_identity_mpo()
+                return mpo * impo
+            return mpo
+
+        mpos = [get_addition_mpo(mpo) for mpo in mpos]
+
+        rme = bw.bs.MovingEnvironment(mpos[0], bra, kets[0], "MADD-0")
+        rme.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+        rme.init_environments(iprint >= 2)
+
+        if noises is None or noises[0] == 0:
+            cps = bw.bs.Linear(
+                pme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_bond_dimss[0]),
+            )
+        else:
+            cps = bw.bs.Linear(
+                pme,
+                rme,
+                bw.b.VectorUBond(bra_bond_dims),
+                bw.b.VectorUBond(ket_bond_dimss[0]),
+                bw.VectorFP(noises),
+            )
+
+        cps.ext_mpss = bw.bs.VectorMPS(kets[1:])
+        for ik, ext_mps in enumerate(cps.ext_mpss, 1):
+            ext_me = bw.bs.MovingEnvironment(
+                mpos[ik], bra, ext_mps, "MADD-" + ext_mps.info.tag
+            )
+            ext_me.delayed_contraction = bw.b.OpNamesSet.normal_ops()
+            ext_me.init_environments(iprint >= 2)
+            cps.ext_mes.append(ext_me)
+
+        if noises is not None and noises[0] != 0:
+            cps.noise_type = bw.b.NoiseTypes.ReducedPerturbative
+            cps.decomp_type = bw.b.DecompositionTypes.SVD
+        cps.eq_type = bw.b.EquationTypes.FitMultiAddition
+        cps.iprint = iprint
+        cps.cutoff = cutoff
+        norm = cps.solve(n_sweeps, kets[0].center == 0, tol)
+
+        if self.clean_scratch:
+            rme.remove_partition_files()
+            for ext_me in cps.ext_mes:
+                ext_me.remove_partition_files()
+            if pme is not None:
+                pme.remove_partition_files()
+
+        if self.mpi is not None:
+            self.mpi.barrier()
+        return norm
+
     def expectation(
         self, bra, mpo, ket, stacked_mpo=None, store_bra_spectra=False, store_ket_spectra=False, iprint=0
     ):

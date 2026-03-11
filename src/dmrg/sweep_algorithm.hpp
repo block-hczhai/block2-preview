@@ -3241,7 +3241,8 @@ enum struct EquationTypes : uint8_t {
     PerturbativeCompression,
     GreensFunction,
     GreensFunctionSquared,
-    FitAddition
+    FitAddition,
+    FitMultiAddition
 };
 
 enum struct ConvergenceTypes : uint8_t {
@@ -3267,6 +3268,13 @@ enum struct ConvergenceTypes : uint8_t {
 //      (optionally: lme = <x|H|x> for perturbative noise)
 //    prefactor in addtion can be introduced by
 //    doing scalar multiplication on MPO in RHS/THS
+// when eq_type == FitMultiAddition
+//    This is 1 |x> = sum_i RHS_i |r_i>
+//    rme = <x|RHS_0|r_0>, ext_mes/ext_mpss hold
+//      <x|RHS_i|r_i> for i > 0,
+//      (optionally: lme = <x|H|x> for perturbative noise)
+//    prefactor in addition can be introduced by
+//    doing scalar multiplication on MPO in each RHS_i
 template <typename S, typename FL, typename FLS> struct Linear {
     typedef typename MovingEnvironment<S, FL, FLS>::FPS FPS;
     typedef typename MovingEnvironment<S, FL, FLS>::FCS FCS;
@@ -3423,6 +3431,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
         assert(me->bra != me->ket);
         frame_<FPS>()->activate(0);
         bool fuse_left = i <= me->fuse_center;
+        const bool fit_addition = eq_type == EquationTypes::FitAddition ||
+                                  eq_type == EquationTypes::FitMultiAddition;
         vector<shared_ptr<MPS<S, FLS>>> mpss = {me->bra, me->ket};
         if (tme != nullptr) {
             if (tme->bra != me->bra && tme->bra != me->ket)
@@ -3473,7 +3483,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
-            eq_type == EquationTypes::FitAddition) {
+            fit_addition) {
             right_bra = make_shared<SparseMatrix<S, FLS>>();
             right_bra->allocate(me->bra->tensors[i]->info);
             if ((eq_type == EquationTypes::GreensFunction ||
@@ -3555,26 +3565,60 @@ template <typename S, typename FL, typename FLS> struct Linear {
         vector<FLS> targets = {get<0>(pdi)};
         vector<FLS> extra_bras;
         h_eff->deallocate();
-        if (eq_type == EquationTypes::FitAddition ||
-            eq_type == EquationTypes::PerturbativeCompression) {
-            if (eq_type == EquationTypes::FitAddition) {
-                shared_ptr<EffectiveHamiltonian<S, FL>> t_eff = tme->eff_ham(
-                    fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
-                    false, tme->bra->tensors[i], tme->ket->tensors[i]);
-                teff += _t.get_time();
-                auto tpdi = t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+        if (fit_addition || eq_type == EquationTypes::PerturbativeCompression) {
+            if (fit_addition) {
                 GMatrix<FLS> mbra(me->bra->tensors[i]->data,
                                   (MKL_INT)me->bra->tensors[i]->total_memory,
                                   1);
-                GMatrix<FLS> sbra(right_bra->data,
-                                  (MKL_INT)right_bra->total_memory, 1);
-                GMatrixFunctions<FLS>::iadd(mbra, sbra, 1);
-                tmult += _t.get_time();
-                targets[0] = GMatrixFunctions<FLS>::norm(mbra);
-                get<1>(pdi).first += get<1>(tpdi);
-                get<2>(pdi) += get<2>(tpdi);
-                get<3>(pdi) += get<3>(tpdi);
-                t_eff->deallocate();
+                if (eq_type == EquationTypes::FitAddition) {
+                    shared_ptr<EffectiveHamiltonian<S, FL>> t_eff =
+                        tme->eff_ham(fuse_left ? FuseTypes::FuseL
+                                               : FuseTypes::FuseR,
+                                     forward, false, tme->bra->tensors[i],
+                                     tme->ket->tensors[i]);
+                    teff += _t.get_time();
+                    auto tpdi =
+                        t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+                    GMatrix<FLS> sbra(right_bra->data,
+                                      (MKL_INT)right_bra->total_memory, 1);
+                    GMatrixFunctions<FLS>::iadd(mbra, sbra, 1);
+                    tmult += _t.get_time();
+                    targets[0] = GMatrixFunctions<FLS>::norm(mbra);
+                    get<1>(pdi).first += get<1>(tpdi);
+                    get<2>(pdi) += get<2>(tpdi);
+                    get<3>(pdi) += get<3>(tpdi);
+                    t_eff->deallocate();
+                } else {
+                    assert(ext_mes.size() == ext_mpss.size());
+                    memcpy(mbra.data, right_bra->data,
+                           right_bra->total_memory * sizeof(FLS));
+                    for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                        shared_ptr<SparseMatrix<S, FLS>> extra_bra =
+                            make_shared<SparseMatrix<S, FLS>>();
+                        extra_bra->allocate(me->bra->tensors[i]->info);
+                        shared_ptr<EffectiveHamiltonian<S, FL>> x_eff =
+                            ext_mes[ist]->eff_ham(
+                                fuse_left ? FuseTypes::FuseL
+                                          : FuseTypes::FuseR,
+                                forward, false, extra_bra,
+                                ext_mpss[ist]->tensors[i]);
+                        teff += _t.get_time();
+                        auto xpdi = x_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                                    ext_mes[ist]->para_rule);
+                        GMatrixFunctions<FLS>::iadd(
+                            mbra,
+                            GMatrix<FLS>(extra_bra->data,
+                                         (MKL_INT)extra_bra->total_memory, 1),
+                            1);
+                        tmult += _t.get_time();
+                        get<1>(pdi).first += get<1>(xpdi);
+                        get<2>(pdi) += get<2>(xpdi);
+                        get<3>(pdi) += get<3>(xpdi);
+                        x_eff->deallocate();
+                        extra_bra->deallocate();
+                    }
+                    targets[0] = GMatrixFunctions<FLS>::norm(mbra);
+                }
             }
             if (lme != nullptr && noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
@@ -3706,7 +3750,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         }
         if (pbra != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
-        if (tme != nullptr && eq_type != EquationTypes::FitAddition) {
+        if (tme != nullptr && !fit_addition) {
             shared_ptr<EffectiveHamiltonian<S, FL>> t_eff = tme->eff_ham(
                 fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward, false,
                 tme->bra->tensors[i], tme->ket->tensors[i]);
@@ -4188,7 +4232,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         }
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
-            eq_type == EquationTypes::FitAddition) {
+            fit_addition) {
             if (real_bra != nullptr)
                 real_bra->deallocate();
             right_bra->deallocate();
@@ -4207,6 +4251,8 @@ template <typename S, typename FL, typename FLS> struct Linear {
         const shared_ptr<MovingEnvironment<S, FL, FLS>> &me = rme;
         assert(me->bra != me->ket);
         frame_<FPS>()->activate(0);
+        const bool fit_addition = eq_type == EquationTypes::FitAddition ||
+                                  eq_type == EquationTypes::FitMultiAddition;
         vector<shared_ptr<MPS<S, FLS>>> mpss = {me->bra, me->ket};
         if (tme != nullptr) {
             if (tme->bra != me->bra && tme->bra != me->ket)
@@ -4230,7 +4276,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         bool build_pdm = noise != 0 && (noise_type & NoiseTypes::Collected);
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
-            eq_type == EquationTypes::FitAddition) {
+            fit_addition) {
             right_bra = make_shared<SparseMatrix<S, FLS>>();
             right_bra->allocate(me->bra->tensors[i]->info);
             if ((eq_type == EquationTypes::GreensFunction ||
@@ -4290,26 +4336,56 @@ template <typename S, typename FL, typename FLS> struct Linear {
         vector<FLS> targets = {get<0>(pdi)};
         vector<FLS> extra_bras;
         h_eff->deallocate();
-        if (eq_type == EquationTypes::FitAddition ||
-            eq_type == EquationTypes::PerturbativeCompression) {
-            if (eq_type == EquationTypes::FitAddition) {
-                shared_ptr<EffectiveHamiltonian<S, FL>> t_eff =
-                    tme->eff_ham(FuseTypes::FuseLR, forward, false,
-                                 tme->bra->tensors[i], tme->ket->tensors[i]);
-                teff += _t.get_time();
-                auto tpdi = t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+        if (fit_addition || eq_type == EquationTypes::PerturbativeCompression) {
+            if (fit_addition) {
                 GMatrix<FLS> mbra(me->bra->tensors[i]->data,
                                   (MKL_INT)me->bra->tensors[i]->total_memory,
                                   1);
-                GMatrix<FLS> sbra(right_bra->data,
-                                  (MKL_INT)right_bra->total_memory, 1);
-                GMatrixFunctions<FLS>::iadd(mbra, sbra, 1);
-                tmult += _t.get_time();
-                targets[0] = GMatrixFunctions<FLS>::norm(mbra);
-                get<1>(pdi).first += get<1>(tpdi);
-                get<2>(pdi) += get<2>(tpdi);
-                get<3>(pdi) += get<3>(tpdi);
-                t_eff->deallocate();
+                if (eq_type == EquationTypes::FitAddition) {
+                    shared_ptr<EffectiveHamiltonian<S, FL>> t_eff =
+                        tme->eff_ham(FuseTypes::FuseLR, forward, false,
+                                     tme->bra->tensors[i], tme->ket->tensors[i]);
+                    teff += _t.get_time();
+                    auto tpdi =
+                        t_eff->multiply(tme->mpo->const_e, tme->para_rule);
+                    GMatrix<FLS> sbra(right_bra->data,
+                                      (MKL_INT)right_bra->total_memory, 1);
+                    GMatrixFunctions<FLS>::iadd(mbra, sbra, 1);
+                    tmult += _t.get_time();
+                    targets[0] = GMatrixFunctions<FLS>::norm(mbra);
+                    get<1>(pdi).first += get<1>(tpdi);
+                    get<2>(pdi) += get<2>(tpdi);
+                    get<3>(pdi) += get<3>(tpdi);
+                    t_eff->deallocate();
+                } else {
+                    assert(ext_mes.size() == ext_mpss.size());
+                    memcpy(mbra.data, right_bra->data,
+                           right_bra->total_memory * sizeof(FLS));
+                    for (size_t ist = 0; ist < ext_mes.size(); ist++) {
+                        shared_ptr<SparseMatrix<S, FLS>> extra_bra =
+                            make_shared<SparseMatrix<S, FLS>>();
+                        extra_bra->allocate(me->bra->tensors[i]->info);
+                        shared_ptr<EffectiveHamiltonian<S, FL>> x_eff =
+                            ext_mes[ist]->eff_ham(
+                                FuseTypes::FuseLR, forward, false, extra_bra,
+                                ext_mpss[ist]->tensors[i]);
+                        teff += _t.get_time();
+                        auto xpdi = x_eff->multiply(ext_mes[ist]->mpo->const_e,
+                                                    ext_mes[ist]->para_rule);
+                        GMatrixFunctions<FLS>::iadd(
+                            mbra,
+                            GMatrix<FLS>(extra_bra->data,
+                                         (MKL_INT)extra_bra->total_memory, 1),
+                            1);
+                        tmult += _t.get_time();
+                        get<1>(pdi).first += get<1>(xpdi);
+                        get<2>(pdi) += get<2>(xpdi);
+                        get<3>(pdi) += get<3>(xpdi);
+                        x_eff->deallocate();
+                        extra_bra->deallocate();
+                    }
+                    targets[0] = GMatrixFunctions<FLS>::norm(mbra);
+                }
             }
             if (lme != nullptr && noise != 0) {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
@@ -4439,7 +4515,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         }
         if (pbra != nullptr)
             sweep_max_pket_size = max(sweep_max_pket_size, pbra->total_memory);
-        if (tme != nullptr && eq_type != EquationTypes::FitAddition) {
+        if (tme != nullptr && !fit_addition) {
             shared_ptr<EffectiveHamiltonian<S, FL>> t_eff =
                 tme->eff_ham(FuseTypes::FuseLR, forward, false,
                              tme->bra->tensors[i], tme->ket->tensors[i]);
@@ -4787,7 +4863,7 @@ template <typename S, typename FL, typename FLS> struct Linear {
         }
         if ((lme != nullptr &&
              eq_type != EquationTypes::PerturbativeCompression) ||
-            eq_type == EquationTypes::FitAddition) {
+            fit_addition) {
             if (real_bra != nullptr)
                 real_bra->deallocate();
             right_bra->deallocate();
