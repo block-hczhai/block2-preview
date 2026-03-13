@@ -446,21 +446,21 @@ jobs:
             export LD_PRELOAD=$PWD/libfixcpu.so
           fi
           echo $LD_PRELOAD
-          py.test -s pyblock2/unit_test/*.py
+          py.test -s pyblock2/unit_test/*.py -k 'not dmrg_pde'
       
       - name: run test (serial-pytest, linux arm)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'ubuntu-24.04-arm'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
-          py.test -s pyblock2/unit_test/*.py
+          py.test -s pyblock2/unit_test/*.py -k 'not dmrg_pde'
 
       - name: run test (serial-pytest, macos)
         if: matrix.parallel == 'serial-pytest' && matrix.os == 'macos-15'
         run: |
           python -m pip install pytest 'pyscf==2.6.2' 'scipy==1.14.1'
           export PYTHONPATH=$(pwd)/build:$(pwd):${PYTHONPATH}
-          py.test -s pyblock2/unit_test/*.py
+          py.test -s pyblock2/unit_test/*.py -k 'not dmrg_pde'
 
       - name: run test (main-test, windows)
         if: matrix.parallel == 'main-test' && matrix.os == 'windows-2025'
@@ -527,8 +527,8 @@ jobs:
           $env:PATH = "${env:Python_ROOT_DIR}\Library\bin;" + $env:PATH
           $env:PATH = "${env:Python_ROOT_DIR};" + $env:PATH
           $env:PATH = "$($vcpath[0].FullName)\bin\Hostx64\x64;" + $env:PATH
-          python -m pip install pytest
-          python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py --symm sany --fd_data=${xpwd}/data
+          python -m pip install pytest scipy
+          python -m pytest -s pyblock2/unit_test/dmrg.py pyblock2/unit_test/dmrg_mpo.py pyblock2/unit_test/dmrg_npdm.py pyblock2/unit_test/dmrg_pde.py --symm sany --fd_data=${xpwd}/data
 
       - name: run test (any-symm-pytest, linux)
         if: matrix.parallel == 'any-symm-pytest' && matrix.os == 'ubuntu-24.04'
