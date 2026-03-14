@@ -598,6 +598,7 @@ template <typename S, typename FL> struct Partition {
                 make_shared<SparseMatrixInfo<S>>();
             left_op_infos.push_back(make_pair(sl[i], lop));
             lop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
+            lop->template initialize_block_shifts<FL>();
         }
         frame_<FP>()->activate(0);
         if (bra_info != ket_info)
@@ -643,6 +644,7 @@ template <typename S, typename FL> struct Partition {
             left_op_infos_notrunc.push_back(make_pair(sl[i], lop_notrunc));
             lop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
                                     sl[i].is_fermion());
+            lop_notrunc->template initialize_block_shifts<FL>();
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
             cinfo->initialize_tp(
@@ -679,6 +681,7 @@ template <typename S, typename FL> struct Partition {
                 make_shared<SparseMatrixInfo<S>>();
             right_op_infos.push_back(make_pair(sl[i], rop));
             rop->initialize(ibra, iket, sl[i], sl[i].is_fermion());
+            rop->template initialize_block_shifts<FL>();
         }
         frame_<FP>()->activate(0);
         if (bra_info != ket_info)
@@ -725,6 +728,7 @@ template <typename S, typename FL> struct Partition {
             right_op_infos_notrunc.push_back(make_pair(sl[i], rop_notrunc));
             rop_notrunc->initialize(ibra_notrunc, iket_notrunc, sl[i],
                                     sl[i].is_fermion());
+            rop_notrunc->template initialize_block_shifts<FL>();
             shared_ptr<typename SparseMatrixInfo<S>::ConnectionInfo> cinfo =
                 make_shared<typename SparseMatrixInfo<S>::ConnectionInfo>();
             cinfo->initialize_tp(sl[i], subsl[i], ibra_notrunc, iket_notrunc,

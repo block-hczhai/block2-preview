@@ -136,9 +136,15 @@ enum struct SeqTypes : uint8_t {
                 //!< step, ``SeqTypes::Tasked`` has no effect and it
                 //!< is equivalent to ``SeqTypes::None``.
                 //!< The ``cblas_dgemm_batch`` is not used in this mode.
-    SimpleTasked = 5 //!< This is the same as ``SeqTypes::Tasked`` for
-                     //!< the Davidson matrix-vector step, and the same as
-                     //!< ``SeqTypes::Simple`` for other steps.
+    SimpleTasked = 5, //!< This is the same as ``SeqTypes::Tasked`` for
+                      //!< the Davidson matrix-vector step, and the same as
+                      //!< ``SeqTypes::Simple`` for other steps.
+};
+
+enum struct AlignTypes : uint8_t {
+    None = 0,
+    Aligned32B = 32,
+    Aligned64B = 64
 };
 
 inline bool operator&(SeqTypes a, SeqTypes b) {
@@ -156,6 +162,7 @@ struct Threading {
     ThreadingTypes type;                //!< Type of the threading scheme.
     SeqTypes seq_type = SeqTypes::None; //!< Method of dense matrix
                                         //!< multiplication parallelism.
+    AlignTypes align_type = AlignTypes::None; //!< Memory alignment mode.
     int n_threads_op = 0,     //!< Number of threads for parallelism over
                               //!< renormalized operators.
         n_threads_quanta = 0, //!< Number of threads for parallelism over
@@ -267,6 +274,17 @@ struct Threading {
         else if (seq_type == SeqTypes::Simple)
             return "Simple";
         else if (seq_type == SeqTypes::None)
+            return "None";
+        else
+            return "???";
+    }
+    /** Return a string indicating which ``AlignTypes`` is used. */
+    string get_align_type() const {
+        if (align_type == AlignTypes::Aligned32B)
+            return "Aligned32B";
+        else if (align_type == AlignTypes::Aligned64B)
+            return "Aligned64B";
+        else if (align_type == AlignTypes::None)
             return "None";
         else
             return "???";
@@ -535,6 +553,7 @@ struct Threading {
            << " BLIS = " << th.blis_available()
            << " MKL = " << th.get_mkl_threading_type() << " "
            << th.get_mkl_version() << " SeqType = " << th.get_seq_type()
+           << " AlignType = " << th.get_align_type()
            << " MKLIntLen = " << sizeof(MKL_INT) << endl;
         os << " THREADING = " << th.n_levels << " layers : "
            << ((th.type & ThreadingTypes::Global) ? "Global | " : "")

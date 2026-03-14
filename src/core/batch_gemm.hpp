@@ -1237,6 +1237,11 @@ template <typename FL> struct BatchGEMMSeq {
         vector<size_t> pwork;
         for (MKL_INT ib = !!batch[0]->gp.size(); ib < refs.size(); ib += db) {
             shared_ptr<BatchGEMM<FL>> b = refs[ib].batch;
+            if (refs[ib].nk == 0) {
+                refs[ib].rwork = 0;
+                refs[ib].ipost = 0;
+                continue;
+            }
             MKL_INT xi = refs[ib].i, xk = refs[ib].k;
             for (MKL_INT i = 0, k = 0; i < refs[ib].n; k += b->gp[xi + i++]) {
                 for (MKL_INT kk = k; kk < k + b->gp[xi + i]; kk++)
@@ -1286,28 +1291,30 @@ template <typename FL> struct BatchGEMMSeq {
             for (size_t p = 0; p < ptrs.size(); p++) {
                 pwork.push_back(0);
                 rshifts.push_back(vector<pair<MKL_INT, vector<MKL_INT>>>());
-                MKL_INT sh = 0, le = 0;
                 for (auto &r : shifts[p]) {
-                    if (r.first.first > sh || le == 0)
-                        sh = r.first.first, le = r.first.second;
-                    if (r.first.first == sh && r.first.second == le)
-                        rshifts.back().push_back(make_pair(sh, r.second));
+                    if (rshifts.back().size() == 0 ||
+                        r.first.first != rshifts.back().back().first)
+                        rshifts.back().push_back(
+                            make_pair(r.first.first, vector<MKL_INT>()));
                 }
-                size_t q = 0;
                 for (auto &r : shifts[p]) {
-                    if (r.first.first != rshifts.back()[q].first) {
-                        assert(r.first.first == rshifts.back()[q - 1].first);
-                        rshifts.back()[q - 1].second.insert(
-                            rshifts.back()[q - 1].second.end(),
-                            r.second.begin(), r.second.end());
-                        for (size_t qq = q; qq < rshifts.back().size(); qq++)
-                            if (rshifts.back()[qq].first > r.first.first &&
-                                rshifts.back()[qq].first <
-                                    r.first.first + r.first.second)
-                                for (size_t u = 0; u < r.second.size(); u++)
-                                    rshifts.back()[qq].second.push_back(-1);
-                    } else
-                        q++;
+                    const size_t q =
+                        (size_t)(lower_bound(
+                                     rshifts.back().begin(), rshifts.back().end(),
+                                     r.first.first,
+                                     [](const pair<MKL_INT, vector<MKL_INT>> &x,
+                                        MKL_INT y) { return x.first < y; }) -
+                                 rshifts.back().begin());
+                    assert(q < rshifts.back().size() &&
+                           rshifts.back()[q].first == r.first.first);
+                    rshifts.back()[q].second.insert(
+                        rshifts.back()[q].second.end(), r.second.begin(),
+                        r.second.end());
+                    for (size_t qq = q + 1; qq < rshifts.back().size(); qq++)
+                        if (rshifts.back()[qq].first <
+                            r.first.first + r.first.second)
+                            for (size_t u = 0; u < r.second.size(); u++)
+                                rshifts.back()[qq].second.push_back(-1);
                 }
                 for (auto &r : rshifts[p])
                     if (r.second.size() > pwork.back())

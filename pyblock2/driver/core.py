@@ -573,6 +573,7 @@ class DMRGDriver:
         fp_codec_chunk=1024,
         min_mpo_mem=False,
         seq_type=None,
+        align_type=0,
         compressed_mps_storage=False,
     ):
         """
@@ -632,6 +633,8 @@ class DMRGDriver:
                 If True, will dynamically load/save MPO to save memory. Default is False.
             seq_type : None or str
                 Shared-memory scheme type. Default is None ('Tasked').
+            align_type : int
+                Memory alignment in bytes. Allowed values are 0, 32, and 64. Default is 0.
             compressed_mps_storage : bool
                 Whether block-sparse tensor should be stored in compressed form to save storage (mainly for MPS).
                 Default is False.
@@ -668,9 +671,15 @@ class DMRGDriver:
         )
         if seq_type is None:
             seq_type = bw.b.SeqTypes.Tasked
-        else:
+        elif isinstance(seq_type, str):
             seq_type = getattr(bw.b.SeqTypes, seq_type)
+        align_type = {
+            0: bw.b.AlignTypes.Nothing,
+            32: bw.b.AlignTypes.Aligned32B,
+            64: bw.b.AlignTypes.Aligned64B,
+        }[align_type]
         bw.b.Global.threading.seq_type = seq_type
+        bw.b.Global.threading.align_type = align_type
         self.reorder_idx = None
         self.pg = "c1"
         self.orb_sym = None
@@ -4692,7 +4701,7 @@ class DMRGDriver:
             assert fused_contraction_rotation
             assert not cached_contraction
             assert not delayed_contraction
-            assert bw.b.Global.threading.seq_type != bw.b.SeqTypes.Tasked
+            assert not (bw.b.Global.threading.seq_type & bw.b.SeqTypes.Tasked)
         dmrg = bw.bs.DMRG(me, bw.b.VectorUBond(bond_dims), bw.VectorFP(noises))
         metric_me = None
         if metric_mpo is not None:

@@ -189,7 +189,8 @@ template <typename S, typename FL> struct MPO {
                     mat_info->initialize(*info->left_dims[i + 1],
                                          *info->left_dims[i + 1], op->q_label,
                                          op->q_label.is_fermion());
-                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mpsz[op->q_label] =
+                        mat_info->template get_total_memory<FL>();
                     mat_info->deallocate();
                 }
                 sz += mpsz.at(op->q_label);
@@ -208,7 +209,8 @@ template <typename S, typename FL> struct MPO {
                     mat_info->initialize(*info->right_dims[i],
                                          *info->right_dims[i], op->q_label,
                                          op->q_label.is_fermion());
-                    mpsz[op->q_label] = mat_info->get_total_memory();
+                    mpsz[op->q_label] =
+                        mat_info->template get_total_memory<FL>();
                     mat_info->deallocate();
                 }
                 sz += mpsz.at(op->q_label);
@@ -256,7 +258,8 @@ template <typename S, typename FL> struct MPO {
                 if (!mpszl.count(op->q_label)) {
                     mat_info->initialize(tl, tl, op->q_label,
                                          op->q_label.is_fermion());
-                    mpszl[op->q_label] = mat_info->get_total_memory();
+                    mpszl[op->q_label] =
+                        mat_info->template get_total_memory<FL>();
                     mat_info->deallocate();
                 }
                 sz += mpszl.at(op->q_label);
@@ -270,7 +273,8 @@ template <typename S, typename FL> struct MPO {
                 if (!mpszr.count(op->q_label)) {
                     mat_info->initialize(tr, tr, op->q_label,
                                          op->q_label.is_fermion());
-                    mpszr[op->q_label] = mat_info->get_total_memory();
+                    mpszr[op->q_label] =
+                        mat_info->template get_total_memory<FL>();
                     mat_info->deallocate();
                 }
                 sz += mpszr.at(op->q_label);

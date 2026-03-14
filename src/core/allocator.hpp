@@ -36,6 +36,7 @@
 #endif
 #include <cassert>
 #include <complex>
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -46,6 +47,9 @@
 #include <string>
 #include <type_traits>
 #include <vector>
+#ifdef _WIN32
+#include <malloc.h>
+#endif
 
 using namespace std;
 
@@ -67,6 +71,25 @@ inline void print_trace() {
 #endif
 #endif
     abort();
+}
+
+inline void *aligned_malloc(size_t alignment, size_t size) {
+    if (size == 0)
+        return nullptr;
+#ifdef _WIN32
+    return _aligned_malloc(size, alignment);
+#else
+    void *ptr = nullptr;
+    return posix_memalign(&ptr, alignment, size) == 0 ? ptr : nullptr;
+#endif
+}
+
+inline void aligned_free(void *ptr) {
+#ifdef _WIN32
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
 }
 
 /** Abstract memory allocator.
@@ -127,7 +150,14 @@ template <typename T> struct StackAllocator : Allocator<T> {
      * @param max_size Total size of the stack (in number of elements).
      */
     StackAllocator(T *ptr, size_t max_size)
-        : size(max_size), used(0), shift(0), data(ptr) {}
+        : size(max_size), used(0), shift(0), data(ptr) {
+        if (threading->align_type != AlignTypes::None) {
+            if (((uintptr_t)(const void *)ptr) %
+                (uint8_t)threading->align_type)
+                throw runtime_error(
+                    "StackAllocator::StackAllocator: memory not aligned.");
+        }
+    }
     /** Default constructor. */
     StackAllocator() : size(0), used(0), shift(0), data(nullptr) {}
     /** Allocate a length n array.
@@ -135,6 +165,11 @@ template <typename T> struct StackAllocator : Allocator<T> {
      * @return The allocated pointer.
      */
     T *allocate(size_t n) override {
+        if (threading->align_type != AlignTypes::None) {
+            const uint32_t xalign =
+                (uint8_t)threading->align_type / sizeof(T);
+            n = (n + xalign - 1) / xalign * xalign;
+        }
         assert(shift == 0);
         if (used + n > size) {
             cout << "exceeding allowed memory"
@@ -157,6 +192,11 @@ template <typename T> struct StackAllocator : Allocator<T> {
     void deallocate(void *ptr, size_t n) override {
         if (n == 0)
             return;
+        if (threading->align_type != AlignTypes::None) {
+            const uint32_t xalign =
+                (uint8_t)threading->align_type / sizeof(T);
+            n = (n + xalign - 1) / xalign * xalign;
+        }
         if (used < n || ptr != data + used - n) {
             cout << "deallocation not happening in reverse order" << endl;
             print_trace();
@@ -171,6 +211,12 @@ template <typename T> struct StackAllocator : Allocator<T> {
      * @return The new pointer.
      */
     T *reallocate(T *ptr, size_t n, size_t new_n) override {
+        if (threading->align_type != AlignTypes::None) {
+            const uint32_t xalign =
+                (uint8_t)threading->align_type / sizeof(T);
+            n = (n + xalign - 1) / xalign * xalign;
+            new_n = (new_n + xalign - 1) / xalign * xalign;
+        }
         ptr += shift;
         shift += new_n - n;
         used = used + new_n - n;
@@ -200,13 +246,15 @@ template <typename T> struct TemporaryAllocator : StackAllocator<T> {
     /** Default constructor. */
     TemporaryAllocator() : StackAllocator<T>(), own_data(true) {}
     TemporaryAllocator(size_t max_size)
-        : StackAllocator<T>(new T[max_size], max_size), own_data(true) {}
+        : StackAllocator<T>((T *)aligned_malloc(64, max_size * sizeof(T)),
+                            max_size),
+          own_data(true) {}
     TemporaryAllocator(T *ptr, size_t max_size)
         : StackAllocator<T>(ptr, max_size), own_data(false) {}
     /** Default destructor. */
     virtual ~TemporaryAllocator() {
         if (StackAllocator<T>::data != nullptr && own_data)
-            delete[] StackAllocator<T>::data;
+            aligned_free(StackAllocator<T>::data);
     }
 };
 
@@ -228,8 +276,21 @@ template <typename T> struct VectorAllocator : Allocator<T> {
      * @return The allocated pointer.
      */
     T *allocate(size_t n) override {
-        data.emplace_back(n);
-        return data.back().data();
+        if (threading->align_type != AlignTypes::None) {
+            const uint32_t xalign =
+                (uint8_t)threading->align_type / sizeof(T);
+            data.emplace_back(n + xalign - 1);
+            uintptr_t unaligned =
+                ((uintptr_t)(const void *)data.back().data()) %
+                (uint8_t)threading->align_type;
+            return unaligned == 0
+                       ? data.back().data()
+                       : (T *)((uintptr_t)(const void *)data.back().data() +
+                               ((uint8_t)threading->align_type - unaligned));
+        } else {
+            data.emplace_back(n);
+            return data.back().data();
+        }
     }
     /** Deallocate a length n array. Note that explicit deallocation is not
      * required for vector allocator. Can be invoked in arbitrary order.
@@ -237,12 +298,33 @@ template <typename T> struct VectorAllocator : Allocator<T> {
      * @param n Number of elements in the array.
      */
     void deallocate(void *ptr, size_t n) override {
-        for (int i = (int)data.size() - 1; i >= 0; i--)
-            if (data[i].data() == ptr) {
-                assert(data[i].size() == n);
-                data.erase(data.begin() + i);
-                return;
+        if (threading->align_type != AlignTypes::None) {
+            const uint32_t xalign =
+                (uint8_t)threading->align_type / sizeof(T);
+            for (int i = (int)data.size() - 1; i >= 0; i--) {
+                uintptr_t unaligned =
+                    ((uintptr_t)(const void *)data[i].data()) %
+                    (uint8_t)threading->align_type;
+                T *dptr =
+                    unaligned == 0
+                        ? data[i].data()
+                        : (T *)((uintptr_t)(const void *)data[i].data() +
+                                ((uint8_t)threading->align_type -
+                                 unaligned));
+                if (dptr == ptr) {
+                    assert(data[i].size() == n + xalign - 1);
+                    data.erase(data.begin() + i);
+                    return;
+                }
             }
+        } else {
+            for (int i = (int)data.size() - 1; i >= 0; i--)
+                if (data[i].data() == ptr) {
+                    assert(data[i].size() == n);
+                    data.erase(data.begin() + i);
+                    return;
+                }
+        }
         cout << "deallocation of unallocated address" << endl;
         abort();
     }
@@ -446,12 +528,14 @@ template <typename FL> struct DataFrame {
         save_futures.resize(n_frames);
         this->isize = isize >> 2;
         this->dsize = dsize / sizeof(FL);
-        size_t imain = (size_t)(imain_ratio * this->isize);
-        size_t dmain = (size_t)(dmain_ratio * this->dsize);
-        size_t ir = (this->isize - imain) / (n_frames - 1);
-        size_t dr = (this->dsize - dmain) / (n_frames - 1);
-        FL *dptr = new FL[this->dsize];
-        uint32_t *iptr = new uint32_t[this->isize];
+        const size_t ipk = 64 / sizeof(uint32_t), dpk = 64 / sizeof(FL);
+        size_t imain = (size_t)(imain_ratio * this->isize) / ipk * ipk;
+        size_t dmain = (size_t)(dmain_ratio * this->dsize) / dpk * dpk;
+        size_t ir = (this->isize - imain) / (n_frames - 1) / ipk * ipk;
+        size_t dr = (this->dsize - dmain) / (n_frames - 1) / dpk * dpk;
+        FL *dptr = (FL *)aligned_malloc(64, this->dsize * sizeof(FL));
+        uint32_t *iptr =
+            (uint32_t *)aligned_malloc(64, this->isize * sizeof(uint32_t));
         iallocs.push_back(make_shared<StackAllocator<uint32_t>>(iptr, imain));
         dallocs.push_back(make_shared<StackAllocator<FL>>(dptr, dmain));
         iptr += imain;
@@ -657,8 +741,8 @@ template <typename FL> struct DataFrame {
      * Note that this method is automatically invoked at deconstruction.
      */
     void deallocate() {
-        delete[] iallocs[0]->data;
-        delete[] dallocs[0]->data;
+        aligned_free(iallocs[0]->data);
+        aligned_free(dallocs[0]->data);
         iallocs.clear();
         dallocs.clear();
         if (save_buffering)

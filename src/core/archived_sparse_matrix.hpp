@@ -90,7 +90,7 @@ struct ArchivedSparseMatrix : SparseMatrix<S, FL> {
             shared_ptr<SparseMatrix<S, FL>> mat =
                 make_shared<SparseMatrix<S, FL>>(alloc);
             mat->info = info;
-            mat->total_memory = info->get_total_memory();
+            mat->total_memory = info->template get_total_memory<FL>();
             total_memory = mat->total_memory;
             mat->factor = factor;
             if (total_memory != 0) {

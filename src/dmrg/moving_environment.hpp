@@ -2644,7 +2644,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (dot == 1 && fuse_left) {
                     int ib = ll->find_state(pln);
                     int bbed = clm->acc_n_states[ib + 1];
-                    size_t p = xwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t p = xwfn->info->block_shifts[k];
                     for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
                         uint32_t ibba = clm->ij_indices[bb].first,
                                  ibbb = clm->ij_indices[bb].second;
@@ -2657,13 +2661,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                             make_pair(xwfn->data + p, 0);
                         p += lp;
                     }
+                    p = (p + xalign - 1) / xalign * xalign;
                     assert(p == (k != xwfn->info->n - 1
-                                     ? xwfn->info->n_states_total[k + 1]
+                                     ? xwfn->info->block_shifts[k + 1]
                                      : xwfn->total_memory));
                 } else if (dot == 1 && !fuse_left) {
                     int ik = rr->find_state(prn);
                     int kked = cmr->acc_n_states[ik + 1];
-                    size_t p = xwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t p = xwfn->info->block_shifts[k];
                     for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
                         uint32_t ikka = cmr->ij_indices[kk].first,
                                  ikkb = cmr->ij_indices[kk].second;
@@ -2675,15 +2684,21 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                             xwfn->data + p, xwfn->info->n_states_ket[k]);
                         p += lp;
                     }
-                    assert(p - xwfn->info->n_states_total[k] ==
-                           xwfn->info->n_states_ket[k]);
+                    assert((p + xalign - 1) / xalign * xalign -
+                               xwfn->info->block_shifts[k] ==
+                           (xwfn->info->n_states_ket[k] + xalign - 1) /
+                               xalign * xalign);
                 } else if (dot == 0)
                     mp0[array<S, 2>{pln, prn}] = make_pair(xwfn->data, 0);
                 else if (dot == 2) {
                     int ib = ll->find_state(pln), ik = rr->find_state(prn);
                     int bbed = clm->acc_n_states[ib + 1],
                         kked = cmr->acc_n_states[ik + 1];
-                    size_t p = xwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t p = xwfn->info->block_shifts[k];
                     size_t ipl = 0;
                     for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
                         uint32_t ibba = clm->ij_indices[bb].first,
@@ -2705,9 +2720,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         assert(ipr == xwfn->info->n_states_ket[k]);
                         ipl += (size_t)npl * npml * xwfn->info->n_states_ket[k];
                     }
-                    assert(p + ipl == (k != xwfn->info->n - 1
-                                           ? xwfn->info->n_states_total[k + 1]
-                                           : xwfn->total_memory));
+                    size_t pend = p + ipl;
+                    pend = (pend + xalign - 1) / xalign * xalign;
+                    assert(pend == (k != xwfn->info->n - 1
+                                        ? xwfn->info->block_shifts[k + 1]
+                                        : xwfn->total_memory));
                 } else
                     assert(false);
             }
@@ -2765,7 +2782,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                 if (dot == 1 && fuse_left) {
                     int ibu = llu->find_state(plu);
                     int bbedu = clmu->acc_n_states[ibu + 1];
-                    size_t pu = cwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t pu = cwfn->info->block_shifts[k];
                     for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu;
                          bbu++) {
                         uint32_t ibbau = clmu->ij_indices[bbu].first,
@@ -2885,13 +2906,18 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                     }
                                 }
                     }
+                    pu = (pu + xalign - 1) / xalign * xalign;
                     assert(pu == (k != cwfn->info->n - 1
-                                      ? cwfn->info->n_states_total[k + 1]
+                                      ? cwfn->info->block_shifts[k + 1]
                                       : cwfn->total_memory));
                 } else if (dot == 1 && !fuse_left) {
                     int iku = rru->find_state(pru);
                     int kkedu = cmru->acc_n_states[iku + 1];
-                    size_t pu = cwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t pu = cwfn->info->block_shifts[k];
                     for (int kku = cmru->acc_n_states[iku]; kku < kkedu;
                          kku++) {
                         uint32_t ikkau = cmru->ij_indices[kku].first,
@@ -3012,8 +3038,10 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                     }
                                 }
                     }
-                    assert(pu - cwfn->info->n_states_total[k] ==
-                           cwfn->info->n_states_ket[k]);
+                    assert((pu + xalign - 1) / xalign * xalign -
+                               cwfn->info->block_shifts[k] ==
+                           (cwfn->info->n_states_ket[k] + xalign - 1) /
+                               xalign * xalign);
                 } else if (dot == 0) {
                     S pplu = plu, ppru = pru;
                     FLS *x = cwfn->data;
@@ -3083,7 +3111,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                     int ibu = llu->find_state(plu), iku = rru->find_state(pru);
                     int bbedu = clmu->acc_n_states[ibu + 1],
                         kkedu = cmru->acc_n_states[iku + 1];
-                    size_t pu = cwfn->info->n_states_total[k];
+                    const size_t xalign =
+                        threading->align_type != AlignTypes::None
+                            ? (uint8_t)threading->align_type / sizeof(FLS)
+                            : 1;
+                    size_t pu = cwfn->info->block_shifts[k];
                     size_t iplu = 0;
                     for (int bbu = clmu->acc_n_states[ibu]; bbu < bbedu;
                          bbu++) {
@@ -3315,9 +3347,11 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         iplu +=
                             (size_t)nplu * npmlu * cwfn->info->n_states_ket[k];
                     }
-                    assert(pu + iplu == (k != cwfn->info->n - 1
-                                             ? cwfn->info->n_states_total[k + 1]
-                                             : cwfn->total_memory));
+                    size_t puend = pu + iplu;
+                    puend = (puend + xalign - 1) / xalign * xalign;
+                    assert(puend == (k != cwfn->info->n - 1
+                                         ? cwfn->info->block_shifts[k + 1]
+                                         : cwfn->total_memory));
                 }
             }
         }
@@ -3928,11 +3962,6 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             rinfo->n_states_bra[i] = trace_right ? ts[ilr[i]]->shape[0] : im[i];
             rinfo->n_states_ket[i] = trace_right ? im[i] : ts[ilr[i]]->shape[1];
         }
-        rinfo->n_states_total[0] = 0;
-        for (int i = 0; i < kk - 1; i++)
-            rinfo->n_states_total[i + 1] =
-                rinfo->n_states_total[i] +
-                (uint32_t)rinfo->n_states_bra[i] * rinfo->n_states_ket[i];
         return rinfo;
     }
     // Get wavefunction matrix info from svd info
@@ -3977,7 +4006,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             }
             j += (int)idx_dm_to_wfn[ilr[i]].size();
         }
-        winfo->sort_states();
+        winfo->sort_blocks();
         return winfo;
     }
     // Get rotation matrix info from density matrix info
@@ -3999,11 +4028,6 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             rinfo->n_states_ket[i] =
                 trace_right ? im[i] : dminfo->n_states_ket[ilr[i]];
         }
-        rinfo->n_states_total[0] = 0;
-        for (int i = 0; i < kk - 1; i++)
-            rinfo->n_states_total[i + 1] =
-                rinfo->n_states_total[i] +
-                (uint32_t)rinfo->n_states_bra[i] * rinfo->n_states_ket[i];
         return rinfo;
     }
     // Get wavefunction matrix info from density matrix info
@@ -4048,7 +4072,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             }
             j += (int)idx_dm_to_wfn[ilr[i]].size();
         }
-        winfo->sort_states();
+        winfo->sort_blocks();
         return winfo;
     }
     // Split wavefunction to two MPS tensors using svd
@@ -4138,7 +4162,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(left->data + linfo->n_states_total[i] + j,
+                        GMatrix<FLS>(left->data + linfo->block_shifts[i] + j,
                                      linfo->n_states_bra[i], 1),
                         GMatrix<FLS>(
                             &l[ss[iss + j].first]->ref()(0, ss[iss + j].second),
@@ -4153,7 +4177,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         for (ubond_t j = 0; j < im[i]; j++) {
                             GMatrixFunctions<FLS>::copy(
                                 GMatrix<FLS>(right->data +
-                                                 rinfo->n_states_total[ir] +
+                                                 rinfo->block_shifts[ir] +
                                                  j * r[iw]->shape[1],
                                              1, r[iw]->shape[1]),
                                 GMatrix<FLS>(
@@ -4161,7 +4185,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                     r[iw]->shape[1]));
                             GMatrixFunctions<FLS>::iscale(
                                 GMatrix<FLS>(right->data +
-                                                 rinfo->n_states_total[ir] +
+                                                 rinfo->block_shifts[ir] +
                                                  j * r[iw]->shape[1],
                                              1, r[iw]->shape[1]),
                                 (*s[ss[iss + j].first]
@@ -4180,7 +4204,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(right->data + rinfo->n_states_total[i] +
+                        GMatrix<FLS>(right->data + rinfo->block_shifts[i] +
                                          j * r[ss[iss + j].first]->shape[1],
                                      1, r[ss[iss + j].first]->shape[1]),
                         GMatrix<FLS>(
@@ -4195,7 +4219,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                         for (ubond_t j = 0; j < im[i]; j++) {
                             GMatrixFunctions<FLS>::copy(
                                 GMatrix<FLS>(left->data +
-                                                 linfo->n_states_total[il] + j,
+                                                 linfo->block_shifts[il] + j,
                                              linfo->n_states_bra[il], 1),
                                 GMatrix<FLS>(
                                     &l[iw]->ref()(0, ss[iss + j].second),
@@ -4203,7 +4227,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
                                 linfo->n_states_ket[il], l[iw]->shape[1]);
                             GMatrixFunctions<FLS>::iscale(
                                 GMatrix<FLS>(left->data +
-                                                 linfo->n_states_total[il] + j,
+                                                 linfo->block_shifts[il] + j,
                                              linfo->n_states_bra[il], 1),
                                 (*s[ss[iss + j].first]
                                       ->data)[ss[iss + j].second],
@@ -4270,7 +4294,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(left->data + linfo->n_states_total[i] + j,
+                        GMatrix<FLS>(left->data + linfo->block_shifts[i] + j,
                                      linfo->n_states_bra[i], 1),
                         GMatrix<FLS>(
                             &(*dm)[ss[iss + j].first](ss[iss + j].second, 0),
@@ -4295,7 +4319,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(right->data + rinfo->n_states_total[i] +
+                        GMatrix<FLS>(right->data + rinfo->block_shifts[i] +
                                          j * (*right)[i].n,
                                      1, (*right)[i].n),
                         GMatrix<FLS>(
@@ -4378,7 +4402,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(rot_mat->data + rinfo->n_states_total[i] +
+                        GMatrix<FLS>(rot_mat->data + rinfo->block_shifts[i] +
                                          j,
                                      rinfo->n_states_bra[i], 1),
                         GMatrix<FLS>(
@@ -4407,7 +4431,7 @@ template <typename S, typename FL, typename FLS> struct MovingEnvironment {
             for (int i = 0; i < kk; i++) {
                 for (ubond_t j = 0; j < im[i]; j++)
                     GMatrixFunctions<FLS>::copy(
-                        GMatrix<FLS>(rot_mat->data + rinfo->n_states_total[i] +
+                        GMatrix<FLS>(rot_mat->data + rinfo->block_shifts[i] +
                                          j * (*rot_mat)[i].n,
                                      1, (*rot_mat)[i].n),
                         GMatrix<FLS>(

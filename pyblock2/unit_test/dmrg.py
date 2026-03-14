@@ -26,12 +26,24 @@ def dhf_type(request):
     return request.param
 
 
+@pytest.fixture(
+    scope="module",
+    params=[None, "Simple", "SimpleTasked", "Tasked"],
+    ids=["default", "simple", "simple-tasked", "tasked"],
+)
+def seq_type(request):
+    return request.param
+
+
+@pytest.fixture(scope="module", params=[0, 32, 64], ids=["unaligned", "aligned32", "aligned64"])
+def align_type(request):
+    return request.param
+
+
 class TestDMRG:
-    def test_rhf(self, tmp_path, name, symm_type, fd_data):
+    def test_rhf(self, tmp_path, name, symm_type, fd_data, seq_type, align_type):
         symm = SymmetryTypes.SAnySU2 if symm_type == "sany" else SymmetryTypes.SU2
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
-        )
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4, seq_type=seq_type, align_type=align_type)
 
         if fd_data == "":
             from pyscf import gto, scf
@@ -129,11 +141,9 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_uhf(self, tmp_path, name, symm_type, fd_data):
+    def test_uhf(self, tmp_path, name, symm_type, fd_data, seq_type, align_type):
         symm = SymmetryTypes.SAnySZ if symm_type == "sany" else SymmetryTypes.SZ
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
-        )
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4, seq_type=seq_type, align_type=align_type)
 
         if fd_data == "":
             from pyscf import gto, scf
@@ -217,11 +227,9 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_ghf(self, tmp_path, name, symm_type, fd_data):
+    def test_ghf(self, tmp_path, name, symm_type, fd_data, seq_type, align_type):
         symm = SymmetryTypes.SAnySGF if symm_type == "sany" else SymmetryTypes.SGF
-        driver = DMRGDriver(
-            scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4
-        )
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4, seq_type=seq_type, align_type=align_type)
 
         if fd_data == "":
             from pyscf import gto, scf
@@ -280,10 +288,9 @@ class TestDMRG:
 
         driver.finalize()
 
-    def test_dhf(self, tmp_path, dhf_type, symm_type, fd_data):
-
+    def test_dhf(self, tmp_path, dhf_type, symm_type, fd_data, seq_type, align_type):
         symm = SymmetryTypes.SAnySGFCPX if symm_type == "sany" else SymmetryTypes.SGFCPX
-        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4)
+        driver = DMRGDriver(scratch=str(tmp_path / "nodex"), symm_type=symm, n_threads=4, seq_type=seq_type, align_type=align_type)
 
         if fd_data == "":
             from pyscf import gto, scf

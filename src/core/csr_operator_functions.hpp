@@ -473,7 +473,7 @@ struct CSROperatorFunctions : OperatorFunctions<S, FL> {
             }
             r += GCSRMatrixFunctions<FL>::sparse_dot(ma, mb);
         }
-        seq->cumulative_nflop += a->info->get_total_memory();
+        seq->cumulative_nflop += a->info->template get_total_memory<FL>();
         return r * scale;
     }
 };

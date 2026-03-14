@@ -515,8 +515,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sz_t>
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
                     if (d == n_sites - 1) {
-                        assert(cmp->total_memory == 1 &&
-                               cmp->info->find_state(mps->info->target) == 0);
+                        const int target_idx =
+                            cmp->info->find_state(mps->info->target);
+                        assert(cmp->info->n == 1 && target_idx == 0 &&
+                               cmp->info->n_states_bra[0] == 1 &&
+                               cmp->info->n_states_ket[0] == 1);
                         if (!has_dets) {
                             dets.push_back(cur);
                             vals.push_back(cmp->data[0]);
@@ -986,8 +989,11 @@ struct DeterminantTRIE<S, FL, typename S::is_su2_t>
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
                     if (d == n_sites - 1) {
-                        assert(cmp->total_memory == 1 &&
-                               cmp->info->find_state(mps->info->target) == 0);
+                        const int target_idx =
+                            cmp->info->find_state(mps->info->target);
+                        assert(cmp->info->n == 1 && target_idx == 0 &&
+                               cmp->info->n_states_bra[0] == 1 &&
+                               cmp->info->n_states_ket[0] == 1);
                         if (!has_dets) {
                             dets.push_back(cur);
                             vals.push_back(cmp->data[0]);
@@ -1379,8 +1385,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sg_t>
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
                     if (d == n_sites - 1) {
-                        assert(cmp->total_memory == 1 &&
-                               cmp->info->find_state(mps->info->target) == 0);
+                        const int target_idx =
+                            cmp->info->find_state(mps->info->target);
+                        assert(cmp->info->n == 1 && target_idx == 0 &&
+                               cmp->info->n_states_bra[0] == 1 &&
+                               cmp->info->n_states_ket[0] == 1);
                         if (!has_dets) {
                             dets.push_back(cur);
                             vals.push_back(cmp->data[0]);
@@ -1856,8 +1865,11 @@ struct DeterminantTRIE<S, FL, typename S::is_sany_t>
                     det[d] = j;
                     shared_ptr<SparseMatrix<S, FL>> cmp = ccmp[ip - pstart];
                     if (d == n_sites - 1) {
-                        assert(cmp->total_memory == 1 &&
-                               cmp->info->find_state(mps->info->target) == 0);
+                        const int target_idx =
+                            cmp->info->find_state(mps->info->target);
+                        assert(cmp->info->n == 1 && target_idx == 0 &&
+                               cmp->info->n_states_bra[0] == 1 &&
+                               cmp->info->n_states_ket[0] == 1);
                         if (!has_dets) {
                             dets.push_back(cur);
                             vals.push_back(cmp->data[0]);

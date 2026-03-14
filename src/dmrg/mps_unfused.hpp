@@ -395,6 +395,10 @@ template <typename S, typename FL> struct UnfusedMPS {
         shared_ptr<typename StateInfo<S>::ConnectionInfo> clm =
             StateInfo<S>::get_connection_info(l, m, lm);
         assert(wfn == mat->info->is_wavefunction);
+        const uint32_t xalign =
+            threading->align_type != AlignTypes::None
+                ? (uint8_t)threading->align_type / sizeof(FL)
+                : 1;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -402,7 +406,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ket = -ket;
             int ib = lm.find_state(bra);
             int bbed = clm->acc_n_states[ib + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            uint32_t p = mat->info->block_shifts[i];
             for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
                 uint32_t ibba = clm->ij_indices[bb].first,
                          ibbb = clm->ij_indices[bb].second;
@@ -416,9 +420,9 @@ template <typename S, typename FL> struct UnfusedMPS {
                        mat->data + p, lp * sizeof(FL));
                 p += lp;
             }
-            assert(p == (i != mat->info->n - 1
-                             ? mat->info->n_states_total[i + 1]
-                             : mat->total_memory));
+            p = (p + xalign - 1) / xalign * xalign;
+            assert(p == (i != mat->info->n - 1 ? mat->info->block_shifts[i + 1]
+                                               : mat->total_memory));
         }
         lm.deallocate();
         l.deallocate();
@@ -437,6 +441,10 @@ template <typename S, typename FL> struct UnfusedMPS {
         shared_ptr<typename StateInfo<S>::ConnectionInfo> cmr =
             StateInfo<S>::get_connection_info(m, r, mr);
         assert(wfn == mat->info->is_wavefunction);
+        const uint32_t xalign =
+            threading->align_type != AlignTypes::None
+                ? (uint8_t)threading->align_type / sizeof(FL)
+                : 1;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -444,7 +452,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ket = -ket;
             int ik = mr.find_state(ket);
             int kked = cmr->acc_n_states[ik + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            uint32_t p = mat->info->block_shifts[i];
             for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
                 uint32_t ikka = cmr->ij_indices[kk].first,
                          ikkb = cmr->ij_indices[kk].second;
@@ -461,8 +469,10 @@ template <typename S, typename FL> struct UnfusedMPS {
                            lp * sizeof(FL));
                 p += lp;
             }
-            assert(p - mat->info->n_states_total[i] ==
-                   mat->info->n_states_ket[i]);
+            assert((p + xalign - 1) / xalign * xalign -
+                       mat->info->block_shifts[i] ==
+                   (mat->info->n_states_ket[i] + xalign - 1) / xalign *
+                       xalign);
         }
         mr.deallocate();
         r.deallocate();
@@ -544,6 +554,10 @@ template <typename S, typename FL> struct UnfusedMPS {
         for (size_t i = 0; i < spt->data.size(); i++)
             mp[i] = map<pair<S, S>, shared_ptr<GTensor<FL>>>(
                 spt->data[i].cbegin(), spt->data[i].cend());
+        const uint32_t xalign =
+            threading->align_type != AlignTypes::None
+                ? (uint8_t)threading->align_type / sizeof(FL)
+                : 1;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -551,7 +565,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ket = -ket;
             int ib = lm.find_state(bra);
             int bbed = clm->acc_n_states[ib + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            uint32_t p = mat->info->block_shifts[i];
             for (int bb = clm->acc_n_states[ib]; bb < bbed; bb++) {
                 uint32_t ibba = clm->ij_indices[bb].first,
                          ibbb = clm->ij_indices[bb].second;
@@ -568,9 +582,9 @@ template <typename S, typename FL> struct UnfusedMPS {
                 }
                 p += lp;
             }
-            assert(p == (i != mat->info->n - 1
-                             ? mat->info->n_states_total[i + 1]
-                             : mat->total_memory));
+            p = (p + xalign - 1) / xalign * xalign;
+            assert(p == (i != mat->info->n - 1 ? mat->info->block_shifts[i + 1]
+                                               : mat->total_memory));
         }
         lm.deallocate();
         return mat;
@@ -603,6 +617,10 @@ template <typename S, typename FL> struct UnfusedMPS {
         for (size_t i = 0; i < spt->data.size(); i++)
             mp[i] = map<pair<S, S>, shared_ptr<GTensor<FL>>>(
                 spt->data[i].cbegin(), spt->data[i].cend());
+        const uint32_t xalign =
+            threading->align_type != AlignTypes::None
+                ? (uint8_t)threading->align_type / sizeof(FL)
+                : 1;
         for (int i = 0; i < mat->info->n; i++) {
             S bra = mat->info->quanta[i].get_bra(mat->info->delta_quantum);
             S ket = mat->info->quanta[i].get_ket();
@@ -610,7 +628,7 @@ template <typename S, typename FL> struct UnfusedMPS {
                 ket = -ket;
             int ik = mr.find_state(ket);
             int kked = cmr->acc_n_states[ik + 1];
-            uint32_t p = mat->info->n_states_total[i];
+            uint32_t p = mat->info->block_shifts[i];
             for (int kk = cmr->acc_n_states[ik]; kk < kked; kk++) {
                 uint32_t ikka = cmr->ij_indices[kk].first,
                          ikkb = cmr->ij_indices[kk].second;
@@ -628,8 +646,10 @@ template <typename S, typename FL> struct UnfusedMPS {
                 }
                 p += lp;
             }
-            assert(p - mat->info->n_states_total[i] ==
-                   mat->info->n_states_ket[i]);
+            assert((p + xalign - 1) / xalign * xalign -
+                       mat->info->block_shifts[i] ==
+                   (mat->info->n_states_ket[i] + xalign - 1) / xalign *
+                       xalign);
         }
         mr.deallocate();
         return mat;
