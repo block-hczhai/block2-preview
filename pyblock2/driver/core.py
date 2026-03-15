@@ -134,20 +134,27 @@ class MPOAlgorithmTypes(IntFlag):
     Bipartite = 1
     #: SVD algorithm. See *J. Chem. Phys.* **145**, 014102 (2016).
     SVD = 2
-    #: Use rescaled singular values for truncation. Optional for 'SVD', cannot be used alone.
+    #: Rank revealing QR algorithm using pivoted QR. Optional modifiers mirror the plain SVD family.
+    RRQR = 2048
+    #: Use rescaled singular values or RRQR diagonal values for truncation.
+    #: Optional for 'SVD' and 'RRQR', cannot be used alone.
     Rescaled = 4
-    #: Fast implementation for dense integrals. Optional for 'SVD' and 'Bipartite', cannot be used alone.
+    #: Fast implementation for dense integrals.
+    #: Optional for 'SVD', 'RRQR' and 'Bipartite', cannot be used alone.
     Fast = 8
-    #: Separate SVD for blocks. Optional for 'SVD' and 'Bipartite', cannot be used alone.
+    #: Separate SVD, RRQR or bipartite treatment for blocks.
+    #: Optional for 'SVD', 'RRQR' and 'Bipartite', cannot be used alone.
     Blocked = 16
     #: Sum of MPO approach. See *J. Chem. Phys.* **145**, 014102 (2016).
-    #: Optional for 'SVD' and 'Bipartite', cannot be used alone.
+    #: Optional for 'SVD', 'RRQR' and 'Bipartite', cannot be used alone.
     Sum = 32
     #: SVD with constraints on sparsity. See *PLoS ONE* **14** e0211463 (2019). Optional for 'SVD', cannot be used alone.
     Constrained = 64
-    #: SVD with block-diagonal sparsity preserved. Optional for 'SVD', cannot be used alone.
+    #: SVD or RRQR with block-diagonal sparsity preserved.
+    #: Optional for 'SVD' and 'RRQR', cannot be used alone.
     Disjoint = 128
-    #: Separate SVD for different operator widths. Optional for 'SVD' and 'Bipartite', cannot be used alone.
+    #: Separate SVD or RRQR for different operator widths.
+    #: Optional for 'SVD' and 'RRQR', cannot be used alone.
     Length = 8192
     DisjointSVD = 128 | 2
     BlockedSumDisjointSVD = 128 | 32 | 16 | 2
@@ -161,6 +168,18 @@ class MPOAlgorithmTypes(IntFlag):
     RescaledDisjointSVD = 128 | 4 | 2
     FastDisjointSVD = 128 | 8 | 2
     FastRescaledDisjointSVD = 128 | 8 | 4 | 2
+    DisjointRRQR = 128 | 2048
+    BlockedSumDisjointRRQR = 128 | 32 | 16 | 2048
+    FastBlockedSumDisjointRRQR = 128 | 32 | 16 | 8 | 2048
+    BlockedRescaledSumDisjointRRQR = 128 | 32 | 16 | 4 | 2048
+    FastBlockedRescaledSumDisjointRRQR = 128 | 32 | 16 | 8 | 4 | 2048
+    BlockedDisjointRRQR = 128 | 16 | 2048
+    FastBlockedDisjointRRQR = 128 | 16 | 8 | 2048
+    BlockedRescaledDisjointRRQR = 128 | 16 | 4 | 2048
+    FastBlockedRescaledDisjointRRQR = 128 | 16 | 8 | 4 | 2048
+    RescaledDisjointRRQR = 128 | 4 | 2048
+    FastDisjointRRQR = 128 | 8 | 2048
+    FastRescaledDisjointRRQR = 128 | 8 | 4 | 2048
     ConstrainedSVD = 64 | 2
     BlockedSumConstrainedSVD = 64 | 32 | 16 | 2
     FastBlockedSumConstrainedSVD = 64 | 32 | 16 | 8 | 2
@@ -191,6 +210,19 @@ class MPOAlgorithmTypes(IntFlag):
     RescaledSVD = 4 | 2
     FastSVD = 8 | 2
     FastRescaledSVD = 8 | 4 | 2
+    BlockedSumRRQR = 32 | 16 | 2048
+    FastBlockedSumRRQR = 32 | 16 | 8 | 2048
+    BlockedRescaledSumRRQR = 32 | 16 | 4 | 2048
+    FastBlockedRescaledSumRRQR = 32 | 16 | 8 | 4 | 2048
+    BlockedRRQR = 16 | 2048
+    FastBlockedRRQR = 16 | 8 | 2048
+    BlockedRescaledRRQR = 16 | 4 | 2048
+    FastBlockedRescaledRRQR = 16 | 8 | 4 | 2048
+    BlockedLengthRRQR = 16 | 2048 | 8192
+    FastBlockedLengthRRQR = 16 | 8 | 2048 | 8192
+    RescaledRRQR = 4 | 2048
+    FastRRQR = 8 | 2048
+    FastRescaledRRQR = 8 | 4 | 2048
     #: Fast algorithm for bipartite (recommended).
     FastBipartite = 8 | 1
     #: Normal-Complementary (NC) partition in conventional quantum chemistry DMRG.
@@ -210,15 +242,15 @@ class MPOAlgorithmTypes(IntFlag):
     ConventionalCN = 1024 | 512
     #: Allow different bra and ket in conventional quantum chemistry MPO.
     #: Optional for 'Conventional', cannot be used alone.
-    NoTranspose = 2048
+    NoTranspose = 16384
     #: Not use R complementary operator intermediates in conventional quantum chemistry MPO.
     #: Optional for 'Conventional', cannot be used alone.
-    NoRIntermed = 4096
-    NoTransConventional = 2048 | 1024
-    NoTransConventionalNC = 2048 | 1024 | 256
-    NoTransConventionalCN = 2048 | 1024 | 512
-    NoRIntermedConventional = 4096 | 1024
-    NoTransNoRIntermedConventional = 4096 | 2048 | 1024
+    NoRIntermed = 32768
+    NoTransConventional = 16384 | 1024
+    NoTransConventionalNC = 16384 | 1024 | 256
+    NoTransConventionalCN = 16384 | 1024 | 512
+    NoRIntermedConventional = 32768 | 1024
+    NoTransNoRIntermedConventional = 32768 | 16384 | 1024
 
 
 class NPDMAlgorithmTypes(IntFlag):
@@ -3437,8 +3469,9 @@ class DMRGDriver:
                 on the integrals ``h1e``, ``g2e`` and ``orb_sym`` before invoking this method
                 to prevent any ambiguity.
             cutoff : float
-                Cutoff of singular values when ``MPOAlgorithmTypes.SVD`` is used for MPO construction.
-                Default is 1E-20.
+                Cutoff of singular values or RRQR diagonal values when
+                ``MPOAlgorithmTypes.SVD`` or ``MPOAlgorithmTypes.RRQR`` is used
+                for MPO construction. Default is 1E-20.
             integral_cutoff : float
                 Cutoff of individual elements in the integrals. Default is 1E-20.
             post_integral_cutoff : float
@@ -3516,9 +3549,11 @@ class DMRGDriver:
                 Allowing the number of singular values to exceed the maximal number, but
                 no more than ``disjoint_multiplier`` times the maximal number. Default is 1.0.
             block_max_length : bool
-                Only have effect if ``MPOAlgorithmTypes.SVD`` or
-                ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
-                If True, will separate the SVD or Bipartite for one- and two-electron integrals.
+                Only have effect if ``MPOAlgorithmTypes.SVD``,
+                ``MPOAlgorithmTypes.RRQR`` or ``MPOAlgorithmTypes.Bipartite``
+                appears in ``algo_type``.
+                If True, will separate the SVD, RRQR or Bipartite treatment for
+                one- and two-electron integrals.
                 Default is False.
             fast_no_orb_dep_op : bool
                 If the operator quantum number does not depend on orbital index,
@@ -3967,8 +4002,9 @@ class DMRGDriver:
             iprint : int
                 Verbosity. Default is 0 (quiet).
             cutoff : float
-                Cutoff of singular values when ``MPOAlgorithmTypes.SVD`` is used for MPO construction.
-                Default is 1E-20.
+                Cutoff of singular values or RRQR diagonal values when
+                ``MPOAlgorithmTypes.SVD`` or ``MPOAlgorithmTypes.RRQR`` is used
+                for MPO construction. Default is 1E-20.
             left_vacuum : SX or None
                 The ``left_vacuum`` of MPO. If None, this will be automatically determined.
             algo_type : None or MPOAlgorithmTypes
@@ -4005,9 +4041,11 @@ class DMRGDriver:
                 Allowing the number of singular values to exceed the maximal number, but
                 no more than ``disjoint_multiplier`` times the maximal number. Default is 1.0.
             block_max_length : bool
-                Only have effect if ``MPOAlgorithmTypes.SVD`` or
-                ``MPOAlgorithmTypes.Bipartite`` appears in ``algo_type``.
-                If True, will separate the SVD or Bipartite for one- and two-electron integrals.
+                Only have effect if ``MPOAlgorithmTypes.SVD``,
+                ``MPOAlgorithmTypes.RRQR`` or ``MPOAlgorithmTypes.Bipartite``
+                appears in ``algo_type``.
+                If True, will separate the SVD, RRQR or Bipartite treatment for
+                one- and two-electron integrals.
                 Default is False.
             fast_no_orb_dep_op : bool
                 If the operator quantum number does not depend on orbital index,

@@ -133,6 +133,11 @@ extern VRETT LFNAME(cgeqrf)(const MKL_INT *m, const MKL_INT *n,
                             complex<float> *a, const MKL_INT *lda,
                             complex<float> *tau, complex<float> *work,
                             const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(cgeqp3)(const MKL_INT *m, const MKL_INT *n,
+                            complex<float> *a, const MKL_INT *lda,
+                            MKL_INT *jpvt, complex<float> *tau,
+                            complex<float> *work, const MKL_INT *lwork,
+                            float *rwork, MKL_INT *info);
 extern VRETT LFNAME(cungqr)(const MKL_INT *m, const MKL_INT *n,
                             const MKL_INT *k, complex<float> *a,
                             const MKL_INT *lda, const complex<float> *tau,
@@ -268,6 +273,11 @@ extern VRETT LFNAME(zgeqrf)(const MKL_INT *m, const MKL_INT *n,
                             complex<double> *a, const MKL_INT *lda,
                             complex<double> *tau, complex<double> *work,
                             const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(zgeqp3)(const MKL_INT *m, const MKL_INT *n,
+                            complex<double> *a, const MKL_INT *lda,
+                            MKL_INT *jpvt, complex<double> *tau,
+                            complex<double> *work, const MKL_INT *lwork,
+                            double *rwork, MKL_INT *info);
 extern VRETT LFNAME(zungqr)(const MKL_INT *m, const MKL_INT *n,
                             const MKL_INT *k, complex<double> *a,
                             const MKL_INT *lda, const complex<double> *tau,
@@ -474,6 +484,26 @@ inline void xgeqrf(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
                    const MKL_INT *lda, complex<double> *tau,
                    complex<double> *work, const MKL_INT *lwork, MKL_INT *info) {
     LFNAME(zgeqrf)(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgeqp3(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, MKL_INT *jpvt, FL *tau, FL *work,
+                   const MKL_INT *lwork, typename GMatrix<FL>::FP *rwork,
+                   MKL_INT *info);
+template <>
+inline void xgeqp3(const MKL_INT *m, const MKL_INT *n, complex<float> *a,
+                   const MKL_INT *lda, MKL_INT *jpvt, complex<float> *tau,
+                   complex<float> *work, const MKL_INT *lwork, float *rwork,
+                   MKL_INT *info) {
+    LFNAME(cgeqp3)(m, n, a, lda, jpvt, tau, work, lwork, rwork, info);
+}
+template <>
+inline void xgeqp3(const MKL_INT *m, const MKL_INT *n, complex<double> *a,
+                   const MKL_INT *lda, MKL_INT *jpvt, complex<double> *tau,
+                   complex<double> *work, const MKL_INT *lwork, double *rwork,
+                   MKL_INT *info) {
+    LFNAME(zgeqp3)(m, n, a, lda, jpvt, tau, work, lwork, rwork, info);
 }
 
 template <>
@@ -1503,6 +1533,79 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
         d_alloc->complex_deallocate(work, lwork);
+    }
+    // Rank revealing QR; original matrix will be destroyed
+    static void rrqr(const GMatrix<FL> &a, const GMatrix<FL> &l,
+                     const GMatrix<FP> &s, const GMatrix<FL> &r) {
+        shared_ptr<VectorAllocator<FP>> d_alloc =
+            make_shared<VectorAllocator<FP>>();
+        shared_ptr<VectorAllocator<MKL_INT>> i_alloc =
+            make_shared<VectorAllocator<MKL_INT>>();
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = -1;
+        FL twork;
+        assert(a.m == l.m && a.n <= r.n && l.n >= k && r.m == k && s.n == k);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < k; j++)
+                l(i, j) = 0;
+        for (MKL_INT i = 0; i < k; i++)
+            for (MKL_INT j = 0; j < r.n; j++)
+                r(i, j) = 0;
+        for (MKL_INT i = 0; i < k; i++)
+            s.data[i] = 0;
+        if (k == 0)
+            return;
+        FL *t = d_alloc->complex_allocate(a.size());
+        FL *tau = d_alloc->complex_allocate(k);
+        FL right_phase = (FL)1.0;
+        MKL_INT *jpvt = i_alloc->allocate(a.n);
+        FP *rwork = d_alloc->allocate(max((MKL_INT)1, 2 * a.n));
+        memset(jpvt, 0, sizeof(MKL_INT) * a.n);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
+                t[(size_t)j * a.m + i] = a(i, j);
+        xgeqp3<FL>(&a.m, &a.n, t, &a.m, jpvt, tau, &twork, &lwork, rwork,
+                   &info);
+        assert(info == 0);
+        MKL_INT geqp3_lwork = max((MKL_INT)xreal<FL>(twork), (MKL_INT)1);
+        FL *work = d_alloc->complex_allocate(geqp3_lwork);
+        xgeqp3<FL>(&a.m, &a.n, t, &a.m, jpvt, tau, work, &geqp3_lwork, rwork,
+                   &info);
+        assert(info == 0);
+        d_alloc->complex_deallocate(work, geqp3_lwork);
+        for (MKL_INT i = 0; i < k; i++) {
+            FP sigma = abs(t[(size_t)i * a.m + i]);
+            if (sigma == 0)
+                for (MKL_INT j = i; j < a.n; j++)
+                    sigma = max(sigma, abs(t[(size_t)j * a.m + i]));
+            s.data[i] = sigma;
+            if (sigma == 0)
+                continue;
+            for (MKL_INT j = i; j < a.n; j++)
+                r(i, jpvt[j] - 1) = t[(size_t)j * a.m + i] / sigma;
+        }
+        if (r.n == 1 && k != 0) {
+            if (s.data[0] != (FP)0.0)
+                right_phase = r(0, 0);
+            r(0, 0) = (FL)1.0;
+        }
+        lwork = -1;
+        xungqr<FL>(&a.m, &k, &k, t, &a.m, tau, &twork, &lwork, &info);
+        assert(info == 0);
+        MKL_INT ungqr_lwork = max((MKL_INT)xreal<FL>(twork), (MKL_INT)1);
+        work = d_alloc->complex_allocate(ungqr_lwork);
+        xungqr<FL>(&a.m, &k, &k, t, &a.m, tau, work, &ungqr_lwork, &info);
+        assert(info == 0);
+        d_alloc->complex_deallocate(work, ungqr_lwork);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < k; j++)
+                l(i, j) = t[(size_t)j * a.m + i];
+        if (r.n == 1 && k != 0)
+            for (MKL_INT i = 0; i < a.m; i++)
+                l(i, 0) *= right_phase;
+        d_alloc->deallocate(rwork, max((MKL_INT)1, 2 * a.n));
+        i_alloc->deallocate(jpvt, a.n);
+        d_alloc->complex_deallocate(tau, k);
+        d_alloc->complex_deallocate(t, a.size());
     }
     // SVD for parallelism over sites; PRB 87, 155137 (2013)
     static void accurate_svd(const GMatrix<FL> &a, const GMatrix<FL> &l,

@@ -2425,6 +2425,7 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("Nothing", MPOAlgorithmTypes::None)
         .value("Bipartite", MPOAlgorithmTypes::Bipartite)
         .value("SVD", MPOAlgorithmTypes::SVD)
+        .value("RRQR", MPOAlgorithmTypes::RRQR)
         .value("Rescaled", MPOAlgorithmTypes::Rescaled)
         .value("Fast", MPOAlgorithmTypes::Fast)
         .value("Blocked", MPOAlgorithmTypes::Blocked)
@@ -2454,6 +2455,26 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("FastDisjointSVD", MPOAlgorithmTypes::FastDisjointSVD)
         .value("FastRescaledDisjointSVD",
                MPOAlgorithmTypes::FastRescaledDisjointSVD)
+        .value("DisjointRRQR", MPOAlgorithmTypes::DisjointRRQR)
+        .value("BlockedSumDisjointRRQR",
+               MPOAlgorithmTypes::BlockedSumDisjointRRQR)
+        .value("FastBlockedSumDisjointRRQR",
+               MPOAlgorithmTypes::FastBlockedSumDisjointRRQR)
+        .value("BlockedRescaledSumDisjointRRQR",
+               MPOAlgorithmTypes::BlockedRescaledSumDisjointRRQR)
+        .value("FastBlockedRescaledSumDisjointRRQR",
+               MPOAlgorithmTypes::FastBlockedRescaledSumDisjointRRQR)
+        .value("BlockedDisjointRRQR", MPOAlgorithmTypes::BlockedDisjointRRQR)
+        .value("FastBlockedDisjointRRQR",
+               MPOAlgorithmTypes::FastBlockedDisjointRRQR)
+        .value("BlockedRescaledDisjointRRQR",
+               MPOAlgorithmTypes::BlockedRescaledDisjointRRQR)
+        .value("FastBlockedRescaledDisjointRRQR",
+               MPOAlgorithmTypes::FastBlockedRescaledDisjointRRQR)
+        .value("RescaledDisjointRRQR", MPOAlgorithmTypes::RescaledDisjointRRQR)
+        .value("FastDisjointRRQR", MPOAlgorithmTypes::FastDisjointRRQR)
+        .value("FastRescaledDisjointRRQR",
+               MPOAlgorithmTypes::FastRescaledDisjointRRQR)
         .value("ConstrainedSVD", MPOAlgorithmTypes::ConstrainedSVD)
         .value("BlockedSumConstrainedSVD",
                MPOAlgorithmTypes::BlockedSumConstrainedSVD)
@@ -2495,8 +2516,25 @@ template <typename S = void> void bind_dmrg_types(py::module &m) {
         .value("RescaledSVD", MPOAlgorithmTypes::RescaledSVD)
         .value("FastSVD", MPOAlgorithmTypes::FastSVD)
         .value("FastRescaledSVD", MPOAlgorithmTypes::FastRescaledSVD)
+        .value("BlockedSumRRQR", MPOAlgorithmTypes::BlockedSumRRQR)
+        .value("FastBlockedSumRRQR", MPOAlgorithmTypes::FastBlockedSumRRQR)
+        .value("BlockedRescaledSumRRQR",
+               MPOAlgorithmTypes::BlockedRescaledSumRRQR)
+        .value("FastBlockedRescaledSumRRQR",
+               MPOAlgorithmTypes::FastBlockedRescaledSumRRQR)
+        .value("BlockedRRQR", MPOAlgorithmTypes::BlockedRRQR)
+        .value("FastBlockedRRQR", MPOAlgorithmTypes::FastBlockedRRQR)
+        .value("BlockedRescaledRRQR", MPOAlgorithmTypes::BlockedRescaledRRQR)
+        .value("FastBlockedRescaledRRQR",
+               MPOAlgorithmTypes::FastBlockedRescaledRRQR)
+        .value("RescaledRRQR", MPOAlgorithmTypes::RescaledRRQR)
+        .value("FastRRQR", MPOAlgorithmTypes::FastRRQR)
+        .value("FastRescaledRRQR", MPOAlgorithmTypes::FastRescaledRRQR)
         .value("BlockedLengthSVD", MPOAlgorithmTypes::BlockedLengthSVD)
         .value("FastBlockedLengthSVD", MPOAlgorithmTypes::FastBlockedLengthSVD)
+        .value("BlockedLengthRRQR", MPOAlgorithmTypes::BlockedLengthRRQR)
+        .value("FastBlockedLengthRRQR",
+               MPOAlgorithmTypes::FastBlockedLengthRRQR)
         .value("FastBipartite", MPOAlgorithmTypes::FastBipartite)
         .def(py::self & py::self)
         .def(py::self | py::self);

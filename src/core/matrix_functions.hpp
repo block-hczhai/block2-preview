@@ -89,6 +89,10 @@ extern VRETT LFNAME(sgesv)(const MKL_INT *n, const MKL_INT *nrhs, float *a,
 extern VRETT LFNAME(sgeqrf)(const MKL_INT *m, const MKL_INT *n, float *a,
                             const MKL_INT *lda, float *tau, float *work,
                             const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(sgeqp3)(const MKL_INT *m, const MKL_INT *n, float *a,
+                            const MKL_INT *lda, MKL_INT *jpvt, float *tau,
+                            float *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 extern VRETT LFNAME(sorgqr)(const MKL_INT *m, const MKL_INT *n,
                             const MKL_INT *k, float *a, const MKL_INT *lda,
                             const float *tau, float *work, const MKL_INT *lwork,
@@ -207,6 +211,10 @@ extern VRETT LFNAME(dgesv)(const MKL_INT *n, const MKL_INT *nrhs, double *a,
 extern VRETT LFNAME(dgeqrf)(const MKL_INT *m, const MKL_INT *n, double *a,
                             const MKL_INT *lda, double *tau, double *work,
                             const MKL_INT *lwork, MKL_INT *info);
+extern VRETT LFNAME(dgeqp3)(const MKL_INT *m, const MKL_INT *n, double *a,
+                            const MKL_INT *lda, MKL_INT *jpvt, double *tau,
+                            double *work, const MKL_INT *lwork,
+                            MKL_INT *info);
 extern VRETT LFNAME(dorgqr)(const MKL_INT *m, const MKL_INT *n,
                             const MKL_INT *k, double *a, const MKL_INT *lda,
                             const double *tau, double *work,
@@ -532,6 +540,23 @@ inline void xgeqrf<float>(const MKL_INT *m, const MKL_INT *n, float *a,
                           const MKL_INT *lda, float *tau, float *work,
                           const MKL_INT *lwork, MKL_INT *info) {
     LFNAME(sgeqrf)(m, n, a, lda, tau, work, lwork, info);
+}
+
+template <typename FL>
+inline void xgeqp3(const MKL_INT *m, const MKL_INT *n, FL *a,
+                   const MKL_INT *lda, MKL_INT *jpvt, FL *tau, FL *work,
+                   const MKL_INT *lwork, MKL_INT *info);
+template <>
+inline void xgeqp3<double>(const MKL_INT *m, const MKL_INT *n, double *a,
+                           const MKL_INT *lda, MKL_INT *jpvt, double *tau,
+                           double *work, const MKL_INT *lwork, MKL_INT *info) {
+    LFNAME(dgeqp3)(m, n, a, lda, jpvt, tau, work, lwork, info);
+}
+template <>
+inline void xgeqp3<float>(const MKL_INT *m, const MKL_INT *n, float *a,
+                          const MKL_INT *lda, MKL_INT *jpvt, float *tau,
+                          float *work, const MKL_INT *lwork, MKL_INT *info) {
+    LFNAME(sgeqp3)(m, n, a, lda, jpvt, tau, work, lwork, info);
 }
 
 template <typename FL>
@@ -1387,6 +1412,77 @@ struct GMatrixFunctions<
                    l.data, &l.n, work, &lwork, &info);
         assert(info == 0);
         d_alloc->deallocate(work, lwork);
+    }
+    // Rank revealing QR; original matrix will be destroyed
+    static void rrqr(const GMatrix<FL> &a, const GMatrix<FL> &l,
+                     const GMatrix<FL> &s, const GMatrix<FL> &r) {
+        shared_ptr<VectorAllocator<FL>> d_alloc =
+            make_shared<VectorAllocator<FL>>();
+        shared_ptr<VectorAllocator<MKL_INT>> i_alloc =
+            make_shared<VectorAllocator<MKL_INT>>();
+        MKL_INT k = min(a.m, a.n), info = 0, lwork = -1;
+        FL twork;
+        assert(a.m == l.m && a.n <= r.n && l.n >= k && r.m == k && s.n == k);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < k; j++)
+                l(i, j) = 0;
+        for (MKL_INT i = 0; i < k; i++)
+            for (MKL_INT j = 0; j < r.n; j++)
+                r(i, j) = 0;
+        for (MKL_INT i = 0; i < k; i++)
+            s.data[i] = 0;
+        if (k == 0)
+            return;
+        FL *t = d_alloc->allocate(a.size());
+        FL *tau = d_alloc->allocate(k);
+        FL right_phase = (FL)1.0;
+        MKL_INT *jpvt = i_alloc->allocate(a.n);
+        memset(jpvt, 0, sizeof(MKL_INT) * a.n);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < a.n; j++)
+                t[(size_t)j * a.m + i] = a(i, j);
+        xgeqp3<FL>(&a.m, &a.n, t, &a.m, jpvt, tau, &twork,
+                   &lwork, &info);
+        assert(info == 0);
+        MKL_INT geqp3_lwork = max((MKL_INT)twork, (MKL_INT)1);
+        FL *work = d_alloc->allocate(geqp3_lwork);
+        xgeqp3<FL>(&a.m, &a.n, t, &a.m, jpvt, tau, work, &geqp3_lwork, &info);
+        assert(info == 0);
+        d_alloc->deallocate(work, geqp3_lwork);
+        for (MKL_INT i = 0; i < k; i++) {
+            FL diag = t[(size_t)i * a.m + i];
+            FL sigma = abs(diag);
+            if (sigma == 0)
+                for (MKL_INT j = i; j < a.n; j++)
+                    sigma = max(sigma, (FL)abs(t[(size_t)j * a.m + i]));
+            s.data[i] = sigma;
+            if (sigma == 0)
+                continue;
+            for (MKL_INT j = i; j < a.n; j++)
+                r(i, jpvt[j] - 1) = t[(size_t)j * a.m + i] / sigma;
+        }
+        if (r.n == 1 && k != 0) {
+            if (s.data[0] != (FL)0.0)
+                right_phase = r(0, 0);
+            r(0, 0) = (FL)1.0;
+        }
+        lwork = -1;
+        xungqr<FL>(&a.m, &k, &k, t, &a.m, tau, &twork, &lwork, &info);
+        assert(info == 0);
+        MKL_INT ungqr_lwork = max((MKL_INT)twork, (MKL_INT)1);
+        work = d_alloc->allocate(ungqr_lwork);
+        xungqr<FL>(&a.m, &k, &k, t, &a.m, tau, work, &ungqr_lwork, &info);
+        assert(info == 0);
+        d_alloc->deallocate(work, ungqr_lwork);
+        for (MKL_INT i = 0; i < a.m; i++)
+            for (MKL_INT j = 0; j < k; j++)
+                l(i, j) = t[(size_t)j * a.m + i];
+        if (r.n == 1 && k != 0)
+            for (MKL_INT i = 0; i < a.m; i++)
+                l(i, 0) *= right_phase;
+        i_alloc->deallocate(jpvt, a.n);
+        d_alloc->deallocate(tau, k);
+        d_alloc->deallocate(t, a.size());
     }
     // SVD for parallelism over sites; PRB 87, 155137 (2013)
     static void accurate_svd(const GMatrix<FL> &a, const GMatrix<FL> &l,

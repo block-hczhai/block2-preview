@@ -287,12 +287,20 @@ template <typename S, typename FL> void run(const map<string, string> &params) {
             mpo_algo_type = MPOAlgorithmTypes::FastBipartite;
         else if (params.at("mpo_algo_type") == "svd")
             mpo_algo_type = MPOAlgorithmTypes::SVD;
+        else if (params.at("mpo_algo_type") == "rrqr")
+            mpo_algo_type = MPOAlgorithmTypes::RRQR;
         else if (params.at("mpo_algo_type") == "fast_svd")
             mpo_algo_type = MPOAlgorithmTypes::FastSVD;
+        else if (params.at("mpo_algo_type") == "fast_rrqr")
+            mpo_algo_type = MPOAlgorithmTypes::FastRRQR;
         else if (params.at("mpo_algo_type") == "rescaled_svd")
             mpo_algo_type = MPOAlgorithmTypes::RescaledSVD;
+        else if (params.at("mpo_algo_type") == "rescaled_rrqr")
+            mpo_algo_type = MPOAlgorithmTypes::RescaledRRQR;
         else if (params.at("mpo_algo_type") == "fast_rescaled_svd")
             mpo_algo_type = MPOAlgorithmTypes::FastRescaledSVD;
+        else if (params.at("mpo_algo_type") == "fast_rescaled_rrqr")
+            mpo_algo_type = MPOAlgorithmTypes::FastRescaledRRQR;
         else {
             cerr << "unknown mpo algo type : " << params.at("mpo_algo_type")
                  << endl;

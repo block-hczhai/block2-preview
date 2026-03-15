@@ -53,6 +53,7 @@ enum struct MPOAlgorithmTypes : uint16_t {
     NC = 256,
     CN = 512,
     Length = 1024,
+    RRQR = 2048,
     DisjointSVD = 128 | 2,
     BlockedSumDisjointSVD = 128 | 32 | 16 | 2,
     FastBlockedSumDisjointSVD = 128 | 32 | 16 | 8 | 2,
@@ -65,6 +66,18 @@ enum struct MPOAlgorithmTypes : uint16_t {
     RescaledDisjointSVD = 128 | 4 | 2,
     FastDisjointSVD = 128 | 8 | 2,
     FastRescaledDisjointSVD = 128 | 8 | 4 | 2,
+    DisjointRRQR = 128 | 2048,
+    BlockedSumDisjointRRQR = 128 | 32 | 16 | 2048,
+    FastBlockedSumDisjointRRQR = 128 | 32 | 16 | 8 | 2048,
+    BlockedRescaledSumDisjointRRQR = 128 | 32 | 16 | 4 | 2048,
+    FastBlockedRescaledSumDisjointRRQR = 128 | 32 | 16 | 8 | 4 | 2048,
+    BlockedDisjointRRQR = 128 | 16 | 2048,
+    FastBlockedDisjointRRQR = 128 | 16 | 8 | 2048,
+    BlockedRescaledDisjointRRQR = 128 | 16 | 4 | 2048,
+    FastBlockedRescaledDisjointRRQR = 128 | 16 | 8 | 4 | 2048,
+    RescaledDisjointRRQR = 128 | 4 | 2048,
+    FastDisjointRRQR = 128 | 8 | 2048,
+    FastRescaledDisjointRRQR = 128 | 8 | 4 | 2048,
     ConstrainedSVD = 64 | 2,
     BlockedSumConstrainedSVD = 64 | 32 | 16 | 2,
     FastBlockedSumConstrainedSVD = 64 | 32 | 16 | 8 | 2,
@@ -94,6 +107,19 @@ enum struct MPOAlgorithmTypes : uint16_t {
     RescaledSVD = 4 | 2,
     FastSVD = 8 | 2,
     FastRescaledSVD = 8 | 4 | 2,
+    BlockedSumRRQR = 32 | 16 | 2048,
+    FastBlockedSumRRQR = 32 | 16 | 8 | 2048,
+    BlockedRescaledSumRRQR = 32 | 16 | 4 | 2048,
+    FastBlockedRescaledSumRRQR = 32 | 16 | 8 | 4 | 2048,
+    BlockedRRQR = 16 | 2048,
+    FastBlockedRRQR = 16 | 8 | 2048,
+    BlockedRescaledRRQR = 16 | 4 | 2048,
+    FastBlockedRescaledRRQR = 16 | 8 | 4 | 2048,
+    BlockedLengthRRQR = 16 | 2048 | 1024,
+    FastBlockedLengthRRQR = 16 | 8 | 2048 | 1024,
+    RescaledRRQR = 4 | 2048,
+    FastRRQR = 8 | 2048,
+    FastRescaledRRQR = 8 | 4 | 2048,
     FastBipartite = 8 | 1,
 };
 
@@ -145,6 +171,8 @@ inline ostream &operator<<(ostream &os, const MPOAlgorithmTypes c) {
             os << "BIP";
         if (c & MPOAlgorithmTypes::SVD)
             os << "SVD";
+        if (c & MPOAlgorithmTypes::RRQR)
+            os << "RRQR";
     }
     return os;
 }
@@ -199,19 +227,24 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         bool constrain = algo_type & MPOAlgorithmTypes::Constrained;
         bool disjoint = algo_type & MPOAlgorithmTypes::Disjoint;
         bool length = algo_type & MPOAlgorithmTypes::Length;
+        bool use_svd = algo_type & MPOAlgorithmTypes::SVD;
+        bool use_rrqr = algo_type & MPOAlgorithmTypes::RRQR;
+        bool use_rank_decomp = use_svd || use_rrqr;
+        if (use_svd && use_rrqr)
+            throw runtime_error("SVD and RRQR cannot be used together!");
         if (!disjoint)
             disjoint_multiplier = (FP)1.0;
-        if (!(algo_type & MPOAlgorithmTypes::SVD) && max_bond_dim != -1)
+        if (!use_rank_decomp && max_bond_dim != -1)
             throw runtime_error(
-                "Max bond dimension can only be used together with SVD!");
-        else if (!(algo_type & MPOAlgorithmTypes::SVD) && rescale)
+                "Max bond dimension can only be used together with SVD/RRQR!");
+        else if (!use_rank_decomp && rescale)
             throw runtime_error(
-                "Rescaling can only be used together with SVD!");
-        else if (!(algo_type & MPOAlgorithmTypes::SVD) && constrain)
+                "Rescaling can only be used together with SVD/RRQR!");
+        else if (!use_svd && constrain)
+            throw runtime_error("Constrained can only be used together with SVD!");
+        else if (!use_rank_decomp && disjoint)
             throw runtime_error(
-                "Constrained can only be used together with SVD!");
-        else if (!(algo_type & MPOAlgorithmTypes::SVD) && disjoint)
-            throw runtime_error("Disjoint can only be used together with SVD!");
+                "Disjoint can only be used together with SVD/RRQR!");
         else if ((algo_type & MPOAlgorithmTypes::NC) &&
                  algo_type != MPOAlgorithmTypes::NC)
             throw runtime_error("Invalid MPO algorithm type with NC!");
@@ -281,7 +314,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                  << " | Algorithm = " << algo_type
                  << " | Cutoff = " << scientific << setw(8) << setprecision(2)
                  << cutoff;
-            if (algo_type & MPOAlgorithmTypes::SVD)
+            if (use_rank_decomp)
                 cout << " | Max bond dimension = " << setw(5) << max_bond_dim;
             cout << endl;
             if (block_max_length)
@@ -725,7 +758,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].first[1][(size_t)i * szr + i] =
                             svds[iq].second[i] = 1;
                     s_kept = szm;
-                } else { // SVD
+                } else { // SVD / RRQR
                     _t2.get_time();
                     vector<FL> mat((size_t)szl * szr, 0);
                     if (delayed_term != -1 && iq == 0) {
@@ -741,7 +774,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         svds[iq].first[0][0] = 1;
                         threading->activate_global_mkl();
                         if ((pqx[iq] >= 2 || disjoint_all_blocks) && disjoint)
-                            IterativeMatrixFunctions<FL>::disjoint_svd(
+                            IterativeMatrixFunctions<FL>::disjoint_svd_or_rrqr(
                                 GMatrix<FL>(mat.data(), szl, szr),
                                 GMatrix<FL>(svds[iq].first[0].data() + 1 + szm,
                                             szl, szm),
@@ -749,7 +782,16 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                                             szm - 1),
                                 GMatrix<FL>(svds[iq].first[1].data() + szr,
                                             szm - 1, szr),
-                                disjoint_levels, false, iprint >= 2);
+                                use_svd, disjoint_levels, false, iprint >= 2);
+                        else if (use_rrqr)
+                            GMatrixFunctions<FL>::rrqr(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data() + 1 + szm,
+                                            szl, szm),
+                                GMatrix<FP>(svds[iq].second.data() + 1, 1,
+                                            szm - 1),
+                                GMatrix<FL>(svds[iq].first[1].data() + szr,
+                                            szm - 1, szr));
                         else
                             GMatrixFunctions<FL>::svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
@@ -769,12 +811,19 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                         // << endl;
                         threading->activate_global_mkl();
                         if ((pqx[iq] >= 2 || disjoint_all_blocks) && disjoint)
-                            IterativeMatrixFunctions<FL>::disjoint_svd(
+                            IterativeMatrixFunctions<FL>::disjoint_svd_or_rrqr(
                                 GMatrix<FL>(mat.data(), szl, szr),
                                 GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
                                 GMatrix<FP>(svds[iq].second.data(), 1, szm),
                                 GMatrix<FL>(svds[iq].first[1].data(), szm, szr),
-                                disjoint_levels, false, iprint >= 2);
+                                use_svd, disjoint_levels, false, iprint >= 2);
+                        else if (use_rrqr)
+                            GMatrixFunctions<FL>::rrqr(
+                                GMatrix<FL>(mat.data(), szl, szr),
+                                GMatrix<FL>(svds[iq].first[0].data(), szl, szm),
+                                GMatrix<FP>(svds[iq].second.data(), 1, szm),
+                                GMatrix<FL>(svds[iq].first[1].data(), szm,
+                                            szr));
                         else
                             GMatrixFunctions<FL>::svd(
                                 GMatrix<FL>(mat.data(), szl, szr),
@@ -939,8 +988,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 }
             }
             FP accurate_svd_error = (FP)0.0;
-            if (compute_accurate_svd_error &&
-                (algo_type & MPOAlgorithmTypes::SVD)) {
+            if (compute_accurate_svd_error && use_svd) {
                 for (auto &mq : q_map) {
                     int iq = mq.second;
                     auto &nm = nms[iq];
@@ -986,8 +1034,7 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
                 cout << "Mmpo = " << setw(5) << s_kept_total
                      << " DW = " << scientific << setw(8) << setprecision(2)
                      << discarded_weights[ii];
-                if (compute_accurate_svd_error &&
-                    (algo_type & MPOAlgorithmTypes::SVD))
+                if (compute_accurate_svd_error && use_svd)
                     cout << " Error = " << scientific << setw(8)
                          << setprecision(2) << sqrt(accurate_svd_error);
                 cout.flush();
@@ -1507,8 +1554,10 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
             }
             if (iprint) {
                 tsite = _t.get_time();
-                if (algo_type & MPOAlgorithmTypes::SVD)
+                if (use_svd)
                     cout << fixed << setprecision(3) << " Tsvd = " << tsvd;
+                else if (use_rrqr)
+                    cout << fixed << setprecision(3) << " Trrqr = " << tsvd;
                 else if (algo_type & MPOAlgorithmTypes::Bipartite)
                     cout << fixed << setprecision(3) << " Tmvc = " << tsvd;
                 cout << " T = " << tsite << endl;
@@ -1530,15 +1579,16 @@ template <typename S, typename FL> struct GeneralMPO : MPO<S, FL> {
         if (iprint) {
             cout << "Ttotal = " << fixed << setprecision(3) << setw(10)
                  << tsite_total << fixed << setprecision(3);
-            if (algo_type & MPOAlgorithmTypes::SVD)
+            if (use_svd)
                 cout << " Tsvd-total = " << tsvd_total;
+            else if (use_rrqr)
+                cout << " Trrqr-total = " << tsvd_total;
             else if (algo_type & MPOAlgorithmTypes::Bipartite)
                 cout << " Tmvc-total = " << tsvd_total;
             cout << " MPO bond dimension = " << setw(5) << bond_max;
             cout << " MaxDW = " << scientific << setw(8) << setprecision(2)
                  << dw_max;
-            if (compute_accurate_svd_error &&
-                (algo_type & MPOAlgorithmTypes::SVD))
+            if (compute_accurate_svd_error && use_svd)
                 cout << " Total error = " << scientific << setw(8)
                      << setprecision(2) << sqrt(error_total);
             cout << endl;

@@ -3197,8 +3197,8 @@ template <typename FL> void bind_matrix(py::module &m) {
                                (MKL_INT)r.shape()[1]);
                 vector<FL> xlevels(levels.data(),
                                    levels.data() + levels.size());
-                IterativeMatrixFunctions<FL>::disjoint_svd(xx, xl, xs, xr,
-                                                           xlevels);
+                IterativeMatrixFunctions<FL>::disjoint_svd_or_rrqr(
+                    xx, xl, xs, xr, true, xlevels);
                 return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("levels") = py::array_t<FL>(0));
@@ -3250,8 +3250,8 @@ template <typename FL> void bind_matrix(py::module &m) {
                                         (MKL_INT)r.shape()[1]);
                 vector<FL> xlevels(levels.data(),
                                    levels.data() + levels.size());
-                IterativeMatrixFunctions<complex<FL>>::disjoint_svd(
-                    xx, xl, xs, xr, xlevels);
+                IterativeMatrixFunctions<complex<FL>>::disjoint_svd_or_rrqr(
+                    xx, xl, xs, xr, true, xlevels);
                 return std::make_tuple(l, s, r);
             },
             py::arg("x"), py::arg("levels") = py::array_t<FL>(0));

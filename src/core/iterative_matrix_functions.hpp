@@ -3683,11 +3683,19 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
         i_alloc->deallocate(iwork, 2 * max(x.m, x.n));
     }
 
-    // Disjoint SVD (SVD with block-diagonal sparsity preserved)
-    // the block-diagonal can have arbitrarily index permutation
     static void disjoint_svd(GMatrix<FL> x, GMatrix<FL> l, GMatrix<FP> s,
                              GMatrix<FL> r, vector<FP> levels = vector<FP>(),
                              bool ensure_ortho = true, bool iprint = false) {
+        disjoint_svd_or_rrqr(x, l, s, r, true, levels, ensure_ortho, iprint);
+    }
+
+    // Disjoint SVD / RRQR (with block-diagonal sparsity preserved)
+    // the block-diagonal can have arbitrarily index permutation
+    static void disjoint_svd_or_rrqr(GMatrix<FL> x, GMatrix<FL> l,
+                                     GMatrix<FP> s, GMatrix<FL> r, bool is_svd,
+                                     vector<FP> levels = vector<FP>(),
+                                     bool ensure_ortho = true,
+                                     bool iprint = false) {
         if (x.m == 0 || x.n == 0)
             return;
         sort(levels.begin(), levels.end(), greater<FP>());
@@ -3822,7 +3830,7 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     gxl += xl, gxr += xr;
                     grt++;
                 }
-            // do svd
+            // do svd / rrqr
             memset(xwork, 0, sizeof(FL) * ixw);
             assert(ixw <= (size_t)x.m * x.n);
             for (; iacc < acc_div[il]; iacc++) {
@@ -3832,8 +3840,12 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                     x(ir, ic);
             }
             for (MKL_INT ig = 0; ig < grt; ig++)
-                GMatrixFunctions<FL>::svd(xmats[ig], lmats[ig], smats[ig],
-                                          rmats[ig]);
+                if (is_svd)
+                    GMatrixFunctions<FL>::svd(xmats[ig], lmats[ig],
+                                              smats[ig], rmats[ig]);
+                else
+                    GMatrixFunctions<FL>::rrqr(xmats[ig], lmats[ig],
+                                               smats[ig], rmats[ig]);
             // fill original matrices
             grt = 0;
             for (auto &r : dsus[il].roots)
@@ -3862,7 +3874,13 @@ template <typename FL> struct IterativeMatrixFunctions : GMatrixFunctions<FL> {
                 }
         }
         assert(gxk <= ssk);
-        l.clear(), r.clear(), s.clear();
+        if (ssk != 0) {
+            for (MKL_INT ii = 0; ii < l.m; ii++)
+                memset(&l(ii, 0), 0, sizeof(FL) * ssk);
+            for (MKL_INT ii = 0; ii < ssk; ii++)
+                memset(&r(ii, 0), 0, sizeof(FL) * r.n);
+            memset(s.data, 0, sizeof(FP) * ssk);
+        }
         vector<MKL_INT> iwork(max(max(x.m, x.n), gxk));
         if (ensure_ortho) {
             // for rows and columns with all zeros
