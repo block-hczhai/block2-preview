@@ -6710,7 +6710,7 @@ class DMRGDriver:
             solver_type : None or str.
                 The type of the linear solver. If None, this is set to "Automatic".
                 Possible options are "Automatic", "CG", "MinRes", "GCROT", "IDRS",
-                "LSQR", and "Cheby".
+                "LSQR", "Cheby", and "Custom".
             right_weight : float
                 Weight (0~1) for mixing rhs wavefunction in density matrix/svd. Default is 0.
             linear_rel_conv_thrd : float

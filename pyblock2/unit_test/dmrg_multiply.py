@@ -73,9 +73,13 @@ def _run_multiply(
     mpo,
     ket,
     sweep_bond_dims,
+    left_mpo=None,
+    left_kernel=None,
     right_kernel=None,
+    solver_type=None,
     proj_mpss=None,
     proj_bond_dim=-1,
+    right_weight=0.0,
 ):
     kwargs = dict(
         n_sweeps=6,
@@ -84,9 +88,16 @@ def _run_multiply(
         bra_bond_dims=sweep_bond_dims,
         cutoff=1e-24,
         iprint=0,
+        right_weight=right_weight,
     )
+    if left_mpo is not None:
+        kwargs["left_mpo"] = left_mpo
+    if left_kernel is not None:
+        kwargs["left_kernel"] = left_kernel
     if right_kernel is not None:
         kwargs["right_kernel"] = right_kernel
+    if solver_type is not None:
+        kwargs["solver_type"] = solver_type
     if proj_mpss is not None:
         kwargs["proj_mpss"] = proj_mpss
         kwargs["proj_weights"] = [1.0]
@@ -218,5 +229,68 @@ class TestDMRGMultiply:
                 proj_bond_dim=work_bond_dim,
             )
             _compare_states(driver, impo, bra_ignore, bra_plain, dot_type)
+        finally:
+            driver.finalize()
+
+    def test_custom_left_kernel_matches_right_kernel(
+        self, tmp_path, symm_type, fd_data, dot_type
+    ):
+        driver, h1e, g2e, ecore = _init_driver_and_integrals(
+            tmp_path, symm_type, fd_data
+        )
+
+        try:
+            driver.bw.b.Random.rand_seed(9753)
+            mpo = driver.get_qc_mpo(h1e=h1e, g2e=g2e, ecore=ecore, iprint=0)
+            impo = driver.get_identity_mpo()
+
+            ket_base = driver.get_random_mps(
+                tag="MUL-CUSTOM-KET-BASE", bond_dim=50, dot=dot_type
+            )
+            bra_template = driver.get_random_mps(
+                tag="MUL-CUSTOM-BRA-TPL", bond_dim=200, dot=dot_type
+            )
+            sweep_bond_dims = [bra_template.info.bond_dim] * 6
+
+            def scale_kernel(beta, hop, a, b, xs):
+                hop(a, b, 2.0 * beta)
+
+            ket_right = driver.copy_mps(ket_base, "MUL-CUSTOM-KET-RIGHT")
+            bra_right = driver.copy_mps(bra_template, "MUL-CUSTOM-BRA-RIGHT")
+            _run_multiply(
+                driver,
+                bra_right,
+                mpo,
+                ket_right,
+                sweep_bond_dims,
+                right_kernel=scale_kernel,
+            )
+
+            ket_left = driver.copy_mps(ket_base, "MUL-CUSTOM-KET-LEFT")
+            bra_left = driver.copy_mps(bra_template, "MUL-CUSTOM-BRA-LEFT")
+            _run_multiply(
+                driver,
+                bra_left,
+                impo,
+                ket_left,
+                sweep_bond_dims,
+                left_mpo=mpo,
+                left_kernel=scale_kernel,
+                solver_type="Custom",
+                right_weight=0.5,
+            )
+
+            overlap = driver.expectation(bra_left, impo, bra_right, iprint=0)
+            norm_left = driver.expectation(bra_left, impo, bra_left, iprint=0)
+            norm_right = driver.expectation(
+                bra_right, impo, bra_right, iprint=0
+            )
+            fidelity = abs(overlap) / np.sqrt(abs(norm_left * norm_right))
+            rel_norm_diff = abs(norm_left - norm_right) / max(
+                1.0, abs(norm_right)
+            )
+
+            assert fidelity > 1 - [0, 1e-4, 1e-8][dot_type]
+            assert rel_norm_diff < [0, 1e-4, 1e-8][dot_type]
         finally:
             driver.finalize()

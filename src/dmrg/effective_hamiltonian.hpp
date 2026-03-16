@@ -75,7 +75,8 @@ enum struct LinearSolverTypes : uint8_t {
     GCROT,
     IDRS,
     LSQR,
-    Cheby
+    Cheby,
+    Custom
 };
 
 template <typename FL> struct EffectiveKernel {
@@ -581,6 +582,34 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
         GMatrix<FL> mket(ket->data, (MKL_INT)ket->total_memory, 1);
         GMatrix<FL> mbra(bra->data, (MKL_INT)bra->total_memory, 1);
         tf->opf->seq->cumulative_nflop = 0;
+        if (solver_type == LinearSolverTypes::Custom) {
+            bra->clear();
+            shared_ptr<OpExpr<S>> expr = add_const_term(const_e, para_rule);
+            SeqTypes mode = tf->opf->seq->mode;
+            tf->opf->seq->mode = tf->opf->seq->mode & SeqTypes::Simple
+                                     ? SeqTypes::Simple
+                                     : SeqTypes::None;
+            if (this->eff_kernel == nullptr)
+                (*this)(mket, mbra);
+            else {
+                const function<void(const GMatrix<FL> &, const GMatrix<FL> &,
+                                    FL)> &f =
+                    [this](const GMatrix<FL> &a, const GMatrix<FL> &b,
+                           FL scale) { return (*this)(a, b, 0, scale); };
+                this->eff_kernel->compute((FL)1.0, f, mket, mbra, ors);
+            }
+            op->mat->data[0] = expr;
+            tf->opf->seq->mode = mode;
+            uint64_t nflop = tf->opf->seq->cumulative_nflop;
+            if (para_rule != nullptr)
+                para_rule->comm->reduce_sum_optional(&nflop, 1,
+                                                     para_rule->comm->root);
+            tf->opf->seq->cumulative_nflop = 0;
+            nmult = niter = 1;
+            return make_tuple((FL)GMatrixFunctions<FL>::norm(mbra),
+                              make_pair(nmult, niter), (size_t)nflop,
+                              t.get_time());
+        }
         GDiagonalMatrix<FL> aa(nullptr, 0);
         if (compute_diag && solver_type != LinearSolverTypes::MinRes) {
             aa = GDiagonalMatrix<FL>(nullptr, (MKL_INT)diag->total_memory);
@@ -598,12 +627,11 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
                     return (*this)(a, b, 0, scale);
             };
         const function<void(const GMatrix<FL> &, const GMatrix<FL> &)> &g =
-            [this, &f](const GMatrix<FL> &a, const GMatrix<FL> &b) {
+            [this, &f, &ors](const GMatrix<FL> &a, const GMatrix<FL> &b) {
                 if (this->eff_kernel == nullptr)
                     f(a, b, (FL)1.0);
                 else
-                    this->eff_kernel->compute((FL)1.0, f, a, b,
-                                              vector<GMatrix<FL>>());
+                    this->eff_kernel->compute((FL)1.0, f, a, b, ors);
             };
         FL r =
             solver_type == LinearSolverTypes::CG

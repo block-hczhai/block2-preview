@@ -3623,7 +3623,6 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff = lme->eff_ham(
                     fuse_left ? FuseTypes::FuseL : FuseTypes::FuseR, forward,
                     false, lme->bra->tensors[i], lme->ket->tensors[i]);
-                l_eff->eff_kernel = leff_kernel;
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
@@ -4391,7 +4390,6 @@ template <typename S, typename FL, typename FLS> struct Linear {
                 shared_ptr<EffectiveHamiltonian<S, FL>> l_eff =
                     lme->eff_ham(FuseTypes::FuseLR, forward, false,
                                  lme->bra->tensors[i], lme->ket->tensors[i]);
-                l_eff->eff_kernel = leff_kernel;
                 teff += _t.get_time();
                 if ((noise_type & NoiseTypes::Perturbative) && noise != 0)
                     pbra = l_eff->perturbative_noise(
