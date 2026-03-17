@@ -125,6 +125,7 @@ template <typename S, typename FL, typename FLS> struct DMRG {
     // store all wfn singular values (for analysis) at each site
     bool store_wfn_spectra = false;
     bool store_seq_data = false;
+    bool save_eff_problem = false;
     vector<vector<FPS>> sweep_wfn_spectra;
     vector<FPS> wfn_spectra;
     int sweep_start_site = 0;
@@ -770,6 +771,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
             h_eff->seq_filename = ss.str();
         }
+        if (save_eff_problem)
+            h_eff->save_eff_problem(i, forward);
         size_t current_eff_ham_size =
             metric_me == nullptr
                 ? h_eff->op->get_total_memory()
@@ -1223,6 +1226,8 @@ template <typename S, typename FL, typename FLS> struct DMRG {
                << Parsing::to_string(isweep) << "." << Parsing::to_string(i);
             h_eff->seq_filename = ss.str();
         }
+        if (save_eff_problem)
+            h_eff->save_eff_problem(i, forward);
         size_t current_eff_ham_size =
             metric_me == nullptr
                 ? h_eff->op->get_total_memory()

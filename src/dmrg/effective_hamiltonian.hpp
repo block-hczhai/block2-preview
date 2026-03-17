@@ -21,6 +21,7 @@
 #pragma once
 
 #include "../core/complex_matrix_functions.hpp"
+#include "../core/effective_problem.hpp"
 #include "../core/iterative_matrix_functions.hpp"
 #include "../core/tensor_functions.hpp"
 #include "mpo.hpp"
@@ -249,6 +250,14 @@ struct EffectiveHamiltonian<S, FL, MPS<S, FL>> {
             tf->opf->seq->deallocate();
             tf->opf->seq->clear();
         }
+    }
+    void save_eff_problem(int isite, bool forward) const {
+        stringstream ss;
+        ss << frame_<FP>()->save_dir << "/EFF-PROB."
+           << (forward ? "FORW." : "BACKW.") << Parsing::to_string(isite);
+        EffectiveProblem<S, FL>::save_problem_file(
+            ss.str(), op, cmat, vmat, opdq, operator_quanta, wfn_infos, isite,
+            forward);
     }
     shared_ptr<SparseMatrixGroup<S, FL>>
     perturbative_noise(bool trace_right, int iL, int iR, FuseTypes ftype,

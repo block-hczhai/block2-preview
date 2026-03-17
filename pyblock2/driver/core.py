@@ -4554,6 +4554,7 @@ class DMRGDriver:
         store_wfn_spectra=True,
         spectra_with_multiplicity=False,
         store_seq_data=False,
+        save_eff_problem=False,
         lowmem_noise=False,
         midmem_noise=False,
         sweep_start=0,
@@ -4667,6 +4668,9 @@ class DMRGDriver:
             store_seq_data : bool
                 If True, will store dense matrix multiplication parameters in text files.
                 Only useful for developers. Default is False.
+            save_eff_problem : bool
+                If True, will store the effective Davidson MatVec problem as a binary file
+                in the scratch directory. Only useful for developers. Default is False.
             lowmem_noise : bool
                 If True, the noise step will cost less memory. Default is False.
             midmem_noise : bool
@@ -4827,6 +4831,7 @@ class DMRGDriver:
         dmrg.davidson_def_max_size = dav_def_max_size
         dmrg.store_wfn_spectra = store_wfn_spectra
         dmrg.store_seq_data = store_seq_data
+        dmrg.save_eff_problem = save_eff_problem
         dmrg.iprint = iprint
         dmrg.cutoff = cutoff
         if real_density_matrix:

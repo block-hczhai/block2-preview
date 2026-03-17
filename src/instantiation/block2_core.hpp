@@ -32,6 +32,7 @@
 #include "../core/delayed_sparse_matrix.hpp"
 #include "../core/delayed_tensor_functions.hpp"
 #include "../core/expr.hpp"
+#include "../core/effective_problem.hpp"
 #include "../core/fft.hpp"
 #include "../core/fp_codec.hpp"
 #include "../core/hamiltonian.hpp"
@@ -199,9 +200,11 @@ extern template struct block2::OperatorFunctions<block2::SU2, double>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SZ, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SZ, double>;
+extern template struct block2::EffectiveProblem<block2::SZ, double>;
 
 extern template struct block2::OperatorTensor<block2::SU2, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2, double>;
+extern template struct block2::EffectiveProblem<block2::SU2, double>;
 
 // parallel_mpi.hpp
 #ifdef _HAS_MPI
@@ -339,9 +342,11 @@ extern template struct block2::OperatorFunctions<block2::SU2K, double>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SZK, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SZK, double>;
+extern template struct block2::EffectiveProblem<block2::SZK, double>;
 
 extern template struct block2::OperatorTensor<block2::SU2K, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2K, double>;
+extern template struct block2::EffectiveProblem<block2::SU2K, double>;
 
 // parallel_mpi.hpp
 #ifdef _HAS_MPI
@@ -479,9 +484,11 @@ extern template struct block2::OperatorFunctions<block2::SGB, double>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SGF, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SGF, double>;
+extern template struct block2::EffectiveProblem<block2::SGF, double>;
 
 extern template struct block2::OperatorTensor<block2::SGB, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SGB, double>;
+extern template struct block2::EffectiveProblem<block2::SGB, double>;
 
 // parallel_mpi.hpp
 #ifdef _HAS_MPI
@@ -590,6 +597,7 @@ extern template struct block2::OperatorFunctions<block2::SAny, double>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SAny, double>;
 extern template struct block2::DelayedOperatorTensor<block2::SAny, double>;
+extern template struct block2::EffectiveProblem<block2::SAny, double>;
 
 // parallel_mpi.hpp
 #ifdef _HAS_MPI
@@ -710,10 +718,12 @@ extern template struct block2::OperatorFunctions<block2::SU2, complex<double>>;
 extern template struct block2::OperatorTensor<block2::SZ, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SZ,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SZ, complex<double>>;
 
 extern template struct block2::OperatorTensor<block2::SU2, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SU2, complex<double>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SZ, complex<double>>;
@@ -824,10 +834,13 @@ extern template struct block2::OperatorFunctions<block2::SU2K, complex<double>>;
 extern template struct block2::OperatorTensor<block2::SZK, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SZK,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SZK, complex<double>>;
 
 extern template struct block2::OperatorTensor<block2::SU2K, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2K,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SU2K,
+                                                complex<double>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SZK, complex<double>>;
@@ -938,10 +951,14 @@ extern template struct block2::OperatorFunctions<block2::SGB, complex<double>>;
 extern template struct block2::OperatorTensor<block2::SGF, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SGF,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SGF,
+                                                complex<double>>;
 
 extern template struct block2::OperatorTensor<block2::SGB, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SGB,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SGB,
+                                                complex<double>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SGF, complex<double>>;
@@ -1024,6 +1041,8 @@ extern template struct block2::OperatorFunctions<block2::SAny, complex<double>>;
 extern template struct block2::OperatorTensor<block2::SAny, complex<double>>;
 extern template struct block2::DelayedOperatorTensor<block2::SAny,
                                                      complex<double>>;
+extern template struct block2::EffectiveProblem<block2::SAny,
+                                                complex<double>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SAny, complex<double>>;
@@ -1173,9 +1192,11 @@ extern template struct block2::OperatorFunctions<block2::SU2, float>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SZ, float>;
 extern template struct block2::DelayedOperatorTensor<block2::SZ, float>;
+extern template struct block2::EffectiveProblem<block2::SZ, float>;
 
 extern template struct block2::OperatorTensor<block2::SU2, float>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2, float>;
+extern template struct block2::EffectiveProblem<block2::SU2, float>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SZ, float>;
@@ -1271,9 +1292,11 @@ extern template struct block2::OperatorFunctions<block2::SGB, float>;
 // operator_tensor.hpp
 extern template struct block2::OperatorTensor<block2::SGF, float>;
 extern template struct block2::DelayedOperatorTensor<block2::SGF, float>;
+extern template struct block2::EffectiveProblem<block2::SGF, float>;
 
 extern template struct block2::OperatorTensor<block2::SGB, float>;
 extern template struct block2::DelayedOperatorTensor<block2::SGB, float>;
+extern template struct block2::EffectiveProblem<block2::SGB, float>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SGF, float>;
@@ -1384,10 +1407,13 @@ extern template struct block2::OperatorFunctions<block2::SU2, complex<float>>;
 extern template struct block2::OperatorTensor<block2::SZ, complex<float>>;
 extern template struct block2::DelayedOperatorTensor<block2::SZ,
                                                      complex<float>>;
+extern template struct block2::EffectiveProblem<block2::SZ, complex<float>>;
 
 extern template struct block2::OperatorTensor<block2::SU2, complex<float>>;
 extern template struct block2::DelayedOperatorTensor<block2::SU2,
                                                      complex<float>>;
+extern template struct block2::EffectiveProblem<block2::SU2,
+                                                complex<float>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SZ, complex<float>>;
@@ -1505,10 +1531,14 @@ extern template struct block2::OperatorFunctions<block2::SGB, complex<float>>;
 extern template struct block2::OperatorTensor<block2::SGF, complex<float>>;
 extern template struct block2::DelayedOperatorTensor<block2::SGF,
                                                      complex<float>>;
+extern template struct block2::EffectiveProblem<block2::SGF,
+                                                complex<float>>;
 
 extern template struct block2::OperatorTensor<block2::SGB, complex<float>>;
 extern template struct block2::DelayedOperatorTensor<block2::SGB,
                                                      complex<float>>;
+extern template struct block2::EffectiveProblem<block2::SGB,
+                                                complex<float>>;
 
 // parallel_rule.hpp
 extern template struct block2::ParallelRule<block2::SGF, complex<float>>;

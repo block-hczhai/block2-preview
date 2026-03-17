@@ -796,7 +796,8 @@ template <typename S, typename FL> struct OpSumProd : OpProduct<S, FL> {
             ifs.read((char *)&x, sizeof(x));
             conjs[i] = x;
         }
-        assert(a == nullptr || b == nullptr);
+        if (a != nullptr && b != nullptr)
+            return make_shared<OpSumProd>(a, b, ops, conjs, factor, conj);
         return b == nullptr
                    ? make_shared<OpSumProd>(a, ops, conjs, factor, conj, c)
                    : make_shared<OpSumProd>(ops, b, conjs, factor, conj, c);
