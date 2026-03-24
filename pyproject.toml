@@ -24,7 +24,7 @@ authors = [
 ]
 requires-python = ">= 3.6"
 dependencies = [
-    "mkl==2021.4.0",
+    "mkl<=2024.2.2",
     "mkl-include",
     "intel-openmp",
     "numpy",

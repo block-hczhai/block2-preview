@@ -61,7 +61,7 @@ jobs:
           MKLROOT: ~/.local
         run: |
           python -m pip install pip build twine setuptools --upgrade
-          python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+          python -m pip install mkl==2024.2.2 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
       
       - name: install requirements (linux arm)
         if: matrix.os == 'ubuntu-24.04-arm'
@@ -184,6 +184,7 @@ jobs:
           echo $CPUTYPE
           if [ "$CPUTYPE" = "AuthenticAMD" ]; then
             echo "int mkl_serv_intel_cpu_true() { return 1; }" > fixcpu.c
+            echo "int (*mkl_serv_get_cpu_true(void))(void) { return &mkl_serv_intel_cpu_true; }" >> fixcpu.c
             $CC -shared -fPIC -o libfixcpu.so fixcpu.c
           fi
           getconf LONG_BIT
@@ -664,7 +665,7 @@ jobs:
         run: |
           export PYT=$(which python)
           python -m pip install pip build twine setuptools --upgrade
-          python -m pip install mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+          python -m pip install mkl==2024.2.2 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 
       - name: install requirements (linux / macos)
         if: matrix.os == 'macos-15'

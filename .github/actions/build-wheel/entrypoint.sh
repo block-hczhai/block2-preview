@@ -52,7 +52,7 @@ if [ "${USE_OPENBLAS}" = "1" ]; then
     sed -i "/intel-openmp/d" pyproject.toml
 else
     /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
-    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2021.4 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2024.2.2 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
 fi
 
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2
@@ -83,10 +83,12 @@ if [ "${PARALLEL}" = "mpi" ]; then
         $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 fi
 
-sed -i '/new_soname = src_name/a \    if any(x in src_name for x in ["libmkl_avx2", "libmkl_avx512"]): new_soname = src_name' \
+sed -i '/for soname, src_path/a \                if any(x in soname for x in ["libmkl"]): continue' \
     $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 ${PY_EXE} -c 'import site; x = site.getsitepackages(); x += [xx.replace("site-packages", "dist-packages") for xx in x]; print("*".join(x))' > /tmp/ptmp
 sed -i '/rpath_set\[rpath\]/a \    import site\n    for x in set(["../lib" + p.split("lib")[-1] for p in open("/tmp/ptmp").read().strip().split("*")]): rpath_set[rpath.replace("../..", x)] = ""' \
+    $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
+sed -i '/rpath_set\[rpath\]/a \    rpath_set["$ORIGIN/../.."] = ""' \
     $($(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -c "from auditwheel import repair;print(repair.__file__)")
 
 cmake --version
