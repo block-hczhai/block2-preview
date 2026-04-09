@@ -2,17 +2,22 @@
 """Build github pages for PYPI indexing."""
 
 import sys, os, json, time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 REPO_URL = sys.argv[1]
 DIST = sys.argv[2]
 
 data = {}
 
+headers = {
+    "Authorization": "Bearer " + os.environ['GH_TOKEN'],
+    "Content-Type": "application/json"
+}
+
 main_url = "https://api.github.com/repos/%s/releases" % REPO_URL
 
-for d in json.loads(urlopen(main_url).read()):
-    for dd in json.loads(urlopen(d["assets_url"]).read()):
+for d in json.loads(urlopen(Request(main_url + '?per_page=100', headers=headers)).read()):
+    for dd in json.loads(urlopen(Request(d["assets_url"] + '?per_page=100', headers=headers)).read()):
         name = dd["name"]
         download_url = dd["browser_download_url"]
         if "-" not in name:
@@ -22,7 +27,7 @@ for d in json.loads(urlopen(main_url).read()):
         if package_name not in data:
             data[package_name] = {}
         data[package_name][name] = download_url
-    time.sleep(1)
+    time.sleep(0.5)
 
 page = """<!DOCTYPE html>
 <html>

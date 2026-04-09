@@ -832,6 +832,7 @@ jobs:
       - name: build index
         env:
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python .github/workflows/build_pypi.py ${REPO} ./idx-dist/pypi
 
