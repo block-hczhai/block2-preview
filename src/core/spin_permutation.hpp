@@ -207,6 +207,29 @@ struct SpinPermTensor {
             perm[i] = pcnt[x[i]]++;
         return perm;
     }
+    static vector<string> split_op_string(const string &expr) {
+        vector<string> r;
+        for (size_t k = 0; k < expr.length(); k++) {
+            const auto &c = expr[k];
+            if (c == ' ')
+                continue;
+            r.push_back(string(1, expr[k]));
+            if (k + 1 < expr.length() && expr[k + 1] == '_') {
+                const size_t l = k + 2 < expr.length() && expr[k + 2] != '{'
+                                     ? k + 2
+                                     : expr.find_first_of("}", k + 1);
+                r.back() += expr.substr(k + 1, l - k);
+                k = l == string::npos ? k + 2 : l;
+            }
+        }
+        return r;
+    }
+    static string merge_op_string(const vector<string> &vops) {
+        stringstream r;
+        for (size_t k = 0; k < vops.size(); k++)
+            r << vops[k];
+        return r.str();
+    }
     static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
                                               const string &xops) {
         vector<uint16_t> perm, pcnt;
@@ -217,8 +240,15 @@ struct SpinPermTensor {
             pcnt[x[i] + 1]++;
         for (uint16_t i = 0; i < x.size(); i++)
             pcnt[i + 1] += pcnt[i];
-        for (uint16_t i = 0; i < x.size(); i++)
-            z[pcnt[x[i]]] = xops[i], perm[i] = pcnt[x[i]]++;
+        if (xops.find('_') != string::npos) {
+            vector<string> vz = split_op_string(xops),
+                           xz = split_op_string(xops);
+            for (uint16_t i = 0; i < x.size(); i++)
+                xz[pcnt[x[i]]] = vz[i], perm[i] = pcnt[x[i]]++;
+            z = merge_op_string(xz);
+        } else
+            for (uint16_t i = 0; i < x.size(); i++)
+                z[pcnt[x[i]]] = xops[i], perm[i] = pcnt[x[i]]++;
         return make_pair(z, permutation_parity(perm) ? -1 : 1);
     }
     static pair<string, int> auto_sort_string(const vector<uint16_t> &x,
@@ -227,14 +257,31 @@ struct SpinPermTensor {
         vector<uint16_t> px = x;
         string z = xops;
         int xsign = 1;
-        for (int l = (int)px.size() - 1; l > 0; l--)
-            for (int p = 0; p < l; p++)
-                if (px[p] > px[p + 1]) {
-                    swap(px[p], px[p + 1]), swap(z[p], z[p + 1]);
-                    if (fermionic_ops.find(z[p]) != string::npos &&
-                        fermionic_ops.find(z[p + 1]) != string::npos)
-                        xsign *= -1;
-                }
+        if (xops.find('_') != string::npos ||
+            fermionic_ops.find('_') != string::npos) {
+            vector<string> vz = split_op_string(xops);
+            unordered_map<string, int8_t> is_op_f;
+            const vector<string> xfops = split_op_string(fermionic_ops);
+            for (size_t it = 0; it < xfops.size(); it++)
+                is_op_f[xfops[it]] = 1;
+            for (int l = (int)px.size() - 1; l > 0; l--)
+                for (int p = 0; p < l; p++)
+                    if (px[p] > px[p + 1]) {
+                        swap(px[p], px[p + 1]), swap(vz[p], vz[p + 1]);
+                        if (is_op_f.count(vz[p]) && is_op_f.count(vz[p + 1]))
+                            xsign *= -1;
+                    }
+            z = merge_op_string(vz);
+        } else {
+            for (int l = (int)px.size() - 1; l > 0; l--)
+                for (int p = 0; p < l; p++)
+                    if (px[p] > px[p + 1]) {
+                        swap(px[p], px[p + 1]), swap(z[p], z[p + 1]);
+                        if (fermionic_ops.find(z[p]) != string::npos &&
+                            fermionic_ops.find(z[p + 1]) != string::npos)
+                            xsign *= -1;
+                    }
+        }
         return make_pair(z, xsign);
     }
     static vector<double> dot_product(const SpinPermTensor &a,
@@ -543,10 +590,29 @@ struct SpinPermRecoupling {
     }
     static int count_cds(const string &x) {
         int ncd = 0;
-        for (auto &c : x)
-            if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
-                  (c >= '0' && c <= '9') || c == '[' || c == ']' || c == ','))
-                ncd++;
+        if (x.find('_') != string::npos) {
+            for (size_t k = 0; k < x.length(); k++) {
+                const auto &c = x[k];
+                if (c == ' ')
+                    continue;
+                if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
+                      (c >= '0' && c <= '9') || c == '[' || c == ']' ||
+                      c == ','))
+                    ncd++;
+                if (k + 1 < x.length() && x[k + 1] == '_') {
+                    size_t l = x.find_first_of("}", k + 1);
+                    k = (k + 2 < x.length() && x[k + 2] != '{') ||
+                                l == string::npos
+                            ? k + 2
+                            : l;
+                }
+            }
+        } else
+            for (auto &c : x)
+                if (!(c == '.' || c == '(' || c == ')' || c == '+' ||
+                      (c >= '0' && c <= '9') || c == '[' || c == ']' ||
+                      c == ','))
+                    ncd++;
         return ncd;
     }
     static SpinPermTensor make_tensor(const string &x,
@@ -594,13 +660,27 @@ struct SpinPermRecoupling {
         }
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        int cnt = 0, depth = 0, start = -1, extra = 0, ldep = -1;
+        int cnt = 0, depth = 0, start = -1, extra = 0, ldep = -1, suf = 0,
+            long_suf = 0;
         stringstream ss;
         for (auto &c : expr) {
-            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            if (suf) {
+                if (cnt > i && cnt <= j)
+                    ss << c;
+                if (c == '{')
+                    long_suf = 1;
+                else if (!long_suf || c == '}')
+                    suf = 0, long_suf = 0;
+            } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
                 if (cnt >= i && cnt < j)
                     ss << c;
                 cnt++, ldep = depth;
+            } else if (c == '_') {
+                if (cnt > i && cnt <= j)
+                    ss << c;
+                suf = 1;
+            } else if (c == ' ') {
+                ;
             } else if (c == '(') {
                 depth++;
                 if (cnt == i && start == -1 && j > i + 1)

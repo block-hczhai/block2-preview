@@ -2510,6 +2510,32 @@ class DMRGDriver:
 
         return LZHamiltonian(self.vacuum, self.n_sites, self.orb_sym)
 
+    def parse_operator_string(self, x):
+        """
+        Parse an operator string to a list of strings.
+
+        Args:
+            x : str
+                An operator string such as "a_{10}a_2b cd".
+
+        Returns:
+            r : list[str] or str
+                A list of strings such as ["a_{10}", "a_2", "b", "c", "d"].
+                When all operators are single character, the original string is returned.
+        """
+        if '_' not in x:
+            return x
+        r, i = [], 0
+        while i != len(x):
+            if x[i] != ' ':
+                r.append(x[i])
+                if i + 1 < len(x) and x[i + 1] == '_':
+                    j = i + 2 if i + 2 < len(x) and x[i + 2] != '{' else x[i + 1:].find('}') + i + 1
+                    r[-1] += x[i + 1:j + 1]
+                    i = j
+            i += 1
+        return r
+
     def get_custom_hamiltonian(
         self,
         site_basis,
@@ -2532,7 +2558,9 @@ class DMRGDriver:
                 When ``site_basis[0] = [(Q1, 2), (Q2, 3), (Q3, 1)]``, each matrix in
                 ``site_ops[0]`` should have shape ``(6, 6)`` where the first 2 rows/columns
                 correspond to the Q1 block, the next 3 rows/columns correspond to the Q2 block, etc.
-                The operator name can only have one character.
+                The operator name is a single character. For non-SU2 symmetry modes, the character can be
+                optionally followed by "_{<suf>}" or "_<char>", where "<suf>" can be a string of letters and/or numbers,
+                and "<char>" is a single character.
                 The dict value can optionally be (q, arr) where q is the delta quantum of the operator
                 and arr is the matrix representation, which may be used in the SU2 mode when the delta
                 quantum cannot be uniquely determined by the non-zero matrix elements.
@@ -2559,6 +2587,9 @@ class DMRGDriver:
             and max(self.orb_sym) == 0
             and min(self.orb_sym) == 0
         )
+
+        orb_dependent_ops = super_self.parse_operator_string(orb_dependent_ops)
+        spin_dependent_ops = super_self.parse_operator_string(spin_dependent_ops)
 
         if (
             SymmetryTypes.SZ in super_self.symm_type
@@ -2724,8 +2755,9 @@ class DMRGDriver:
                         self.opf.product(0, a, b, r)
                         self.site_norm_ops[m][expr] = r
                     else:
-                        r = self.site_norm_ops[m][expr[0]]
-                        for p in expr[1:]:
+                        xexpr = super_self.parse_operator_string(expr)
+                        r = self.site_norm_ops[m][xexpr[0]]
+                        for p in xexpr[1:]:
                             xp = self.site_norm_ops[m][p]
                             q = r.info.delta_quantum + xp.info.delta_quantum
                             mat = super_self.bw.bs.SparseMatrix(d_alloc)
@@ -2773,7 +2805,7 @@ class DMRGDriver:
                                 super_self.bw.VectorSX(
                                     list(
                                         accumulate(
-                                            [qs[""]] + [qs[x] for x in expr],
+                                            [qs[""]] + [qs[x] for x in super_self.parse_operator_string(expr)],
                                             lambda x, y: x + y,
                                         )
                                     )
@@ -2789,7 +2821,7 @@ class DMRGDriver:
                     else:
                         l, r = ref[k], ref[-1] - ref[k]
                         pexpr = [
-                            x for x in expr if not x.isdigit() and x not in "()[]+-,;"
+                            x for x in super_self.parse_operator_string(expr) if not x.isdigit() and x not in "()[]+-,;"
                         ]
                         for j, (ex, ix) in enumerate(zip(pexpr, idxs)):
                             if ex in orb_dependent_ops:
@@ -2852,10 +2884,9 @@ class DMRGDriver:
                             for k, v in self.site_norm_ops[ix].items()
                         }
                         from functools import reduce
-
                         return reduce(
                             lambda a, b: a + b,
-                            [qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(expr, idxs)],
+                            [qs(0)[""]] + [qs(ix)[ex] for ex, ix in zip(super_self.parse_operator_string(expr), idxs)],
                         )
 
                 def deallocate(self):
@@ -5746,6 +5777,8 @@ class DMRGDriver:
         if self.mpi is not None:
             self.mpi.barrier()
 
+        xlen = lambda x: len(self.parse_operator_string(x))
+
         if SymmetryTypes.SU2 in bw.symm_type:
             assert fermionic_ops is None
             if npdm_expr is not None and isinstance(npdm_expr, str) and "%s" not in npdm_expr:
@@ -5779,9 +5812,9 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(len(cd), cd, True,
+                        bw.b.SpinPermScheme.initialize_sz(xlen(cd), cd, True,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
+                        bw.b.SpinPermScheme.initialize_sany(xlen(cd), cd, fermionic_ops,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
@@ -5790,10 +5823,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            len(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            xlen(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) for cd, xm in zip(op_str, mask)
                     ]
                 )
@@ -5801,10 +5834,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            len(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            xlen(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) for cd in op_str
                     ]
                 )
@@ -5818,9 +5851,9 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sz(len(cd), cd, True,
+                        bw.b.SpinPermScheme.initialize_sz(xlen(cd), cd, True,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) if fermionic_ops is None else
-                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
+                        bw.b.SpinPermScheme.initialize_sany(xlen(cd), cd, fermionic_ops,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
@@ -5829,10 +5862,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            len(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            xlen(cd), cd, True, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
                         for cd, xm in zip(op_str, mask)
                     ]
@@ -5841,10 +5874,10 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sz(
-                            len(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            xlen(cd), cd, True, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) if fermionic_ops is None else
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         ) for cd in op_str
                     ]
                 )
@@ -5855,7 +5888,7 @@ class DMRGDriver:
             if mask is None:
                 perms = bw.b.VectorSpinPermScheme(
                     [
-                        bw.b.SpinPermScheme.initialize_sany(len(cd), cd, fermionic_ops,
+                        bw.b.SpinPermScheme.initialize_sany(xlen(cd), cd, fermionic_ops,
                             mask=bw.b.VectorUInt16(), max_n_sites=ket.n_sites) for cd in op_str
                     ]
                 )
@@ -5864,7 +5897,7 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(xm), max_n_sites=ket.n_sites
                         )
                         for cd, xm in zip(op_str, mask)
                     ]
@@ -5873,7 +5906,7 @@ class DMRGDriver:
                 perms = bw.b.VectorSpinPermScheme(
                     [
                         bw.b.SpinPermScheme.initialize_sany(
-                            len(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
+                            xlen(cd), cd, fermionic_ops, mask=bw.b.VectorUInt16(mask), max_n_sites=ket.n_sites
                         )
                         for cd in op_str
                     ]
@@ -9505,6 +9538,8 @@ class ExprBuilder:
                 )
                 self.data = self.data.adjust_order(fermionic_ops, merge=merge)
             else:
+                if any('_' in expr for expr in self.data.exprs):
+                    raise RuntimeError('Explicit fermionic_ops required for long operator names!')
                 self.data = self.data.adjust_order(merge=merge, is_drt=is_drt)
         elif merge:
             self.data.merge_terms()

@@ -31,6 +31,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -320,7 +321,27 @@ struct GeneralHamiltonian<S, FL, typename S::is_sz_t> : Hamiltonian<S, FL> {
         return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        return expr.substr(i, j - i);
+        if (expr.find('_') != string::npos) {
+            stringstream ss;
+            for (uint16_t k = 0, p = 0; k < (uint16_t)expr.length(); k++, p++) {
+                if (expr[k] == ' ') {
+                    p--;
+                    continue;
+                }
+                if (p >= i && p < j)
+                    ss << expr[k];
+                if (k + 1 < (uint16_t)expr.length() && expr[k + 1] == '_') {
+                    const size_t l = k + 2 < expr.length() && expr[k + 2] != '{'
+                                         ? k + 2
+                                         : expr.find_first_of("}", k + 1);
+                    if (p >= i && p < j && l != string::npos)
+                        ss << expr.substr(k + 1, l - k);
+                    k = l == string::npos ? k + 2 : (uint16_t)l;
+                }
+            }
+            return ss.str();
+        } else
+            return expr.substr(i, j - i);
     }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
@@ -837,7 +858,27 @@ struct GeneralHamiltonian<S, FL, typename enable_if<S::GIF>::type>
         return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        return expr.substr(i, j - i);
+        if (expr.find('_') != string::npos) {
+            stringstream ss;
+            for (uint16_t k = 0, p = 0; k < (uint16_t)expr.length(); k++, p++) {
+                if (expr[k] == ' ') {
+                    p--;
+                    continue;
+                }
+                if (p >= i && p < j)
+                    ss << expr[k];
+                if (k + 1 < (uint16_t)expr.length() && expr[k + 1] == '_') {
+                    const size_t l = k + 2 < expr.length() && expr[k + 2] != '{'
+                                         ? k + 2
+                                         : expr.find_first_of("}", k + 1);
+                    if (p >= i && p < j && l != string::npos)
+                        ss << expr.substr(k + 1, l - k);
+                    k = l == string::npos ? k + 2 : (uint16_t)l;
+                }
+            }
+            return ss.str();
+        } else
+            return expr.substr(i, j - i);
     }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
@@ -1057,7 +1098,27 @@ struct GeneralHamiltonian<S, FL, typename enable_if<!S::GIF>::type>
         return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        return expr.substr(i, j - i);
+        if (expr.find('_') != string::npos) {
+            stringstream ss;
+            for (uint16_t k = 0, p = 0; k < (uint16_t)expr.length(); k++, p++) {
+                if (expr[k] == ' ') {
+                    p--;
+                    continue;
+                }
+                if (p >= i && p < j)
+                    ss << expr[k];
+                if (k + 1 < (uint16_t)expr.length() && expr[k + 1] == '_') {
+                    const size_t l = k + 2 < expr.length() && expr[k + 2] != '{'
+                                         ? k + 2
+                                         : expr.find_first_of("}", k + 1);
+                    if (p >= i && p < j && l != string::npos)
+                        ss << expr.substr(k + 1, l - k);
+                    k = l == string::npos ? k + 2 : (uint16_t)l;
+                }
+            }
+            return ss.str();
+        } else
+            return expr.substr(i, j - i);
     }
     void deallocate() override {
         for (auto &op_prims : this->op_prims)
@@ -1505,8 +1566,28 @@ struct GeneralHamiltonian<S, FL, typename S::is_sany_t> : Hamiltonian<S, FL> {
         return r;
     }
     static string get_sub_expr(const string &expr, int i, int j) {
-        if (expr.find('+') == string::npos && expr.find('(') == string::npos &&
-            expr.find('[') == string::npos)
+        if (expr.find('_') != string::npos) {
+            stringstream ss;
+            for (uint16_t k = 0, p = 0; k < (uint16_t)expr.length(); k++, p++) {
+                if (expr[k] == ' ') {
+                    p--;
+                    continue;
+                }
+                if (p >= i && p < j)
+                    ss << expr[k];
+                if (k + 1 < (uint16_t)expr.length() && expr[k + 1] == '_') {
+                    const size_t l = k + 2 < expr.length() && expr[k + 2] != '{'
+                                         ? k + 2
+                                         : expr.find_first_of("}", k + 1);
+                    if (p >= i && p < j && l != string::npos)
+                        ss << expr.substr(k + 1, l - k);
+                    k = l == string::npos ? k + 2 : (uint16_t)l;
+                }
+            }
+            return ss.str();
+        } else if (expr.find('+') == string::npos &&
+                   expr.find('(') == string::npos &&
+                   expr.find('[') == string::npos)
             return expr.substr(i, j - i);
         else
             return SpinPermRecoupling::get_sub_expr(expr, i, j);

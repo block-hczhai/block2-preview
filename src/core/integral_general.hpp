@@ -323,29 +323,34 @@ template <typename FL> struct GeneralFCIDUMP {
                                             bool merge = true,
                                             FP cutoff = (FP)0.0) const {
         unordered_map<string, uint64_t> r_exprs;
-        unordered_map<char, int8_t> is_op_f;
-        for (size_t it = 0; it < fermionic_ops.length(); it++)
-            is_op_f[fermionic_ops[it]] = 1;
+        unordered_map<string, int8_t> is_op_f;
+        const vector<string> vec_fermionic_ops =
+            SpinPermTensor::split_op_string(fermionic_ops);
+        for (size_t it = 0; it < vec_fermionic_ops.size(); it++)
+            is_op_f[vec_fermionic_ops[it]] = 1;
         vector<vector<uint16_t>> r_indices;
         vector<vector<FL>> r_data;
         for (size_t ix = 0; ix < exprs.size(); ix++) {
-            int nn = (int)exprs[ix].length();
+            const vector<string> vec_expr =
+                SpinPermTensor::split_op_string(exprs[ix]);
+            int nn = (int)vec_expr.size();
             vector<uint16_t> idx_idx(nn);
             for (size_t i = 0; i < (nn == 0 ? 1 : indices[ix].size());
                  i += (nn == 0 ? 1 : nn)) {
                 for (int j = 0; j < nn; j++)
                     idx_idx[j] = j;
-                string xex = exprs[ix];
+                vector<string> vxex = vec_expr;
                 int8_t n = 0;
                 for (int xi = 0; xi < (int)nn - 1; xi++)
                     for (int xj = xi; xj >= 0; xj--)
                         if (indices[ix][i + idx_idx[xj]] >
                             indices[ix][i + idx_idx[xj + 1]]) {
                             swap(idx_idx[xj], idx_idx[xj + 1]);
-                            swap(xex[xj], xex[xj + 1]);
-                            n ^= (is_op_f.count(xex[xj]) &&
-                                  is_op_f.count(xex[xj + 1]));
+                            swap(vxex[xj], vxex[xj + 1]);
+                            n ^= (is_op_f.count(vxex[xj]) &&
+                                  is_op_f.count(vxex[xj + 1]));
                         }
+                const string xex = SpinPermTensor::merge_op_string(vxex);
                 if (!r_exprs.count(xex)) {
                     r_exprs[xex] = r_data.size();
                     r_indices.push_back(vector<uint16_t>());
