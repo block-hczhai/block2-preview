@@ -244,13 +244,15 @@ template <int8_t L = 6> struct SAnyT {
         return r;
     }
     bool is_fermion() const {
+        bool r = false;
         for (int8_t i = 0; i < L; i++)
-            if (types[i] == SAnySymmTypes::SU2Fermi ||
-                types[i] == SAnySymmTypes::U1Fermi ||
+            if (types[i] == SAnySymmTypes::U1Fermi ||
                 (types[i] >= SAnySymmTypes::ZNFermi &&
                  types[i] < SAnySymmTypes::ZNFermiMax))
-                return values[i] & 1;
-        return false;
+                r = r ^ (values[i] & 1);
+            else if (types[i] == SAnySymmTypes::SU2Fermi)
+                r = r ^ (values[i] & 1), i++;
+        return r;
     }
     bool operator==(SAnyT other) const {
         return types == other.types && values == other.values;
