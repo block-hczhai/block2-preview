@@ -29,7 +29,10 @@ To activate the ``blcok2`` interface, run ``cmake`` for this OpenMOLCAS with the
     cd OpenMolcas
     mkdir build
     cd build
-    CC=gcc CXX=g++ FC=gfortran MKLROOT=/usr/local cmake .. -DCMAKE_INSTALL_PREFIX=../install -DLINALG=MKL -DOPENMP=ON -DBLOCK2=ON
+    # Set MKLROOT if MKL is available
+    export MKLROOT=/usr/local
+    export FFLAGS="-std=legacy -fallow-argument-mismatch"
+    CC=gcc CXX=g++ FC=gfortran cmake .. -DCMAKE_INSTALL_PREFIX=../install -DLINALG=MKL -DOPENMP=ON -DBLOCK2=ON
     make -j 10
     make install
 

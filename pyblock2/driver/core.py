@@ -3165,7 +3165,7 @@ class DMRGDriver:
         if SymmetryTypes.SZ in bw.symm_type:
             if h1e is not None:
                 x = np.array(orb_sym, dtype=int)
-                if x.ndim == 1:
+                if x.ndim == 1 and len(x) == self.n_sites:
                     if k_symm is None:
                         mask = (x[:, None] ^ x[None, :]) != 0
                     else:
@@ -3174,6 +3174,8 @@ class DMRGDriver:
                     h1e[0][mask] = 0
                     h1e[1][mask] = 0
                 else:
+                    if len(x) == self.n_sites * 2:
+                        x = x.reshape(2, self.n_sites)
                     for i in range(len(h1e)):
                         if k_symm is None:
                             mask = (x[i][:, None] ^ x[i][None, :]) != 0
@@ -3183,7 +3185,7 @@ class DMRGDriver:
                         h1e[i][mask] = 0
             if g2e is not None:
                 x = np.array(orb_sym, dtype=int)
-                if x.ndim == 1:
+                if x.ndim == 1 and len(x) == self.n_sites:
                     if k_symm is None:
                         mask = (
                             x[:, None, None, None]
@@ -3204,6 +3206,8 @@ class DMRGDriver:
                     g2e[1][mask] = 0
                     g2e[2][mask] = 0
                 else:
+                    if len(x) == self.n_sites * 2:
+                        x = x.reshape(2, self.n_sites)
                     js = [[0, 0, 0, 0], [0, 0, 1, 1], [1, 1, 1, 1]]
                     for i in range(len(g2e)):
                         if k_symm is None:
