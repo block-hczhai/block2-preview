@@ -180,6 +180,42 @@ class PDEToolsND:
         ]
         return self._combine_axis_pymps(axis_states)
 
+    def pymps_edge_indicator(self, dim=0, side=0):
+        """dim start (side=0) or end (side=1) indicator MPS."""
+        states = [self._axis_constant_pymps(d) for d in range(self.nd)]
+        states[dim] = self._axis_delta_pymps(dim, side)
+        return self.pymps_from_axis_product(states)
+
+    def pymps_from_edge_value(self, y_lower=0.0, y_upper=0.0, dim=0):
+        """y can be scalar or ND MPS (will only take boundary)."""
+        r = None
+        for side, y in ((0, y_lower), (1, y_upper)):
+            if np.isscalar(y):
+                if y == 0.0:
+                    continue
+                t = self.pymps_edge_indicator(dim, side) * y
+            else:
+                t = self.pymps_edge_indicator(dim, side).diag() @ y
+            r = t if r is None else r + t
+        return r
+
+    def _axis_point_pymps(self, dim, index):
+        """delta at (dim, index), rank 1."""
+        ts, ix = [], int(index)
+        for bz in self._bases_nd[dim][::-1]:
+            t = np.zeros((1, bz, 1)); t[0, ix % bz, 0] = 1.0
+            ts.append(t); ix //= bz
+        return self.trans_tensors_to_pymps(ts[::-1])
+
+    def pymps_from_points(self, points, values):
+        """sum_m values[m] * delta(x - grid[points[m]]), rank <= len(points)."""
+        r = None
+        for pt, v in zip(points, values):
+            t = self.pymps_from_axis_product(
+                [self._axis_point_pymps(d, pt[d]) for d in range(self.nd)]) * v
+            r = t if r is None else r + t
+        return r
+
     def pymps_rasterize(self, pyket, n_pts=4096):
         """Sample f(x) as (coords, values)."""
         tensors = self.trans_pymps_to_tensors(pyket)
@@ -202,14 +238,12 @@ class PDEToolsND:
 
     def pympo_from_differential(self, coeffs, cutoff=1e-24, pbc=True):
         """H = sum_dim sum_k coeffs[dim][k] * d^k / d x_dim^k."""
-        if not pbc:
-            return NotImplemented
-
         coeffs = self._normalize_differential_coeffs(coeffs)
+        pbc = self._broadcast_axis_values(pbc, "pbc")
         global_terms = {}
         for axis, axis_coeffs in enumerate(coeffs):
             axis_terms = self._differential_terms_1d(
-                self._bases_nd[axis], self._dx[axis], axis_coeffs, cutoff
+                self._bases_nd[axis], self._dx[axis], axis_coeffs, cutoff, pbc=pbc[axis]
             )
             for term, val in axis_terms.items():
                 gterm = [0] * self.n_sites
@@ -437,7 +471,7 @@ class PDEToolsND:
         return [list(axis_coeffs) for axis_coeffs in coeffs]
 
     @classmethod
-    def _differential_terms_1d(cls, bases, dx, coeffs, cutoff):
+    def _differential_terms_1d(cls, bases, dx, coeffs, cutoff, pbc=True):
         fxs = {}
         for k, cc in enumerate(coeffs):
             if k % 2 == 0:
@@ -470,11 +504,98 @@ class PDEToolsND:
                     if z != 0:
                         next_rs.append((term + (z - fx * base,), fx * ((ax + base) // base)))
                 rs = next_rs
-            for digits, _ in rs:
-                term = tuple(-x for x in digits[::-1])
-                terms[term] = terms.get(term, 0.0) + c
+            for digits, carry in rs:
+                if pbc or carry == 0:
+                    term = tuple(-x for x in digits[::-1])
+                    terms[term] = terms.get(term, 0.0) + c
         return {k: v for k, v in terms.items() if abs(v) > cutoff}
 
+    def _axis_delta_pymps(self, dim, side):
+        ts = []
+        for bz in self._bases_nd[dim]:
+            t = np.zeros((1, bz, 1))
+            t[0, bz - 1 if side else 0, 0] = 1.0
+            ts.append(t)
+        return self.trans_tensors_to_pymps(ts)
+
+    def _axis_polynomial_pymps(self, dim, coeffs):
+        return self.trans_tensors_to_pymps(self._axis_polynomial_raw_tensors(
+            self._bases_nd[dim], self._xi[dim], self._dx[dim], coeffs))
+
+    def _axis_trigonometric_pymps(self, dim, alpha, phi):
+        return self.trans_tensors_to_pymps(self._axis_trigonometric_raw_tensors(
+            self._bases_nd[dim], self._xi[dim], self._dx[dim], alpha, phi))
+
+    def pymps_from_axis_product(self, axis_states):
+        """f(x) = prod_dim f_dim(x_dim), axis_states are 1D MPSs."""
+        return self._combine_axis_pymps(list(axis_states))
+
+    def pymps_from_polynomial(self, coeffs):
+        """f(x) = prod_dim p_dim(x_dim)."""
+        coeffs = self._normalize_differential_coeffs(coeffs)
+        return self.pymps_from_axis_product([self._axis_polynomial_pymps(d, coeffs[d]) for d in range(self.nd)])
+
+    def pymps_from_trigonometric(self, alpha, phi=0.0):
+        """f(x) = prod_dim sin(alpha_dim * x_dim + phi_dim)."""
+        alpha, phi = self._broadcast_axis_values(alpha, "alpha"), self._broadcast_axis_values(phi, "phi")
+        return self.pymps_from_axis_product(
+            [self._axis_trigonometric_pymps(d, alpha[d], phi[d]) for d in range(self.nd)])
+
+    @staticmethod
+    def _vector_to_raw_tensors(vec, bases, cutoff=1e-15, max_bond_dim=None):
+        mat, tensors = np.asarray(vec, dtype=float).reshape(1, -1), []
+        for bz in bases[:-1]:
+            mat = mat.reshape(mat.shape[0] * bz, -1)
+            u, s, vt = np.linalg.svd(mat, full_matrices=False)
+            tol, k = (cutoff ** 2) * np.sum(s ** 2), len(s)
+            while k > 1 and np.sum(s[k - 1:] ** 2) <= tol:
+                k -= 1
+            if max_bond_dim is not None:
+                k = min(k, max_bond_dim)
+            tensors.append(u[:, :k].reshape(-1, bz, k))
+            mat = s[:k, None] * vt[:k]
+        tensors.append(mat.reshape(-1, bases[-1], 1))
+        return tensors
+
+    def pymps_from_vector(self, values, cutoff=1e-15, max_bond_dim=None):
+        values = np.asarray(values, dtype=float).reshape(
+            tuple(b for row in self._bases_nd for b in row))
+        axis_order = [s for sites in self._axis_sites for s in sites]
+        values = values.transpose(np.argsort(axis_order))
+        return self.trans_tensors_to_pymps(self._vector_to_raw_tensors(
+            values.ravel(), self._bases, cutoff, max_bond_dim))
+
+    def _axis_keep_counts(self, n_pts):
+        keep, total = [0] * self.nd, 1
+        while True:
+            grew = False
+            for d in range(self.nd):
+                if keep[d] < self.n_pts:
+                    b = self._bases_nd[d][keep[d]]
+                    if total * b <= n_pts:
+                        total, keep[d], grew = total * b, keep[d] + 1, True
+            if not grew:
+                return keep
+
+    def pymps_rasterize(self, pyket, n_pts=4096):
+        """Sample f(x) as (xi, fi)."""
+        tensors = self._expand_mps_tensors(self.trans_pymps_to_tensors(pyket))
+        keep = self._axis_keep_counts(n_pts)
+        p, shape = np.ones((1, 1)), []
+        for i, (dim, pt) in enumerate(self._site_schedule):
+            if pt < keep[dim]:
+                p = np.tensordot(p, tensors[i], axes=(-1, 0))
+                shape.append(tensors[i].shape[1])
+            else:
+                p = np.tensordot(p, tensors[i][:, 0], axes=(-1, 0))
+        kept = [x for x in self._site_schedule if x[1] < keep[x[0]]]
+        order = [kept.index((d, pt)) for d in range(self.nd) for pt in range(keep[d])]
+        sizes = [int(np.prod(self._bases_nd[d][:keep[d]], dtype=int)) for d in range(self.nd)]
+        values = np.asarray(p).reshape(shape).transpose(order).reshape(sizes)
+        coords = [self._xi[d] + np.arange(sizes[d]) * self._dx[d]
+                  * int(np.prod(self._bases_nd[d][keep[d]:], dtype=int))
+                  for d in range(self.nd)]
+        return coords, values
 
 class PDETools1D(PDEToolsND):
     def __init__(self, n_sites, xi=0.0, xf=1.0, bases=2):
