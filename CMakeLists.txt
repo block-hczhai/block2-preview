@@ -825,7 +825,11 @@ FOREACH (target ${TARGETS})
 
     IF (${USE_PCH})
         FILE(GLOB COREHDRS src/instantiation/*.hpp)
-        TARGET_PRECOMPILE_HEADERS(${target} PRIVATE ${COREHDRS})
+        IF (("${target}" STREQUAL "b2_py") OR ("${target}" IN_LIST B2_PY_OBJ_TARGETS))
+            TARGET_PRECOMPILE_HEADERS(${target} PRIVATE "<pyconfig.h>" ${COREHDRS})
+        ELSE()
+            TARGET_PRECOMPILE_HEADERS(${target} PRIVATE ${COREHDRS})
+        ENDIF()
     ENDIF()
 
     SET_TARGET_PROPERTIES(${target} PROPERTIES POSITION_INDEPENDENT_CODE 1)
