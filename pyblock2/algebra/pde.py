@@ -565,6 +565,16 @@ class PDEToolsND:
         return self.trans_tensors_to_pymps(self._vector_to_raw_tensors(
             values.ravel(), self._bases, cutoff, max_bond_dim))
 
+    def pymps_from_separable(self, funcs, cutoff=1e-14):
+        """f(r) = prod_d funcs[d](x_d)."""
+        states = []
+        for d, fn in enumerate(funcs):
+            m = int(np.prod(self._bases_nd[d], dtype=int))
+            xs = self._xi[d] + np.arange(m) * self._dx[d]
+            states.append(self.trans_tensors_to_pymps(
+                self._vector_to_raw_tensors(fn(xs), self._bases_nd[d], cutoff)))
+        return self.pymps_from_axis_product(states)
+
     def _axis_keep_counts(self, n_pts):
         keep, total = [0] * self.nd, 1
         while True:

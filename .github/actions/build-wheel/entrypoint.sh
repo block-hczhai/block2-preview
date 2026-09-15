@@ -44,7 +44,7 @@ ls -l /opt/python
 USE_OPENBLAS=${USE_OPENBLAS:-0}
 if [ "${USE_OPENBLAS}" = "1" ]; then
     /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
-    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir numpy 'cmake>=3.19' pybind11==2.12.0
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir 'cmake>=3.19' pybind11==3.1.0
     yum install -y epel-release && yum install -y openblas-devel
     export BLAS_ROOT=/usr
     export BLA_VENDOR=OpenBLAS
@@ -56,7 +56,8 @@ if [ "${USE_OPENBLAS}" = "1" ]; then
     sed -i "/intel-openmp/d" pyproject.toml
 else
     /opt/python/"${PY_VER}"/bin/pip install --upgrade --no-cache-dir pip setuptools
-    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2024.2.2 mkl-include intel-openmp numpy 'cmake>=3.19' pybind11==2.12.0
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir 'cmake>=3.19' pybind11==3.1.0
+    /opt/python/"${PY_VER}"/bin/pip install --no-cache-dir mkl==2024.2.2 mkl-include intel-openmp
 fi
 
 $(cat $(which auditwheel) | head -1 | awk -F'!' '{print $2}') -m pip install auditwheel==5.1.2

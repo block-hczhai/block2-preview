@@ -383,7 +383,7 @@ template <typename T> struct CompressedVector {
     mutable vector<vector<T>> cp_data; //!< Chunks of compressed data.
     mutable vector<pair<size_t, vector<T>>>
         cache_data; //!< Cached data of decompressed chunks.
-    mutable vector<bool>
+    mutable vector<uint8_t>
         cache_dirty; //!< Whether each cached chunk has been changed.
     FPCodec<T> fpc;  //!< Floating-point number compression driver.
     /** Constructor.

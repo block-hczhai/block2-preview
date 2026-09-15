@@ -31,9 +31,13 @@ Custom model Hamiltonians can be supported via a Python interface:
 `t-J <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model>`_,
 `correlation functions <https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions>`_.
 
+Other examples:
+`Vibrational Hamiltonians <https://block2.readthedocs.io/en/latest/tutorial/vibrational-hamiltonians.html>`_,
+`Partial Differential Equations <https://block2.readthedocs.io/en/latest/tutorial/dmrg-pde.html>`_.
+
 Source code: https://github.com/block-hczhai/block2-preview
 
-Example DMRG scripts for realistic systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
+Example DMRG scripts for realistic quantum chemistry systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
 
 Contributors
 """"""""""""
@@ -67,9 +71,9 @@ Features
     * Green's function
 * Finite-Temperature DMRG (ancilla approach)
 * Low-Temperature DMRG (partition function approach)
-* Particle Density Matrix (1-site / 2-site)
-    * 1PDM / 2PDM / 3PDM / 4PDM
-    * Transition 1PDM / 2PDM / 3PDM / 4PDM
+* Particle Density Matrix (0-site / 1-site / 2-site)
+    * 1PDM / 2PDM / 3PDM / 4PDM / ...
+    * Transition 1PDM / 2PDM / 3PDM / 4PDM / ...
     * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
@@ -113,6 +117,12 @@ Features
     * SU2 to SZ mapping
     * Point group mapping
     * Orbital basis rotation
+* MPO Construction Methods
+    * Symbolic (optimized for quantum chemistry)
+    * Bipartite
+    * SVD
+    * Rank-Revealing QR
+* Interface for Partial Differential Equations / Quantized Tensor Train
 
 .. raw:: latex
 

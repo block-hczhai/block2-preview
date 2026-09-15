@@ -62,7 +62,7 @@ One can install ``block2`` using ``pip`` (note: for very new Python versions, th
       pip install block2==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
       pip install block2-mpi==<version> --extra-index-url=https://block-hczhai.github.io/block2-preview/pypi/
 
-  where ``<version>`` can be some development version number like ``0.5.4rc14`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``. For the most recent development version, binary format is prepared for python 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.13t, 3.14, and 3.14t with macOS (arm64), Linux (x86_64 and aarch64), or Windows (x86_64) with no MPI dependence, and Linux (x86_64) with openMPI.
+  where ``<version>`` can be some development version number like ``0.5.4rc17`` (see https://github.com/block-hczhai/block2-preview/tags for a complete list of version numbers. The letter ``p`` is not needed). To force reinstalling an updated version, you may consider ``pip`` options ``--upgrade --force-reinstall --no-deps --no-cache-dir``. For the most recent development version, binary format is prepared for python 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.13t, 3.14, and 3.14t with macOS (arm64), Linux (x86_64 and aarch64), or Windows (x86_64) with no MPI dependence, and Linux (x86_64) with openMPI.
 
 The detailed instructions on manual installation can be found [here](https://block2.readthedocs.io/en/latest/user/installation.html#manual-installation).
 
@@ -79,11 +79,13 @@ Documentation: https://block2.readthedocs.io/en/latest/
 
 Tutorial (Python interface): https://block2.readthedocs.io/en/latest/tutorial/qc-hamiltonians.html
 
-Custom model Hamiltonians can be supported via a Python interface: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model), [correlation functions](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions).
+Custom model Hamiltonians can be supported via a Python interface: [Fermi-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/hubbard.html), [Bose-Hubbard](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Bose-Hubbard-Model), [Hubbard-Holstein](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#The-Hubbard-Holstein-Model), [SU(2) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/heisenberg.html), [SU(3) Heisenberg](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(3)-Heisenberg-Model), [t-J](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#SU(2)-t-J-Model), and [correlation functions](https://block2.readthedocs.io/en/latest/tutorial/custom-hamiltonians.html#Correlation-Functions).
+
+Other examples: [Vibrational Problems](https://block2.readthedocs.io/en/latest/tutorial/vibrational-hamiltonians.html), and [Partial Differential Equations](https://block2.readthedocs.io/en/latest/tutorial/dmrg-pde.html).
 
 Source code: https://github.com/block-hczhai/block2-preview
 
-Example DMRG scripts for realistic systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
+Example DMRG scripts for realistic quantum chemistry systems: https://github.com/hczhai/block2-example-data/tree/master/00-HC
 
 For a simplified implementation of ab initio DMRG, see [pyblock3](https://github.com/block-hczhai/pyblock3-preview). Data can be imported and exported between ``block2`` and ``pyblock3``, see https://github.com/block-hczhai/block2-preview/discussions/35.
 
@@ -113,9 +115,9 @@ Features
     * Green's function
     * Time evolution
 * Low-Temperature DMRG (partition function approach)
-* Particle Density Matrix (1-site / 2-site)
-    * 1PDM / 2PDM / 3PDM / 4PDM
-    * Transition 1PDM / 2PDM / 3PDM / 4PDM
+* Particle Density Matrix (0-site / 1-site / 2-site)
+    * 1PDM / 2PDM / 3PDM / 4PDM / ...
+    * Transition 1PDM / 2PDM / 3PDM / 4PDM / ...
     * Spin / charge correlation
 * Quantum Chemistry MPO
     * Normal-Complementary (NC) partition
@@ -159,6 +161,12 @@ Features
     * SU2 to SZ mapping
     * Point group mapping
     * Orbital basis rotation
+* MPO Construction Methods
+    * Symbolic (optimized for quantum chemistry)
+    * Bipartite
+    * SVD
+    * Rank-Revealing QR
+* Interface for Partial Differential Equations / Quantized Tensor Train
 
 StackBlock Compatibility
 ------------------------

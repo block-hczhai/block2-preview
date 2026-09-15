@@ -48,6 +48,19 @@ ENDIF()
 
 # Check Python3 and Pybind11
 
+IF (NOT CMAKE_VERSION VERSION_LESS 3.30)
+    IF (WIN32)
+        SET(Python3_FIND_ABI "OFF" "OFF" "OFF" "ANY")
+    ELSE()
+        SET(Python3_FIND_ABI "ANY" "ANY" "ANY" "ANY")
+    ENDIF()
+ENDIF()
+
+SET(Python3_FIND_FRAMEWORK LAST)
+IF (Python3_EXECUTABLE_HINT)
+    SET(Python3_EXECUTABLE "${Python3_EXECUTABLE_HINT}")
+ENDIF()
+
 FIND_PACKAGE(Python3 COMPONENTS Interpreter OPTIONAL_COMPONENTS Development)
 
 IF (NOT Python3_Interpreter_FOUND)
@@ -83,10 +96,13 @@ MESSAGE(STATUS "Python3_LIBRARY_DIRS = ${Python3_LIBRARY_DIRS}")
 MESSAGE(STATUS "PYLIB_SUFFIX = ${PYLIB_SUFFIX}")
 MESSAGE(STATUS "PYBIND_INCLUDE_DIRS = ${PYBIND_INCLUDE_DIRS}")
 
-IF (${Python3_EXECUTABLE_HINT})
-    IF (NOT (${Python3_EXECUTABLE_HINT} EQUAL ${Python3_EXECUTABLE}))
-        MESSAGE(FATAL_ERROR "Python3 used by cmake (${Python3_EXECUTABLE}) does not match Python3 \
-            used by setup.py (${Python3_EXECUTABLE_HINT})!")
+IF (Python3_EXECUTABLE_HINT)
+    EXECUTE_PROCESS(COMMAND ${Python3_EXECUTABLE_HINT} -c
+        "import sysconfig;print(sysconfig.get_config_var('EXT_SUFFIX'))"
+        OUTPUT_VARIABLE PYLIB_SUFFIX_HINT OUTPUT_STRIP_TRAILING_WHITESPACE)
+    IF (NOT ("${PYLIB_SUFFIX_HINT}" STREQUAL "${PYLIB_SUFFIX}"))
+        MESSAGE(FATAL_ERROR "module suffix mismatch: cmake ${PYLIB_SUFFIX} (${Python3_EXECUTABLE}) "
+            "vs setup.py ${PYLIB_SUFFIX_HINT} (${Python3_EXECUTABLE_HINT})")
     ENDIF()
 ENDIF()
 
@@ -725,6 +741,8 @@ IF (${REUSE_OBJS})
     SET(CORE_SRCS $<TARGET_OBJECTS:b2_core>)
 ENDIF()
 
+SET(PY_FT_FLAG "")
+
 IF (${BUILD_LIB})
     SET(B2_PY_OBJECTS "")
     ADD_LIBRARY(b2_py_init_obj OBJECT ${PYBIND_INIT_SRC})
@@ -757,12 +775,24 @@ IF (${BUILD_LIB})
             TARGET_COMPILE_OPTIONS(${py_target} BEFORE PRIVATE ${VIS_OPT_FLAG})
         ENDFOREACH()
     ELSE()
-        GET_FILENAME_COMPONENT(Python3_LIB_DIR ${Python3_LIBRARIES} DIRECTORY)
-        FIND_LIBRARY(Python3_LIB_X NAMES python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR} HINTS "${Python3_LIB_DIR}")
+        GET_FILENAME_COMPONENT(Python3_LIB_DIR "${Python3_LIBRARIES}" DIRECTORY)
+        GET_FILENAME_COMPONENT(Python3_EXE_DIR "${Python3_EXECUTABLE}" DIRECTORY)
+        SET(PY_T "")
+        IF (PYLIB_SUFFIX MATCHES "cp[0-9]+t-win")
+            SET(PY_T "t")
+            SET(PY_FT_FLAG "-DPy_GIL_DISABLED=1")
+        ENDIF()
+        FIND_LIBRARY(Python3_LIB_X NAMES python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}${PY_T}
+            HINTS "${Python3_LIB_DIR}" "${Python3_EXE_DIR}/libs" NO_DEFAULT_PATH)
+        IF (NOT Python3_LIB_X)
+            MESSAGE(FATAL_ERROR "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}${PY_T}.lib not found")
+        ENDIF()
         MESSAGE(STATUS "Python3_LIB_X = ${Python3_LIB_X}")
         TARGET_LINK_LIBRARIES(b2_py PUBLIC ${Python3_LIB_X})
     ENDIF()
 ENDIF()
+
+MESSAGE(STATUS "PY_FT_FLAG = ${PY_FT_FLAG}")
 
 IF (${BUILD_TEST})
     ADD_EXECUTABLE(b2_testexe unit_test/debug_main.cpp)
@@ -825,7 +855,11 @@ FOREACH (target ${TARGETS})
 
     IF (${USE_PCH})
         FILE(GLOB COREHDRS src/instantiation/*.hpp)
-        TARGET_PRECOMPILE_HEADERS(${target} PRIVATE ${COREHDRS})
+        IF (("${target}" STREQUAL "b2_py") OR ("${target}" IN_LIST B2_PY_OBJ_TARGETS))
+            TARGET_PRECOMPILE_HEADERS(${target} PRIVATE "<pyconfig.h>" ${COREHDRS})
+        ELSE()
+            TARGET_PRECOMPILE_HEADERS(${target} PRIVATE ${COREHDRS})
+        ENDIF()
     ENDIF()
 
     SET_TARGET_PROPERTIES(${target} PROPERTIES POSITION_INDEPENDENT_CODE 1)
@@ -836,7 +870,7 @@ FOREACH (target ${TARGETS})
     TARGET_INCLUDE_DIRECTORIES(${target} PUBLIC ${Python3_INCLUDE_DIRS} ${PYBIND_INCLUDE_DIRS}
         ${MKL_INCLUDE_DIR} ${MPI_INCLUDE_DIR} ${TBB_INCLUDE_DIR} ${BLIS_INCLUDE_DIR})
     TARGET_COMPILE_OPTIONS(${target} BEFORE PRIVATE ${VIS_OPT_FLAG} ${OPT_FLAG} ${ARCH_FLAG})
-    TARGET_COMPILE_OPTIONS(${target} BEFORE PUBLIC ${MKL_FLAG} ${MPI_FLAG}
+    TARGET_COMPILE_OPTIONS(${target} BEFORE PUBLIC ${PY_FT_FLAG} ${MKL_FLAG} ${MPI_FLAG}
         ${TMPL_FLAG} ${BOND_FLAG} ${SCI_FLAG} ${CORE_FLAG} ${DMRG_FLAG} ${BIG_SITE_FLAG}
         ${SP_DMRG_FLAG} ${IC_FLAG} ${KSYMM_FLAG} ${SG_FLAG} ${COMPLEX_FLAG} ${SINGLE_PREC_FLAG}
         ${TBB_FLAG} ${SU2SZ_FLAG} ${SANY_FLAG} ${BLIS_FLAG} ${OPENBLAS_FLAG})
