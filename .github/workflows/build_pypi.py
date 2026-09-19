@@ -16,8 +16,9 @@ headers = {
 
 main_url = "https://api.github.com/repos/%s/releases" % REPO_URL
 
-for d in json.loads(urlopen(Request(main_url + '?per_page=100', headers=headers)).read()):
-    for dd in json.loads(urlopen(Request(d["assets_url"] + '?per_page=100', headers=headers)).read()):
+for d in json.loads(urlopen(Request(main_url + '?per_page=200', headers=headers)).read()):
+    print(d["name"])
+    for dd in json.loads(urlopen(Request(d["assets_url"] + '?per_page=200', headers=headers)).read()):
         name = dd["name"]
         download_url = dd["browser_download_url"]
         if "-" not in name:
