@@ -438,8 +438,8 @@ template <typename T> struct CompressedVector {
             cp_data[ic].resize(clen);
             cp_data[ic].shrink_to_fit();
         }
-        cache_dirty.resize(1);
-        cache_dirty[0] = false;
+        cache_dirty.clear();
+        cache_dirty.push_back(false);
         icache = (icache + 1) % ncache;
     }
     /** Minimize the storage cost of the compressed data (after the data has
@@ -450,21 +450,16 @@ template <typename T> struct CompressedVector {
     }
     /** Write all cached data into compressed form. */
     void finalize() {
-        if (!cache_dirty.empty()) {
-            for (int ic = 0; ic < ncache; ic++)
-                if (cache_dirty[ic]) {
-                    size_t dchunk = cache_data[ic].first;
-                    size_t alen =
-                        min(chunk_size, arr_len - dchunk * chunk_size);
-                    cp_data[dchunk].resize(alen + 1);
-                    size_t clen = fpc.encode(
-                        cache_data[ic].second.data(),
-                        min(chunk_size, arr_len - dchunk * chunk_size),
-                        cp_data[dchunk].data());
-                    cp_data[dchunk].resize(clen);
-                }
-            cache_dirty.clear();
-        }
+        for (int ic = 0; ic < (int)cache_dirty.size(); ic++)
+            if (cache_dirty[ic]) {
+                size_t dchunk = cache_data[ic].first;
+                size_t alen = min(chunk_size, arr_len - dchunk * chunk_size);
+                cp_data[dchunk].resize(alen + 1);
+                size_t clen = fpc.encode(cache_data[ic].second.data(), alen,
+                                         cp_data[dchunk].data());
+                cp_data[dchunk].resize(clen);
+                cache_dirty[ic] = false;
+            }
     }
     /** Write one element into the array.
      * @param i Array index.
