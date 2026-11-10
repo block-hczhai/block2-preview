@@ -7819,7 +7819,7 @@ class DMRGDriver:
         zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
         return zmps
 
-    def mps_change_to_sz(self, mps, tag, sz=None):
+    def mps_change_to_sz(self, mps, tag, sz=None, canonicalize=True):
         """
         Change MPS from spin-adapted to non-spin-adapted.
         Only works in SU2 mode. The resulting MPS should be used in SZ mode.
@@ -7834,6 +7834,14 @@ class DMRGDriver:
                 the output MPS to be the given number.
                 If None, the output MPS will contain all possible project spin
                 components. Default is None.
+            canonicalize : bool
+                If True, the output MPS is canonicalized (which does not change
+                the state), so that its site tensors are orthonormal as indicated
+                by its canonical form. This is required for using the output MPS
+                in sweep algorithms (for example ``dmrg``), since the
+                Clebsch-Gordan expansion of the SU2 site tensors does not keep
+                them orthonormal. If False, the output MPS can only be used for
+                computing expectation values. Default is True.
 
         Returns:
             zmps : MPS
@@ -7851,6 +7859,33 @@ class DMRGDriver:
         if sz is not None:
             umps.resolve_singlet_embedding(sz)
         zmps = umps.finalize(self.prule)
+
+        # the output lives in the SZ module even though the driver is in SU2 mode
+        zmulti = getattr(getattr(bw.b, "sz", bw.bs), "MultiMPS", ())
+        if canonicalize and not isinstance(zmps, zmulti):
+            if self.mpi is not None:
+                self.mpi.barrier()
+            zmps.info.load_mutable()
+            zmps.load_mutable()
+            # MPS.canonicalize assumes that a 2-site MPS stores the two-site
+            # wavefunction at ``center`` with ``tensors[center + 1] is None``.
+            # An MPS whose center was moved by 1-site operations (for example
+            # after ``align_mps_center``) keeps ``dot == 2`` but stores one
+            # site tensor per site; treat it as a 1-site MPS for the QR sweep.
+            zdot = zmps.dot
+            if (
+                zdot == 2
+                and zmps.center + 1 < zmps.n_sites
+                and zmps.tensors[zmps.center + 1] is not None
+            ):
+                zmps.dot = 1
+            zmps.canonicalize()
+            zmps.dot = zdot
+            zmps.save_mutable()
+            zmps.deallocate()
+            zmps.info.deallocate_mutable()
+            if self.mpi is not None:
+                self.mpi.barrier()
 
         zmps.info.save_data(self.scratch + "/%s-mps_info.bin" % tag)
         zmps = self.adjust_mps(zmps, dot=mps.dot)[0]
@@ -9753,21 +9788,22 @@ class OrbitalEntropy:
         """Internal method for computing symbolic terms in two-orbital RDM."""
         h_terms = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
+        # (SZ signs: same convention as in get_two_orb_rdm_exprs)
         if block_symm:
             if is_sgf:
                 ts = "1/1 1/4 2/3 4/1 4/4"
             else:
                 ts = (
-                    "1/1 1/6 2/5 6/1 1/11 3/9 11/1 6/6 1/16 2/15 -3/14 -4/13 6/11 7/10 "
-                    + "-8/9 11/6 12/5 16/1 11/11 6/16 8/14 16/6 11/16 12/15 16/11 16/16"
+                    "1/1 1/6 -2/5 6/1 1/11 -3/9 11/1 6/6 1/16 2/15 3/14 -4/13 6/11 -7/10 "
+                    + "-8/9 11/6 -12/5 16/1 11/11 6/16 8/14 16/6 11/16 12/15 16/11 16/16"
                 )
         else:
             if is_sgf:
                 ts = "1/1 1/4 2/3 -3/2 4/1 4/4"
             else:
                 ts = (
-                    "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
-                    + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+                    "1/1 1/6 -2/5 5/2 6/1 1/11 -3/9 9/3 11/1 6/6 1/16 2/15 3/14 "
+                    + "-4/13 -5/12 6/11 -7/10 -8/9 -9/8 -10/7 11/6 -12/5 -13/4 14/3 15/2 16/1 "
                     + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
                 )
         ts = [[int(v) for v in u.split("/")] for u in ts.split()]
@@ -9828,13 +9864,17 @@ class OrbitalEntropy:
         """Internal method for computing two-orbital RDM expressions (for NPDM engine)."""
         exprs = {}
         # Table 3. J. Chem. Theory Comput. 2013, 9, 2959-2973
+        # SZ signs: the entries are the elements of the two-orbital RDM in the basis
+        # |s_i s_j> = C(s_i)_i C(s_j)_j |vac>, with one-orbital states s = 0, dn, up,
+        # updn (same order as in OrbitalEntropy.ops) and C(0) = 1, C(dn) = a+_dn,
+        # C(up) = a+_up, C(updn) = a+_up a+_dn
         if is_sgf:
             ts = "1/1 1/4 2/3 -3/2 4/1 4/4"
             ops = OrbitalEntropy.ops_ghf
         else:
             ts = (
-                "1/1 1/6 2/5 -5/2 6/1 1/11 3/9 -9/3 11/1 6/6 1/16 2/15 -3/14 "
-                + "-4/13 -5/12 6/11 7/10 -8/9 9/8 10/7 11/6 12/5 -13/4 14/3 -15/2 16/1 "
+                "1/1 1/6 -2/5 5/2 6/1 1/11 -3/9 9/3 11/1 6/6 1/16 2/15 3/14 "
+                + "-4/13 -5/12 6/11 -7/10 -8/9 -9/8 -10/7 11/6 -12/5 -13/4 14/3 15/2 16/1 "
                 + "11/11 6/16 8/14 -14/8 16/6 11/16 12/15 -15/12 16/11 16/16"
             )
             ops = OrbitalEntropy.ops
