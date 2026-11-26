@@ -812,6 +812,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         static const FL x = 1.0, zz = 0.0;
         assert(a.m == b.m && a.n == b.n);
         MKL_INT n = a.m * a.n, inc = 1;
+        if (n == 0)
+            return zz;
         FL r;
         // zdotc can sometimes return zero
         // zdotc(&r, &n, a.data, &inc, b.data, &inc);
@@ -865,6 +867,8 @@ struct GMatrixFunctions<FL, typename enable_if<is_complex<FL>::value>::type> {
         static const FL x = 1.0, zz = 0.0;
         assert(a.m == b.m && a.n == b.n);
         MKL_INT n = a.m * a.n, inc = 1;
+        if (n == 0)
+            return zz;
         FL r;
         xgemm<FL>("t", "n", &inc, &inc, &n, &x, a.data, &n, b.data, &n, &zz, &r,
                   &inc);
